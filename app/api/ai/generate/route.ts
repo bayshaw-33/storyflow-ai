@@ -58,7 +58,7 @@ function toFriendlyError(error: unknown) {
   }
 
   if (message === "DEEPSEEK_TIMEOUT") {
-    return "DeepSeek 请求超时，请稍后重试。已有内容已保留，你也可以先加载本地示例内容继续演示。";
+    return "DeepSeek 请求超时，请稍后重试。已有内容已保留，也可以先加载本地示例内容继续演示。";
   }
 
   if (message === "DEEPSEEK_NETWORK_ERROR") {

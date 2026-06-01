@@ -424,6 +424,13 @@ textarea {
   color: #1f6f55;
 }
 
+.field-note {
+  color: #68736e;
+  line-height: 1.5;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .ai-hints {
   display: flex;
   flex-wrap: wrap;

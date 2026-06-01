@@ -9,9 +9,11 @@ import {
   CheckCircle2,
   Download,
   Loader2,
+  Plus,
   RefreshCw,
   Save,
   Settings,
+  UserPlus,
   WandSparkles,
 } from "lucide-react";
 import type { TaskType } from "@/lib/ai/prompts";
@@ -20,15 +22,20 @@ import {
   createProject,
   demoProject,
   DramaProject,
+  EPISODE_COUNT_OPTIONS,
+  EPISODE_DURATION_OPTIONS,
   exportProjectMarkdown,
   GENRE_OPTIONS,
   getStepContent,
   MARKET_OPTIONS,
   readProjectsFromStorage,
+  SCRIPT_MODE_OPTIONS,
   setStepContent,
   upsertProject,
   workflowSteps,
 } from "@/lib/projects";
+
+const DEFAULT_TITLE = "未命名短剧项目";
 
 function getPreviousKey(taskType: TaskType): TaskType | null {
   const index = workflowSteps.findIndex((step) => step.key === taskType);
@@ -57,13 +64,6 @@ function getRequirement(project: DramaProject, taskType: TaskType) {
     : `请先完成上一步：${workflowSteps.find((step) => step.key === previousKey)?.short}`;
 }
 
-function allStepContent(project: DramaProject) {
-  return workflowSteps.reduce((acc, step) => {
-    acc[step.key] = getStepContent(project, step.key);
-    return acc;
-  }, {} as Partial<Record<TaskType, string>>);
-}
-
 function previousStepContent(project: DramaProject, activeStep: TaskType) {
   const activeIndex = workflowSteps.findIndex((step) => step.key === activeStep);
   const priorSteps = activeIndex > 0 ? workflowSteps.slice(0, activeIndex) : [];
@@ -76,7 +76,7 @@ function previousStepContent(project: DramaProject, activeStep: TaskType) {
 
 function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent: string) {
   if (activeStep === "market_positioning") {
-    return `目标市场：${project.market}\n题材：${project.genre}`;
+    return `目标市场：${project.market}\n题材：${project.genre}\n集数：${project.episodeCount}\n每集片长：${project.episodeDuration}`;
   }
 
   if (activeStep === "benchmark_analysis") {
@@ -84,14 +84,28 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
   }
 
   if (activeStep === "translation") {
-    return project.script;
+    return project.outline || project.brief;
   }
 
   if (activeStep === "localization") {
-    return project.translation || project.script;
+    return project.translation || project.outline;
+  }
+
+  if (activeStep === "final_script") {
+    return project.localization || project.translation || project.outline;
+  }
+
+  if (activeStep === "storyboard_script") {
+    return project.finalScript;
   }
 
   return activeContent || project.idea;
+}
+
+function extractGeneratedTitle(output: string) {
+  const match = output.match(/(?:剧名|推荐剧名|暂定剧名|片名)\s*[：:]\s*(.+)/);
+  if (!match?.[1]) return "";
+  return match[1].replace(/[#*_`"“”]/g, "").trim().slice(0, 32);
 }
 
 export default function WorkflowPage() {
@@ -215,6 +229,9 @@ export default function WorkflowPage() {
             targetLanguage: "英语",
             benchmarkTitle: project.benchmarkTitle,
             benchmarkLink: project.benchmarkLink,
+            episodeDuration: project.episodeDuration,
+            episodeCount: project.episodeCount,
+            scriptMode: project.scriptMode,
           },
           projectTitle: project.title,
           market: project.market,
@@ -234,11 +251,18 @@ export default function WorkflowPage() {
         return;
       }
 
-      const nextProject = {
+      let nextProject = {
         ...setStepContent(generatingProject, activeStep, data.output),
         status: "ready" as const,
         updatedAt: new Date().toISOString(),
       };
+
+      if (activeStep === "brief" && (!project.title.trim() || project.title.trim() === DEFAULT_TITLE)) {
+        const generatedTitle = extractGeneratedTitle(data.output);
+        if (generatedTitle) {
+          nextProject = { ...nextProject, title: generatedTitle };
+        }
+      }
 
       setProject(nextProject);
       upsertProject(nextProject);
@@ -282,6 +306,25 @@ export default function WorkflowPage() {
     setError("");
   }
 
+  function addManualCharacter() {
+    if (!project) return;
+    const template = [
+      "",
+      "### 新角色",
+      "- 身份：",
+      "- 目标：",
+      "- 弱点：",
+      "- 秘密：",
+      "- 成长弧线：",
+      "- 与其他角色的冲突关系：",
+      "- 首次登场画面：",
+      "- 典型短对白：",
+    ].join("\n");
+    updateStep("characters", `${project.characters.trim()}${project.characters.trim() ? "\n\n" : ""}${template.trim()}`);
+    setActiveStep("characters");
+    setStatusText("已添加角色模板");
+  }
+
   function continueNextStep() {
     const currentIndex = workflowSteps.findIndex((step) => step.key === activeStep);
     const nextStep = workflowSteps[currentIndex + 1];
@@ -317,8 +360,9 @@ export default function WorkflowPage() {
     );
   }
 
-  const selectedGenreIsOther = !GENRE_OPTIONS.includes(project.genre) || project.genre === "Other";
+  const selectedGenreIsOther = !GENRE_OPTIONS.includes(project.genre) || project.genre === "其他";
   const selectedMarketIsOther = !MARKET_OPTIONS.includes(project.market) || project.market === "其他";
+  const scriptMode = SCRIPT_MODE_OPTIONS.find((option) => option.value === project.scriptMode);
 
   return (
     <main className="workflow-shell">
@@ -330,6 +374,7 @@ export default function WorkflowPage() {
           className="title-input"
           value={project.title}
           onChange={(event) => updateField("title", event.target.value)}
+          title="剧名，可手动修改"
         />
         <div className="header-actions">
           <span className="save-state"><Save size={15} /> {statusText || "本地自动保存"}</span>
@@ -384,7 +429,7 @@ export default function WorkflowPage() {
               <label>
                 题材
                 <select
-                  value={selectedGenreIsOther ? "Other" : project.genre}
+                  value={selectedGenreIsOther ? "其他" : project.genre}
                   onChange={(event) => updateField("genre", event.target.value)}
                 >
                   {GENRE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
@@ -400,18 +445,24 @@ export default function WorkflowPage() {
             </div>
 
             <div className="compact-fields">
-              {selectedMarketIsOther ? (
-                <label>
-                  其他市场
-                  <input value={project.market} onChange={(event) => updateField("market", event.target.value)} />
-                </label>
-              ) : null}
-              {selectedGenreIsOther ? (
-                <label>
-                  Other 题材
-                  <input value={project.genre} onChange={(event) => updateField("genre", event.target.value)} />
-                </label>
-              ) : null}
+              <label>
+                集数
+                <select
+                  value={project.episodeCount}
+                  onChange={(event) => updateField("episodeCount", Number(event.target.value))}
+                >
+                  {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} 集</option>)}
+                </select>
+              </label>
+              <label>
+                每集片长
+                <select
+                  value={project.episodeDuration}
+                  onChange={(event) => updateField("episodeDuration", event.target.value)}
+                >
+                  {EPISODE_DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
               <label>
                 竞品链接
                 <input
@@ -422,13 +473,36 @@ export default function WorkflowPage() {
               </label>
             </div>
 
+            {(selectedMarketIsOther || selectedGenreIsOther) ? (
+              <div className="compact-fields">
+                {selectedMarketIsOther ? (
+                  <label>
+                    其他市场
+                    <input
+                      value={project.market === "其他" ? "" : project.market}
+                      onChange={(event) => updateField("market", event.target.value || "其他")}
+                    />
+                  </label>
+                ) : null}
+                {selectedGenreIsOther ? (
+                  <label>
+                    其他题材
+                    <input
+                      value={project.genre === "其他" ? "" : project.genre}
+                      onChange={(event) => updateField("genre", event.target.value || "其他")}
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+
             <label>
               故事创意
               <textarea
                 className="idea-input"
                 value={project.idea}
                 onChange={(event) => updateField("idea", event.target.value)}
-                placeholder="一句话创意，或关键词：重生 / 复仇 / 豪门 / 隐藏身份"
+                placeholder="一句话创意，或关键词：重生 / 复仇 / 豪门 / 隐藏身份。生成 Brief 后会自动提取剧名，也可以在顶部手动修改。"
               />
             </label>
           </div>
@@ -458,6 +532,24 @@ export default function WorkflowPage() {
             <p>根据当前 PRD 阶段调用 `/api/ai/generate`，由服务端读取 `DEEPSEEK_API_KEY`。</p>
           </div>
 
+          {activeStep === "final_script" ? (
+            <label>
+              剧本生成范围
+              <select value={project.scriptMode} onChange={(event) => updateField("scriptMode", event.target.value as DramaProject["scriptMode"])}>
+                {SCRIPT_MODE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <small className="field-note">{scriptMode?.description}</small>
+            </label>
+          ) : null}
+
+          {activeStep === "characters" ? (
+            <button className="secondary-button full" onClick={addManualCharacter}>
+              <UserPlus size={18} /> 手动添加角色
+            </button>
+          ) : null}
+
           {requirement ? <div className="notice warning"><AlertCircle size={17} /> {requirement}</div> : null}
           {aiConfigured === false ? (
             <div className="notice warning">
@@ -468,8 +560,12 @@ export default function WorkflowPage() {
           {statusText ? <div className="notice success"><CheckCircle2 size={17} /> {statusText}</div> : null}
 
           <button className="primary-button full" onClick={generate} disabled={loading || Boolean(requirement)}>
-            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-            {activeContent.trim() ? "重新生成" : "生成当前阶段"}
+            {loading ? <Loader2 className="spin" size={18} /> : activeStep === "storyboard_script" ? <Plus size={18} /> : <RefreshCw size={18} />}
+            {activeStep === "storyboard_script"
+              ? "一键生成分镜头脚本"
+              : activeContent.trim()
+                ? "重新生成当前阶段"
+                : "生成当前阶段"}
           </button>
           <button className="secondary-button full" onClick={generate} disabled={loading || Boolean(requirement) || !activeContent.trim()}>
             优化内容
@@ -483,10 +579,11 @@ export default function WorkflowPage() {
 
           <div className="ai-hints">
             <strong>MVP 演示标准</strong>
-            <span>5 分钟内跑完主流程</span>
-            <span>每步真实调用 DeepSeek</span>
-            <span>前 3 集试生产</span>
-            <span>翻译与本土化</span>
+            <span>中文题材选项</span>
+            <span>{project.episodeCount} 集 / {project.episodeDuration}</span>
+            <span>自动剧名</span>
+            <span>本土化后生成剧本</span>
+            <span>一键分镜</span>
           </div>
         </aside>
       </section>

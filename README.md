@@ -1,23 +1,24 @@
 # StoryFlow AI
 
-从创意到海外短剧剧本的 AI 创作工作台 MVP，可部署到 Vercel。
+从创意到海外漫剧剧本的 AI 创作工作台 MVP，可部署到 Vercel。
 
 ## 产品规范
 
-后续开发以 [docs/PRD-v1.0.md](docs/PRD-v1.0.md) 为唯一产品规范。
+后续开发以 [docs/PRD-v1.0.md](docs/PRD-v1.0.md) 为产品规范；如实现与 PRD 冲突，先列差异再决策。
 
 ## MVP 流程
 
 1. 市场定位
 2. 竞品分析
-3. 故事创意 / 项目 Brief
+3. 创意 Brief / 自动剧名
 4. 市场预判
 5. 角色设定
-6. 全剧大纲 / 12 集大纲
-7. 前 3 集试生产
-8. AI 质量评估
-9. 翻译
-10. 本土化
+6. 全剧大纲 / 分集大纲
+7. AI 质量评估
+8. 翻译
+9. 本土化优化
+10. 生成剧本
+11. 一键生成分镜头脚本
 
 ## API
 
@@ -34,10 +35,11 @@ brief
 market_prediction
 characters
 series_outline
-episode_scripts
 quality_evaluation
 translation
 localization
+final_script
+storyboard_script
 ```
 
 ## 环境变量

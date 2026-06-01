@@ -87,6 +87,8 @@ export default function ProjectListPage() {
               <p>{project.idea || "尚未填写故事创意。"}</p>
               <div className="project-meta">
                 <span>{project.market}</span>
+                <span>{project.episodeCount} 集</span>
+                <span>{project.episodeDuration}</span>
                 <span>{completed}/{workflowSteps.length} 步已完成</span>
                 <span>{project.status}</span>
                 <span>{new Date(project.updatedAt).toLocaleString("zh-CN")}</span>

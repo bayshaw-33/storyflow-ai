@@ -8,10 +8,11 @@ const taskTypes: TaskType[] = [
   "market_prediction",
   "characters",
   "series_outline",
-  "episode_scripts",
   "quality_evaluation",
   "translation",
   "localization",
+  "final_script",
+  "storyboard_script",
 ];
 
 export type GenerateSuccess = {
@@ -50,7 +51,8 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
     messages: [
       {
         role: "system",
-        content: "你是 StoryFlow AI 的服务端生成器，只输出符合海外短剧研发流程的正文内容。",
+        content:
+          "你是 StoryFlow AI 的服务端生成器，只输出符合海外漫剧研发流程的正文内容，不输出解释过程。",
       },
       {
         role: "user",
