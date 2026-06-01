@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   Download,
   FileText,
   Loader2,
@@ -28,6 +29,7 @@ import {
   CHINESE_SCRIPT_RANGE_OPTIONS,
   createEmptyCharacterCard,
   createEmptyStoryboardEpisode,
+  createContinuationProject,
   createProject,
   demoProject,
   DramaProject,
@@ -38,6 +40,7 @@ import {
   GENRE_OPTIONS,
   getSelectedFinalScript,
   getStepContent,
+  getWorkflowSteps,
   LANGUAGE_OPTIONS,
   MARKET_OPTIONS,
   readProjectsFromStorage,
@@ -45,18 +48,27 @@ import {
   StoryboardEpisode,
   storyboardEpisodesToMarkdown,
   upsertProject,
-  workflowSteps,
 } from "@/lib/projects";
 
 const DEFAULT_TITLE = "未命名短剧项目";
 
-function getPreviousKey(taskType: TaskType): TaskType | null {
+function getPreviousKey(project: DramaProject, taskType: TaskType): TaskType | null {
+  const workflowSteps = getWorkflowSteps(project);
   const index = workflowSteps.findIndex((step) => step.key === taskType);
   if (index <= 0) return null;
   return workflowSteps[index - 1].key;
 }
 
 function getRequirement(project: DramaProject, taskType: TaskType) {
+  if (project.workflowType === "continuation") {
+    if (taskType === "script_import") return project.idea.trim() || project.importedScript.trim() ? "" : "请先导入或粘贴已有小说/剧本材料。";
+    if (taskType === "characters") return project.importedScript.trim() ? "" : "请先完成剧本导入。";
+    if (taskType === "series_outline") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
+    if (taskType === "existing_script") return project.outline.trim() ? "" : "请先完成大纲。";
+    if (taskType === "continuation_script") return project.existingScript.trim() ? "" : "请先整理已有剧本。";
+    if (taskType === "translation") return project.continuationScript.trim() ? "" : "请先生成续写剧本。";
+  }
+
   if (taskType === "market_analysis") return project.market && project.genre ? "" : "请先选择目标市场和题材。";
   if (taskType === "brief") return project.idea.trim() ? "" : "请先填写故事创意，或拖入附件解析。";
   if (taskType === "characters") return project.brief.trim() ? "" : "请先完成创意。";
@@ -65,15 +77,16 @@ function getRequirement(project: DramaProject, taskType: TaskType) {
   if (taskType === "storyboard_script") return getSelectedFinalScript(project).trim() ? "" : "请先生成最终剧本。";
   if (taskType === "final_delivery") return project.storyboardEpisodes.length || project.storyboardScript.trim() ? "" : "请先生成分镜。";
 
-  const previousKey = getPreviousKey(taskType);
+  const previousKey = getPreviousKey(project, taskType);
   if (!previousKey) return "";
 
   return getStepContent(project, previousKey).trim()
     ? ""
-    : `请先完成上一步：${workflowSteps.find((step) => step.key === previousKey)?.short}`;
+    : `请先完成上一步：${getWorkflowSteps(project).find((step) => step.key === previousKey)?.short}`;
 }
 
 function previousStepContent(project: DramaProject, activeStep: TaskType) {
+  const workflowSteps = getWorkflowSteps(project);
   const activeIndex = workflowSteps.findIndex((step) => step.key === activeStep);
   const priorSteps = activeIndex > 0 ? workflowSteps.slice(0, activeIndex) : [];
 
@@ -94,10 +107,20 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
       `每集片长：${project.episodeDuration}`,
     ].join("\n");
   }
-  if (activeStep === "characters") return project.brief;
-  if (activeStep === "series_outline") return characterCardsToMarkdown(project.characterCards) || project.brief;
+  if (activeStep === "script_import") return project.idea || project.importedScript;
+  if (activeStep === "characters") return project.workflowType === "continuation" ? project.importedScript || project.idea : project.brief;
+  if (activeStep === "series_outline") {
+    return [
+      project.workflowType === "continuation" ? project.importedScript : project.brief,
+      characterCardsToMarkdown(project.characterCards),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  if (activeStep === "existing_script") return [project.importedScript, project.outline].filter(Boolean).join("\n\n");
   if (activeStep === "chinese_script") return project.outline;
-  if (activeStep === "translation") return project.chineseScript;
+  if (activeStep === "continuation_script") return [project.existingScript, project.outline, characterCardsToMarkdown(project.characterCards)].filter(Boolean).join("\n\n");
+  if (activeStep === "translation") return project.workflowType === "continuation" ? project.continuationScript : project.chineseScript;
   if (activeStep === "localization") return project.translation;
   if (activeStep === "test_script") return project.localization;
   if (activeStep === "quality_evaluation") return project.testScript;
@@ -110,7 +133,7 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
       project.qualityEvaluation,
       "",
       "【中文剧本】",
-      project.chineseScript,
+      project.workflowType === "continuation" ? project.continuationScript : project.chineseScript,
       "",
       "【外语剧本】",
       project.translation,
@@ -158,6 +181,7 @@ export default function WorkflowPage() {
   const [characterView, setCharacterView] = useState<"cards" | "relationships">("cards");
   const [optimizeOpen, setOptimizeOpen] = useState(false);
   const [optimizeInstruction, setOptimizeInstruction] = useState("");
+  const [projectFieldsOpen, setProjectFieldsOpen] = useState(false);
 
   useEffect(() => {
     const projects = readProjectsFromStorage();
@@ -165,15 +189,21 @@ export default function WorkflowPage() {
 
     if (found) {
       setProject(found);
+      const steps = getWorkflowSteps(found);
+      setActiveStep((current) => (steps.some((step) => step.key === current) ? current : steps[0].key));
       return;
     }
 
+    const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
     const created =
       searchParams.get("template") === "demo"
         ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
-        : createProject({ id: params.projectId });
+        : requestedWorkflow === "continuation"
+          ? createContinuationProject({ id: params.projectId })
+          : createProject({ id: params.projectId });
 
     setProject(created);
+    setActiveStep(getWorkflowSteps(created)[0].key);
     upsertProject(created);
   }, [params.projectId, searchParams]);
 
@@ -190,9 +220,10 @@ export default function WorkflowPage() {
     };
   }, []);
 
+  const workflowSteps = useMemo(() => getWorkflowSteps(project || undefined), [project?.workflowType]);
   const activeMeta = useMemo(
     () => workflowSteps.find((step) => step.key === activeStep) || workflowSteps[0],
-    [activeStep],
+    [activeStep, workflowSteps],
   );
 
   const requirement = project ? getRequirement(project, activeStep) : "";
@@ -376,8 +407,9 @@ export default function WorkflowPage() {
 
   async function continueNextStep() {
     if (!project) return;
-    const currentIndex = workflowSteps.findIndex((step) => step.key === activeStep);
-    const nextStep = workflowSteps[currentIndex + 1];
+    const steps = getWorkflowSteps(project);
+    const currentIndex = steps.findIndex((step) => step.key === activeStep);
+    const nextStep = steps[currentIndex + 1];
     if (!nextStep) return;
     setActiveStep(nextStep.key);
     await generateForStep(nextStep.key, project);
@@ -587,6 +619,16 @@ export default function WorkflowPage() {
 
         <section className="editor-panel">
           <div className="project-fields">
+            <button className="project-fields-toggle" type="button" onClick={() => setProjectFieldsOpen((open) => !open)}>
+              <div>
+                <strong>{project.workflowType === "continuation" ? "续写项目信息" : "项目信息"}</strong>
+                <span>{project.market} / {project.genre} / {project.episodeCount} 集 / {project.episodeDuration}</span>
+              </div>
+              <ChevronDown className={projectFieldsOpen ? "toggle-icon open" : "toggle-icon"} size={18} />
+            </button>
+
+            {projectFieldsOpen ? (
+              <div className="project-fields-body">
             <div className="compact-fields">
               <label>
                 目标市场
@@ -653,12 +695,12 @@ export default function WorkflowPage() {
             ) : null}
 
             <label>
-              故事创意
+              {project.workflowType === "continuation" ? "剧本导入材料" : "故事创意"}
               <textarea
                 className="idea-input"
                 value={project.idea}
                 onChange={(event) => updateField("idea", event.target.value)}
-                placeholder="一句话创意，或拖入已有小说/剧本附件，支持 txt、md、pdf、doc、docx。"
+                placeholder={project.workflowType === "continuation" ? "粘贴已有小说/剧本，或拖入附件解析，系统会先整理成续写底稿。" : "一句话创意，或拖入已有小说/剧本附件，支持 txt、md、pdf、doc、docx。"}
               />
             </label>
             <div
@@ -680,6 +722,8 @@ export default function WorkflowPage() {
                 }}
               />
             </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="editor-head">

@@ -194,10 +194,6 @@ p {
   font-size: 20px;
 }
 
-.project-card p {
-  min-height: 74px;
-}
-
 .project-meta {
   gap: 8px;
   flex-wrap: wrap;
@@ -357,6 +353,49 @@ p {
 }
 
 .project-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.project-fields-toggle {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #d4dbd6;
+  border-radius: 8px;
+  background: #fbfaf6;
+  color: #18201d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  text-align: left;
+}
+
+.project-fields-toggle div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.project-fields-toggle span {
+  color: #68736e;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle-icon {
+  flex: 0 0 auto;
+  transition: transform 0.18s ease;
+}
+
+.toggle-icon.open {
+  transform: rotate(180deg);
+}
+
+.project-fields-body {
   display: grid;
   gap: 12px;
 }

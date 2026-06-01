@@ -1,17 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, FilePlus2, FolderOpen, Settings, Trash2, WandSparkles } from "lucide-react";
+import { ArrowRight, FilePlus2, FolderOpen, PenLine, Settings, Trash2, WandSparkles } from "lucide-react";
 import {
+  createContinuationProject,
+  createProject,
   deleteProject,
   DramaProject,
   getCompletedStepCount,
+  getWorkflowSteps,
   readProjectsFromStorage,
-  workflowSteps,
+  upsertProject,
 } from "@/lib/projects";
 
 export default function ProjectListPage() {
+  const router = useRouter();
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -30,6 +35,13 @@ export default function ProjectListPage() {
     setProjects(readProjectsFromStorage());
   }
 
+  function createAndOpen(type: "creation" | "continuation") {
+    const project = type === "continuation" ? createContinuationProject() : createProject();
+    upsertProject(project);
+    setProjects(readProjectsFromStorage());
+    router.push(`/projects/${project.id}`);
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -44,9 +56,12 @@ export default function ProjectListPage() {
           <Link className="secondary-button" href="/projects/demo?template=demo">
             <WandSparkles size={18} /> 一键填入演示案例
           </Link>
-          <Link className="primary-button" href="/projects/new">
+          <button className="secondary-button" onClick={() => createAndOpen("continuation")}>
+            <PenLine size={18} /> 剧本续写
+          </button>
+          <button className="primary-button" onClick={() => createAndOpen("creation")}>
             <FilePlus2 size={18} /> 新建项目
-          </Link>
+          </button>
         </nav>
       </header>
 
@@ -84,12 +99,12 @@ export default function ProjectListPage() {
                   <Trash2 size={16} />
                 </button>
               </div>
-              <p>{project.idea || "尚未填写故事创意。"}</p>
               <div className="project-meta">
+                <span>{project.workflowType === "continuation" ? "剧本续写" : "原创项目"}</span>
                 <span>{project.market}</span>
                 <span>{project.episodeCount} 集</span>
                 <span>{project.episodeDuration}</span>
-                <span>{completed}/{workflowSteps.length} 步已完成</span>
+                <span>{completed}/{getWorkflowSteps(project).length} 步已完成</span>
                 <span>{project.status}</span>
                 <span>{new Date(project.updatedAt).toLocaleString("zh-CN")}</span>
               </div>

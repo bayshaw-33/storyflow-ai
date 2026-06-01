@@ -1,6 +1,7 @@
 import type { ChineseScriptRange, FinalScriptVersion, TaskType } from "./ai/prompts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
+export type WorkflowType = "creation" | "continuation";
 
 export type CharacterCard = {
   id: string;
@@ -25,6 +26,7 @@ export type StoryboardEpisode = {
 
 export type DramaProject = {
   id: string;
+  workflowType: WorkflowType;
   title: string;
   market: string;
   genre: string;
@@ -36,6 +38,7 @@ export type DramaProject = {
   benchmarkTitle: string;
   benchmarkLink: string;
   idea: string;
+  importedScript: string;
   marketAnalysis: string;
   brief: string;
   characters: string;
@@ -43,7 +46,9 @@ export type DramaProject = {
   relationshipDiagram: string;
   outline: string;
   episodes: string;
+  existingScript: string;
   chineseScript: string;
+  continuationScript: string;
   translation: string;
   localization: string;
   testScript: string;
@@ -116,10 +121,13 @@ export const FINAL_SCRIPT_VERSION_OPTIONS: Array<{ value: FinalScriptVersion; la
 
 export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   market_analysis: "marketAnalysis",
+  script_import: "importedScript",
   brief: "brief",
   characters: "characters",
   series_outline: "outline",
+  existing_script: "existingScript",
   chinese_script: "chineseScript",
+  continuation_script: "continuationScript",
   translation: "translation",
   localization: "localization",
   test_script: "testScript",
@@ -129,7 +137,9 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   final_delivery: "deliveryPackage",
 };
 
-export const workflowSteps: Array<{ key: TaskType; field: keyof DramaProject; label: string; short: string }> = [
+export type WorkflowStep = { key: TaskType; field: keyof DramaProject; label: string; short: string };
+
+export const creationWorkflowSteps: WorkflowStep[] = [
   { key: "market_analysis", field: "marketAnalysis", label: "市场分析", short: "市场" },
   { key: "brief", field: "brief", label: "创意 Brief / 附件导入", short: "创意" },
   { key: "characters", field: "characterCards", label: "角色卡 / 人物关系图", short: "角色" },
@@ -144,11 +154,34 @@ export const workflowSteps: Array<{ key: TaskType; field: keyof DramaProject; la
   { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
 ];
 
+export const continuationWorkflowSteps: WorkflowStep[] = [
+  { key: "script_import", field: "importedScript", label: "剧本导入", short: "导入" },
+  { key: "characters", field: "characterCards", label: "角色卡 / 人物关系图", short: "角色" },
+  { key: "series_outline", field: "outline", label: "三幕结构 / 八段式 Treatment", short: "大纲" },
+  { key: "existing_script", field: "existingScript", label: "已有剧本", short: "已有剧本" },
+  { key: "continuation_script", field: "continuationScript", label: "续写剧本", short: "续写" },
+  { key: "translation", field: "translation", label: "翻译", short: "翻译" },
+  { key: "localization", field: "localization", label: "本土化", short: "本土化" },
+  { key: "test_script", field: "testScript", label: "测试剧本", short: "测试剧本" },
+  { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
+  { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
+  { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
+  { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
+];
+
+export const workflowSteps = creationWorkflowSteps;
+
+export function getWorkflowSteps(projectOrType?: DramaProject | WorkflowType) {
+  const workflowType = typeof projectOrType === "string" ? projectOrType : projectOrType?.workflowType;
+  return workflowType === "continuation" ? continuationWorkflowSteps : creationWorkflowSteps;
+}
+
 export function createProject(overrides: Partial<DramaProject> = {}): DramaProject {
   const now = new Date().toISOString();
 
   return {
     id: createId(),
+    workflowType: "creation",
     title: "未命名短剧项目",
     market: "北美",
     genre: "逆袭复仇",
@@ -160,6 +193,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     benchmarkTitle: "",
     benchmarkLink: "",
     idea: "",
+    importedScript: "",
     marketAnalysis: "",
     brief: "",
     characters: "",
@@ -167,7 +201,9 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     relationshipDiagram: "",
     outline: "",
     episodes: "",
+    existingScript: "",
     chineseScript: "",
+    continuationScript: "",
     translation: "",
     localization: "",
     testScript: "",
@@ -199,6 +235,14 @@ export function demoProject(): DramaProject {
     benchmarkTitle: "ReelShort 热门豪门复仇短剧",
     benchmarkLink: "https://www.reelshort.com/",
     idea: "重生后发现未婚夫背叛自己，女主以隐藏继承人的身份回归，在订婚宴上夺回家族公司和爱情主动权。",
+  });
+}
+
+export function createContinuationProject(overrides: Partial<DramaProject> = {}): DramaProject {
+  return createProject({
+    workflowType: "continuation",
+    title: "未命名续写项目",
+    ...overrides,
   });
 }
 
@@ -361,7 +405,7 @@ export function setStepContent(project: DramaProject, taskType: TaskType, conten
 }
 
 export function getCompletedStepCount(project: DramaProject) {
-  return workflowSteps.filter((step) => {
+  return getWorkflowSteps(project).filter((step) => {
     if (step.key === "characters") return project.characterCards.length > 0 || Boolean(project.characters.trim());
     if (step.key === "final_script") return Boolean(getSelectedFinalScript(project).trim());
     if (step.key === "storyboard_script") return project.storyboardEpisodes.length > 0 || Boolean(project.storyboardScript.trim());
@@ -456,6 +500,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
 
   return createProject({
     id: project.id || createId(),
+    workflowType: project.workflowType || "creation",
     title: project.title || "未命名短剧项目",
     market: normalizeMarket(project.market),
     genre: normalizeGenre(project.genre),
@@ -467,6 +512,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     benchmarkTitle: project.benchmarkTitle || "",
     benchmarkLink: project.benchmarkLink || "",
     idea: project.idea || project.storyIdea || "",
+    importedScript: project.importedScript || "",
     marketAnalysis: legacyMarketAnalysis,
     brief: project.brief || steps.brief?.content || "",
     characters: characterCardsToMarkdown(parsed.cards) || project.characters || steps.characters?.content || "",
@@ -474,7 +520,9 @@ function normalizeProject(project: LegacyProject): DramaProject {
     relationshipDiagram: parsed.relationshipDiagram || project.relationshipDiagram || "",
     outline: project.outline || project.seriesOutline || steps.series_outline?.content || "",
     episodes: project.episodes || project.episodeOutline || steps.episode_outline?.content || "",
+    existingScript: project.existingScript || "",
     chineseScript: legacyChineseScript,
+    continuationScript: project.continuationScript || "",
     translation: project.translation || "",
     localization: project.localization || project.rewrittenScript || "",
     testScript: project.testScript || project.localization || project.rewrittenScript || "",
@@ -660,14 +708,20 @@ function createId() {
 const demoStepContent: Record<TaskType, string> = {
   market_analysis:
     "1. 目标市场：北美用户对豪门羞辱、身份反转、强复仇开场接受度高。\n2. 题材机会：逆袭复仇适合竖屏漫剧，前 30 秒可以直接给出背叛和打脸。\n3. 竞品启发：高密度羞辱开场、男主资源入场、每集结尾留身份钩子。\n4. 风险提醒：继承权和董事会表达需要简化；复仇启动不能太慢；对白避免中文长句。\n5. 创作建议：第 1 集订婚宴羞辱，第 2 集女主以投资人身份回场，第 3 集抛出录音证据。",
+  script_import:
+    "1. 原始材料类型判断：已有都市复仇短剧大纲。\n2. 已有剧情概况：女主在订婚宴被背叛；继妹顶替身份；男主带来董事文件；女主决定回到公司夺权。\n3. 核心人物与关系：林晚被继妹林薇夺权，周衍背叛她，沈烬掌握旧案线索。\n4. 当前剧情停点：黑车门打开，沈烬递出董事文件，女主身份即将反转。\n5. 可续写方向：董事会打脸；录音证据曝光；旧案真相牵出男主家族。\n6. 需要保留的风格：短对白、强羞辱、冷色豪门画面、每集结尾身份钩子。\n7. 续写风险：不要让男主过早解释全部秘密；不要让女主复仇太顺利。",
   brief:
     "剧名：午夜继承人\n1. 故事定位：隐藏继承人回归复仇的竖屏漫剧。\n2. 一句话卖点：被夺走一切的女人，以新董事身份回到订婚宴。\n3. 核心冲突：女主夺回公司与身份，反派阻止真相公开。\n4. 主角目标：拿回母亲留下的股份和尊严。\n5. 反派阻力：继妹与未婚夫联手制造女主精神失常的假象。\n6. 情绪基调：冷感、压抑、反击爽感。\n7. 目标受众：偏好复仇爱情和身份反转的海外女性用户。\n8. 视觉风格：冷色豪门宴会、红毯羞辱、黑车反转。",
   characters:
     '{"relationshipDiagram":"林晚 -> 复仇对象 -> 林薇；沈烬 -> 秘密盟友 -> 林晚；林薇 + 周衡 -> 联手夺权","characters":[{"name":"林晚","role":"女主","identity":"隐藏继承人，母亲遗产的真正受益人","goal":"夺回公司，公开继妹和未婚夫的阴谋","weakness":"仍然在意曾经的爱情","secret":"掌握父亲失踪前的录音","arc":"从忍耐求证到公开反击","conflict":"被继妹顶替身份，被未婚夫背叛","entrance":"订婚宴红毯尽头，她被保安拦下","line":"你们抢走的，今晚一件件还回来。","appearancePrompt":"25岁亚洲女性，冷白皮，黑色长发，湿透白色礼服，克制愤怒的眼神，红毯雨夜，电影感侧光"},{"name":"沈烬","role":"男主","identity":"跨国基金负责人","goal":"查清旧案并保护林晚","weakness":"不轻易相信任何人","secret":"他早已知道林晚的真实身份","arc":"从旁观者变成共同复仇者","conflict":"和反派家族存在旧账","entrance":"黑车停在雨中，他递出董事会文件","line":"你要复仇，我要真相。","appearancePrompt":"30岁亚洲男性，黑色西装，冷峻克制，雨夜黑车旁，手持文件袋，低饱和电影光"}]}',
   series_outline:
     "1. 全剧主线：林晚从订婚宴羞辱开始，逐步拿回股份、爱情和真相。\n2. 三幕结构：开端：订婚宴背叛与新身份入场；对抗：证据升级、关系拉扯、董事会夺权；结局：身份公开、旧案翻盘、情绪释放。\n3. 八段式 Treatment：1 羞辱开场；2 新身份入场；3 初次反击；4 反派反扑；5 男主秘密暴露；6 女主低谷；7 董事会翻盘；8 旧案真相与情绪释放。\n4. 关键反转清单：未婚夫背叛、男主隐藏帮助、继妹伪造病历、董事会投票翻盘。\n5. 情绪升级曲线：羞辱 -> 忍耐 -> 反击 -> 误会 -> 爆发 -> 终局胜利。\n6. 分集大纲：\n第 1 集 / 订婚宴羞辱 / 女主被赶出宴会 / 婚戒滚落 / 黑车中递出董事文件\n第 2 集 / 投资人入场 / 女主重返宴会 / 继妹失态 / 股东名单出现女主姓名\n第 3 集 / 录音线索 / 旧案浮出水面 / 男主身份存疑 / 录音里出现男主父亲声音",
+  existing_script:
+    "1. 已有剧本范围：已覆盖第 1 集订婚宴羞辱到董事文件登场。\n2. 已有剧情摘要：林晚被保安拦下；宴会大屏公开周衍与林薇婚照；婚戒落入红酒；沈烬在黑车中递出董事文件。\n3. 已有 Scene List：订婚宴门口 / 建立羞辱与背叛 / 希望转为羞辱 / 黑车文件推动身份反转。\n4. 人物当前状态：林晚压抑愤怒；林薇以胜利者姿态顶替她；周衍试图切割旧关系；沈烬掌握关键文件。\n5. 当前悬念：董事文件是否真实；沈烬为何帮助林晚；继妹是否知道旧案真相。\n6. 续写起点：第 2 集从林晚重新走入宴会厅开始，所有人以为她已经被赶走。",
   chinese_script:
     "## 第 1 集\n片长：2 分钟\n### Scene List\n- 场次：订婚宴门口\n- 功能：建立羞辱开场和女主目标\n- 冲突：女主被保安阻拦，继妹顶替她的位置\n- 价值变化：期待 -> 羞辱\n- 前后因果：女主赶到订婚宴，发现未婚夫背叛；这一场导致她接受新身份入场\n### 场景 1\n- 画面：红毯尽头，林晚的白裙被雨水打湿。\n- 人物：林晚、保安、宾客。\n- 动作：保安伸手挡住她，宴会厅大屏正在播放她未婚夫和继妹的婚照。\n- 情绪：羞辱、窒息。\n- 对白：林晚：“今天，是我的订婚宴。” 保安：“名单上没有你。”\n- 镜头提示：婚戒从她掌心滑落，滚进红酒。\n### 集尾钩子\n黑车门打开，沈烬递出文件：“林董事，该您入场了。”",
+  continuation_script:
+    "## 第 2 集\n片长：2 分钟\n### Scene List\n- 场次：订婚宴大厅\n- 功能：承接第 1 集身份反转，让女主第一次公开反击\n- 冲突：林薇要求保安赶人，沈烬公开董事授权\n- 价值变化：羞辱 -> 反击\n- 前后因果：沈烬递出文件，导致林晚重新入场；董事授权迫使宴会所有人转向她\n### 场景 1\n- 画面：宴会厅门被推开，冷光从林晚身后压进来。\n- 人物：林晚、沈烬、林薇、周衍、宾客。\n- 动作：林薇笑容僵住，周衍下意识挡住大屏。\n- 情绪：压迫、反击爽感。\n- 对白：林薇：“你怎么还敢回来？” 林晚：“回来拿我的东西。”\n- 镜头提示：董事授权书特写，林晚姓名被红色印章盖住。\n### 集尾钩子\n沈烬低声：“你母亲去世前，见过周衍的父亲。”",
   translation:
     "## Episode 1\nDuration: 2 minutes\n### Scene List\n- Scene: Entrance of the engagement party\n- Function: Establish public humiliation and the heroine's goal\n- Conflict: Lin Wan is blocked while her stepsister takes her place\n- Value Shift: Hope -> Humiliation\n- Cause and Effect: Lin Wan arrives and discovers the betrayal; this pushes her to accept her new identity\n### Scene 1\n- Visual: At the end of the red carpet, Lin Wan's white dress is soaked by rain.\n- Characters: Lin Wan, security guards, guests.\n- Action: A guard blocks her while the banquet screen shows her fiance's wedding photo with her stepsister.\n- Emotion: Humiliation, suffocation.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Your name is not on the list.”\n### Ending Hook\nThe black car door opens. Shen Jin hands her a document: “Director Lin, it is your turn to enter.”",
   localization:

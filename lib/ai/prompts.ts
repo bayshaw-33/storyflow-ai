@@ -1,9 +1,12 @@
 export type TaskType =
   | "market_analysis"
+  | "script_import"
   | "brief"
   | "characters"
   | "series_outline"
+  | "existing_script"
   | "chinese_script"
+  | "continuation_script"
   | "translation"
   | "localization"
   | "test_script"
@@ -45,10 +48,13 @@ export type GeneratePayload = {
 
 export const taskNames: Record<TaskType, string> = {
   market_analysis: "市场",
+  script_import: "剧本导入",
   brief: "创意",
   characters: "角色",
   series_outline: "大纲",
+  existing_script: "已有剧本",
   chinese_script: "中文剧本",
+  continuation_script: "续写剧本",
   translation: "翻译",
   localization: "本土化",
   test_script: "测试剧本",
@@ -79,6 +85,19 @@ const promptByTask: Record<TaskType, string> = {
     "4. 风险提醒：列出 2-3 个文化、节奏或题材风险",
     "5. 创作建议：给出前 3 集 Hook 和整体爽点建议",
     "要求：简洁、可执行，不要写长篇行业分析。",
+  ].join("\n"),
+
+  script_import: [
+    "任务：解析用户导入的已有小说、剧本或故事材料，整理成可用于续写的项目底稿。",
+    "输出结构必须包含：",
+    "1. 原始材料类型判断：小说 / 剧本 / 大纲 / 混合材料",
+    "2. 已有剧情概况：用 5-8 条概括已经发生的关键事件",
+    "3. 核心人物与关系：列出主要人物、关系、目标、秘密和冲突",
+    "4. 当前剧情停点：明确故事停在什么情绪点、冲突点或悬念点",
+    "5. 可续写方向：给出 3 个可继续推进的方向，每个方向包含冲突和钩子",
+    "6. 需要保留的风格：对白长度、情绪强度、画面调性、叙事节奏",
+    "7. 续写风险：列出可能破坏因果、人物弧线或原文设定的风险",
+    "要求：不要照抄原文长段落；要提炼成续写可用的信息；面向漫剧分镜和短剧节奏。",
   ].join("\n"),
 
   brief: [
@@ -135,6 +154,18 @@ const promptByTask: Record<TaskType, string> = {
     "要求：分集数量必须等于 options.episodeCount；每集结尾都要有推动下一集的钩子。",
   ].join("\n"),
 
+  existing_script: [
+    "任务：根据导入材料和大纲，整理“已有剧本”模块，方便后续从当前停点继续写。",
+    "输出结构必须包含：",
+    "1. 已有剧本范围：说明已覆盖到第几集/第几场/哪个关键节点",
+    "2. 已有剧情摘要：按集或按场列出已经发生的内容",
+    "3. 已有 Scene List：列出关键场次的功能、冲突、价值变化和前后因果",
+    "4. 人物当前状态：每个主要人物当前目标、误会、秘密、情绪位置",
+    "5. 当前悬念：列出必须在续写中承接的悬念和钩子",
+    "6. 续写起点：给出下一场或下一集最适合打开的画面",
+    "要求：保留原剧情，不新增无关大事件；格式稳定，方便人工编辑。",
+  ].join("\n"),
+
   chinese_script: [
     "任务：根据大纲生成中文漫剧剧本。",
     "根据 options.chineseScriptRange 控制生成范围：first3 前 3 集；first15 前 15 集；first_half 前半部；full 全剧。",
@@ -156,6 +187,29 @@ const promptByTask: Record<TaskType, string> = {
     "- 镜头提示：",
     "### 集尾钩子",
     "要求：中文输出；强画面、强冲突、强情绪、短对白；不改变大纲核心剧情。",
+  ].join("\n"),
+
+  continuation_script: [
+    "任务：从“已有剧本”的当前停点继续生成中文漫剧续写剧本。",
+    "生成范围：默认生成接下来的 3 集；如果 options.chineseScriptRange 或上下文提出范围要求，则按要求执行。",
+    "每集格式：",
+    "## 第 X 集",
+    "片长：使用 options.episodeDuration",
+    "### Scene List",
+    "- 场次：",
+    "- 功能：这场戏在续写中的功能",
+    "- 冲突：",
+    "- 价值变化：例如信任 -> 怀疑、羞辱 -> 反击",
+    "- 前后因果：这场戏由什么导致，又导致什么",
+    "### 场景 1",
+    "- 画面：",
+    "- 人物：",
+    "- 动作：",
+    "- 情绪：",
+    "- 对白：短句，适合竖屏漫剧",
+    "- 镜头提示：",
+    "### 集尾钩子",
+    "要求：必须承接已有剧本的人物状态、悬念和因果；不能推翻原设定；强化画面感、冲突、情绪和连续钩子。",
   ].join("\n"),
 
   translation: [

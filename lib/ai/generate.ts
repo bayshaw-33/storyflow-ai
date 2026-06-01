@@ -3,10 +3,13 @@ import { buildPrompt, taskNames, type GeneratePayload, type TaskType } from "./p
 
 const taskTypes: TaskType[] = [
   "market_analysis",
+  "script_import",
   "brief",
   "characters",
   "series_outline",
+  "existing_script",
   "chinese_script",
+  "continuation_script",
   "translation",
   "localization",
   "test_script",
