@@ -255,12 +255,21 @@ export default function WorkflowPage() {
   }
 
   function updateField<K extends keyof DramaProject>(key: K, value: DramaProject[K]) {
-    updateProject((current) => ({
-      ...current,
-      [key]: value,
-      status: "draft",
-      updatedAt: new Date().toISOString(),
-    }));
+    updateProject((current) => {
+      const next = {
+        ...current,
+        [key]: value,
+        status: "draft" as const,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (current.workflowType === "continuation" && key === "idea" && typeof value === "string") {
+        const canMirrorImport = !current.existingScript.trim() || current.existingScript.trim() === current.idea.trim();
+        if (canMirrorImport) next.existingScript = value;
+      }
+
+      return next;
+    });
   }
 
   function updateStep(taskType: TaskType, content: string) {
@@ -307,6 +316,20 @@ export default function WorkflowPage() {
     const blocked = getRequirement(baseProject, step);
     if (blocked) {
       setError(blocked);
+      return;
+    }
+
+    if (baseProject.workflowType === "continuation" && step === "existing_script") {
+      const existingContent = baseProject.existingScript.trim() || baseProject.idea.trim() || baseProject.importedScript.trim();
+      const nextProject = {
+        ...setStepContent(baseProject, "existing_script", existingContent),
+        status: "ready" as const,
+        updatedAt: new Date().toISOString(),
+      };
+      setProject(nextProject);
+      upsertProject(nextProject);
+      setError("");
+      setStatusText("已有剧本已从导入内容自动带入，可直接编辑。");
       return;
     }
 
@@ -366,6 +389,10 @@ export default function WorkflowPage() {
         updatedAt: new Date().toISOString(),
       };
 
+      if (step === "script_import" && baseProject.workflowType === "continuation" && !nextProject.existingScript.trim()) {
+        nextProject = { ...nextProject, existingScript: baseProject.idea };
+      }
+
       if (step === "brief" && (!baseProject.title.trim() || baseProject.title.trim() === DEFAULT_TITLE)) {
         const generatedTitle = extractGeneratedTitle(data.output);
         if (generatedTitle) nextProject = { ...nextProject, title: generatedTitle };
@@ -412,6 +439,10 @@ export default function WorkflowPage() {
     const nextStep = steps[currentIndex + 1];
     if (!nextStep) return;
     setActiveStep(nextStep.key);
+    if (project.workflowType === "continuation" && nextStep.key === "existing_script") {
+      await generateForStep(nextStep.key, project);
+      return;
+    }
     await generateForStep(nextStep.key, project);
   }
 
