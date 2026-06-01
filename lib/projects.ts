@@ -423,9 +423,9 @@ export function getChineseScriptRangeLabel(value: ChineseScriptRange) {
 }
 
 export function getSelectedFinalScript(project: DramaProject) {
-  if (project.finalScriptVersion === "chinese") return project.finalScriptChinese || project.finalScript || "";
-  if (project.finalScriptVersion === "bilingual") return project.finalScriptBilingual || project.finalScript || "";
-  return project.finalScriptForeign || project.finalScript || "";
+  if (project.finalScriptVersion === "chinese") return project.finalScriptChinese || "";
+  if (project.finalScriptVersion === "bilingual") return project.finalScriptBilingual || "";
+  return project.finalScriptForeign || "";
 }
 
 function normalizeProject(project: LegacyProject): DramaProject {

@@ -159,13 +159,18 @@ const promptByTask: Record<TaskType, string> = {
   ].join("\n"),
 
   translation: [
-    "任务：将中文剧本翻译为 options.targetLanguage。",
+    "任务：将中文剧本翻译为 options.targetLanguage，并保留中文原文，输出双语核对版。",
     "输出结构：",
-    "1. 目标语言剧本",
-    "2. 关键台词翻译",
+    "1. 双语剧本",
+    "每个场景必须按以下格式输出：",
+    "【中文原文】",
+    "保留原中文 Scene List、画面、动作、对白。",
+    "【目标语言译文】",
+    "使用 options.targetLanguage 翻译同一段内容。",
+    "2. 关键台词对照",
     "3. 需要保留的情绪表达",
     "4. 翻译风险提示",
-    "要求：主体内容使用目标语言；保留 Scene List、漫剧节奏、短对白和强情绪，不直译中文长句。",
+    "要求：不要删除中文；中文和目标语言必须对应，方便人工核对；保留 Scene List、漫剧节奏、短对白和强情绪。",
   ].join("\n"),
 
   localization: [
@@ -207,10 +212,11 @@ const promptByTask: Record<TaskType, string> = {
     "任务：根据测试剧本和评估要求生成最终剧本。",
     "必须严格执行用户手动编辑后的评估内容。",
     "根据 options.finalScriptVersion 输出不同版本：",
-    "- chinese：中文剧本",
-    "- foreign：外语剧本，使用 options.targetLanguage",
-    "- bilingual：双语剧本，每句或每段保留中文和目标语言对照",
+    "- chinese：只输出中文剧本，不输出外语正文",
+    "- foreign：只输出外语剧本，使用 options.targetLanguage，不输出中文正文",
+    "- bilingual：输出双语剧本，每句或每段保留中文和目标语言对照",
     "输出标题必须为：经过评估修订后的最终剧本",
+    "标题下一行必须标明版本：中文剧本 / 外语剧本 / 双语剧本。",
     "要求：保留 Scene List；落实诊断修订和计时删减；统一格式；删掉过程说明、问题清单和无关提示。",
   ].join("\n"),
 

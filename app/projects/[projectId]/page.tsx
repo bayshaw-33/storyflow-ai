@@ -821,28 +821,48 @@ export default function WorkflowPage() {
           {showDownloadPanel ? (
             <div className="download-panel">
               <strong>{downloadTitle}下载</strong>
-              <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("word", downloadTitle, downloadContent, downloadLandscape)}>
-                <FileText size={17} /> 下载 Word
-              </button>
-              <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("md", downloadTitle, downloadContent, downloadLandscape)}>
-                <Download size={17} /> 下载 MD
-              </button>
-              <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("pdf", downloadTitle, downloadContent, downloadLandscape)}>
-                <Download size={17} /> 下载 PDF
-              </button>
               {activeStep === "final_delivery" ? (
-                <>
-                  <button className="secondary-button full" onClick={() => downloadSection("md", "故事概况及大纲", `${project.brief}\n\n${project.outline}`)}>
-                    下载故事概况及大纲
+                <div className="download-matrix">
+                  {[
+                    { title: "故事概况及大纲", content: `${project.brief}\n\n${project.outline}`, landscape: false },
+                    {
+                      title: "最终剧本各语言版本",
+                      content: [
+                        "## 中文剧本",
+                        project.finalScriptChinese || "未生成",
+                        "",
+                        "## 外语剧本",
+                        project.finalScriptForeign || "未生成",
+                        "",
+                        "## 双语剧本",
+                        project.finalScriptBilingual || "未生成",
+                      ].join("\n"),
+                      landscape: false,
+                    },
+                    { title: "分镜", content: storyboardContent, landscape: true },
+                    { title: "完整交付包", content: deliveryContent, landscape: false },
+                  ].map((item) => (
+                    <div className="download-row" key={item.title}>
+                      <span>{item.title}</span>
+                      <button disabled={!item.content.trim()} onClick={() => downloadSection("word", item.title, item.content, item.landscape)}>Word</button>
+                      <button disabled={!item.content.trim()} onClick={() => downloadSection("md", item.title, item.content, item.landscape)}>MD</button>
+                      <button disabled={!item.content.trim()} onClick={() => downloadSection("pdf", item.title, item.content, item.landscape)}>PDF</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="download-actions">
+                  <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("word", downloadTitle, downloadContent, downloadLandscape)}>
+                    <FileText size={17} /> 下载 Word
                   </button>
-                  <button className="secondary-button full" onClick={() => downloadSection("md", "最终剧本各语言版本", `${project.finalScriptChinese}\n\n${project.finalScriptForeign}\n\n${project.finalScriptBilingual}`)}>
-                    下载最终剧本各语言版本
+                  <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("md", downloadTitle, downloadContent, downloadLandscape)}>
+                    <Download size={17} /> 下载 MD
                   </button>
-                  <button className="secondary-button full" onClick={() => downloadSection("md", "分镜", storyboardContent, true)}>
-                    下载分镜
+                  <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("pdf", downloadTitle, downloadContent, downloadLandscape)}>
+                    <Download size={17} /> 下载 PDF
                   </button>
-                </>
-              ) : null}
+                </div>
+              )}
             </div>
           ) : null}
 
