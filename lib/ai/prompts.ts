@@ -1,17 +1,16 @@
 export type TaskType =
-  | "market_positioning"
-  | "benchmark_analysis"
+  | "market_analysis"
   | "brief"
-  | "market_prediction"
   | "characters"
   | "series_outline"
-  | "quality_evaluation"
+  | "chinese_script"
   | "translation"
   | "localization"
   | "final_script"
+  | "quality_evaluation"
   | "storyboard_script";
 
-export type ScriptMode = "first3_with_outline" | "full_script";
+export type ChineseScriptRange = "first3" | "first15" | "first_half" | "full";
 
 export type GenerateOptions = {
   market?: string;
@@ -22,7 +21,7 @@ export type GenerateOptions = {
   benchmarkLink?: string;
   episodeDuration?: string;
   episodeCount?: number;
-  scriptMode?: ScriptMode;
+  chineseScriptRange?: ChineseScriptRange;
 };
 
 export type GeneratePayload = {
@@ -40,52 +39,39 @@ export type GeneratePayload = {
 };
 
 export const taskNames: Record<TaskType, string> = {
-  market_positioning: "市场定位",
-  benchmark_analysis: "竞品分析",
-  brief: "项目 Brief",
-  market_prediction: "市场预判",
+  market_analysis: "市场分析",
+  brief: "创意 Brief",
   characters: "角色设定",
   series_outline: "全剧大纲",
-  quality_evaluation: "AI 质量评估",
+  chinese_script: "中文剧本",
   translation: "翻译",
-  localization: "本土化优化",
-  final_script: "生成剧本",
-  storyboard_script: "分镜头脚本",
+  localization: "本土化",
+  final_script: "最终剧本",
+  quality_evaluation: "评估",
+  storyboard_script: "分镜",
 };
 
 const commonRules = [
   "你是 StoryFlow AI 的海外漫剧研发助手。",
-  "必须使用中文输出，除非任务明确要求生成目标语言版本。",
-  "面向“漫剧”和海外竖屏短剧，不是普通小说、长剧、网文大纲或营销文案。",
-  "只输出可直接放进创作后台编辑的正文，不输出解释过程、思考过程、免责声明或教程。",
+  "必须使用中文输出，翻译任务除外；翻译任务按目标语言输出主体内容。",
+  "面向漫剧和海外竖屏短剧，不是普通小说、长剧、网文大纲或营销文案。",
+  "只输出生成内容本身。严禁输出“好的”“以下是”“这是根据您提供的信息生成的”等 AI 回复套话。",
+  "不输出解释过程、思考过程、免责声明、教程或营销文案。",
   "强调强画面感、强冲突、强情绪、短对白、连续钩子、集尾反转。",
   "输出格式要稳定，使用清晰标题、编号、短段落，便于前端展示和后续编辑。",
   "不要输出 Markdown 表格。",
 ].join("\n");
 
 const promptByTask: Record<TaskType, string> = {
-  market_positioning: [
-    "任务：根据 input、context、options 生成市场定位。",
+  market_analysis: [
+    "任务：把市场定位、竞品分析、市场预判合并成一个简洁的市场分析。",
     "输出结构：",
-    "1. 目标市场判断",
-    "2. 题材适配度",
-    "3. 目标受众画像",
-    "4. 平台与内容语感",
-    "5. 文化风险与规避方式",
-    "要求：必须结合目标市场、中文题材、每集片长和集数，不要泛泛而谈。",
-  ].join("\n"),
-
-  benchmark_analysis: [
-    "任务：进行 Benchmark Analysis 竞品分析。",
-    "输出结构：",
-    "1. 竞品基本判断",
-    "2. 题材与卖点拆解",
-    "3. 人物关系结构",
-    "4. 前 3 集钩子设计",
-    "5. 情绪曲线",
-    "6. 可借鉴但不能照搬的点",
-    "7. 对本项目的创作启发",
-    "要求：结合竞品名称和链接。如果链接内容不可访问，只基于用户提供信息分析，并明确依据不足。",
+    "1. 目标市场：一句话判断目标市场的内容偏好",
+    "2. 题材机会：说明所选题材为什么适合该市场",
+    "3. 竞品启发：结合竞品名称或链接，总结 3 个可借鉴点",
+    "4. 风险提醒：列出 2-3 个文化、节奏或题材风险",
+    "5. 创作建议：给出前 3 集 Hook 和整体爽点建议",
+    "要求：简洁、可执行，不要写长篇行业分析。",
   ].join("\n"),
 
   brief: [
@@ -100,89 +86,46 @@ const promptByTask: Record<TaskType, string> = {
     "6. 情绪基调",
     "7. 目标受众",
     "8. 视觉风格",
-    "要求：剧名要短、有冲突、有记忆点；Brief 要能指导后续角色、大纲和剧本生成。",
-  ].join("\n"),
-
-  market_prediction: [
-    "任务：生成市场预判。",
-    "输出结构：",
-    "1. 市场匹配度：0-10 分，并说明原因",
-    "2. 推荐标签",
-    "3. 潜在风险",
-    "4. 前 5 秒 Hook 建议",
-    "5. 前 3 集强化建议",
-    "6. 集数和片长适配建议",
-    "要求：结论要具体，能指导下一步角色和大纲生成。",
+    "要求：剧名短、有冲突、有记忆点；Brief 能直接指导角色、大纲和剧本。",
   ].join("\n"),
 
   characters: [
     "任务：生成角色设定。",
-    "至少输出：女主、男主或关键关系对象、主反派、关键配角。",
-    "每个角色格式：",
-    "### 角色名",
-    "- 身份：",
-    "- 目标：",
-    "- 弱点：",
-    "- 秘密：",
-    "- 成长弧线：",
-    "- 与其他角色的冲突关系：",
-    "- 首次登场画面：",
-    "- 典型短对白：",
-    "要求：角色必须服务强冲突和连续反转，不能只是人物小传。",
+    "只输出 JSON 数组，不要 Markdown，不要代码块。",
+    "数组中至少包含女主、男主或关键关系对象、主反派、关键配角。",
+    "每个角色对象必须包含以下字段：",
+    "name：角色名",
+    "role：角色功能，例如女主、男主、反派、关键配角",
+    "identity：身份",
+    "goal：目标",
+    "weakness：弱点",
+    "secret：秘密",
+    "arc：成长弧线",
+    "conflict：与其他角色的冲突关系",
+    "entrance：首次登场画面",
+    "line：典型短对白",
+    "要求：所有字段用中文；角色必须服务强冲突和连续反转，不能只是人物小传。",
   ].join("\n"),
 
   series_outline: [
     "任务：生成全剧大纲，并按 options.episodeCount 生成分集大纲；如果没有 episodeCount，默认 12 集。",
     "输出结构：",
     "1. 全剧主线",
-    "2. Act 1：建立羞辱、危机和欲望",
-    "3. Act 2：反击升级、关系拉扯和身份误会",
-    "4. Act 3：身份揭露、终局反转和情绪释放",
-    "5. 关键反转清单",
-    "6. 分集大纲",
+    "2. 三幕结构",
+    "3. 关键反转清单",
+    "4. 情绪升级曲线",
+    "5. 分集大纲",
     "每集格式：第 X 集 / 核心事件 / 主要冲突 / 情绪爆点 / 集尾钩子",
     "要求：分集数量必须等于 options.episodeCount；每集结尾都要有推动下一集的钩子。",
   ].join("\n"),
 
-  quality_evaluation: [
-    "任务：进行 AI 质量评估。",
-    "输出结构：",
-    "1. Hook 强度：0-10 分",
-    "2. 情绪密度：0-10 分",
-    "3. 反转频率：0-10 分",
-    "4. 漫剧画面感：0-10 分",
-    "5. 目标市场适配度：0-10 分",
-    "6. 最大问题清单",
-    "7. 可执行修改建议",
-    "要求：不要只打分，必须给出能直接修改的建议。",
-  ].join("\n"),
-
-  translation: [
-    "任务：翻译当前剧本或项目内容。",
-    "输出结构：",
-    "1. 目标语言版本",
-    "2. 关键台词翻译",
-    "3. 需要保留的情绪表达",
-    "4. 翻译风险提示",
-    "要求：默认保留漫剧节奏、短对白和强情绪，不直译中文长句。",
-  ].join("\n"),
-
-  localization: [
-    "任务：进行本土化检查与自动优化。",
-    "检查项：文化表达、称谓、职业、法律、宗教、习惯用语、目标市场情绪偏好。",
-    "输出结构：",
-    "1. 发现问题",
-    "2. 修改建议",
-    "3. 自动优化版本",
-    "4. 仍需人工确认的风险",
-    "要求：必须结合目标市场，不要泛泛提示；保留原剧情，只优化表达、对白、节奏和画面感。",
-  ].join("\n"),
-
-  final_script: [
-    "任务：在本土化优化之后生成正式剧本。",
-    "根据 options.scriptMode 选择范围：",
-    "- first3_with_outline：生成前 3 集完整漫剧剧本，并补充全局剧本大纲。",
-    "- full_script：按 options.episodeCount 生成全局剧本。若集数较多，每集至少给出关键场景、冲突、对白、画面和集尾钩子。",
+  chinese_script: [
+    "任务：根据大纲生成中文漫剧剧本。",
+    "根据 options.chineseScriptRange 控制生成范围：",
+    "- first3：生成前 3 集中文剧本",
+    "- first15：生成前 15 集中文剧本",
+    "- first_half：生成前半部中文剧本，集数为 options.episodeCount 的一半",
+    "- full：生成全剧中文剧本",
     "每集格式：",
     "## 第 X 集",
     "片长：使用 options.episodeDuration",
@@ -194,11 +137,52 @@ const promptByTask: Record<TaskType, string> = {
     "- 对白：短句，适合竖屏漫剧",
     "- 镜头提示：",
     "### 集尾钩子",
-    "要求：剧本必须强画面、强冲突、强情绪、短对白；不要改写原核心剧情。",
+    "要求：中文输出；强画面、强冲突、强情绪、短对白；不改变大纲核心剧情。",
+  ].join("\n"),
+
+  translation: [
+    "任务：将中文剧本翻译为 options.targetLanguage。",
+    "输出结构：",
+    "1. 目标语言剧本",
+    "2. 关键台词翻译",
+    "3. 需要保留的情绪表达",
+    "4. 翻译风险提示",
+    "要求：主体内容使用目标语言；保留漫剧节奏、短对白和强情绪，不直译中文长句。",
+  ].join("\n"),
+
+  localization: [
+    "任务：对翻译后的剧本进行目标市场本土化优化。",
+    "检查项：文化表达、称谓、职业、法律、宗教、习惯用语、情绪表达、目标市场爽点。",
+    "输出结构：",
+    "1. 本土化优化版剧本",
+    "2. 已调整的表达",
+    "3. 仍需人工确认的风险",
+    "要求：保留原剧情，只优化表达、对白、节奏和画面感。",
+  ].join("\n"),
+
+  final_script: [
+    "任务：生成最终剧本。",
+    "输入会包含本土化优化后的剧本。",
+    "输出标题必须为：经过本土化优化之后的剧本",
+    "输出内容：整理为可下载、可交付的最终剧本版本。",
+    "要求：保留本土化后的语言和剧情；统一格式；删掉过程说明、问题清单和无关提示。",
+  ].join("\n"),
+
+  quality_evaluation: [
+    "任务：对最终剧本进行评估。",
+    "输出结构：",
+    "1. Hook 强度：0-10 分",
+    "2. 情绪密度：0-10 分",
+    "3. 反转频率：0-10 分",
+    "4. 漫剧画面感：0-10 分",
+    "5. 目标市场适配度：0-10 分",
+    "6. 最大问题清单",
+    "7. 可执行修改建议",
+    "要求：不要只打分，必须给出能直接修改的建议。",
   ].join("\n"),
 
   storyboard_script: [
-    "任务：把已生成剧本一键转成分镜头脚本。",
+    "任务：把最终剧本一键转成分镜头脚本。",
     "输出结构：",
     "## 第 X 集分镜头脚本",
     "### 镜头 1",
@@ -208,7 +192,7 @@ const promptByTask: Record<TaskType, string> = {
     "- 台词/字幕：",
     "- 音效/情绪：",
     "- 转场：",
-    "要求：每集至少 12 个镜头；画面要能直接交给漫剧制作或 AI 视频生成；保留原剧情和对白，不新增大段剧情。",
+    "要求：每集至少 12 个镜头；画面可直接交给漫剧制作或 AI 视频生成；保留原剧情和对白，不新增大段剧情。",
   ].join("\n"),
 };
 
@@ -261,11 +245,11 @@ function buildOptions(payload: GeneratePayload) {
     market: payload.options?.market || payload.market || "未选择",
     genre: payload.options?.genre || payload.genre || "未选择",
     sourceLanguage: payload.options?.sourceLanguage || "中文",
-    targetLanguage: payload.options?.targetLanguage || "英语",
+    targetLanguage: payload.options?.targetLanguage || "英文",
     benchmarkTitle: payload.options?.benchmarkTitle || payload.benchmarkTitle || "",
     benchmarkLink: payload.options?.benchmarkLink || payload.benchmarkLink || "",
     episodeDuration: payload.options?.episodeDuration || "2 分钟",
     episodeCount: payload.options?.episodeCount || 12,
-    scriptMode: payload.options?.scriptMode || "first3_with_outline",
+    chineseScriptRange: payload.options?.chineseScriptRange || "first3",
   };
 }

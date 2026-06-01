@@ -8,17 +8,23 @@ import {
   ArrowLeft,
   CheckCircle2,
   Download,
+  FileText,
   Loader2,
   Plus,
   RefreshCw,
   Save,
   Settings,
+  Trash2,
   UserPlus,
   WandSparkles,
 } from "lucide-react";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   applyDemoStep,
+  CharacterCard,
+  characterCardsToMarkdown,
+  CHINESE_SCRIPT_RANGE_OPTIONS,
+  createEmptyCharacterCard,
   createProject,
   demoProject,
   DramaProject,
@@ -27,9 +33,9 @@ import {
   exportProjectMarkdown,
   GENRE_OPTIONS,
   getStepContent,
+  LANGUAGE_OPTIONS,
   MARKET_OPTIONS,
   readProjectsFromStorage,
-  SCRIPT_MODE_OPTIONS,
   setStepContent,
   upsertProject,
   workflowSteps,
@@ -44,16 +50,24 @@ function getPreviousKey(taskType: TaskType): TaskType | null {
 }
 
 function getRequirement(project: DramaProject, taskType: TaskType) {
-  if (taskType === "market_positioning") {
+  if (taskType === "market_analysis") {
     return project.market && project.genre ? "" : "请先选择目标市场和题材。";
-  }
-
-  if (taskType === "benchmark_analysis") {
-    return project.benchmarkTitle || project.benchmarkLink ? "" : "请先填写竞品名称或竞品链接。";
   }
 
   if (taskType === "brief") {
     return project.idea.trim() ? "" : "请先填写故事创意。";
+  }
+
+  if (taskType === "characters") {
+    return project.brief.trim() ? "" : "请先完成创意 Brief。";
+  }
+
+  if (taskType === "series_outline") {
+    return project.characterCards.length || project.characters.trim() ? "" : "请先生成或添加角色卡。";
+  }
+
+  if (taskType === "storyboard_script") {
+    return project.qualityEvaluation.trim() ? "" : "请先完成评估。";
   }
 
   const previousKey = getPreviousKey(taskType);
@@ -75,24 +89,43 @@ function previousStepContent(project: DramaProject, activeStep: TaskType) {
 }
 
 function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent: string) {
-  if (activeStep === "market_positioning") {
-    return `目标市场：${project.market}\n题材：${project.genre}\n集数：${project.episodeCount}\n每集片长：${project.episodeDuration}`;
+  if (activeStep === "market_analysis") {
+    return [
+      `目标市场：${project.market}`,
+      `题材：${project.genre}`,
+      `竞品名称：${project.benchmarkTitle}`,
+      `竞品链接：${project.benchmarkLink}`,
+      `集数：${project.episodeCount}`,
+      `每集片长：${project.episodeDuration}`,
+    ].join("\n");
   }
 
-  if (activeStep === "benchmark_analysis") {
-    return `竞品名称：${project.benchmarkTitle}\n竞品链接：${project.benchmarkLink}`;
+  if (activeStep === "characters") {
+    return project.brief;
+  }
+
+  if (activeStep === "series_outline") {
+    return characterCardsToMarkdown(project.characterCards) || project.characters || project.brief;
+  }
+
+  if (activeStep === "chinese_script") {
+    return project.outline;
   }
 
   if (activeStep === "translation") {
-    return project.outline || project.brief;
+    return project.chineseScript;
   }
 
   if (activeStep === "localization") {
-    return project.translation || project.outline;
+    return project.translation;
   }
 
   if (activeStep === "final_script") {
-    return project.localization || project.translation || project.outline;
+    return project.localization;
+  }
+
+  if (activeStep === "quality_evaluation") {
+    return project.finalScript;
   }
 
   if (activeStep === "storyboard_script") {
@@ -108,12 +141,32 @@ function extractGeneratedTitle(output: string) {
   return match[1].replace(/[#*_`"“”]/g, "").trim().slice(0, 32);
 }
 
+function safeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, "").trim() || "StoryFlow项目";
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function markdownToHtml(content: string) {
+  return escapeHtml(content)
+    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.*)$/gm, "<h1>$1</h1>")
+    .replace(/\n/g, "<br />");
+}
+
 export default function WorkflowPage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [project, setProject] = useState<DramaProject | null>(null);
-  const [activeStep, setActiveStep] = useState<TaskType>("market_positioning");
+  const [activeStep, setActiveStep] = useState<TaskType>("market_analysis");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [statusText, setStatusText] = useState("");
@@ -199,6 +252,21 @@ export default function WorkflowPage() {
     }));
   }
 
+  function syncCharacterCards(cards: CharacterCard[]) {
+    updateProject((current) => ({
+      ...current,
+      characterCards: cards,
+      characters: characterCardsToMarkdown(cards),
+      status: "draft",
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function updateCharacterCard(id: string, key: keyof CharacterCard, value: string) {
+    if (!project) return;
+    syncCharacterCards(project.characterCards.map((card) => (card.id === id ? { ...card, [key]: value } : card)));
+  }
+
   async function generate() {
     if (!project || requirement) return;
 
@@ -226,12 +294,12 @@ export default function WorkflowPage() {
             market: project.market,
             genre: project.genre,
             sourceLanguage: "中文",
-            targetLanguage: "英语",
+            targetLanguage: project.targetLanguage,
             benchmarkTitle: project.benchmarkTitle,
             benchmarkLink: project.benchmarkLink,
             episodeDuration: project.episodeDuration,
             episodeCount: project.episodeCount,
-            scriptMode: project.scriptMode,
+            chineseScriptRange: project.chineseScriptRange,
           },
           projectTitle: project.title,
           market: project.market,
@@ -292,7 +360,7 @@ export default function WorkflowPage() {
     };
     setProject(demo);
     upsertProject(demo);
-    setActiveStep("market_positioning");
+    setActiveStep("market_analysis");
     setStatusText("已填入演示案例");
     setError("");
   }
@@ -308,21 +376,14 @@ export default function WorkflowPage() {
 
   function addManualCharacter() {
     if (!project) return;
-    const template = [
-      "",
-      "### 新角色",
-      "- 身份：",
-      "- 目标：",
-      "- 弱点：",
-      "- 秘密：",
-      "- 成长弧线：",
-      "- 与其他角色的冲突关系：",
-      "- 首次登场画面：",
-      "- 典型短对白：",
-    ].join("\n");
-    updateStep("characters", `${project.characters.trim()}${project.characters.trim() ? "\n\n" : ""}${template.trim()}`);
+    syncCharacterCards([...project.characterCards, createEmptyCharacterCard()]);
     setActiveStep("characters");
-    setStatusText("已添加角色模板");
+    setStatusText("已添加角色卡");
+  }
+
+  function removeCharacter(id: string) {
+    if (!project) return;
+    syncCharacterCards(project.characterCards.filter((card) => card.id !== id));
   }
 
   function continueNextStep() {
@@ -331,20 +392,57 @@ export default function WorkflowPage() {
     if (nextStep) setActiveStep(nextStep.key);
   }
 
-  function exportMarkdown() {
-    if (!project) return;
-    const markdown = exportProjectMarkdown(project);
-    const date = new Date().toISOString().slice(0, 10);
-    const safeTitle = project.title.replace(/[\\/:*?"<>|]/g, "").trim() || "StoryFlow项目";
-    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  function downloadBlob(filename: string, content: string, type: string) {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${safeTitle}-${date}.md`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadSection(format: "md" | "word" | "pdf", title: string, content: string, landscape = false) {
+    if (!project) return;
+    const date = new Date().toISOString().slice(0, 10);
+    const baseName = `${safeFileName(project.title)}-${title}-${date}`;
+
+    if (format === "md") {
+      downloadBlob(`${baseName}.md`, `# ${project.title}\n\n## ${title}\n\n${content}`, "text/markdown;charset=utf-8");
+      return;
+    }
+
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><style>
+      @page { size: A4 ${landscape ? "landscape" : "portrait"}; margin: 18mm; }
+      body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; line-height: 1.72; color: #18201d; }
+      h1, h2, h3 { margin: 0 0 12px; }
+      body > h1 { font-size: 24px; }
+      body > h2 { font-size: 18px; margin-top: 18px; }
+    </style></head><body><h1>${escapeHtml(project.title)}</h1><h2>${escapeHtml(title)}</h2>${markdownToHtml(content)}</body></html>`;
+
+    if (format === "word") {
+      downloadBlob(`${baseName}.doc`, html, "application/msword;charset=utf-8");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("浏览器阻止了 PDF 下载窗口，请允许弹窗后重试。");
+      return;
+    }
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
+  function exportMarkdown() {
+    if (!project) return;
+    const markdown = exportProjectMarkdown(project);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadBlob(`${safeFileName(project.title)}-${date}.md`, markdown, "text/markdown;charset=utf-8");
   }
 
   if (!project) {
@@ -362,7 +460,11 @@ export default function WorkflowPage() {
 
   const selectedGenreIsOther = !GENRE_OPTIONS.includes(project.genre) || project.genre === "其他";
   const selectedMarketIsOther = !MARKET_OPTIONS.includes(project.market) || project.market === "其他";
-  const scriptMode = SCRIPT_MODE_OPTIONS.find((option) => option.value === project.scriptMode);
+  const scriptRange = CHINESE_SCRIPT_RANGE_OPTIONS.find((option) => option.value === project.chineseScriptRange);
+  const showDownloadPanel = activeStep === "final_script" || activeStep === "storyboard_script";
+  const downloadTitle = activeStep === "storyboard_script" ? "分镜头脚本" : "最终剧本";
+  const downloadContent = activeStep === "storyboard_script" ? project.storyboardScript : project.finalScript;
+  const downloadLandscape = activeStep === "storyboard_script";
 
   return (
     <main className="workflow-shell">
@@ -378,7 +480,7 @@ export default function WorkflowPage() {
         />
         <div className="header-actions">
           <span className="save-state"><Save size={15} /> {statusText || "本地自动保存"}</span>
-          <button className="icon-button" onClick={exportMarkdown} title="导出 Markdown">
+          <button className="icon-button" onClick={exportMarkdown} title="导出完整 Markdown">
             <Download size={18} />
           </button>
           <Link className="icon-button" href="/settings" title="设置">
@@ -390,11 +492,13 @@ export default function WorkflowPage() {
       <section className="workflow-grid">
         <aside className="steps-panel">
           <div className="panel-title">
-            <span>PRD 流程导航</span>
+            <span>流程导航</span>
             <strong>{workflowSteps.findIndex((step) => step.key === activeStep) + 1}/{workflowSteps.length}</strong>
           </div>
           {workflowSteps.map((step, index) => {
-            const done = Boolean(getStepContent(project, step.key).trim());
+            const done = step.key === "characters"
+              ? project.characterCards.length > 0
+              : Boolean(getStepContent(project, step.key).trim());
             const blocked = Boolean(getRequirement(project, step.key));
 
             return (
@@ -502,7 +606,7 @@ export default function WorkflowPage() {
                 className="idea-input"
                 value={project.idea}
                 onChange={(event) => updateField("idea", event.target.value)}
-                placeholder="一句话创意，或关键词：重生 / 复仇 / 豪门 / 隐藏身份。生成 Brief 后会自动提取剧名，也可以在顶部手动修改。"
+                placeholder="一句话创意，或关键词：重生 / 复仇 / 豪门 / 隐藏身份。生成创意后会自动提取剧名，也可以在顶部手动修改。"
               />
             </label>
           </div>
@@ -517,30 +621,80 @@ export default function WorkflowPage() {
             </button>
           </div>
 
-          <textarea
-            className="script-editor"
-            value={activeContent}
-            onChange={(event) => updateStep(activeStep, event.target.value)}
-            placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
-          />
+          {activeStep === "characters" ? (
+            <div className="character-grid">
+              {project.characterCards.length === 0 ? (
+                <div className="empty-character">
+                  <UserPlus size={24} />
+                  <h2>还没有角色卡</h2>
+                  <p>点击生成角色，或手动添加一个角色卡。</p>
+                </div>
+              ) : null}
+
+              {project.characterCards.map((card) => (
+                <article className="character-card" key={card.id}>
+                  <div className="character-card-head">
+                    <input
+                      value={card.name}
+                      onChange={(event) => updateCharacterCard(card.id, "name", event.target.value)}
+                      placeholder="角色名"
+                    />
+                    <button className="icon-button subtle" onClick={() => removeCharacter(card.id)} title="删除角色">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <div className="character-fields">
+                    <label>功能<input value={card.role} onChange={(event) => updateCharacterCard(card.id, "role", event.target.value)} /></label>
+                    <label>身份<input value={card.identity} onChange={(event) => updateCharacterCard(card.id, "identity", event.target.value)} /></label>
+                    <label>目标<textarea value={card.goal} onChange={(event) => updateCharacterCard(card.id, "goal", event.target.value)} /></label>
+                    <label>弱点<textarea value={card.weakness} onChange={(event) => updateCharacterCard(card.id, "weakness", event.target.value)} /></label>
+                    <label>秘密<textarea value={card.secret} onChange={(event) => updateCharacterCard(card.id, "secret", event.target.value)} /></label>
+                    <label>成长弧线<textarea value={card.arc} onChange={(event) => updateCharacterCard(card.id, "arc", event.target.value)} /></label>
+                    <label>冲突关系<textarea value={card.conflict} onChange={(event) => updateCharacterCard(card.id, "conflict", event.target.value)} /></label>
+                    <label>首次登场画面<textarea value={card.entrance} onChange={(event) => updateCharacterCard(card.id, "entrance", event.target.value)} /></label>
+                    <label>典型短对白<textarea value={card.line} onChange={(event) => updateCharacterCard(card.id, "line", event.target.value)} /></label>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <textarea
+              className="script-editor"
+              value={activeContent}
+              onChange={(event) => updateStep(activeStep, event.target.value)}
+              placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+            />
+          )}
         </section>
 
         <aside className="ai-panel">
           <div>
             <span className="kicker">AI 助手</span>
             <h2>{activeContent.trim() ? "重新生成" : "生成内容"}</h2>
-            <p>根据当前 PRD 阶段调用 `/api/ai/generate`，由服务端读取 `DEEPSEEK_API_KEY`。</p>
+            <p>当前步骤会调用 `/api/ai/generate`，由服务端读取 `DEEPSEEK_API_KEY`。</p>
           </div>
 
-          {activeStep === "final_script" ? (
+          {activeStep === "chinese_script" ? (
             <label>
-              剧本生成范围
-              <select value={project.scriptMode} onChange={(event) => updateField("scriptMode", event.target.value as DramaProject["scriptMode"])}>
-                {SCRIPT_MODE_OPTIONS.map((option) => (
+              中文剧本范围
+              <select
+                value={project.chineseScriptRange}
+                onChange={(event) => updateField("chineseScriptRange", event.target.value as DramaProject["chineseScriptRange"])}
+              >
+                {CHINESE_SCRIPT_RANGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-              <small className="field-note">{scriptMode?.description}</small>
+              <small className="field-note">{scriptRange?.description}</small>
+            </label>
+          ) : null}
+
+          {activeStep === "translation" ? (
+            <label>
+              翻译语言
+              <select value={project.targetLanguage} onChange={(event) => updateField("targetLanguage", event.target.value)}>
+                {LANGUAGE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+              </select>
             </label>
           ) : null}
 
@@ -548,6 +702,21 @@ export default function WorkflowPage() {
             <button className="secondary-button full" onClick={addManualCharacter}>
               <UserPlus size={18} /> 手动添加角色
             </button>
+          ) : null}
+
+          {showDownloadPanel ? (
+            <div className="download-panel">
+              <strong>{downloadTitle}下载</strong>
+              <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("word", downloadTitle, downloadContent, downloadLandscape)}>
+                <FileText size={17} /> 下载 Word
+              </button>
+              <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("md", downloadTitle, downloadContent, downloadLandscape)}>
+                <Download size={17} /> 下载 MD
+              </button>
+              <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("pdf", downloadTitle, downloadContent, downloadLandscape)}>
+                <Download size={17} /> 下载 PDF
+              </button>
+            </div>
           ) : null}
 
           {requirement ? <div className="notice warning"><AlertCircle size={17} /> {requirement}</div> : null}
@@ -579,11 +748,11 @@ export default function WorkflowPage() {
 
           <div className="ai-hints">
             <strong>MVP 演示标准</strong>
-            <span>中文题材选项</span>
+            <span>10 步创作流程</span>
             <span>{project.episodeCount} 集 / {project.episodeDuration}</span>
-            <span>自动剧名</span>
-            <span>本土化后生成剧本</span>
-            <span>一键分镜</span>
+            <span>{project.genre}</span>
+            <span>角色卡编辑</span>
+            <span>最终剧本下载</span>
           </div>
         </aside>
       </section>

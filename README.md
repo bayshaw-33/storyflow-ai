@@ -8,17 +8,16 @@
 
 ## MVP 流程
 
-1. 市场定位
-2. 竞品分析
-3. 创意 Brief / 自动剧名
-4. 市场预判
-5. 角色设定
-6. 全剧大纲 / 分集大纲
-7. AI 质量评估
-8. 翻译
-9. 本土化优化
-10. 生成剧本
-11. 一键生成分镜头脚本
+1. 市场分析
+2. 创意
+3. 角色
+4. 大纲
+5. 中文剧本
+6. 翻译
+7. 本土化
+8. 最终剧本
+9. 评估
+10. 分镜
 
 ## API
 
@@ -29,16 +28,15 @@ POST /api/ai/generate
 支持 `taskType`：
 
 ```text
-market_positioning
-benchmark_analysis
+market_analysis
 brief
-market_prediction
 characters
 series_outline
-quality_evaluation
+chinese_script
 translation
 localization
 final_script
+quality_evaluation
 storyboard_script
 ```
 

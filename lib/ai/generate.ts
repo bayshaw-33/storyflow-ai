@@ -2,16 +2,15 @@ import { callDeepSeek, type AIUsage } from "./providers/deepseek";
 import { buildPrompt, taskNames, type GeneratePayload, type TaskType } from "./prompts";
 
 const taskTypes: TaskType[] = [
-  "market_positioning",
-  "benchmark_analysis",
+  "market_analysis",
   "brief",
-  "market_prediction",
   "characters",
   "series_outline",
-  "quality_evaluation",
+  "chinese_script",
   "translation",
   "localization",
   "final_script",
+  "quality_evaluation",
   "storyboard_script",
 ];
 
@@ -52,7 +51,7 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
       {
         role: "system",
         content:
-          "你是 StoryFlow AI 的服务端生成器，只输出符合海外漫剧研发流程的正文内容，不输出解释过程。",
+          "你是 StoryFlow AI 的服务端生成器，只输出符合海外漫剧研发流程的正文内容。严禁输出“好的”“以下是”等 AI 回复套话。",
       },
       {
         role: "user",
@@ -63,7 +62,7 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
 
   return {
     success: true,
-    output: providerResult.output,
+    output: cleanAIOutput(providerResult.output),
     usage: providerResult.usage,
     error: null,
     meta: {
@@ -74,4 +73,14 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
       generatedAt: new Date().toISOString(),
     },
   };
+}
+
+function cleanAIOutput(output: string) {
+  return output
+    .replace(/^\s*(好的|当然|没问题)[，,。\s]*/i, "")
+    .replace(/^\s*这是根据您?(提供的)?(?:输入|信息|内容).*?(生成|整理).*?[。:：]\s*/i, "")
+    .replace(/^\s*以下是(?:根据.*?生成的)?[^。\n]*[。:：]\s*/i, "")
+    .replace(/^\s*```(?:json|markdown|md|text)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
 }
