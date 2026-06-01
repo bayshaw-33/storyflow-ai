@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -15,28 +15,35 @@ import {
   Save,
   Settings,
   Trash2,
+  UploadCloud,
   UserPlus,
   WandSparkles,
 } from "lucide-react";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   applyDemoStep,
+  buildDeliveryMarkdown,
   CharacterCard,
   characterCardsToMarkdown,
   CHINESE_SCRIPT_RANGE_OPTIONS,
   createEmptyCharacterCard,
+  createEmptyStoryboardEpisode,
   createProject,
   demoProject,
   DramaProject,
   EPISODE_COUNT_OPTIONS,
   EPISODE_DURATION_OPTIONS,
   exportProjectMarkdown,
+  FINAL_SCRIPT_VERSION_OPTIONS,
   GENRE_OPTIONS,
+  getSelectedFinalScript,
   getStepContent,
   LANGUAGE_OPTIONS,
   MARKET_OPTIONS,
   readProjectsFromStorage,
   setStepContent,
+  StoryboardEpisode,
+  storyboardEpisodesToMarkdown,
   upsertProject,
   workflowSteps,
 } from "@/lib/projects";
@@ -50,25 +57,13 @@ function getPreviousKey(taskType: TaskType): TaskType | null {
 }
 
 function getRequirement(project: DramaProject, taskType: TaskType) {
-  if (taskType === "market_analysis") {
-    return project.market && project.genre ? "" : "请先选择目标市场和题材。";
-  }
-
-  if (taskType === "brief") {
-    return project.idea.trim() ? "" : "请先填写故事创意。";
-  }
-
-  if (taskType === "characters") {
-    return project.brief.trim() ? "" : "请先完成创意 Brief。";
-  }
-
-  if (taskType === "series_outline") {
-    return project.characterCards.length || project.characters.trim() ? "" : "请先生成或添加角色卡。";
-  }
-
-  if (taskType === "storyboard_script") {
-    return project.qualityEvaluation.trim() ? "" : "请先完成评估。";
-  }
+  if (taskType === "market_analysis") return project.market && project.genre ? "" : "请先选择目标市场和题材。";
+  if (taskType === "brief") return project.idea.trim() ? "" : "请先填写故事创意，或拖入附件解析。";
+  if (taskType === "characters") return project.brief.trim() ? "" : "请先完成创意。";
+  if (taskType === "series_outline") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
+  if (taskType === "final_script") return project.testScript.trim() && project.qualityEvaluation.trim() ? "" : "请先完成测试剧本和评估。";
+  if (taskType === "storyboard_script") return getSelectedFinalScript(project).trim() ? "" : "请先生成最终剧本。";
+  if (taskType === "final_delivery") return project.storyboardEpisodes.length || project.storyboardScript.trim() ? "" : "请先生成分镜。";
 
   const previousKey = getPreviousKey(taskType);
   if (!previousKey) return "";
@@ -99,39 +94,30 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
       `每集片长：${project.episodeDuration}`,
     ].join("\n");
   }
-
-  if (activeStep === "characters") {
-    return project.brief;
-  }
-
-  if (activeStep === "series_outline") {
-    return characterCardsToMarkdown(project.characterCards) || project.characters || project.brief;
-  }
-
-  if (activeStep === "chinese_script") {
-    return project.outline;
-  }
-
-  if (activeStep === "translation") {
-    return project.chineseScript;
-  }
-
-  if (activeStep === "localization") {
-    return project.translation;
-  }
-
+  if (activeStep === "characters") return project.brief;
+  if (activeStep === "series_outline") return characterCardsToMarkdown(project.characterCards) || project.brief;
+  if (activeStep === "chinese_script") return project.outline;
+  if (activeStep === "translation") return project.chineseScript;
+  if (activeStep === "localization") return project.translation;
+  if (activeStep === "test_script") return project.localization;
+  if (activeStep === "quality_evaluation") return project.testScript;
   if (activeStep === "final_script") {
-    return project.localization;
+    return [
+      "【测试剧本】",
+      project.testScript,
+      "",
+      "【评估与修订要求】",
+      project.qualityEvaluation,
+      "",
+      "【中文剧本】",
+      project.chineseScript,
+      "",
+      "【外语剧本】",
+      project.translation,
+    ].join("\n");
   }
-
-  if (activeStep === "quality_evaluation") {
-    return project.finalScript;
-  }
-
-  if (activeStep === "storyboard_script") {
-    return project.finalScript;
-  }
-
+  if (activeStep === "storyboard_script") return getSelectedFinalScript(project);
+  if (activeStep === "final_delivery") return buildDeliveryMarkdown(project, true);
   return activeContent || project.idea;
 }
 
@@ -146,11 +132,7 @@ function safeFileName(value: string) {
 }
 
 function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function markdownToHtml(content: string) {
@@ -165,12 +147,17 @@ export default function WorkflowPage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [project, setProject] = useState<DramaProject | null>(null);
   const [activeStep, setActiveStep] = useState<TaskType>("market_analysis");
   const [loading, setLoading] = useState(false);
+  const [parsingFile, setParsingFile] = useState(false);
   const [error, setError] = useState("");
   const [statusText, setStatusText] = useState("");
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [characterView, setCharacterView] = useState<"cards" | "relationships">("cards");
+  const [optimizeOpen, setOptimizeOpen] = useState(false);
+  const [optimizeInstruction, setOptimizeInstruction] = useState("");
 
   useEffect(() => {
     const projects = readProjectsFromStorage();
@@ -246,10 +233,7 @@ export default function WorkflowPage() {
   }
 
   function updateStep(taskType: TaskType, content: string) {
-    updateProject((current) => ({
-      ...setStepContent(current, taskType, content),
-      status: "draft",
-    }));
+    updateProject((current) => ({ ...setStepContent(current, taskType, content), status: "draft" }));
   }
 
   function syncCharacterCards(cards: CharacterCard[]) {
@@ -267,14 +251,36 @@ export default function WorkflowPage() {
     syncCharacterCards(project.characterCards.map((card) => (card.id === id ? { ...card, [key]: value } : card)));
   }
 
-  async function generate() {
-    if (!project || requirement) return;
-
-    const generatingProject: DramaProject = {
-      ...project,
-      status: "generating",
+  function syncStoryboardEpisodes(episodes: StoryboardEpisode[]) {
+    updateProject((current) => ({
+      ...current,
+      storyboardEpisodes: episodes,
+      storyboardScript: storyboardEpisodesToMarkdown(episodes),
+      status: "draft",
       updatedAt: new Date().toISOString(),
-    };
+    }));
+  }
+
+  function updateStoryboardEpisode(id: string, key: keyof StoryboardEpisode, value: string) {
+    if (!project) return;
+    syncStoryboardEpisodes(project.storyboardEpisodes.map((episode) => (episode.id === id ? { ...episode, [key]: value } : episode)));
+  }
+
+  async function generateForStep(
+    step: TaskType,
+    baseProject = project,
+    extra?: { optimizeInstruction?: string; inputOverride?: string },
+  ) {
+    if (!baseProject) return;
+
+    const blocked = getRequirement(baseProject, step);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+
+    const stepContent = getStepContent(baseProject, step);
+    const generatingProject: DramaProject = { ...baseProject, status: "generating", updatedAt: new Date().toISOString() };
 
     setProject(generatingProject);
     upsertProject(generatingProject);
@@ -287,27 +293,31 @@ export default function WorkflowPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          taskType: activeStep,
-          input: getTaskInput(project, activeStep, activeContent),
-          context: project.idea,
+          taskType: step,
+          input: extra?.inputOverride || getTaskInput(baseProject, step, stepContent),
+          context: extra?.optimizeInstruction
+            ? `请根据以下优化要求重写当前页内容：${extra.optimizeInstruction}`
+            : baseProject.idea,
           options: {
-            market: project.market,
-            genre: project.genre,
+            market: baseProject.market,
+            genre: baseProject.genre,
             sourceLanguage: "中文",
-            targetLanguage: project.targetLanguage,
-            benchmarkTitle: project.benchmarkTitle,
-            benchmarkLink: project.benchmarkLink,
-            episodeDuration: project.episodeDuration,
-            episodeCount: project.episodeCount,
-            chineseScriptRange: project.chineseScriptRange,
+            targetLanguage: baseProject.targetLanguage,
+            benchmarkTitle: baseProject.benchmarkTitle,
+            benchmarkLink: baseProject.benchmarkLink,
+            episodeDuration: baseProject.episodeDuration,
+            episodeCount: baseProject.episodeCount,
+            chineseScriptRange: baseProject.chineseScriptRange,
+            finalScriptVersion: baseProject.finalScriptVersion,
+            optimizeInstruction: extra?.optimizeInstruction || "",
           },
-          projectTitle: project.title,
-          market: project.market,
-          genre: project.genre,
-          benchmarkTitle: project.benchmarkTitle,
-          benchmarkLink: project.benchmarkLink,
-          idea: project.idea,
-          allSteps: previousStepContent(project, activeStep),
+          projectTitle: baseProject.title,
+          market: baseProject.market,
+          genre: baseProject.genre,
+          benchmarkTitle: baseProject.benchmarkTitle,
+          benchmarkLink: baseProject.benchmarkLink,
+          idea: baseProject.idea,
+          allSteps: previousStepContent(baseProject, step),
         }),
       });
 
@@ -320,16 +330,14 @@ export default function WorkflowPage() {
       }
 
       let nextProject = {
-        ...setStepContent(generatingProject, activeStep, data.output),
+        ...setStepContent(generatingProject, step, data.output),
         status: "ready" as const,
         updatedAt: new Date().toISOString(),
       };
 
-      if (activeStep === "brief" && (!project.title.trim() || project.title.trim() === DEFAULT_TITLE)) {
+      if (step === "brief" && (!baseProject.title.trim() || baseProject.title.trim() === DEFAULT_TITLE)) {
         const generatedTitle = extractGeneratedTitle(data.output);
-        if (generatedTitle) {
-          nextProject = { ...nextProject, title: generatedTitle };
-        }
+        if (generatedTitle) nextProject = { ...nextProject, title: generatedTitle };
       }
 
       setProject(nextProject);
@@ -342,22 +350,14 @@ export default function WorkflowPage() {
   }
 
   function markError(baseProject: DramaProject, message: string) {
-    const erroredProject = {
-      ...baseProject,
-      status: "error" as const,
-      updatedAt: new Date().toISOString(),
-    };
+    const erroredProject = { ...baseProject, status: "error" as const, updatedAt: new Date().toISOString() };
     setProject(erroredProject);
     upsertProject(erroredProject);
     setError(message);
   }
 
   function fillDemo() {
-    const demo = {
-      ...demoProject(),
-      id: params.projectId,
-      updatedAt: new Date().toISOString(),
-    };
+    const demo = { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() };
     setProject(demo);
     upsertProject(demo);
     setActiveStep("market_analysis");
@@ -374,6 +374,62 @@ export default function WorkflowPage() {
     setError("");
   }
 
+  async function continueNextStep() {
+    if (!project) return;
+    const currentIndex = workflowSteps.findIndex((step) => step.key === activeStep);
+    const nextStep = workflowSteps[currentIndex + 1];
+    if (!nextStep) return;
+    setActiveStep(nextStep.key);
+    await generateForStep(nextStep.key, project);
+  }
+
+  function confirmOptimize() {
+    if (!project || !optimizeInstruction.trim()) return;
+    const inputOverride = ["【当前内容】", activeContent, "", "【优化要求】", optimizeInstruction.trim()].join("\n");
+    setOptimizeOpen(false);
+    void generateForStep(activeStep, project, { optimizeInstruction: optimizeInstruction.trim(), inputOverride });
+    setOptimizeInstruction("");
+  }
+
+  async function handleFiles(files: FileList | File[]) {
+    const file = Array.from(files)[0];
+    if (!file || !project) return;
+    setParsingFile(true);
+    setError("");
+
+    try {
+      const fileName = file.name.toLowerCase();
+      let text = "";
+
+      if (fileName.endsWith(".txt") || fileName.endsWith(".md")) {
+        text = await file.text();
+      } else {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch("/api/files/parse", { method: "POST", body: formData });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "文件解析失败。");
+        text = data.text;
+      }
+
+      const clipped = text.trim().slice(0, 30000);
+      updateField(
+        "idea",
+        `${project.idea.trim() ? `${project.idea.trim()}\n\n` : ""}【附件：${file.name}】\n${clipped}` as DramaProject["idea"],
+      );
+      setStatusText(`已解析附件：${file.name}`);
+    } catch (fileError) {
+      setError(fileError instanceof Error ? fileError.message : "附件解析失败，请换一个文件重试。");
+    } finally {
+      setParsingFile(false);
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    void handleFiles(event.dataTransfer.files);
+  }
+
   function addManualCharacter() {
     if (!project) return;
     syncCharacterCards([...project.characterCards, createEmptyCharacterCard()]);
@@ -386,10 +442,14 @@ export default function WorkflowPage() {
     syncCharacterCards(project.characterCards.filter((card) => card.id !== id));
   }
 
-  function continueNextStep() {
-    const currentIndex = workflowSteps.findIndex((step) => step.key === activeStep);
-    const nextStep = workflowSteps[currentIndex + 1];
-    if (nextStep) setActiveStep(nextStep.key);
+  function addStoryboardEpisode() {
+    if (!project) return;
+    syncStoryboardEpisodes([...project.storyboardEpisodes, createEmptyStoryboardEpisode(project.storyboardEpisodes.length + 1)]);
+  }
+
+  function removeStoryboardEpisode(id: string) {
+    if (!project) return;
+    syncStoryboardEpisodes(project.storyboardEpisodes.filter((episode) => episode.id !== id));
   }
 
   function downloadBlob(filename: string, content: string, type: string) {
@@ -461,9 +521,14 @@ export default function WorkflowPage() {
   const selectedGenreIsOther = !GENRE_OPTIONS.includes(project.genre) || project.genre === "其他";
   const selectedMarketIsOther = !MARKET_OPTIONS.includes(project.market) || project.market === "其他";
   const scriptRange = CHINESE_SCRIPT_RANGE_OPTIONS.find((option) => option.value === project.chineseScriptRange);
-  const showDownloadPanel = activeStep === "final_script" || activeStep === "storyboard_script";
-  const downloadTitle = activeStep === "storyboard_script" ? "分镜头脚本" : "最终剧本";
-  const downloadContent = activeStep === "storyboard_script" ? project.storyboardScript : project.finalScript;
+  const showDownloadPanel = activeStep === "final_script" || activeStep === "storyboard_script" || activeStep === "final_delivery";
+  const finalScriptContent = getSelectedFinalScript(project);
+  const storyboardContent = storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript;
+  const deliveryContent = buildDeliveryMarkdown(project, true);
+  const downloadTitle =
+    activeStep === "storyboard_script" ? "分镜头脚本" : activeStep === "final_delivery" ? "最终交付包" : "最终剧本";
+  const downloadContent =
+    activeStep === "storyboard_script" ? storyboardContent : activeStep === "final_delivery" ? deliveryContent : finalScriptContent;
   const downloadLandscape = activeStep === "storyboard_script";
 
   return (
@@ -498,7 +563,9 @@ export default function WorkflowPage() {
           {workflowSteps.map((step, index) => {
             const done = step.key === "characters"
               ? project.characterCards.length > 0
-              : Boolean(getStepContent(project, step.key).trim());
+              : step.key === "storyboard_script"
+                ? project.storyboardEpisodes.length > 0
+                : Boolean(getStepContent(project, step.key).trim());
             const blocked = Boolean(getRequirement(project, step.key));
 
             return (
@@ -541,29 +608,20 @@ export default function WorkflowPage() {
               </label>
               <label>
                 竞品名称
-                <input
-                  value={project.benchmarkTitle}
-                  onChange={(event) => updateField("benchmarkTitle", event.target.value)}
-                />
+                <input value={project.benchmarkTitle} onChange={(event) => updateField("benchmarkTitle", event.target.value)} />
               </label>
             </div>
 
             <div className="compact-fields">
               <label>
                 集数
-                <select
-                  value={project.episodeCount}
-                  onChange={(event) => updateField("episodeCount", Number(event.target.value))}
-                >
+                <select value={project.episodeCount} onChange={(event) => updateField("episodeCount", Number(event.target.value))}>
                   {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} 集</option>)}
                 </select>
               </label>
               <label>
                 每集片长
-                <select
-                  value={project.episodeDuration}
-                  onChange={(event) => updateField("episodeDuration", event.target.value)}
-                >
+                <select value={project.episodeDuration} onChange={(event) => updateField("episodeDuration", event.target.value)}>
                   {EPISODE_DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
@@ -582,19 +640,13 @@ export default function WorkflowPage() {
                 {selectedMarketIsOther ? (
                   <label>
                     其他市场
-                    <input
-                      value={project.market === "其他" ? "" : project.market}
-                      onChange={(event) => updateField("market", event.target.value || "其他")}
-                    />
+                    <input value={project.market === "其他" ? "" : project.market} onChange={(event) => updateField("market", event.target.value || "其他")} />
                   </label>
                 ) : null}
                 {selectedGenreIsOther ? (
                   <label>
                     其他题材
-                    <input
-                      value={project.genre === "其他" ? "" : project.genre}
-                      onChange={(event) => updateField("genre", event.target.value || "其他")}
-                    />
+                    <input value={project.genre === "其他" ? "" : project.genre} onChange={(event) => updateField("genre", event.target.value || "其他")} />
                   </label>
                 ) : null}
               </div>
@@ -606,9 +658,28 @@ export default function WorkflowPage() {
                 className="idea-input"
                 value={project.idea}
                 onChange={(event) => updateField("idea", event.target.value)}
-                placeholder="一句话创意，或关键词：重生 / 复仇 / 豪门 / 隐藏身份。生成创意后会自动提取剧名，也可以在顶部手动修改。"
+                placeholder="一句话创意，或拖入已有小说/剧本附件，支持 txt、md、pdf、doc、docx。"
               />
             </label>
+            <div
+              className="file-dropzone"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {parsingFile ? <Loader2 className="spin" size={18} /> : <UploadCloud size={18} />}
+              <span>一键拖入附件解析：txt / md / pdf / doc / docx</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.pdf,.doc,.docx"
+                hidden
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  if (event.target.files) void handleFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            </div>
           </div>
 
           <div className="editor-head">
@@ -622,38 +693,71 @@ export default function WorkflowPage() {
           </div>
 
           {activeStep === "characters" ? (
-            <div className="character-grid">
-              {project.characterCards.length === 0 ? (
+            <div className="character-workspace">
+              <div className="segmented-control">
+                <button className={characterView === "cards" ? "active" : ""} onClick={() => setCharacterView("cards")}>角色卡</button>
+                <button className={characterView === "relationships" ? "active" : ""} onClick={() => setCharacterView("relationships")}>人物关系图</button>
+              </div>
+              {characterView === "relationships" ? (
+                <textarea
+                  className="script-editor"
+                  value={project.relationshipDiagram}
+                  onChange={(event) => updateField("relationshipDiagram", event.target.value)}
+                  placeholder="用文字描述人物关系图，例如：林晚 -> 复仇对象 -> 林薇；沈烬 -> 秘密盟友 -> 林晚。"
+                />
+              ) : (
+                <div className="character-grid">
+                  {project.characterCards.length === 0 ? (
+                    <div className="empty-character">
+                      <UserPlus size={24} />
+                      <h2>还没有角色卡</h2>
+                      <p>点击内容生成，或手动添加一个角色卡。</p>
+                    </div>
+                  ) : null}
+
+                  {project.characterCards.map((card) => (
+                    <article className="character-card" key={card.id}>
+                      <div className="character-card-head">
+                        <input value={card.name} onChange={(event) => updateCharacterCard(card.id, "name", event.target.value)} placeholder="角色名" />
+                        <button className="icon-button subtle" onClick={() => removeCharacter(card.id)} title="删除角色">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <div className="character-fields">
+                        <label>功能<input value={card.role} onChange={(event) => updateCharacterCard(card.id, "role", event.target.value)} /></label>
+                        <label>身份<input value={card.identity} onChange={(event) => updateCharacterCard(card.id, "identity", event.target.value)} /></label>
+                        <label>目标<textarea value={card.goal} onChange={(event) => updateCharacterCard(card.id, "goal", event.target.value)} /></label>
+                        <label>弱点<textarea value={card.weakness} onChange={(event) => updateCharacterCard(card.id, "weakness", event.target.value)} /></label>
+                        <label>秘密<textarea value={card.secret} onChange={(event) => updateCharacterCard(card.id, "secret", event.target.value)} /></label>
+                        <label>成长弧线<textarea value={card.arc} onChange={(event) => updateCharacterCard(card.id, "arc", event.target.value)} /></label>
+                        <label>冲突关系<textarea value={card.conflict} onChange={(event) => updateCharacterCard(card.id, "conflict", event.target.value)} /></label>
+                        <label>首次登场画面<textarea value={card.entrance} onChange={(event) => updateCharacterCard(card.id, "entrance", event.target.value)} /></label>
+                        <label>典型短对白<textarea value={card.line} onChange={(event) => updateCharacterCard(card.id, "line", event.target.value)} /></label>
+                        <label>人物形象提示词<textarea value={card.appearancePrompt} onChange={(event) => updateCharacterCard(card.id, "appearancePrompt", event.target.value)} /></label>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : activeStep === "storyboard_script" ? (
+            <div className="storyboard-grid">
+              {project.storyboardEpisodes.length === 0 ? (
                 <div className="empty-character">
-                  <UserPlus size={24} />
-                  <h2>还没有角色卡</h2>
-                  <p>点击生成角色，或手动添加一个角色卡。</p>
+                  <FileText size={24} />
+                  <h2>还没有分集分镜</h2>
+                  <p>点击内容生成，系统会按集拆分分镜头脚本。</p>
                 </div>
               ) : null}
-
-              {project.characterCards.map((card) => (
-                <article className="character-card" key={card.id}>
+              {project.storyboardEpisodes.map((episode) => (
+                <article className="storyboard-card" key={episode.id}>
                   <div className="character-card-head">
-                    <input
-                      value={card.name}
-                      onChange={(event) => updateCharacterCard(card.id, "name", event.target.value)}
-                      placeholder="角色名"
-                    />
-                    <button className="icon-button subtle" onClick={() => removeCharacter(card.id)} title="删除角色">
+                    <input value={episode.title} onChange={(event) => updateStoryboardEpisode(episode.id, "title", event.target.value)} />
+                    <button className="icon-button subtle" onClick={() => removeStoryboardEpisode(episode.id)} title="删除本集">
                       <Trash2 size={16} />
                     </button>
                   </div>
-                  <div className="character-fields">
-                    <label>功能<input value={card.role} onChange={(event) => updateCharacterCard(card.id, "role", event.target.value)} /></label>
-                    <label>身份<input value={card.identity} onChange={(event) => updateCharacterCard(card.id, "identity", event.target.value)} /></label>
-                    <label>目标<textarea value={card.goal} onChange={(event) => updateCharacterCard(card.id, "goal", event.target.value)} /></label>
-                    <label>弱点<textarea value={card.weakness} onChange={(event) => updateCharacterCard(card.id, "weakness", event.target.value)} /></label>
-                    <label>秘密<textarea value={card.secret} onChange={(event) => updateCharacterCard(card.id, "secret", event.target.value)} /></label>
-                    <label>成长弧线<textarea value={card.arc} onChange={(event) => updateCharacterCard(card.id, "arc", event.target.value)} /></label>
-                    <label>冲突关系<textarea value={card.conflict} onChange={(event) => updateCharacterCard(card.id, "conflict", event.target.value)} /></label>
-                    <label>首次登场画面<textarea value={card.entrance} onChange={(event) => updateCharacterCard(card.id, "entrance", event.target.value)} /></label>
-                    <label>典型短对白<textarea value={card.line} onChange={(event) => updateCharacterCard(card.id, "line", event.target.value)} /></label>
-                  </div>
+                  <textarea value={episode.content} onChange={(event) => updateStoryboardEpisode(episode.id, "content", event.target.value)} />
                 </article>
               ))}
             </div>
@@ -670,20 +774,15 @@ export default function WorkflowPage() {
         <aside className="ai-panel">
           <div>
             <span className="kicker">AI 助手</span>
-            <h2>{activeContent.trim() ? "重新生成" : "生成内容"}</h2>
+            <h2>内容生成</h2>
             <p>当前步骤会调用 `/api/ai/generate`，由服务端读取 `DEEPSEEK_API_KEY`。</p>
           </div>
 
           {activeStep === "chinese_script" ? (
             <label>
               中文剧本范围
-              <select
-                value={project.chineseScriptRange}
-                onChange={(event) => updateField("chineseScriptRange", event.target.value as DramaProject["chineseScriptRange"])}
-              >
-                {CHINESE_SCRIPT_RANGE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
+              <select value={project.chineseScriptRange} onChange={(event) => updateField("chineseScriptRange", event.target.value as DramaProject["chineseScriptRange"])}>
+                {CHINESE_SCRIPT_RANGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <small className="field-note">{scriptRange?.description}</small>
             </label>
@@ -698,9 +797,24 @@ export default function WorkflowPage() {
             </label>
           ) : null}
 
+          {activeStep === "final_script" ? (
+            <label>
+              最终剧本版本
+              <select value={project.finalScriptVersion} onChange={(event) => updateField("finalScriptVersion", event.target.value as DramaProject["finalScriptVersion"])}>
+                {FINAL_SCRIPT_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+          ) : null}
+
           {activeStep === "characters" ? (
             <button className="secondary-button full" onClick={addManualCharacter}>
               <UserPlus size={18} /> 手动添加角色
+            </button>
+          ) : null}
+
+          {activeStep === "storyboard_script" ? (
+            <button className="secondary-button full" onClick={addStoryboardEpisode}>
+              <Plus size={18} /> 添加分集模块
             </button>
           ) : null}
 
@@ -716,6 +830,19 @@ export default function WorkflowPage() {
               <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("pdf", downloadTitle, downloadContent, downloadLandscape)}>
                 <Download size={17} /> 下载 PDF
               </button>
+              {activeStep === "final_delivery" ? (
+                <>
+                  <button className="secondary-button full" onClick={() => downloadSection("md", "故事概况及大纲", `${project.brief}\n\n${project.outline}`)}>
+                    下载故事概况及大纲
+                  </button>
+                  <button className="secondary-button full" onClick={() => downloadSection("md", "最终剧本各语言版本", `${project.finalScriptChinese}\n\n${project.finalScriptForeign}\n\n${project.finalScriptBilingual}`)}>
+                    下载最终剧本各语言版本
+                  </button>
+                  <button className="secondary-button full" onClick={() => downloadSection("md", "分镜", storyboardContent, true)}>
+                    下载分镜
+                  </button>
+                </>
+              ) : null}
             </div>
           ) : null}
 
@@ -728,19 +855,15 @@ export default function WorkflowPage() {
           {error ? <div className="notice error"><AlertCircle size={17} /> {error}</div> : null}
           {statusText ? <div className="notice success"><CheckCircle2 size={17} /> {statusText}</div> : null}
 
-          <button className="primary-button full" onClick={generate} disabled={loading || Boolean(requirement)}>
-            {loading ? <Loader2 className="spin" size={18} /> : activeStep === "storyboard_script" ? <Plus size={18} /> : <RefreshCw size={18} />}
-            {activeStep === "storyboard_script"
-              ? "一键生成分镜头脚本"
-              : activeContent.trim()
-                ? "重新生成当前阶段"
-                : "生成当前阶段"}
+          <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || Boolean(requirement)}>
+            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+            内容生成
           </button>
-          <button className="secondary-button full" onClick={generate} disabled={loading || Boolean(requirement) || !activeContent.trim()}>
+          <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || Boolean(requirement) || !activeContent.trim()}>
             优化内容
           </button>
-          <button className="secondary-button full" onClick={continueNextStep}>
-            继续下一步
+          <button className="secondary-button full" onClick={continueNextStep} disabled={loading}>
+            继续下一步并生成
           </button>
           <button className="secondary-button full" onClick={loadDemoStep}>
             <WandSparkles size={18} /> 加载当前步骤示例内容
@@ -748,14 +871,32 @@ export default function WorkflowPage() {
 
           <div className="ai-hints">
             <strong>MVP 演示标准</strong>
-            <span>10 步创作流程</span>
-            <span>{project.episodeCount} 集 / {project.episodeDuration}</span>
-            <span>{project.genre}</span>
-            <span>角色卡编辑</span>
-            <span>最终剧本下载</span>
+            <span>12 步创作交付</span>
+            <span>附件解析</span>
+            <span>角色卡和关系图</span>
+            <span>测试评估后修订</span>
+            <span>最终交付下载</span>
           </div>
         </aside>
       </section>
+
+      {optimizeOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h2>优化内容</h2>
+            <p>输入本页内容的优化要求，确认后会重新生成当前阶段内容。</p>
+            <textarea
+              value={optimizeInstruction}
+              onChange={(event) => setOptimizeInstruction(event.target.value)}
+              placeholder="例如：加强第 1 集结尾钩子，删掉解释性对白，让女主更克制但更有压迫感。"
+            />
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setOptimizeOpen(false)}>取消</button>
+              <button className="primary-button" onClick={confirmOptimize} disabled={!optimizeInstruction.trim() || loading}>确认优化</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

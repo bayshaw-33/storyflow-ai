@@ -9,9 +9,11 @@ const taskTypes: TaskType[] = [
   "chinese_script",
   "translation",
   "localization",
-  "final_script",
+  "test_script",
   "quality_evaluation",
+  "final_script",
   "storyboard_script",
+  "final_delivery",
 ];
 
 export type GenerateSuccess = {

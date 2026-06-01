@@ -374,6 +374,21 @@ textarea {
   min-height: 86px;
 }
 
+.file-dropzone {
+  min-height: 44px;
+  border: 1px dashed #b9c8c0;
+  border-radius: 8px;
+  background: #f8f7f1;
+  color: #4d5b55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .compact-fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -389,6 +404,41 @@ textarea {
   min-height: 100%;
   resize: none;
   font-size: 15px;
+}
+
+.character-workspace {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+}
+
+.segmented-control {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid #d4dbd6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fbfaf6;
+}
+
+.segmented-control button {
+  min-height: 36px;
+  border: 0;
+  border-right: 1px solid #d4dbd6;
+  background: transparent;
+  color: #4c5752;
+  padding: 0 13px;
+  font-weight: 800;
+}
+
+.segmented-control button:last-child {
+  border-right: 0;
+}
+
+.segmented-control button.active {
+  background: #1f6f55;
+  color: #fff;
 }
 
 .character-grid {
@@ -445,6 +495,29 @@ textarea {
   min-height: 66px;
 }
 
+.storyboard-grid {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+}
+
+.storyboard-card {
+  border: 1px solid #dfe3de;
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.storyboard-card textarea {
+  min-height: 420px;
+  resize: vertical;
+}
+
 .ai-panel {
   display: flex;
   flex-direction: column;
@@ -492,6 +565,42 @@ textarea {
   border-radius: 8px;
   background: #fbfaf6;
   padding: 11px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(24, 32, 29, 0.42);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.modal {
+  width: min(560px, 100%);
+  border: 1px solid #dfe3de;
+  border-radius: 8px;
+  background: #fffefa;
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  box-shadow: 0 24px 60px rgba(24, 32, 29, 0.22);
+}
+
+.modal p {
+  color: #68736e;
+  line-height: 1.55;
+}
+
+.modal textarea {
+  min-height: 150px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .ai-hints {

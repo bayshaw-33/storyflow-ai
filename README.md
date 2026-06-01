@@ -1,6 +1,6 @@
 # StoryFlow AI
 
-从创意到海外漫剧剧本的 AI 创作工作台 MVP，可部署到 Vercel。
+从创意到海外漫剧剧本与分镜交付的 AI 创作工作台 MVP，可部署到 Vercel。
 
 ## 产品规范
 
@@ -8,21 +8,24 @@
 
 ## MVP 流程
 
-1. 市场分析
+1. 市场
 2. 创意
 3. 角色
 4. 大纲
 5. 中文剧本
 6. 翻译
 7. 本土化
-8. 最终剧本
+8. 测试剧本
 9. 评估
-10. 分镜
+10. 最终剧本
+11. 分镜
+12. 最终交付
 
 ## API
 
 ```text
 POST /api/ai/generate
+POST /api/files/parse
 ```
 
 支持 `taskType`：
@@ -35,9 +38,11 @@ series_outline
 chinese_script
 translation
 localization
-final_script
+test_script
 quality_evaluation
+final_script
 storyboard_script
+final_delivery
 ```
 
 ## 环境变量

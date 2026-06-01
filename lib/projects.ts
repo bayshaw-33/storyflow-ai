@@ -1,4 +1,4 @@
-import type { ChineseScriptRange, TaskType } from "./ai/prompts";
+import type { ChineseScriptRange, FinalScriptVersion, TaskType } from "./ai/prompts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 
@@ -14,6 +14,13 @@ export type CharacterCard = {
   conflict: string;
   entrance: string;
   line: string;
+  appearancePrompt: string;
+};
+
+export type StoryboardEpisode = {
+  id: string;
+  title: string;
+  content: string;
 };
 
 export type DramaProject = {
@@ -25,6 +32,7 @@ export type DramaProject = {
   episodeCount: number;
   chineseScriptRange: ChineseScriptRange;
   targetLanguage: string;
+  finalScriptVersion: FinalScriptVersion;
   benchmarkTitle: string;
   benchmarkLink: string;
   idea: string;
@@ -32,14 +40,21 @@ export type DramaProject = {
   brief: string;
   characters: string;
   characterCards: CharacterCard[];
+  relationshipDiagram: string;
   outline: string;
   episodes: string;
   chineseScript: string;
   translation: string;
   localization: string;
-  finalScript: string;
+  testScript: string;
   qualityEvaluation: string;
+  finalScript: string;
+  finalScriptChinese: string;
+  finalScriptForeign: string;
+  finalScriptBilingual: string;
   storyboardScript: string;
+  storyboardEpisodes: StoryboardEpisode[];
+  deliveryPackage: string;
   status: ProjectStatus;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +108,12 @@ export const CHINESE_SCRIPT_RANGE_OPTIONS: Array<{
 
 export const LANGUAGE_OPTIONS = ["中文", "英文", "西班牙语", "意大利语", "法语", "日语", "韩语"];
 
+export const FINAL_SCRIPT_VERSION_OPTIONS: Array<{ value: FinalScriptVersion; label: string }> = [
+  { value: "chinese", label: "中文剧本" },
+  { value: "foreign", label: "外语剧本" },
+  { value: "bilingual", label: "双语剧本" },
+];
+
 export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   market_analysis: "marketAnalysis",
   brief: "brief",
@@ -101,22 +122,26 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   chinese_script: "chineseScript",
   translation: "translation",
   localization: "localization",
-  final_script: "finalScript",
+  test_script: "testScript",
   quality_evaluation: "qualityEvaluation",
+  final_script: "finalScript",
   storyboard_script: "storyboardScript",
+  final_delivery: "deliveryPackage",
 };
 
 export const workflowSteps: Array<{ key: TaskType; field: keyof DramaProject; label: string; short: string }> = [
   { key: "market_analysis", field: "marketAnalysis", label: "市场分析", short: "市场" },
-  { key: "brief", field: "brief", label: "创意 Brief / 自动剧名", short: "创意" },
-  { key: "characters", field: "characterCards", label: "角色卡", short: "角色" },
-  { key: "series_outline", field: "outline", label: "全剧大纲 / 分集大纲", short: "大纲" },
-  { key: "chinese_script", field: "chineseScript", label: "中文剧本", short: "中文剧本" },
+  { key: "brief", field: "brief", label: "创意 Brief / 附件导入", short: "创意" },
+  { key: "characters", field: "characterCards", label: "角色卡 / 人物关系图", short: "角色" },
+  { key: "series_outline", field: "outline", label: "三幕结构 / 八段式 Treatment", short: "大纲" },
+  { key: "chinese_script", field: "chineseScript", label: "中文剧本 / Scene List", short: "中文剧本" },
   { key: "translation", field: "translation", label: "翻译", short: "翻译" },
   { key: "localization", field: "localization", label: "本土化", short: "本土化" },
+  { key: "test_script", field: "testScript", label: "测试剧本", short: "测试剧本" },
+  { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
-  { key: "quality_evaluation", field: "qualityEvaluation", label: "评估", short: "评估" },
-  { key: "storyboard_script", field: "storyboardScript", label: "分镜", short: "分镜" },
+  { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
+  { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
 ];
 
 export function createProject(overrides: Partial<DramaProject> = {}): DramaProject {
@@ -131,6 +156,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     episodeCount: 12,
     chineseScriptRange: "first3",
     targetLanguage: "英文",
+    finalScriptVersion: "foreign",
     benchmarkTitle: "",
     benchmarkLink: "",
     idea: "",
@@ -138,14 +164,21 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     brief: "",
     characters: "",
     characterCards: [],
+    relationshipDiagram: "",
     outline: "",
     episodes: "",
     chineseScript: "",
     translation: "",
     localization: "",
-    finalScript: "",
+    testScript: "",
     qualityEvaluation: "",
+    finalScript: "",
+    finalScriptChinese: "",
+    finalScriptForeign: "",
+    finalScriptBilingual: "",
     storyboardScript: "",
+    storyboardEpisodes: [],
+    deliveryPackage: "",
     status: "draft",
     createdAt: now,
     updatedAt: now,
@@ -162,6 +195,7 @@ export function demoProject(): DramaProject {
     episodeCount: 12,
     chineseScriptRange: "first3",
     targetLanguage: "英文",
+    finalScriptVersion: "foreign",
     benchmarkTitle: "ReelShort 热门豪门复仇短剧",
     benchmarkLink: "https://www.reelshort.com/",
     idea: "重生后发现未婚夫背叛自己，女主以隐藏继承人的身份回归，在订婚宴上夺回家族公司和爱情主动权。",
@@ -177,7 +211,11 @@ export function applyDemoStep(project: DramaProject, taskType: TaskType): DramaP
 }
 
 export function exportProjectMarkdown(project: DramaProject) {
-  return [
+  return buildDeliveryMarkdown(project, false);
+}
+
+export function buildDeliveryMarkdown(project: DramaProject, deliveryOnly = true) {
+  const lines = [
     `# ${project.title}`,
     "",
     `导出时间：${new Date().toLocaleString("zh-CN")}`,
@@ -187,26 +225,38 @@ export function exportProjectMarkdown(project: DramaProject) {
     `每集片长：${project.episodeDuration}`,
     `中文剧本范围：${getChineseScriptRangeLabel(project.chineseScriptRange)}`,
     `翻译语言：${project.targetLanguage}`,
-    `项目状态：${project.status}`,
     "",
-    "## 竞品",
-    project.benchmarkTitle || "未填写",
-    project.benchmarkLink ? `链接：${project.benchmarkLink}` : "",
+    "## 故事概况及大纲",
+    project.brief || "未生成 Brief",
     "",
+    project.outline || "未生成大纲",
+    "",
+    "## 最终剧本：中文版本",
+    project.finalScriptChinese || "未生成",
+    "",
+    "## 最终剧本：外语版本",
+    project.finalScriptForeign || project.finalScript || "未生成",
+    "",
+    "## 最终剧本：双语版本",
+    project.finalScriptBilingual || "未生成",
+    "",
+    "## 分镜",
+    storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript || "未生成",
+    "",
+  ];
+
+  if (deliveryOnly) return lines.join("\n");
+
+  return [
+    ...lines,
     "## 市场分析",
     project.marketAnalysis || "未生成",
-    "",
-    "## 故事创意",
-    project.idea || "未填写",
-    "",
-    "## 创意 Brief",
-    project.brief || "未生成",
     "",
     "## 角色",
     characterCardsToMarkdown(project.characterCards) || project.characters || "未生成",
     "",
-    "## 全剧大纲 / 分集大纲",
-    project.outline || project.episodes || "未生成",
+    "## 人物关系图",
+    project.relationshipDiagram || "未生成",
     "",
     "## 中文剧本",
     project.chineseScript || "未生成",
@@ -217,18 +267,16 @@ export function exportProjectMarkdown(project: DramaProject) {
     "## 本土化",
     project.localization || "未生成",
     "",
-    "## 最终剧本",
-    project.finalScript || "未生成",
+    "## 测试剧本",
+    project.testScript || "未生成",
     "",
     "## 评估",
     project.qualityEvaluation || "未生成",
     "",
-    "## 分镜",
-    project.storyboardScript || "未生成",
+    "## 最终交付说明",
+    project.deliveryPackage || "未生成",
     "",
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  ].join("\n");
 }
 
 export function readProjectsFromStorage(): DramaProject[] {
@@ -268,6 +316,14 @@ export function getStepContent(project: DramaProject, taskType: TaskType) {
     return characterCardsToMarkdown(project.characterCards) || project.characters || "";
   }
 
+  if (taskType === "final_script") {
+    return getSelectedFinalScript(project);
+  }
+
+  if (taskType === "storyboard_script") {
+    return storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript || "";
+  }
+
   return String(project[taskFieldMap[taskType]] || "");
 }
 
@@ -279,12 +335,26 @@ export function setStepContent(project: DramaProject, taskType: TaskType, conten
   };
 
   if (taskType === "characters") {
-    nextProject.characterCards = parseCharacterCards(content);
+    const parsed = parseCharacterPayload(content);
+    nextProject.characterCards = parsed.cards;
+    nextProject.relationshipDiagram = parsed.relationshipDiagram || nextProject.relationshipDiagram;
     nextProject.characters = characterCardsToMarkdown(nextProject.characterCards) || content;
   }
 
   if (taskType === "series_outline") {
     nextProject.episodes = content;
+  }
+
+  if (taskType === "final_script") {
+    if (project.finalScriptVersion === "chinese") nextProject.finalScriptChinese = content;
+    if (project.finalScriptVersion === "foreign") nextProject.finalScriptForeign = content;
+    if (project.finalScriptVersion === "bilingual") nextProject.finalScriptBilingual = content;
+    nextProject.finalScript = content;
+  }
+
+  if (taskType === "storyboard_script") {
+    nextProject.storyboardEpisodes = parseStoryboardEpisodes(content);
+    nextProject.storyboardScript = storyboardEpisodesToMarkdown(nextProject.storyboardEpisodes) || content;
   }
 
   return nextProject;
@@ -293,6 +363,8 @@ export function setStepContent(project: DramaProject, taskType: TaskType, conten
 export function getCompletedStepCount(project: DramaProject) {
   return workflowSteps.filter((step) => {
     if (step.key === "characters") return project.characterCards.length > 0 || Boolean(project.characters.trim());
+    if (step.key === "final_script") return Boolean(getSelectedFinalScript(project).trim());
+    if (step.key === "storyboard_script") return project.storyboardEpisodes.length > 0 || Boolean(project.storyboardScript.trim());
     return Boolean(String(project[step.field] || "").trim());
   }).length;
 }
@@ -310,6 +382,7 @@ export function createEmptyCharacterCard(): CharacterCard {
     conflict: "",
     entrance: "",
     line: "",
+    appearancePrompt: "",
   };
 }
 
@@ -327,13 +400,32 @@ export function characterCardsToMarkdown(cards: CharacterCard[]) {
         `- 冲突关系：${card.conflict || ""}`,
         `- 首次登场画面：${card.entrance || ""}`,
         `- 典型短对白：${card.line || ""}`,
+        `- 人物形象提示词：${card.appearancePrompt || ""}`,
       ].join("\n"),
     )
     .join("\n\n");
 }
 
+export function storyboardEpisodesToMarkdown(episodes: StoryboardEpisode[]) {
+  return episodes.map((episode) => `## ${episode.title}\n${episode.content}`).join("\n\n");
+}
+
+export function createEmptyStoryboardEpisode(index = 1): StoryboardEpisode {
+  return {
+    id: createId(),
+    title: `第 ${index} 集`,
+    content: "",
+  };
+}
+
 export function getChineseScriptRangeLabel(value: ChineseScriptRange) {
   return CHINESE_SCRIPT_RANGE_OPTIONS.find((option) => option.value === value)?.label || value;
+}
+
+export function getSelectedFinalScript(project: DramaProject) {
+  if (project.finalScriptVersion === "chinese") return project.finalScriptChinese || project.finalScript || "";
+  if (project.finalScriptVersion === "bilingual") return project.finalScriptBilingual || project.finalScript || "";
+  return project.finalScriptForeign || project.finalScript || "";
 }
 
 function normalizeProject(project: LegacyProject): DramaProject {
@@ -354,9 +446,13 @@ function normalizeProject(project: LegacyProject): DramaProject {
     steps.episode_script?.content ||
     steps.episode_scripts?.content ||
     "";
-  const cards = project.characterCards?.length
-    ? project.characterCards.map(normalizeCharacterCard)
-    : parseCharacterCards(project.characters || steps.characters?.content || "");
+  const parsed = project.characterCards?.length
+    ? { cards: project.characterCards.map(normalizeCharacterCard), relationshipDiagram: project.relationshipDiagram || "" }
+    : parseCharacterPayload(project.characters || steps.characters?.content || "");
+  const storyboardEpisodes = project.storyboardEpisodes?.length
+    ? project.storyboardEpisodes.map(normalizeStoryboardEpisode)
+    : parseStoryboardEpisodes(project.storyboardScript || "");
+  const finalForeign = project.finalScriptForeign || project.finalScript || "";
 
   return createProject({
     id: project.id || createId(),
@@ -367,35 +463,52 @@ function normalizeProject(project: LegacyProject): DramaProject {
     episodeCount: Number(project.episodeCount || 12),
     chineseScriptRange: normalizeChineseScriptRange(project.chineseScriptRange || project.scriptMode),
     targetLanguage: normalizeLanguage(project.targetLanguage),
+    finalScriptVersion: normalizeFinalScriptVersion(project.finalScriptVersion),
     benchmarkTitle: project.benchmarkTitle || "",
     benchmarkLink: project.benchmarkLink || "",
     idea: project.idea || project.storyIdea || "",
     marketAnalysis: legacyMarketAnalysis,
     brief: project.brief || steps.brief?.content || "",
-    characters: characterCardsToMarkdown(cards) || project.characters || steps.characters?.content || "",
-    characterCards: cards,
+    characters: characterCardsToMarkdown(parsed.cards) || project.characters || steps.characters?.content || "",
+    characterCards: parsed.cards,
+    relationshipDiagram: parsed.relationshipDiagram || project.relationshipDiagram || "",
     outline: project.outline || project.seriesOutline || steps.series_outline?.content || "",
     episodes: project.episodes || project.episodeOutline || steps.episode_outline?.content || "",
     chineseScript: legacyChineseScript,
     translation: project.translation || "",
     localization: project.localization || project.rewrittenScript || "",
-    finalScript: project.finalScript || "",
+    testScript: project.testScript || project.localization || project.rewrittenScript || "",
     qualityEvaluation: project.qualityEvaluation || steps.quality_evaluation?.content || project.logicCheck || "",
-    storyboardScript: project.storyboardScript || "",
+    finalScript: project.finalScript || finalForeign,
+    finalScriptChinese: project.finalScriptChinese || "",
+    finalScriptForeign: finalForeign,
+    finalScriptBilingual: project.finalScriptBilingual || "",
+    storyboardScript: storyboardEpisodesToMarkdown(storyboardEpisodes) || project.storyboardScript || "",
+    storyboardEpisodes,
+    deliveryPackage: project.deliveryPackage || "",
     status: project.status || "draft",
     createdAt: project.createdAt || now,
     updatedAt: project.updatedAt || now,
   });
 }
 
-function parseCharacterCards(content: string): CharacterCard[] {
+function parseCharacterPayload(content: string): { cards: CharacterCard[]; relationshipDiagram: string } {
   const trimmed = content.trim();
-  if (!trimmed) return [];
+  if (!trimmed) return { cards: [], relationshipDiagram: "" };
 
   try {
-    const parsed = JSON.parse(trimmed) as Array<Partial<CharacterCard>>;
+    const parsed = JSON.parse(trimmed) as unknown;
     if (Array.isArray(parsed)) {
-      return parsed.map(normalizeCharacterCard).filter((card) => card.name.trim());
+      return { cards: parsed.map((card) => normalizeCharacterCard(card as Partial<CharacterCard>)), relationshipDiagram: "" };
+    }
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as { characters?: Array<Partial<CharacterCard>>; relationshipDiagram?: string };
+      if (Array.isArray(obj.characters)) {
+        return {
+          cards: obj.characters.map(normalizeCharacterCard),
+          relationshipDiagram: obj.relationshipDiagram || "",
+        };
+      }
     }
   } catch {
     // Fallback to Markdown parsing below.
@@ -406,20 +519,44 @@ function parseCharacterCards(content: string): CharacterCard[] {
     .map((section) => section.trim())
     .filter(Boolean);
 
-  return sections.map((section) => {
-    const title = section.match(/^###\s*(.+)$/m)?.[1]?.trim() || "未命名角色";
-    return normalizeCharacterCard({
-      name: title,
-      role: pickLine(section, ["角色功能", "功能", "role"]),
-      identity: pickLine(section, ["身份", "identity"]),
-      goal: pickLine(section, ["目标", "goal"]),
-      weakness: pickLine(section, ["弱点", "weakness"]),
-      secret: pickLine(section, ["秘密", "secret"]),
-      arc: pickLine(section, ["成长弧线", "arc"]),
-      conflict: pickLine(section, ["冲突关系", "与其他角色的冲突关系", "conflict"]),
-      entrance: pickLine(section, ["首次登场画面", "entrance"]),
-      line: pickLine(section, ["典型短对白", "line"]),
-    });
+  return {
+    relationshipDiagram: "",
+    cards: sections.map((section) => {
+      const title = section.match(/^###\s*(.+)$/m)?.[1]?.trim() || "未命名角色";
+      return normalizeCharacterCard({
+        name: title,
+        role: pickLine(section, ["角色功能", "功能", "role"]),
+        identity: pickLine(section, ["身份", "identity"]),
+        goal: pickLine(section, ["目标", "goal"]),
+        weakness: pickLine(section, ["弱点", "weakness"]),
+        secret: pickLine(section, ["秘密", "secret"]),
+        arc: pickLine(section, ["成长弧线", "arc"]),
+        conflict: pickLine(section, ["冲突关系", "与其他角色的冲突关系", "conflict"]),
+        entrance: pickLine(section, ["首次登场画面", "entrance"]),
+        line: pickLine(section, ["典型短对白", "line"]),
+        appearancePrompt: pickLine(section, ["人物形象提示词", "形象提示词", "appearancePrompt"]),
+      });
+    }),
+  };
+}
+
+function parseStoryboardEpisodes(content: string): StoryboardEpisode[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+
+  const sections = trimmed
+    .split(/\n(?=##\s*(?:第\s*\d+\s*集|Episode\s*\d+))/i)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  if (sections.length === 0) {
+    return [{ id: createId(), title: "第 1 集", content: trimmed }];
+  }
+
+  return sections.map((section, index) => {
+    const title = section.match(/^##\s*(.+)$/m)?.[1]?.trim() || `第 ${index + 1} 集`;
+    const body = section.replace(/^##\s*.+\n?/, "").trim();
+    return { id: createId(), title, content: body };
   });
 }
 
@@ -445,12 +582,22 @@ function normalizeCharacterCard(card: Partial<CharacterCard>): CharacterCard {
     conflict: card.conflict || "",
     entrance: card.entrance || "",
     line: card.line || "",
+    appearancePrompt: card.appearancePrompt || "",
+  };
+}
+
+function normalizeStoryboardEpisode(episode: Partial<StoryboardEpisode>): StoryboardEpisode {
+  return {
+    id: episode.id || createId(),
+    title: episode.title || "第 1 集",
+    content: episode.content || "",
   };
 }
 
 function normalizeMarket(market?: string) {
   if (!market) return "北美";
-  return MARKET_OPTIONS.includes(market) ? market : market;
+  const map: Record<string, string> = { "鍖楃編": "北美", "娆ф床": "欧洲", "鍏朵粬": "其他" };
+  return map[market] || market;
 }
 
 function normalizeGenre(genre?: string) {
@@ -491,9 +638,14 @@ function normalizeChineseScriptRange(value?: string): ChineseScriptRange {
   return "first3";
 }
 
+function normalizeFinalScriptVersion(value?: string): FinalScriptVersion {
+  if (value === "chinese" || value === "bilingual") return value;
+  return "foreign";
+}
+
 function normalizeLanguage(language?: string) {
   if (!language) return "英文";
-  const map: Record<string, string> = { 英语: "英文", English: "英文", 中文: "中文" };
+  const map: Record<string, string> = { 英语: "英文", English: "英文", 中文: "中文", "鑻辨枃": "英文" };
   return map[language] || language;
 }
 
@@ -511,19 +663,23 @@ const demoStepContent: Record<TaskType, string> = {
   brief:
     "剧名：午夜继承人\n1. 故事定位：隐藏继承人回归复仇的竖屏漫剧。\n2. 一句话卖点：被夺走一切的女人，以新董事身份回到订婚宴。\n3. 核心冲突：女主夺回公司与身份，反派阻止真相公开。\n4. 主角目标：拿回母亲留下的股份和尊严。\n5. 反派阻力：继妹与未婚夫联手制造女主精神失常的假象。\n6. 情绪基调：冷感、压抑、反击爽感。\n7. 目标受众：偏好复仇爱情和身份反转的海外女性用户。\n8. 视觉风格：冷色豪门宴会、红毯羞辱、黑车反转。",
   characters:
-    '[{"name":"林晚","role":"女主","identity":"隐藏继承人，母亲遗产的真正受益人","goal":"夺回公司，公开继妹和未婚夫的阴谋","weakness":"仍然在意曾经的爱情","secret":"掌握父亲失踪前的录音","arc":"从忍耐求证到公开反击","conflict":"被继妹顶替身份，被未婚夫背叛","entrance":"订婚宴红毯尽头，她被保安拦下","line":"你们抢走的，今晚一件件还回来。"},{"name":"沈烬","role":"男主","identity":"跨国基金负责人","goal":"查清旧案并保护林晚","weakness":"不轻易相信任何人","secret":"他早已知道林晚的真实身份","arc":"从旁观者变成共同复仇者","conflict":"和反派家族存在旧账","entrance":"黑车停在雨中，他递出董事会文件","line":"你要复仇，我要真相。"}]',
+    '{"relationshipDiagram":"林晚 -> 复仇对象 -> 林薇；沈烬 -> 秘密盟友 -> 林晚；林薇 + 周衡 -> 联手夺权","characters":[{"name":"林晚","role":"女主","identity":"隐藏继承人，母亲遗产的真正受益人","goal":"夺回公司，公开继妹和未婚夫的阴谋","weakness":"仍然在意曾经的爱情","secret":"掌握父亲失踪前的录音","arc":"从忍耐求证到公开反击","conflict":"被继妹顶替身份，被未婚夫背叛","entrance":"订婚宴红毯尽头，她被保安拦下","line":"你们抢走的，今晚一件件还回来。","appearancePrompt":"25岁亚洲女性，冷白皮，黑色长发，湿透白色礼服，克制愤怒的眼神，红毯雨夜，电影感侧光"},{"name":"沈烬","role":"男主","identity":"跨国基金负责人","goal":"查清旧案并保护林晚","weakness":"不轻易相信任何人","secret":"他早已知道林晚的真实身份","arc":"从旁观者变成共同复仇者","conflict":"和反派家族存在旧账","entrance":"黑车停在雨中，他递出董事会文件","line":"你要复仇，我要真相。","appearancePrompt":"30岁亚洲男性，黑色西装，冷峻克制，雨夜黑车旁，手持文件袋，低饱和电影光"}]}',
   series_outline:
-    "1. 全剧主线：林晚从订婚宴羞辱开始，逐步拿回股份、爱情和真相。\n2. 三幕结构：Act 1 订婚宴背叛与新身份入场；Act 2 证据升级、关系拉扯、董事会夺权；Act 3 身份公开、旧案翻盘、情绪释放。\n3. 关键反转清单：未婚夫背叛、男主隐藏帮助、继妹伪造病历、董事会投票翻盘。\n4. 情绪升级曲线：羞辱 -> 忍耐 -> 反击 -> 误会 -> 爆发 -> 终局胜利。\n5. 分集大纲：\n第 1 集 / 订婚宴羞辱 / 女主被赶出宴会 / 婚戒滚落 / 黑车中递出董事文件\n第 2 集 / 投资人入场 / 女主重返宴会 / 继妹失态 / 股东名单出现女主姓名\n第 3 集 / 录音线索 / 旧案浮出水面 / 男主身份存疑 / 录音里出现男主父亲声音",
+    "1. 全剧主线：林晚从订婚宴羞辱开始，逐步拿回股份、爱情和真相。\n2. 三幕结构：开端：订婚宴背叛与新身份入场；对抗：证据升级、关系拉扯、董事会夺权；结局：身份公开、旧案翻盘、情绪释放。\n3. 八段式 Treatment：1 羞辱开场；2 新身份入场；3 初次反击；4 反派反扑；5 男主秘密暴露；6 女主低谷；7 董事会翻盘；8 旧案真相与情绪释放。\n4. 关键反转清单：未婚夫背叛、男主隐藏帮助、继妹伪造病历、董事会投票翻盘。\n5. 情绪升级曲线：羞辱 -> 忍耐 -> 反击 -> 误会 -> 爆发 -> 终局胜利。\n6. 分集大纲：\n第 1 集 / 订婚宴羞辱 / 女主被赶出宴会 / 婚戒滚落 / 黑车中递出董事文件\n第 2 集 / 投资人入场 / 女主重返宴会 / 继妹失态 / 股东名单出现女主姓名\n第 3 集 / 录音线索 / 旧案浮出水面 / 男主身份存疑 / 录音里出现男主父亲声音",
   chinese_script:
-    "## 第 1 集\n片长：2 分钟\n### 场景 1\n- 画面：红毯尽头，林晚的白裙被雨水打湿。\n- 人物：林晚、保安、宾客。\n- 动作：保安伸手挡住她，宴会厅大屏正在播放她未婚夫和继妹的婚照。\n- 情绪：羞辱、窒息。\n- 对白：林晚：“今天，是我的订婚宴。” 保安：“名单上没有你。”\n- 镜头提示：婚戒从她掌心滑落，滚进红酒。\n### 集尾钩子\n黑车门打开，沈烬递出文件：“林董事，该您入场了。”",
+    "## 第 1 集\n片长：2 分钟\n### Scene List\n- 场次：订婚宴门口\n- 功能：建立羞辱开场和女主目标\n- 冲突：女主被保安阻拦，继妹顶替她的位置\n- 价值变化：期待 -> 羞辱\n- 前后因果：女主赶到订婚宴，发现未婚夫背叛；这一场导致她接受新身份入场\n### 场景 1\n- 画面：红毯尽头，林晚的白裙被雨水打湿。\n- 人物：林晚、保安、宾客。\n- 动作：保安伸手挡住她，宴会厅大屏正在播放她未婚夫和继妹的婚照。\n- 情绪：羞辱、窒息。\n- 对白：林晚：“今天，是我的订婚宴。” 保安：“名单上没有你。”\n- 镜头提示：婚戒从她掌心滑落，滚进红酒。\n### 集尾钩子\n黑车门打开，沈烬递出文件：“林董事，该您入场了。”",
   translation:
-    "## Episode 1\nDuration: 2 minutes\n### Scene 1\n- Visual: At the end of the red carpet, Lin Wan's white dress is soaked by rain.\n- Characters: Lin Wan, security guards, guests.\n- Action: A guard blocks her while the banquet screen shows her fiance's wedding photo with her stepsister.\n- Emotion: Humiliation, suffocation.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Your name is not on the list.”\n### Ending Hook\nThe black car door opens. Shen Jin hands her a document: “Director Lin, it is your turn to enter.”",
+    "## Episode 1\nDuration: 2 minutes\n### Scene List\n- Scene: Entrance of the engagement party\n- Function: Establish public humiliation and the heroine's goal\n- Conflict: Lin Wan is blocked while her stepsister takes her place\n- Value Shift: Hope -> Humiliation\n- Cause and Effect: Lin Wan arrives and discovers the betrayal; this pushes her to accept her new identity\n### Scene 1\n- Visual: At the end of the red carpet, Lin Wan's white dress is soaked by rain.\n- Characters: Lin Wan, security guards, guests.\n- Action: A guard blocks her while the banquet screen shows her fiance's wedding photo with her stepsister.\n- Emotion: Humiliation, suffocation.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Your name is not on the list.”\n### Ending Hook\nThe black car door opens. Shen Jin hands her a document: “Director Lin, it is your turn to enter.”",
   localization:
-    "1. 本土化优化版剧本\n## Episode 1\nDuration: 2 minutes\n### Scene 1\n- Visual: Rain hits the red carpet as Lin Wan stands outside the ballroom, frozen in a soaked white dress.\n- Characters: Lin Wan, security guards, guests.\n- Action: A guard blocks her. On the giant screen inside, her fiance smiles beside her stepsister in a wedding portrait.\n- Emotion: Public humiliation, shock, controlled rage.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Not anymore.”\n### Ending Hook\nA black car door opens. Shen Jin hands her a sealed board document: “Director Lin, they are waiting for you.”\n2. 已调整的表达：将家族继承改为董事文件和投票权，减少中式表达。\n3. 仍需人工确认的风险：法律细节保持简化，不展开公司治理。",
-  final_script:
-    "经过本土化优化之后的剧本\n\n## Episode 1\nDuration: 2 minutes\n### Scene 1\n- Visual: Rain hits the red carpet as Lin Wan stands outside the ballroom, frozen in a soaked white dress.\n- Characters: Lin Wan, security guards, guests.\n- Action: A guard blocks her. On the giant screen inside, her fiance smiles beside her stepsister in a wedding portrait.\n- Emotion: Public humiliation, shock, controlled rage.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Not anymore.”\n### Ending Hook\nA black car door opens. Shen Jin hands her a sealed board document: “Director Lin, they are waiting for you.”",
+    "1. 本土化优化版剧本\n## Episode 1\nDuration: 2 minutes\n### Scene List\n- Scene: Outside the ballroom\n- Function: Establish public humiliation and a revenge trigger\n- Conflict: Lin Wan is erased from her own engagement party\n- Value Shift: Hope -> Public disgrace\n- Cause and Effect: The betrayal forces Lin Wan to reclaim her voting power\n### Scene 1\n- Visual: Rain hits the red carpet as Lin Wan stands outside the ballroom, frozen in a soaked white dress.\n- Characters: Lin Wan, security guards, guests.\n- Action: A guard blocks her. On the giant screen inside, her fiance smiles beside her stepsister in a wedding portrait.\n- Emotion: Public humiliation, shock, controlled rage.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Not anymore.”\n### Ending Hook\nA black car door opens. Shen Jin hands her a sealed board document: “Director Lin, they are waiting for you.”\n2. 已调整的表达：将家族继承改为董事文件和投票权。\n3. 仍需人工确认的风险：法律细节保持简化。",
+  test_script:
+    "## 测试剧本\n## Episode 1\nDuration: 2 minutes\n### Scene List\n- Scene: Outside the ballroom\n- Function: Test public humiliation hook and identity reversal\n- Conflict: Lin Wan is blocked from her own engagement party\n- Value Shift: Hope -> Public disgrace\n- Cause and Effect: The betrayal triggers the board document reveal\n### Scene 1\n- Visual: Rain hits the red carpet as Lin Wan stands outside the ballroom, frozen in a soaked white dress.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Not anymore.”\n### 测试观察点\n- Hook：5 秒内明确背叛\n- 风险：董事文件是否太抽象\n- 爽点：结尾身份反转",
   quality_evaluation:
-    "1. Hook 强度：9/10。羞辱开场明确，身份反转强。\n2. 情绪密度：8/10。女主受压与反击节奏清楚。\n3. 反转频率：8/10。建议每集结尾都留下身份或证据钩子。\n4. 漫剧画面感：8/10。红毯、黑车、董事会文件具有可视化价值。\n5. 目标市场适配度：8.5/10。复仇和身份反转适合北美短剧用户。\n6. 最大问题清单：男主动机需要更早埋线。\n7. 可执行修改建议：第 1 集增加男主看到女主伤口的特写，建立情绪连接。",
+    "1. Hook 强度：9/10。\n2. 情绪密度：8/10。\n3. 反转频率：8/10。\n4. 漫剧画面感：8/10。\n5. 目标市场适配度：8.5/10。\n6. 诊断修订：因果清楚，但男主动机需要提前埋线；女主弧线从受辱到反击成立；第 1 集节奏紧；场景价值从希望转为羞辱，推进有效。\n7. 计时与删减：预计 2 分 15 秒，删掉宾客重复嘲笑，保留婚戒滚落和黑车文件。\n8. 最终剧本修订指令：增加男主看到女主伤口的特写；把 board document 改为 voting rights packet；删掉重复解释。",
+  final_script:
+    "经过评估修订后的最终剧本\n\n## Episode 1\nDuration: 2 minutes\n### Scene List\n- Scene: Outside the ballroom\n- Function: Establish public humiliation and a clean revenge trigger\n- Conflict: Lin Wan is erased from her own engagement party\n- Value Shift: Hope -> Public disgrace -> Controlled resolve\n- Cause and Effect: The betrayal forces Lin Wan to reclaim her voting power\n### Scene 1\n- Visual: Rain hits the red carpet. Lin Wan stands outside the ballroom in a soaked white dress, one scratch visible on her wrist.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Not anymore.”\n### Ending Hook\nA black car door opens. Shen Jin notices the wound, then hands her a sealed voting rights packet: “Director Lin, they are waiting for you.”",
   storyboard_script:
-    "## 第 1 集分镜头脚本\n### 镜头 1\n- 景别：特写\n- 画面：婚戒滚进红酒杯，溅起暗红色液体。\n- 人物/动作：林晚的手停在半空，指尖发抖。\n- 台词/字幕：字幕：她来参加自己的订婚宴，却成了外人。\n- 音效/情绪：玻璃轻响，压抑。\n- 转场：切到宴会大屏。\n### 镜头 2\n- 景别：中景\n- 画面：大屏上是未婚夫和继妹的婚照。\n- 人物/动作：宾客转头看她，窃笑。\n- 台词/字幕：继妹：“姐姐，你来晚了。”\n- 音效/情绪：人群低笑，羞辱感拉满。\n- 转场：推近林晚眼神。",
+    "## 第 1 集\n### 镜头 1\n- 景别：特写\n- 画面：婚戒滚进红酒杯，溅起暗红色液体。\n- 人物/动作：林晚的手停在半空，指尖发抖。\n- 台词/字幕：字幕：她来参加自己的订婚宴，却成了外人。\n- 音效/情绪：玻璃轻响，压抑。\n- 转场：切到宴会大屏。\n- AI 生成提示词：特写，婚戒落入红酒杯，暗红液体飞溅，雨夜豪门宴会，冷色电影光，强羞辱感，竖屏构图\n### 镜头 2\n- 景别：中景\n- 画面：大屏上是未婚夫和继妹的婚照。\n- 人物/动作：宾客转头看她，窃笑。\n- 台词/字幕：继妹：“姐姐，你来晚了。”\n- 音效/情绪：人群低笑，羞辱感拉满。\n- 转场：推近林晚眼神。\n- AI 生成提示词：豪门宴会大屏婚照，白裙女主被众人凝视，冷色调，高反差，竖屏漫画剧风格",
+  final_delivery:
+    "1. 故事概况：隐藏继承人林晚在订婚宴被背叛后，以董事身份回归复仇。\n2. 大纲交付范围：三幕结构、八段式 Treatment、分集大纲。\n3. 最终剧本版本清单：中文版本、英文版本、双语版本。\n4. 分镜交付范围：按集拆分，每集包含镜头、台词、音效和 AI 生成提示词。\n5. 现场演示建议：先展示附件导入，再一键推进到分镜和交付下载。",
 };
