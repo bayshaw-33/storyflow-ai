@@ -45,9 +45,12 @@ export default function ProjectListPage() {
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div>
-          <span className="kicker">StoryFlow AI</span>
-          <h1>项目列表</h1>
+        <div className="brand-lockup">
+          <img className="brand-logo" src="/storyflow-logo-white.png" alt="StoryFlow" />
+          <div>
+            <span className="kicker">StoryFlow AI</span>
+            <h1>项目列表</h1>
+          </div>
         </div>
         <nav className="header-actions">
           <Link className="icon-button" href="/settings" title="设置">

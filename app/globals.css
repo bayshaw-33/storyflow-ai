@@ -772,16 +772,26 @@ body {
 }
 
 body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: url("/storyflow-logo-white.png");
-  background-position: center 58%;
-  background-repeat: no-repeat;
-  background-size: min(76vw, 980px) auto;
-  opacity: 0.055;
+  content: none;
+}
+
+.brand-lockup,
+.workflow-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-logo {
+  width: 168px;
+  height: auto;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.brand-logo.compact {
+  width: 132px;
 }
 
 .workflow-header,

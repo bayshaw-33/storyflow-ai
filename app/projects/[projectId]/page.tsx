@@ -616,9 +616,12 @@ export default function WorkflowPage() {
   return (
     <main className="workflow-shell">
       <header className="workflow-header">
-        <Link className="icon-button" href="/" title="返回项目列表">
-          <ArrowLeft size={18} />
-        </Link>
+        <div className="workflow-brand">
+          <Link className="icon-button" href="/" title="返回项目列表">
+            <ArrowLeft size={18} />
+          </Link>
+          <img className="brand-logo compact" src="/storyflow-logo-white.png" alt="StoryFlow" />
+        </div>
         <input
           className="title-input"
           value={project.title}

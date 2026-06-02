@@ -15,9 +15,12 @@ export default function SettingsPage() {
   return (
     <main className="app-shell narrow">
       <header className="app-header">
-        <div>
-          <span className="kicker">StoryFlow AI</span>
-          <h1>设置</h1>
+        <div className="brand-lockup">
+          <img className="brand-logo" src="/storyflow-logo-white.png" alt="StoryFlow" />
+          <div>
+            <span className="kicker">StoryFlow AI</span>
+            <h1>设置</h1>
+          </div>
         </div>
         <Link className="icon-button" href="/" title="返回项目列表">
           <ArrowLeft size={18} />
