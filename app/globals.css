@@ -761,6 +761,22 @@ textarea {
   min-height: 66px;
 }
 
+.character-fields label:nth-of-type(4),
+.character-fields label:nth-of-type(5),
+.character-fields label:nth-of-type(6),
+.character-fields label:nth-of-type(8),
+.character-fields label:nth-of-type(9) {
+  display: none;
+}
+
+.character-fields textarea {
+  min-height: 48px;
+}
+
+.character-card {
+  align-content: start;
+}
+
 .storyboard-grid {
   min-height: 100%;
   display: grid;
@@ -870,6 +886,50 @@ textarea {
   font-weight: 800;
 }
 
+.history-tools {
+  display: grid;
+  gap: 9px;
+}
+
+.history-panel {
+  max-height: 260px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dfe3de;
+  border-radius: 8px;
+  background: #fbfaf6;
+  padding: 10px;
+}
+
+.history-panel p {
+  margin: 0;
+  color: #68736e;
+  font-size: 12px;
+}
+
+.history-item {
+  width: 100%;
+  border: 1px solid #dfe3de;
+  border-radius: 8px;
+  background: #fffefa;
+  color: #1f2b25;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  text-align: left;
+}
+
+.history-item strong {
+  font-size: 12px;
+}
+
+.history-item span {
+  color: #68736e;
+  font-size: 11px;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -970,8 +1030,8 @@ code {
 
 body {
   background:
-    radial-gradient(circle at 18% 10%, rgba(39, 111, 85, 0.2), transparent 34%),
-    radial-gradient(circle at 82% 88%, rgba(183, 148, 84, 0.14), transparent 32%),
+    radial-gradient(circle at 84% 12%, rgba(39, 111, 85, 0.2), transparent 34%),
+    radial-gradient(circle at 74% 88%, rgba(183, 148, 84, 0.14), transparent 32%),
     #07090f;
   color: #f6f7fb;
 }
@@ -1097,7 +1157,9 @@ input,
 textarea,
 select,
 .segmented-control,
-.file-dropzone {
+.file-dropzone,
+.history-panel,
+.history-item {
   border-color: rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.07);
   color: #f6f7fb;
@@ -1115,7 +1177,9 @@ textarea::placeholder {
 
 .project-fields-toggle span,
 .download-row span,
-.segmented-control button {
+.segmented-control button,
+.history-item span,
+.history-panel p {
   color: #a9b2c3;
 }
 

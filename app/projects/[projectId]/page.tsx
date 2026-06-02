@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Download,
   FileText,
+  History,
   Loader2,
   Plus,
   RefreshCw,
@@ -40,11 +41,13 @@ import {
   GENRE_OPTIONS,
   getSelectedFinalScript,
   getStepContent,
+  getStepVersions,
   getWorkflowSteps,
   LANGUAGE_OPTIONS,
   LOCALIZATION_MODE_OPTIONS,
   MARKET_OPTIONS,
   readProjectsFromStorage,
+  saveStepVersion,
   setStepContent,
   StoryboardEpisode,
   storyboardEpisodesToMarkdown,
@@ -192,6 +195,7 @@ export default function WorkflowPage() {
   const [optimizeOpen, setOptimizeOpen] = useState(false);
   const [optimizeInstruction, setOptimizeInstruction] = useState("");
   const [projectFieldsOpen, setProjectFieldsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     const projects = readProjectsFromStorage();
@@ -230,6 +234,10 @@ export default function WorkflowPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setHistoryOpen(false);
+  }, [activeStep]);
+
   const workflowSteps = useMemo(() => getWorkflowSteps(project || undefined), [project?.workflowType]);
   const activeMeta = useMemo(
     () => workflowSteps.find((step) => step.key === activeStep) || workflowSteps[0],
@@ -238,6 +246,7 @@ export default function WorkflowPage() {
 
   const requirement = project ? getRequirement(project, activeStep) : "";
   const activeContent = project ? getStepContent(project, activeStep) : "";
+  const activeVersions = project ? getStepVersions(project, activeStep) : [];
 
   function persist(nextProject: DramaProject, immediate = false) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -283,7 +292,7 @@ export default function WorkflowPage() {
   }
 
   function updateStep(taskType: TaskType, content: string) {
-    updateProject((current) => ({ ...setStepContent(current, taskType, content), status: "draft" }));
+    updateProject((current) => ({ ...setStepContent(current, taskType, content), status: "draft" }), true);
   }
 
   function syncCharacterCards(cards: CharacterCard[]) {
@@ -293,7 +302,7 @@ export default function WorkflowPage() {
       characters: characterCardsToMarkdown(cards),
       status: "draft",
       updatedAt: new Date().toISOString(),
-    }));
+    }), true);
   }
 
   function updateCharacterCard(id: string, key: keyof CharacterCard, value: string) {
@@ -308,7 +317,7 @@ export default function WorkflowPage() {
       storyboardScript: storyboardEpisodesToMarkdown(episodes),
       status: "draft",
       updatedAt: new Date().toISOString(),
-    }));
+    }), true);
   }
 
   function updateStoryboardEpisode(id: string, key: keyof StoryboardEpisode, value: string) {
@@ -316,9 +325,96 @@ export default function WorkflowPage() {
     syncStoryboardEpisodes(project.storyboardEpisodes.map((episode) => (episode.id === id ? { ...episode, [key]: value } : episode)));
   }
 
+  function recordStepVersion(taskType: TaskType, content: string, source: "ai" | "manual" | "demo" | "optimize" | "restore", label?: string) {
+    updateProject((current) => saveStepVersion(current, taskType, content, source, label), true);
+  }
+
+  function restoreVersion(content: string) {
+    updateProject((current) => saveStepVersion(setStepContent(current, activeStep, content), activeStep, content, "restore"), true);
+    setStatusText("已恢复所选历史版本");
+  }
+
+  function expectedEpisodeCountForStep(baseProject: DramaProject, step: TaskType, sourceContent = "") {
+    if (step === "chinese_script" || step === "continuation_script") {
+      if (baseProject.chineseScriptRange === "first15") return Math.min(15, baseProject.episodeCount);
+      if (baseProject.chineseScriptRange === "first_half") return Math.max(1, Math.ceil(baseProject.episodeCount / 2));
+      if (baseProject.chineseScriptRange === "full") return baseProject.episodeCount;
+      return Math.min(3, baseProject.episodeCount);
+    }
+
+    if (step === "localization") return countGeneratedEpisodes(sourceContent || baseProject.translation);
+    if (step === "storyboard_script") return countGeneratedEpisodes(sourceContent || getSelectedFinalScript(baseProject));
+    return 0;
+  }
+
+  function countGeneratedEpisodes(content: string) {
+    const matches = Array.from(content.matchAll(/第\s*(\d+)\s*集|Episode\s*(\d+)/gi));
+    const unique = new Set(matches.map((match) => match[1] || match[2]).filter(Boolean));
+    return unique.size;
+  }
+
+  function missingEpisodePrompt(baseInput: string, currentOutput: string, generatedCount: number, expectedCount: number) {
+    const nextEpisode = generatedCount + 1;
+    return [
+      baseInput,
+      "",
+      `【补全要求】当前结果只覆盖到约 ${generatedCount} 集，需要继续补全第 ${nextEpisode} 集到第 ${expectedCount} 集。`,
+      "只输出缺失集数的正文，不要重复已生成内容，不要输出解释。",
+      "",
+      "【已生成内容摘要】",
+      currentOutput.slice(-12000),
+    ].join("\n");
+  }
+
+  async function requestGenerate(
+    step: TaskType,
+    baseProject: DramaProject,
+    input: string,
+    optimizeInstruction = "",
+  ) {
+    const response = await fetch("/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskType: step,
+        input,
+        context: optimizeInstruction
+          ? `请根据以下优化要求重写当前页内容：${optimizeInstruction}`
+          : baseProject.idea,
+        options: {
+          market: baseProject.market,
+          genre: baseProject.genre,
+          sourceLanguage: "中文",
+          targetLanguage: baseProject.targetLanguage,
+          benchmarkTitle: baseProject.benchmarkTitle,
+          benchmarkLink: baseProject.benchmarkLink,
+          episodeDuration: baseProject.episodeDuration,
+          episodeCount: baseProject.episodeCount,
+          chineseScriptRange: baseProject.chineseScriptRange,
+          finalScriptVersion: baseProject.finalScriptVersion,
+          localizationMode: baseProject.localizationMode,
+          optimizeInstruction,
+        },
+        projectTitle: baseProject.title,
+        market: baseProject.market,
+        genre: baseProject.genre,
+        benchmarkTitle: baseProject.benchmarkTitle,
+        benchmarkLink: baseProject.benchmarkLink,
+        idea: baseProject.idea,
+        allSteps: previousStepContent(baseProject, step),
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "生成失败，请检查 DeepSeek API。已有内容已保留。");
+    }
+    return data;
+  }
+
   async function generateForStep(
     step: TaskType,
-    baseProject = project,
+    baseProject: DramaProject = project as DramaProject,
     extra?: { optimizeInstruction?: string; inputOverride?: string },
   ) {
     if (!baseProject) return;
@@ -336,8 +432,9 @@ export default function WorkflowPage() {
         status: "ready" as const,
         updatedAt: new Date().toISOString(),
       };
-      setProject(nextProject);
-      upsertProject(nextProject);
+      const versionedProject = saveStepVersion(nextProject, "existing_script", existingContent, "manual", "导入内容自动带入");
+      setProject(versionedProject);
+      upsertProject(versionedProject);
       setError("");
       setStatusText("已有剧本已从导入内容自动带入，可直接编辑。");
       return;
@@ -347,12 +444,68 @@ export default function WorkflowPage() {
     const generatingProject: DramaProject = { ...baseProject, status: "generating", updatedAt: new Date().toISOString() };
 
     setProject(generatingProject);
-    upsertProject(generatingProject);
     setLoading(true);
     setError("");
     setStatusText("");
 
     try {
+      {
+      const baseInput = extra?.inputOverride || getTaskInput(baseProject, step, stepContent);
+      const data = await requestGenerate(step, baseProject, baseInput, extra?.optimizeInstruction || "");
+      setLoading(false);
+
+      let output = String(data.output || "");
+      const expectedCount = expectedEpisodeCountForStep(baseProject, step, baseInput);
+      let generatedCount = countGeneratedEpisodes(output);
+      let completionAttempts = 0;
+
+      while (expectedCount > 0 && generatedCount > 0 && generatedCount < expectedCount && completionAttempts < 2) {
+        setLoading(true);
+        setStatusText(`已生成 ${generatedCount}/${expectedCount} 集，正在补全缺失内容...`);
+        const supplement = await requestGenerate(
+          step,
+          baseProject,
+          missingEpisodePrompt(baseInput, output, generatedCount, expectedCount),
+          extra?.optimizeInstruction || "",
+        );
+        output = `${output.trim()}\n\n${String(supplement.output || "").trim()}`.trim();
+        generatedCount = countGeneratedEpisodes(output);
+        completionAttempts += 1;
+        setLoading(false);
+      }
+
+      let nextProject: DramaProject = {
+        ...setStepContent(generatingProject, step, output),
+        status: "ready" as const,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (step === "script_import" && baseProject.workflowType === "continuation" && !nextProject.existingScript.trim()) {
+        nextProject = { ...nextProject, existingScript: baseProject.idea };
+      }
+
+      if (step === "brief" && (!baseProject.title.trim() || baseProject.title.trim() === DEFAULT_TITLE)) {
+        const generatedTitle = extractGeneratedTitle(output);
+        if (generatedTitle) nextProject = { ...nextProject, title: generatedTitle };
+      }
+
+      nextProject = saveStepVersion(
+        nextProject,
+        step,
+        output,
+        extra?.optimizeInstruction ? "optimize" : "ai",
+      );
+
+      setProject(nextProject);
+      upsertProject(nextProject);
+      const finalCount = countGeneratedEpisodes(output);
+      const incompleteNotice = expectedCount > 0 && finalCount > 0 && finalCount < expectedCount
+        ? `，但仍只检测到 ${finalCount}/${expectedCount} 集，可再次点击内容生成继续补齐`
+        : "";
+      setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`);
+      return;
+      }
+
       const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -360,7 +513,7 @@ export default function WorkflowPage() {
           taskType: step,
           input: extra?.inputOverride || getTaskInput(baseProject, step, stepContent),
           context: extra?.optimizeInstruction
-            ? `请根据以下优化要求重写当前页内容：${extra.optimizeInstruction}`
+            ? `请根据以下优化要求重写当前页内容：${extra?.optimizeInstruction}`
             : baseProject.idea,
           options: {
             market: baseProject.market,
@@ -412,8 +565,12 @@ export default function WorkflowPage() {
       setProject(nextProject);
       upsertProject(nextProject);
       setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})`);
-    } catch {
+    } catch (generateError) {
       setLoading(false);
+      if (generateError instanceof Error) {
+        markError(generatingProject, generateError.message);
+        return;
+      }
       markError(generatingProject, "网络请求失败或超时，请稍后重试。已有内容已保留。");
     }
   }
@@ -436,7 +593,8 @@ export default function WorkflowPage() {
 
   function loadDemoStep() {
     if (!project) return;
-    const nextProject = applyDemoStep(project, activeStep);
+    const demoStep = applyDemoStep(project, activeStep);
+    const nextProject = saveStepVersion(demoStep, activeStep, getStepContent(demoStep, activeStep), "demo");
     setProject(nextProject);
     upsertProject(nextProject);
     setStatusText("已加载示例内容，仅用于现场演示");
@@ -984,6 +1142,31 @@ export default function WorkflowPage() {
                   </button>
                 </div>
               )}
+            </div>
+          ) : null}
+
+          {activeStep !== "final_delivery" ? (
+            <div className="history-tools">
+              <button className="secondary-button full" onClick={() => recordStepVersion(activeStep, activeContent, "manual")} disabled={!activeContent.trim()}>
+                <Save size={17} /> 保存当前版本
+              </button>
+              <button className="secondary-button full" onClick={() => setHistoryOpen((open) => !open)}>
+                <History size={17} /> 查看历史记录
+              </button>
+              {historyOpen ? (
+                <div className="history-panel">
+                  {activeVersions.length === 0 ? (
+                    <p>暂无历史版本</p>
+                  ) : (
+                    activeVersions.map((version) => (
+                      <button className="history-item" key={version.id} onClick={() => restoreVersion(version.content)}>
+                        <strong>{version.label}</strong>
+                        <span>{new Date(version.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
 

@@ -21,12 +21,14 @@ type DeepSeekOptions = {
   messages: AIMessage[];
   temperature?: number;
   timeoutMs?: number;
+  maxTokens?: number;
 };
 
 export async function callDeepSeek({
   messages,
   temperature = 0.75,
-  timeoutMs = 45000,
+  timeoutMs = 90000,
+  maxTokens = 8192,
 }: DeepSeekOptions): Promise<AIProviderResult> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
@@ -50,6 +52,7 @@ export async function callDeepSeek({
         model,
         messages,
         temperature,
+        max_tokens: maxTokens,
       }),
       signal: controller.signal,
     });

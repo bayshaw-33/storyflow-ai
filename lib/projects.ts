@@ -2,6 +2,16 @@ import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation";
+export type StepVersionSource = "ai" | "manual" | "demo" | "optimize" | "restore";
+
+export type StepVersion = {
+  id: string;
+  taskType: TaskType;
+  content: string;
+  label: string;
+  source: StepVersionSource;
+  createdAt: string;
+};
 
 export type CharacterCard = {
   id: string;
@@ -61,6 +71,7 @@ export type DramaProject = {
   storyboardScript: string;
   storyboardEpisodes: StoryboardEpisode[];
   deliveryPackage: string;
+  stepVersions: StepVersion[];
   status: ProjectStatus;
   createdAt: string;
   updatedAt: string;
@@ -220,6 +231,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     storyboardScript: "",
     storyboardEpisodes: [],
     deliveryPackage: "",
+    stepVersions: [],
     status: "draft",
     createdAt: now,
     updatedAt: now,
@@ -406,6 +418,54 @@ export function setStepContent(project: DramaProject, taskType: TaskType, conten
   return nextProject;
 }
 
+export function getStepVersions(project: DramaProject, taskType: TaskType) {
+  return (project.stepVersions || [])
+    .filter((version) => version.taskType === taskType && version.content.trim())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function saveStepVersion(
+  project: DramaProject,
+  taskType: TaskType,
+  content: string,
+  source: StepVersionSource = "manual",
+  label?: string,
+): DramaProject {
+  const trimmed = content.trim();
+  if (!trimmed) return project;
+
+  const latest = getStepVersions(project, taskType)[0];
+  if (latest?.content.trim() === trimmed) return project;
+
+  const now = new Date().toISOString();
+  const nextVersion: StepVersion = {
+    id: createId(),
+    taskType,
+    content,
+    source,
+    createdAt: now,
+    label: label || buildVersionLabel(source, now),
+  };
+
+  return {
+    ...project,
+    stepVersions: [nextVersion, ...(project.stepVersions || [])].slice(0, 80),
+    updatedAt: now,
+  };
+}
+
+function buildVersionLabel(source: StepVersionSource, createdAt: string) {
+  const sourceLabel: Record<StepVersionSource, string> = {
+    ai: "AI 生成",
+    manual: "手动保存",
+    demo: "演示样例",
+    optimize: "优化版本",
+    restore: "历史恢复",
+  };
+
+  return `${sourceLabel[source]} · ${new Date(createdAt).toLocaleString("zh-CN", { hour12: false })}`;
+}
+
 export function getCompletedStepCount(project: DramaProject) {
   return getWorkflowSteps(project).filter((step) => {
     if (step.key === "characters") return project.characterCards.length > 0 || Boolean(project.characters.trim());
@@ -538,6 +598,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     storyboardScript: storyboardEpisodesToMarkdown(storyboardEpisodes) || project.storyboardScript || "",
     storyboardEpisodes,
     deliveryPackage: project.deliveryPackage || "",
+    stepVersions: Array.isArray(project.stepVersions) ? project.stepVersions.map(normalizeStepVersion).filter(Boolean) as StepVersion[] : [],
     status: project.status || "draft",
     createdAt: project.createdAt || now,
     updatedAt: project.updatedAt || now,
@@ -643,6 +704,19 @@ function normalizeStoryboardEpisode(episode: Partial<StoryboardEpisode>): Storyb
     id: episode.id || createId(),
     title: episode.title || "第 1 集",
     content: episode.content || "",
+  };
+}
+
+function normalizeStepVersion(version: Partial<StepVersion>): StepVersion | null {
+  if (!version.taskType || !version.content) return null;
+  const now = new Date().toISOString();
+  return {
+    id: version.id || createId(),
+    taskType: version.taskType,
+    content: version.content,
+    source: version.source || "manual",
+    createdAt: version.createdAt || now,
+    label: version.label || buildVersionLabel(version.source || "manual", version.createdAt || now),
   };
 }
 
