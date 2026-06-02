@@ -1,4 +1,4 @@
-import type { ChineseScriptRange, FinalScriptVersion, TaskType } from "./ai/prompts";
+import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation";
@@ -35,6 +35,7 @@ export type DramaProject = {
   chineseScriptRange: ChineseScriptRange;
   targetLanguage: string;
   finalScriptVersion: FinalScriptVersion;
+  localizationMode: LocalizationMode;
   benchmarkTitle: string;
   benchmarkLink: string;
   idea: string;
@@ -119,6 +120,11 @@ export const FINAL_SCRIPT_VERSION_OPTIONS: Array<{ value: FinalScriptVersion; la
   { value: "bilingual", label: "双语剧本" },
 ];
 
+export const LOCALIZATION_MODE_OPTIONS: Array<{ value: LocalizationMode; label: string; description: string }> = [
+  { value: "script", label: "本土化修改后的剧本", description: "只展示修改完成后的成稿，适合继续评估和交付。" },
+  { value: "revision", label: "修改过程 / 红色修订", description: "展示完成修改后的剧本，并用红色标注本土化调整部分。" },
+];
+
 export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   market_analysis: "marketAnalysis",
   script_import: "importedScript",
@@ -147,7 +153,6 @@ export const creationWorkflowSteps: WorkflowStep[] = [
   { key: "chinese_script", field: "chineseScript", label: "中文剧本 / Scene List", short: "中文剧本" },
   { key: "translation", field: "translation", label: "翻译", short: "翻译" },
   { key: "localization", field: "localization", label: "本土化", short: "本土化" },
-  { key: "test_script", field: "testScript", label: "测试剧本", short: "测试剧本" },
   { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
   { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
@@ -162,7 +167,6 @@ export const continuationWorkflowSteps: WorkflowStep[] = [
   { key: "continuation_script", field: "continuationScript", label: "续写剧本", short: "续写" },
   { key: "translation", field: "translation", label: "翻译", short: "翻译" },
   { key: "localization", field: "localization", label: "本土化", short: "本土化" },
-  { key: "test_script", field: "testScript", label: "测试剧本", short: "测试剧本" },
   { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
   { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
@@ -190,6 +194,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     chineseScriptRange: "first3",
     targetLanguage: "英文",
     finalScriptVersion: "foreign",
+    localizationMode: "script",
     benchmarkTitle: "",
     benchmarkLink: "",
     idea: "",
@@ -311,9 +316,6 @@ export function buildDeliveryMarkdown(project: DramaProject, deliveryOnly = true
     "## 本土化",
     project.localization || "未生成",
     "",
-    "## 测试剧本",
-    project.testScript || "未生成",
-    "",
     "## 评估",
     project.qualityEvaluation || "未生成",
     "",
@@ -409,6 +411,7 @@ export function getCompletedStepCount(project: DramaProject) {
     if (step.key === "characters") return project.characterCards.length > 0 || Boolean(project.characters.trim());
     if (step.key === "final_script") return Boolean(getSelectedFinalScript(project).trim());
     if (step.key === "storyboard_script") return project.storyboardEpisodes.length > 0 || Boolean(project.storyboardScript.trim());
+    if (step.key === "final_delivery") return Boolean(getSelectedFinalScript(project).trim()) || project.storyboardEpisodes.length > 0 || Boolean(project.storyboardScript.trim());
     return Boolean(String(project[step.field] || "").trim());
   }).length;
 }
@@ -509,6 +512,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     chineseScriptRange: normalizeChineseScriptRange(project.chineseScriptRange || project.scriptMode),
     targetLanguage: normalizeLanguage(project.targetLanguage),
     finalScriptVersion: normalizeFinalScriptVersion(project.finalScriptVersion),
+    localizationMode: project.localizationMode || "script",
     benchmarkTitle: project.benchmarkTitle || "",
     benchmarkLink: project.benchmarkLink || "",
     idea: project.idea || project.storyIdea || "",

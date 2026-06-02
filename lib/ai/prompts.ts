@@ -17,6 +17,7 @@ export type TaskType =
 
 export type ChineseScriptRange = "first3" | "first15" | "first_half" | "full";
 export type FinalScriptVersion = "chinese" | "foreign" | "bilingual";
+export type LocalizationMode = "script" | "revision";
 
 export type GenerateOptions = {
   market?: string;
@@ -29,6 +30,7 @@ export type GenerateOptions = {
   episodeCount?: number;
   chineseScriptRange?: ChineseScriptRange;
   finalScriptVersion?: FinalScriptVersion;
+  localizationMode?: LocalizationMode;
   optimizeInstruction?: string;
 };
 
@@ -230,11 +232,10 @@ const promptByTask: Record<TaskType, string> = {
   localization: [
     "任务：对翻译后的剧本进行目标市场本土化优化。",
     "检查项：文化表达、称谓、职业、法律、宗教、习惯用语、情绪表达、目标市场爽点。",
-    "输出结构：",
-    "1. 本土化优化版剧本",
-    "2. 已调整的表达",
-    "3. 仍需人工确认的风险",
-    "要求：保留原剧情，只优化表达、对白、节奏和画面感。",
+    "根据 options.localizationMode 输出：",
+    "- script：只输出本土化修改后的完整剧本，不输出修改说明。",
+    "- revision：输出已完成修改的剧本，并把改动后的词句用 <span class=\"revision-mark\">红色标注内容</span> 包裹；可在相关场景后用【批注：】说明修改原因。",
+    "要求：保留原剧情，只优化表达、对白、节奏和画面感；不要输出过程说明；revision 模式必须直接给出改后正文，不要只列修改清单。",
   ].join("\n"),
 
   test_script: [
@@ -249,7 +250,7 @@ const promptByTask: Record<TaskType, string> = {
   ].join("\n"),
 
   quality_evaluation: [
-    "任务：对测试剧本进行评估，并形成可用于下一步最终剧本修订的明确要求。",
+    "任务：对本土化后的剧本进行评估，并形成可用于下一步最终剧本修订的明确要求。",
     "输出结构必须包含：",
     "1. Hook 强度：0-10 分",
     "2. 情绪密度：0-10 分",
@@ -263,7 +264,7 @@ const promptByTask: Record<TaskType, string> = {
   ].join("\n"),
 
   final_script: [
-    "任务：根据测试剧本和评估要求生成最终剧本。",
+    "任务：根据本土化剧本和评估要求生成最终剧本。",
     "必须严格执行用户手动编辑后的评估内容。",
     "根据 options.finalScriptVersion 输出不同版本：",
     "- chinese：只输出中文剧本，不输出外语正文",
@@ -358,6 +359,7 @@ function buildOptions(payload: GeneratePayload) {
     episodeCount: payload.options?.episodeCount || 12,
     chineseScriptRange: payload.options?.chineseScriptRange || "first3",
     finalScriptVersion: payload.options?.finalScriptVersion || "foreign",
+    localizationMode: payload.options?.localizationMode || "script",
     optimizeInstruction: payload.options?.optimizeInstruction || "",
   };
 }

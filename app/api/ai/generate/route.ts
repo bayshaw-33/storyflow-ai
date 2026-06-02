@@ -46,11 +46,11 @@ function toFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
   if (message === "MISSING_DEEPSEEK_API_KEY") {
-    return "服务端尚未配置 DEEPSEEK_API_KEY，请先在 .env.local 或 Vercel 环境变量中配置。";
+    return "AI 生成尚未完成服务端配置，请先使用示例内容或稍后重试。";
   }
 
   if (message.includes("DEEPSEEK_API_ERROR:401") || message.includes("DEEPSEEK_API_ERROR:403")) {
-    return "DeepSeek API Key 无效或权限不足，请检查服务端环境变量。";
+    return "AI 生成配置无效或权限不足，请检查云端配置。";
   }
 
   if (message.includes("DEEPSEEK_API_ERROR:429")) {

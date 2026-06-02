@@ -28,27 +28,24 @@ export default function SettingsPage() {
         <article>
           <KeyRound size={22} />
           <div>
-            <h2>DeepSeek API Key</h2>
-            <p>只能在 Vercel 或本地 `.env.local` 的服务端环境变量中配置，前端不会读取或展示。</p>
-            <code>DEEPSEEK_API_KEY</code>
+            <h2>AI 生成配置</h2>
+            <p>当前生成能力由云端安全处理，页面不会展示密钥或敏感配置。</p>
           </div>
         </article>
 
         <article>
           <Server size={22} />
           <div>
-            <h2>模型</h2>
-            <p>默认使用 `deepseek-chat`，可通过服务端环境变量覆盖。</p>
-            <code>DEEPSEEK_MODEL=deepseek-chat</code>
+            <h2>生成能力</h2>
+            <p>支持市场、创意、角色、大纲、剧本、翻译、本土化、评估和分镜生成。</p>
           </div>
         </article>
 
         <article>
           <Database size={22} />
           <div>
-            <h2>本地项目存储</h2>
-            <p>当前项目保存到浏览器 localStorage，字段已按 PRD 和演示工作流组织，后续可迁移到数据库。</p>
-            <code>{STORAGE_KEY}</code>
+            <h2>项目保存</h2>
+            <p>当前项目会自动保存在本机浏览器中，刷新页面后仍可继续编辑。</p>
             <strong>{projectCount} 个本地项目</strong>
           </div>
         </article>
@@ -57,8 +54,7 @@ export default function SettingsPage() {
           <ShieldCheck size={22} />
           <div>
             <h2>安全边界</h2>
-            <p>生成请求统一发送到服务端 API，API Key 不会进入页面组件、localStorage 或浏览器网络载荷。</p>
-            <code>POST /api/ai/generate</code>
+            <p>敏感配置只在云端处理，前端仅保存项目内容和编辑状态。</p>
           </div>
         </article>
       </section>

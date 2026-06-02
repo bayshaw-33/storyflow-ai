@@ -68,9 +68,8 @@ export default function ProjectListPage() {
       <section className="project-toolbar">
         <div>
           <strong>{projects.length}</strong>
-          <span>本地项目，自动保存到浏览器 localStorage</span>
+          <span>项目总数</span>
         </div>
-        <p>项目字段已按 PRD 组织，后续可迁移到 Supabase 或 PostgreSQL。</p>
       </section>
 
       <section className="project-grid">

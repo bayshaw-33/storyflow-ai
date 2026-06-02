@@ -42,6 +42,7 @@ import {
   getStepContent,
   getWorkflowSteps,
   LANGUAGE_OPTIONS,
+  LOCALIZATION_MODE_OPTIONS,
   MARKET_OPTIONS,
   readProjectsFromStorage,
   setStepContent,
@@ -73,7 +74,8 @@ function getRequirement(project: DramaProject, taskType: TaskType) {
   if (taskType === "brief") return project.idea.trim() ? "" : "请先填写故事创意，或拖入附件解析。";
   if (taskType === "characters") return project.brief.trim() ? "" : "请先完成创意。";
   if (taskType === "series_outline") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
-  if (taskType === "final_script") return project.testScript.trim() && project.qualityEvaluation.trim() ? "" : "请先完成测试剧本和评估。";
+  if (taskType === "quality_evaluation") return project.localization.trim() ? "" : "请先完成本土化。";
+  if (taskType === "final_script") return project.localization.trim() && project.qualityEvaluation.trim() ? "" : "请先完成本土化和评估。";
   if (taskType === "storyboard_script") return getSelectedFinalScript(project).trim() ? "" : "请先生成最终剧本。";
   if (taskType === "final_delivery") return project.storyboardEpisodes.length || project.storyboardScript.trim() ? "" : "请先生成分镜。";
 
@@ -123,11 +125,11 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
   if (activeStep === "translation") return project.workflowType === "continuation" ? project.continuationScript : project.chineseScript;
   if (activeStep === "localization") return project.translation;
   if (activeStep === "test_script") return project.localization;
-  if (activeStep === "quality_evaluation") return project.testScript;
+  if (activeStep === "quality_evaluation") return project.localization;
   if (activeStep === "final_script") {
     return [
-      "【测试剧本】",
-      project.testScript,
+      "【本土化剧本】",
+      project.localization,
       "",
       "【评估与修订要求】",
       project.qualityEvaluation,
@@ -163,6 +165,14 @@ function markdownToHtml(content: string) {
     .replace(/^### (.*)$/gm, "<h3>$1</h3>")
     .replace(/^## (.*)$/gm, "<h2>$1</h2>")
     .replace(/^# (.*)$/gm, "<h1>$1</h1>")
+    .replace(/\n/g, "<br />");
+}
+
+function revisionMarkupToHtml(content: string) {
+  return escapeHtml(content)
+    .replace(/&lt;span class=&quot;revision-mark&quot;&gt;/g, '<span class="revision-mark">')
+    .replace(/&lt;span class=&#39;revision-mark&#39;&gt;/g, '<span class="revision-mark">')
+    .replace(/&lt;\/span&gt;/g, "</span>")
     .replace(/\n/g, "<br />");
 }
 
@@ -363,6 +373,7 @@ export default function WorkflowPage() {
             episodeCount: baseProject.episodeCount,
             chineseScriptRange: baseProject.chineseScriptRange,
             finalScriptVersion: baseProject.finalScriptVersion,
+            localizationMode: baseProject.localizationMode,
             optimizeInstruction: extra?.optimizeInstruction || "",
           },
           projectTitle: baseProject.title,
@@ -588,6 +599,14 @@ export default function WorkflowPage() {
   const finalScriptContent = getSelectedFinalScript(project);
   const storyboardContent = storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript;
   const deliveryContent = buildDeliveryMarkdown(project, true);
+  const deliveryItems = [
+    { title: "故事概况及大纲", content: `${project.brief}\n\n${project.outline}`.trim(), landscape: false },
+    { title: "最终剧本-中文", content: project.finalScriptChinese, landscape: false },
+    { title: "最终剧本-外文", content: project.finalScriptForeign, landscape: false },
+    { title: "最终剧本-双语", content: project.finalScriptBilingual, landscape: false },
+    { title: "分镜", content: storyboardContent, landscape: true },
+    { title: "完整交付包", content: deliveryContent, landscape: false },
+  ];
   const downloadTitle =
     activeStep === "storyboard_script" ? "分镜头脚本" : activeStep === "final_delivery" ? "最终交付包" : "最终剧本";
   const downloadContent =
@@ -628,6 +647,8 @@ export default function WorkflowPage() {
               ? project.characterCards.length > 0
               : step.key === "storyboard_script"
                 ? project.storyboardEpisodes.length > 0
+                : step.key === "final_delivery"
+                  ? Boolean(getSelectedFinalScript(project).trim()) || project.storyboardEpisodes.length > 0 || Boolean(project.storyboardScript.trim())
                 : Boolean(getStepContent(project, step.key).trim());
             const blocked = Boolean(getRequirement(project, step.key));
 
@@ -836,6 +857,37 @@ export default function WorkflowPage() {
                 </article>
               ))}
             </div>
+          ) : activeStep === "final_delivery" ? (
+            <div className="delivery-workspace">
+              {deliveryItems.map((item) => (
+                <article className="delivery-card" key={item.title}>
+                  <div>
+                    <h2>{item.title}</h2>
+                    <p>{item.content.trim() ? "已准备下载" : "尚未生成内容"}</p>
+                  </div>
+                  <div className="delivery-actions">
+                    <button disabled={!item.content.trim()} onClick={() => downloadSection("word", item.title, item.content, item.landscape)}>Word</button>
+                    <button disabled={!item.content.trim()} onClick={() => downloadSection("md", item.title, item.content, item.landscape)}>MD</button>
+                    <button disabled={!item.content.trim()} onClick={() => downloadSection("pdf", item.title, item.content, item.landscape)}>PDF</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : activeStep === "localization" && project.localizationMode === "revision" ? (
+            <div className="revision-workspace">
+              <div
+                className="revision-preview"
+                dangerouslySetInnerHTML={{
+                  __html: revisionMarkupToHtml(activeContent || "选择“内容生成”后，这里会展示带红色修订标注的本土化结果。"),
+                }}
+              />
+              <textarea
+                className="script-editor revision-source"
+                value={activeContent}
+                onChange={(event) => updateStep(activeStep, event.target.value)}
+                placeholder="红色修订模式会使用 <span class=&quot;revision-mark&quot;>...</span> 标注修改部分，也可以在这里手动编辑。"
+              />
+            </div>
           ) : (
             <textarea
               className="script-editor"
@@ -850,7 +902,6 @@ export default function WorkflowPage() {
           <div>
             <span className="kicker">AI 助手</span>
             <h2>内容生成</h2>
-            <p>当前步骤会调用 `/api/ai/generate`，由服务端读取 `DEEPSEEK_API_KEY`。</p>
           </div>
 
           {activeStep === "chinese_script" ? (
@@ -869,6 +920,16 @@ export default function WorkflowPage() {
               <select value={project.targetLanguage} onChange={(event) => updateField("targetLanguage", event.target.value)}>
                 {LANGUAGE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
               </select>
+            </label>
+          ) : null}
+
+          {activeStep === "localization" ? (
+            <label>
+              本土化输出方式
+              <select value={project.localizationMode} onChange={(event) => updateField("localizationMode", event.target.value as DramaProject["localizationMode"])}>
+                {LOCALIZATION_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <small className="field-note">{LOCALIZATION_MODE_OPTIONS.find((option) => option.value === project.localizationMode)?.description}</small>
             </label>
           ) : null}
 
@@ -898,25 +959,7 @@ export default function WorkflowPage() {
               <strong>{downloadTitle}下载</strong>
               {activeStep === "final_delivery" ? (
                 <div className="download-matrix">
-                  {[
-                    { title: "故事概况及大纲", content: `${project.brief}\n\n${project.outline}`, landscape: false },
-                    {
-                      title: "最终剧本各语言版本",
-                      content: [
-                        "## 中文剧本",
-                        project.finalScriptChinese || "未生成",
-                        "",
-                        "## 外语剧本",
-                        project.finalScriptForeign || "未生成",
-                        "",
-                        "## 双语剧本",
-                        project.finalScriptBilingual || "未生成",
-                      ].join("\n"),
-                      landscape: false,
-                    },
-                    { title: "分镜", content: storyboardContent, landscape: true },
-                    { title: "完整交付包", content: deliveryContent, landscape: false },
-                  ].map((item) => (
+                  {deliveryItems.map((item) => (
                     <div className="download-row" key={item.title}>
                       <span>{item.title}</span>
                       <button disabled={!item.content.trim()} onClick={() => downloadSection("word", item.title, item.content, item.landscape)}>Word</button>
@@ -944,34 +987,31 @@ export default function WorkflowPage() {
           {requirement ? <div className="notice warning"><AlertCircle size={17} /> {requirement}</div> : null}
           {aiConfigured === false ? (
             <div className="notice warning">
-              <AlertCircle size={17} /> 服务端缺少 DEEPSEEK_API_KEY。真实生成不可用，可先加载示例内容演示。
+              <AlertCircle size={17} /> AI 生成尚未完成服务端配置，可先加载示例内容演示。
             </div>
           ) : null}
           {error ? <div className="notice error"><AlertCircle size={17} /> {error}</div> : null}
           {statusText ? <div className="notice success"><CheckCircle2 size={17} /> {statusText}</div> : null}
 
-          <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || Boolean(requirement)}>
-            {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-            内容生成
-          </button>
-          <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || Boolean(requirement) || !activeContent.trim()}>
-            优化内容
-          </button>
-          <button className="secondary-button full" onClick={continueNextStep} disabled={loading}>
-            继续下一步并生成
-          </button>
-          <button className="secondary-button full" onClick={loadDemoStep}>
-            <WandSparkles size={18} /> 加载当前步骤示例内容
-          </button>
-
-          <div className="ai-hints">
-            <strong>MVP 演示标准</strong>
-            <span>12 步创作交付</span>
-            <span>附件解析</span>
-            <span>角色卡和关系图</span>
-            <span>测试评估后修订</span>
-            <span>最终交付下载</span>
-          </div>
+          {activeStep === "final_delivery" ? (
+            <div className="notice success"><CheckCircle2 size={17} /> 交付文件已整理为下载清单。</div>
+          ) : (
+            <>
+              <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || Boolean(requirement)}>
+                {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
+                内容生成
+              </button>
+              <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || Boolean(requirement) || !activeContent.trim()}>
+                优化内容
+              </button>
+              <button className="secondary-button full" onClick={continueNextStep} disabled={loading}>
+                继续下一步并生成
+              </button>
+              <button className="secondary-button full" onClick={loadDemoStep}>
+                <WandSparkles size={18} /> 加载当前步骤示例内容
+              </button>
+            </>
+          )}
         </aside>
       </section>
 
