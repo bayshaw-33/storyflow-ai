@@ -205,16 +205,16 @@ export default function WorkflowPage() {
     }
 
     const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
-    const created =
-      searchParams.get("template") === "demo"
-        ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
-        : requestedWorkflow === "continuation"
-          ? createContinuationProject({ id: params.projectId })
-          : createProject({ id: params.projectId });
+    const isDemo = searchParams.get("template") === "demo";
+    const created = isDemo
+      ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
+      : requestedWorkflow === "continuation"
+        ? createContinuationProject({ id: params.projectId })
+        : createProject({ id: params.projectId });
 
     setProject(created);
     setActiveStep(getWorkflowSteps(created)[0].key);
-    upsertProject(created);
+    if (isDemo) upsertProject(created);
   }, [params.projectId, searchParams]);
 
   useEffect(() => {
