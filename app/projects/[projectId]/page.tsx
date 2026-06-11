@@ -67,7 +67,9 @@ function getRequirement(project: DramaProject, taskType: TaskType) {
   if (project.workflowType === "continuation") {
     if (taskType === "script_import") return project.idea.trim() || project.importedScript.trim() ? "" : "请先导入或粘贴已有小说/剧本材料。";
     if (taskType === "characters") return project.importedScript.trim() ? "" : "请先完成剧本导入。";
-    if (taskType === "series_outline") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
+    if (taskType === "structure_model") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
+    if (taskType === "beat_cards") return project.structureModel.trim() ? "" : "请先完成结构模型。";
+    if (taskType === "series_outline") return project.beatCards.trim() ? "" : "请先完成节拍卡。";
     if (taskType === "existing_script") return project.outline.trim() ? "" : "请先完成大纲。";
     if (taskType === "continuation_script") return project.existingScript.trim() ? "" : "请先整理已有剧本。";
     if (taskType === "translation") return project.continuationScript.trim() ? "" : "请先生成续写剧本。";
@@ -76,10 +78,13 @@ function getRequirement(project: DramaProject, taskType: TaskType) {
   if (taskType === "market_analysis") return project.market && project.genre ? "" : "请先选择目标市场和题材。";
   if (taskType === "brief") return project.idea.trim() ? "" : "请先填写故事创意，或拖入附件解析。";
   if (taskType === "characters") return project.brief.trim() ? "" : "请先完成创意。";
-  if (taskType === "series_outline") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
+  if (taskType === "structure_model") return project.characterCards.length ? "" : "请先生成或添加角色卡。";
+  if (taskType === "beat_cards") return project.structureModel.trim() ? "" : "请先完成结构模型。";
+  if (taskType === "series_outline") return project.beatCards.trim() ? "" : "请先完成节拍卡。";
   if (taskType === "quality_evaluation") return project.localization.trim() ? "" : "请先完成本土化。";
   if (taskType === "final_script") return project.localization.trim() && project.qualityEvaluation.trim() ? "" : "请先完成本土化和评估。";
-  if (taskType === "storyboard_script") return getSelectedFinalScript(project).trim() ? "" : "请先生成最终剧本。";
+  if (taskType === "format_check") return getSelectedFinalScript(project).trim() ? "" : "请先生成最终剧本。";
+  if (taskType === "storyboard_script") return project.formatCheck.trim() || getSelectedFinalScript(project).trim() ? "" : "请先完成格式检查。";
   if (taskType === "final_delivery") return project.storyboardEpisodes.length || project.storyboardScript.trim() ? "" : "请先生成分镜。";
 
   const previousKey = getPreviousKey(project, taskType);
@@ -114,9 +119,25 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
   }
   if (activeStep === "script_import") return project.idea || project.importedScript;
   if (activeStep === "characters") return project.workflowType === "continuation" ? project.importedScript || project.idea : project.brief;
+  if (activeStep === "structure_model") {
+    return [
+      project.workflowType === "continuation" ? project.importedScript : project.brief,
+      characterCardsToMarkdown(project.characterCards),
+      project.relationshipDiagram,
+    ].filter(Boolean).join("\n\n");
+  }
+  if (activeStep === "beat_cards") {
+    return [
+      project.structureModel,
+      characterCardsToMarkdown(project.characterCards),
+      project.relationshipDiagram,
+    ].filter(Boolean).join("\n\n");
+  }
   if (activeStep === "series_outline") {
     return [
       project.workflowType === "continuation" ? project.importedScript : project.brief,
+      project.structureModel,
+      project.beatCards,
       characterCardsToMarkdown(project.characterCards),
     ]
       .filter(Boolean)
@@ -144,6 +165,7 @@ function getTaskInput(project: DramaProject, activeStep: TaskType, activeContent
       project.translation,
     ].join("\n");
   }
+  if (activeStep === "format_check") return getSelectedFinalScript(project);
   if (activeStep === "storyboard_script") return getSelectedFinalScript(project);
   if (activeStep === "final_delivery") return buildDeliveryMarkdown(project, true);
   return activeContent || project.idea;
@@ -187,6 +209,7 @@ export default function WorkflowPage() {
   const [project, setProject] = useState<DramaProject | null>(null);
   const [activeStep, setActiveStep] = useState<TaskType>("market_analysis");
   const [loading, setLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
   const [parsingFile, setParsingFile] = useState(false);
   const [error, setError] = useState("");
   const [statusText, setStatusText] = useState("");
@@ -308,6 +331,47 @@ export default function WorkflowPage() {
   function updateCharacterCard(id: string, key: keyof CharacterCard, value: string) {
     if (!project) return;
     syncCharacterCards(project.characterCards.map((card) => (card.id === id ? { ...card, [key]: value } : card)));
+  }
+
+  async function generateRelationshipImage() {
+    if (!project) return;
+    if (!project.characterCards.length && !project.relationshipDiagram.trim()) {
+      setError("请先生成或添加角色卡，再生成图片关系图。");
+      return;
+    }
+
+    setImageLoading(true);
+    setError("");
+    setStatusText("");
+
+    try {
+      const response = await fetch("/api/ai/relationship-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectTitle: project.title,
+          relationshipDiagram: project.relationshipDiagram,
+          characters: project.characterCards,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "人物关系图生成失败，请稍后重试。");
+      }
+
+      updateProject((current) => ({
+        ...current,
+        relationshipImageUrl: data.imageUrl,
+        status: "ready" as const,
+        updatedAt: new Date().toISOString(),
+      }), true);
+      setStatusText(`已生成图片关系图（${data.model || "MiniMax"}）`);
+    } catch (imageError) {
+      setError(imageError instanceof Error ? imageError.message : "人物关系图生成失败，请稍后重试。");
+    } finally {
+      setImageLoading(false);
+    }
   }
 
   function syncStoryboardEpisodes(episodes: StoryboardEpisode[]) {
@@ -956,12 +1020,37 @@ export default function WorkflowPage() {
                 <button className={characterView === "relationships" ? "active" : ""} onClick={() => setCharacterView("relationships")}>人物关系图</button>
               </div>
               {characterView === "relationships" ? (
+                <div className="relationship-image-workspace">
+                  <div className="relationship-toolbar">
+                    <div>
+                      <strong>图片关系图</strong>
+                      <span>由 MiniMax 根据角色卡和关系描述生成</span>
+                    </div>
+                    <button className="primary-button" onClick={generateRelationshipImage} disabled={imageLoading || (!project.characterCards.length && !project.relationshipDiagram.trim())}>
+                      {imageLoading ? <Loader2 className="spin" size={17} /> : <WandSparkles size={17} />}
+                      生成图片关系图
+                    </button>
+                  </div>
+                  {project.relationshipImageUrl ? (
+                    <div className="relationship-image-preview">
+                      <img src={project.relationshipImageUrl} alt="人物关系图" />
+                      <a className="secondary-button" href={project.relationshipImageUrl} target="_blank" rel="noreferrer">
+                        打开原图
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="relationship-image-empty">
+                      <UserPlus size={26} />
+                      <p>生成后会在这里显示图片格式的人物关系图。</p>
+                    </div>
+                  )}
                 <textarea
                   className="script-editor"
                   value={project.relationshipDiagram}
                   onChange={(event) => updateField("relationshipDiagram", event.target.value)}
                   placeholder="用文字描述人物关系图，例如：林晚 -> 复仇对象 -> 林薇；沈烬 -> 秘密盟友 -> 林晚。"
                 />
+                </div>
               ) : (
                 <div className="character-grid">
                   {project.characterCards.length === 0 ? (

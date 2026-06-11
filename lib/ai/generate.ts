@@ -1,4 +1,4 @@
-import { callDeepSeek, type AIUsage } from "./providers/deepseek";
+import { callRoutedProvider, type AIUsage } from "./providers";
 import { buildPrompt, taskNames, type GeneratePayload, type TaskType } from "./prompts";
 
 const taskTypes: TaskType[] = [
@@ -6,6 +6,8 @@ const taskTypes: TaskType[] = [
   "script_import",
   "brief",
   "characters",
+  "structure_model",
+  "beat_cards",
   "series_outline",
   "existing_script",
   "chinese_script",
@@ -15,6 +17,7 @@ const taskTypes: TaskType[] = [
   "test_script",
   "quality_evaluation",
   "final_script",
+  "format_check",
   "storyboard_script",
   "final_delivery",
 ];
@@ -51,7 +54,8 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
     throw new Error("INVALID_TASK_TYPE");
   }
 
-  const providerResult = await callDeepSeek({
+  const providerResult = await callRoutedProvider({
+    taskType: payload.taskType,
     messages: [
       {
         role: "system",

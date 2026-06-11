@@ -1,21 +1,4 @@
-export type AIMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
-
-export type AIUsage = {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  [key: string]: unknown;
-};
-
-export type AIProviderResult = {
-  output: string;
-  usage: AIUsage | null;
-  model: string;
-  provider: "deepseek";
-};
+import type { AIMessage, AIProviderResult } from "./types";
 
 type DeepSeekOptions = {
   messages: AIMessage[];
@@ -31,7 +14,7 @@ export async function callDeepSeek({
   maxTokens = 8192,
 }: DeepSeekOptions): Promise<AIProviderResult> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");

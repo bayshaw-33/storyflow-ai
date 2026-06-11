@@ -55,6 +55,9 @@ export type DramaProject = {
   characters: string;
   characterCards: CharacterCard[];
   relationshipDiagram: string;
+  relationshipImageUrl: string;
+  structureModel: string;
+  beatCards: string;
   outline: string;
   episodes: string;
   existingScript: string;
@@ -68,6 +71,7 @@ export type DramaProject = {
   finalScriptChinese: string;
   finalScriptForeign: string;
   finalScriptBilingual: string;
+  formatCheck: string;
   storyboardScript: string;
   storyboardEpisodes: StoryboardEpisode[];
   deliveryPackage: string;
@@ -141,6 +145,8 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   script_import: "importedScript",
   brief: "brief",
   characters: "characters",
+  structure_model: "structureModel",
+  beat_cards: "beatCards",
   series_outline: "outline",
   existing_script: "existingScript",
   chinese_script: "chineseScript",
@@ -150,6 +156,7 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   test_script: "testScript",
   quality_evaluation: "qualityEvaluation",
   final_script: "finalScript",
+  format_check: "formatCheck",
   storyboard_script: "storyboardScript",
   final_delivery: "deliveryPackage",
 };
@@ -160,12 +167,15 @@ export const creationWorkflowSteps: WorkflowStep[] = [
   { key: "market_analysis", field: "marketAnalysis", label: "市场分析", short: "市场" },
   { key: "brief", field: "brief", label: "创意 Brief / 附件导入", short: "创意" },
   { key: "characters", field: "characterCards", label: "角色卡 / 人物关系图", short: "角色" },
+  { key: "structure_model", field: "structureModel", label: "结构模型 / 好莱坞节拍", short: "结构" },
+  { key: "beat_cards", field: "beatCards", label: "节拍卡 / 情绪推进", short: "节拍卡" },
   { key: "series_outline", field: "outline", label: "三幕结构 / 八段式 Treatment", short: "大纲" },
   { key: "chinese_script", field: "chineseScript", label: "中文剧本 / Scene List", short: "中文剧本" },
   { key: "translation", field: "translation", label: "翻译", short: "翻译" },
   { key: "localization", field: "localization", label: "本土化", short: "本土化" },
   { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
+  { key: "format_check", field: "formatCheck", label: "格式检查 / Hollywood & Asian", short: "格式" },
   { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
   { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
 ];
@@ -173,6 +183,8 @@ export const creationWorkflowSteps: WorkflowStep[] = [
 export const continuationWorkflowSteps: WorkflowStep[] = [
   { key: "script_import", field: "importedScript", label: "剧本导入", short: "导入" },
   { key: "characters", field: "characterCards", label: "角色卡 / 人物关系图", short: "角色" },
+  { key: "structure_model", field: "structureModel", label: "结构模型 / 好莱坞节拍", short: "结构" },
+  { key: "beat_cards", field: "beatCards", label: "节拍卡 / 情绪推进", short: "节拍卡" },
   { key: "series_outline", field: "outline", label: "三幕结构 / 八段式 Treatment", short: "大纲" },
   { key: "existing_script", field: "existingScript", label: "已有剧本", short: "已有剧本" },
   { key: "continuation_script", field: "continuationScript", label: "续写剧本", short: "续写" },
@@ -180,6 +192,7 @@ export const continuationWorkflowSteps: WorkflowStep[] = [
   { key: "localization", field: "localization", label: "本土化", short: "本土化" },
   { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
+  { key: "format_check", field: "formatCheck", label: "格式检查 / Hollywood & Asian", short: "格式" },
   { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
   { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
 ];
@@ -215,6 +228,9 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     characters: "",
     characterCards: [],
     relationshipDiagram: "",
+    relationshipImageUrl: "",
+    structureModel: "",
+    beatCards: "",
     outline: "",
     episodes: "",
     existingScript: "",
@@ -228,6 +244,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     finalScriptChinese: "",
     finalScriptForeign: "",
     finalScriptBilingual: "",
+    formatCheck: "",
     storyboardScript: "",
     storyboardEpisodes: [],
     deliveryPackage: "",
@@ -582,6 +599,9 @@ function normalizeProject(project: LegacyProject): DramaProject {
     characters: characterCardsToMarkdown(parsed.cards) || project.characters || steps.characters?.content || "",
     characterCards: parsed.cards,
     relationshipDiagram: parsed.relationshipDiagram || project.relationshipDiagram || "",
+    relationshipImageUrl: project.relationshipImageUrl || "",
+    structureModel: project.structureModel || "",
+    beatCards: project.beatCards || "",
     outline: project.outline || project.seriesOutline || steps.series_outline?.content || "",
     episodes: project.episodes || project.episodeOutline || steps.episode_outline?.content || "",
     existingScript: project.existingScript || "",
@@ -595,6 +615,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     finalScriptChinese: project.finalScriptChinese || "",
     finalScriptForeign: finalForeign,
     finalScriptBilingual: project.finalScriptBilingual || "",
+    formatCheck: project.formatCheck || "",
     storyboardScript: storyboardEpisodesToMarkdown(storyboardEpisodes) || project.storyboardScript || "",
     storyboardEpisodes,
     deliveryPackage: project.deliveryPackage || "",
@@ -792,6 +813,10 @@ const demoStepContent: Record<TaskType, string> = {
     "剧名：午夜继承人\n1. 故事定位：隐藏继承人回归复仇的竖屏漫剧。\n2. 一句话卖点：被夺走一切的女人，以新董事身份回到订婚宴。\n3. 核心冲突：女主夺回公司与身份，反派阻止真相公开。\n4. 主角目标：拿回母亲留下的股份和尊严。\n5. 反派阻力：继妹与未婚夫联手制造女主精神失常的假象。\n6. 情绪基调：冷感、压抑、反击爽感。\n7. 目标受众：偏好复仇爱情和身份反转的海外女性用户。\n8. 视觉风格：冷色豪门宴会、红毯羞辱、黑车反转。",
   characters:
     '{"relationshipDiagram":"林晚 -> 复仇对象 -> 林薇；沈烬 -> 秘密盟友 -> 林晚；林薇 + 周衡 -> 联手夺权","characters":[{"name":"林晚","role":"女主","identity":"隐藏继承人，母亲遗产的真正受益人","goal":"夺回公司，公开继妹和未婚夫的阴谋","weakness":"仍然在意曾经的爱情","secret":"掌握父亲失踪前的录音","arc":"从忍耐求证到公开反击","conflict":"被继妹顶替身份，被未婚夫背叛","entrance":"订婚宴红毯尽头，她被保安拦下","line":"你们抢走的，今晚一件件还回来。","appearancePrompt":"25岁亚洲女性，冷白皮，黑色长发，湿透白色礼服，克制愤怒的眼神，红毯雨夜，电影感侧光"},{"name":"沈烬","role":"男主","identity":"跨国基金负责人","goal":"查清旧案并保护林晚","weakness":"不轻易相信任何人","secret":"他早已知道林晚的真实身份","arc":"从旁观者变成共同复仇者","conflict":"和反派家族存在旧账","entrance":"黑车停在雨中，他递出董事会文件","line":"你要复仇，我要真相。","appearancePrompt":"30岁亚洲男性，黑色西装，冷峻克制，雨夜黑车旁，手持文件袋，低饱和电影光"}]}',
+  structure_model:
+    "## 推荐结构模型\n主模型：三幕结构 + Save the Cat 15 节拍。\n辅助模型：韩剧式人物关系驱动。\n\n## 选择理由\n- 三幕结构适合投资人快速判断主线闭环。\n- Save the Cat 节拍能保证每 1-2 集有明确情绪转折。\n- 人物关系驱动适合豪门复仇、继承权、爱情误会等高频短剧题材。\n\n## 三幕结构骨架\n1. 开端：订婚宴羞辱，女主被夺走身份，男主递出董事文件。\n2. 对抗：女主以投资人身份回归，逐步拆穿继妹和未婚夫的局。\n3. 结局：董事会翻盘，旧案真相公开，女主完成身份与情感复位。\n\n## 关键转折点\n- 触发事件：女主被挡在自己的订婚宴外。\n- 第一幕转折：黑车文件证明她才是真正董事。\n- 中点反转：男主父亲疑似参与母亲旧案。\n- 第二幕低谷：女主公开证据被反派反咬为伪造。\n- 终局反转：母亲录音与股权文件同时曝光。\n\n## 结构风险\n- 男主秘密不能过早解释完。\n- 继妹反扑要持续升级，避免女主一路碾压。\n- 每集结尾必须保留身份、证据或情感钩子。",
+  beat_cards:
+    "## 节拍 1：开场羞辱\n- 所属模型：Save the Cat / Opening Image\n- 覆盖集数：第 1 集\n- 功能：用强画面建立女主处境和复仇动机。\n- 冲突：女主赶到订婚宴，却被保安拦在门外。\n- 价值变化：期待 -> 公开羞辱。\n- 情绪推进：震惊、窒息、克制愤怒。\n- 画面提示：雨夜红毯，白裙湿透，婚戒滚进红酒。\n- 集尾钩子：黑车门打开，男主递出董事文件。\n\n## 节拍 2：身份反转\n- 所属模型：三幕结构 / 第一幕转折\n- 覆盖集数：第 2-3 集\n- 功能：让女主第一次公开反击。\n- 冲突：继妹要求赶人，男主公开授权文件。\n- 价值变化：羞辱 -> 掌控。\n- 情绪推进：压抑、反击、爽感。\n- 画面提示：宴会门被推开，文件印章特写，宾客集体沉默。\n- 集尾钩子：旧录音里出现男主父亲的声音。\n\n## 节拍 3：旧案阴影\n- 所属模型：B Story / 情感与真相副线\n- 覆盖集数：第 4-6 集\n- 功能：把爱情线和旧案悬疑绑定。\n- 冲突：女主需要男主帮助，却发现他可能隐瞒关键事实。\n- 价值变化：信任 -> 怀疑。\n- 情绪推进：暧昧、试探、刺痛。\n- 画面提示：停车场冷光，录音笔红点闪烁，男主沉默。\n- 集尾钩子：女主发现母亲死亡前最后一个电话来自男主家族。",
   series_outline:
     "1. 全剧主线：林晚从订婚宴羞辱开始，逐步拿回股份、爱情和真相。\n2. 三幕结构：开端：订婚宴背叛与新身份入场；对抗：证据升级、关系拉扯、董事会夺权；结局：身份公开、旧案翻盘、情绪释放。\n3. 八段式 Treatment：1 羞辱开场；2 新身份入场；3 初次反击；4 反派反扑；5 男主秘密暴露；6 女主低谷；7 董事会翻盘；8 旧案真相与情绪释放。\n4. 关键反转清单：未婚夫背叛、男主隐藏帮助、继妹伪造病历、董事会投票翻盘。\n5. 情绪升级曲线：羞辱 -> 忍耐 -> 反击 -> 误会 -> 爆发 -> 终局胜利。\n6. 分集大纲：\n第 1 集 / 订婚宴羞辱 / 女主被赶出宴会 / 婚戒滚落 / 黑车中递出董事文件\n第 2 集 / 投资人入场 / 女主重返宴会 / 继妹失态 / 股东名单出现女主姓名\n第 3 集 / 录音线索 / 旧案浮出水面 / 男主身份存疑 / 录音里出现男主父亲声音",
   existing_script:
@@ -810,6 +835,8 @@ const demoStepContent: Record<TaskType, string> = {
     "1. Hook 强度：9/10。\n2. 情绪密度：8/10。\n3. 反转频率：8/10。\n4. 漫剧画面感：8/10。\n5. 目标市场适配度：8.5/10。\n6. 诊断修订：因果清楚，但男主动机需要提前埋线；女主弧线从受辱到反击成立；第 1 集节奏紧；场景价值从希望转为羞辱，推进有效。\n7. 计时与删减：预计 2 分 15 秒，删掉宾客重复嘲笑，保留婚戒滚落和黑车文件。\n8. 最终剧本修订指令：增加男主看到女主伤口的特写；把 board document 改为 voting rights packet；删掉重复解释。",
   final_script:
     "经过评估修订后的最终剧本\n\n## Episode 1\nDuration: 2 minutes\n### Scene List\n- Scene: Outside the ballroom\n- Function: Establish public humiliation and a clean revenge trigger\n- Conflict: Lin Wan is erased from her own engagement party\n- Value Shift: Hope -> Public disgrace -> Controlled resolve\n- Cause and Effect: The betrayal forces Lin Wan to reclaim her voting power\n### Scene 1\n- Visual: Rain hits the red carpet. Lin Wan stands outside the ballroom in a soaked white dress, one scratch visible on her wrist.\n- Dialogue: Lin Wan: “This is my engagement party.” Guard: “Not anymore.”\n### Ending Hook\nA black car door opens. Shen Jin notices the wound, then hands her a sealed voting rights packet: “Director Lin, they are waiting for you.”",
+  format_check:
+    "## 格式问题清单\n1. 场景标题完整：已包含场景位置和场景功能，但可补充 INT./EXT. 标记以贴近 Hollywood screenplay。\n2. 动作段落：画面感明确，建议每段控制在 1-2 行，适合竖屏拆镜。\n3. 对白长度：对白短，符合漫剧节奏。\n4. Scene List：已包含功能、冲突、价值变化和前后因果。\n5. 钩子：第 1 集结尾身份反转清晰。\n\n## 修改建议\n- 把“Outside the ballroom”统一为“EXT. BALLROOM ENTRANCE - NIGHT”。\n- 每场戏开头增加镜头情绪关键词，方便后续分镜。\n- 删除重复解释董事文件的对白，用文件特写和宾客反应传达。\n\n## 可直接替换的格式修订\n### EXT. BALLROOM ENTRANCE - NIGHT\nRain hammers the red carpet. Lin Wan stands in a soaked white dress, one scratch bright on her wrist.\nLIN WAN: This is my engagement party.\nGUARD: Not anymore.",
   storyboard_script:
     "## 第 1 集\n### 镜头 1\n- 景别：特写\n- 画面：婚戒滚进红酒杯，溅起暗红色液体。\n- 人物/动作：林晚的手停在半空，指尖发抖。\n- 台词/字幕：字幕：她来参加自己的订婚宴，却成了外人。\n- 音效/情绪：玻璃轻响，压抑。\n- 转场：切到宴会大屏。\n- AI 生成提示词：特写，婚戒落入红酒杯，暗红液体飞溅，雨夜豪门宴会，冷色电影光，强羞辱感，竖屏构图\n### 镜头 2\n- 景别：中景\n- 画面：大屏上是未婚夫和继妹的婚照。\n- 人物/动作：宾客转头看她，窃笑。\n- 台词/字幕：继妹：“姐姐，你来晚了。”\n- 音效/情绪：人群低笑，羞辱感拉满。\n- 转场：推近林晚眼神。\n- AI 生成提示词：豪门宴会大屏婚照，白裙女主被众人凝视，冷色调，高反差，竖屏漫画剧风格",
   final_delivery:

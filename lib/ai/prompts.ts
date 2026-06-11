@@ -3,6 +3,8 @@ export type TaskType =
   | "script_import"
   | "brief"
   | "characters"
+  | "structure_model"
+  | "beat_cards"
   | "series_outline"
   | "existing_script"
   | "chinese_script"
@@ -12,6 +14,7 @@ export type TaskType =
   | "test_script"
   | "quality_evaluation"
   | "final_script"
+  | "format_check"
   | "storyboard_script"
   | "final_delivery";
 
@@ -53,6 +56,8 @@ export const taskNames: Record<TaskType, string> = {
   script_import: "剧本导入",
   brief: "创意",
   characters: "角色",
+  structure_model: "结构模型",
+  beat_cards: "节拍卡",
   series_outline: "大纲",
   existing_script: "已有剧本",
   chinese_script: "中文剧本",
@@ -62,6 +67,7 @@ export const taskNames: Record<TaskType, string> = {
   test_script: "测试剧本",
   quality_evaluation: "评估",
   final_script: "最终剧本",
+  format_check: "格式检查",
   storyboard_script: "分镜",
   final_delivery: "最终交付",
 };
@@ -141,6 +147,40 @@ const promptByTask: Record<TaskType, string> = {
     "}",
     "至少包含女主、男主或关键关系对象、主反派、关键配角。",
     "要求：所有字段用中文；角色必须服务强冲突和连续反转。",
+  ].join("\n"),
+
+  structure_model: [
+    "任务：为当前项目选择并生成专业剧作结构模型。",
+    "必须结合 input、context、options，面向海外竖屏短剧/漫剧，不要写成电影论文。",
+    "可使用并混合以下模型：三幕结构、救猫咪 15 节拍、英雄之旅、弗赖塔格金字塔、豪格六阶段、韩剧人物关系驱动。",
+    "输出结构必须包含：",
+    "1. 推荐结构模型：说明主模型和辅助模型",
+    "2. 选择理由：为什么适合当前题材、市场、集数和片长",
+    "3. 三幕骨架：开端 / 对抗 / 结局，每幕写清主要转折点",
+    "4. 救猫咪节拍表：Opening Image、Theme Stated、Set-up、Catalyst、Debate、Break into Two、B Story、Fun and Games、Midpoint、Bad Guys Close In、All Is Lost、Dark Night of the Soul、Break into Three、Finale、Final Image",
+    "5. B 故事：情感副线、主题线、关系变化线",
+    "6. 韩剧式关系驱动：主角目标、阻碍者、配角功能、情绪推进",
+    "7. 风险提示：列出可能导致后续剧本跑偏的 3 个结构风险",
+    "要求：格式稳定、短句、可直接作为下一步节拍卡输入。",
+  ].join("\n"),
+
+  beat_cards: [
+    "任务：根据结构模型、角色和项目 Brief 生成可执行的节拍卡 Beat Cards。",
+    "每张节拍卡必须是一个清晰模块，便于后续生成大纲、剧本和分镜。",
+    "输出格式：",
+    "## 节拍 1：节拍名称",
+    "- 所属模型：三幕 / 救猫咪 / 英雄之旅 / 韩剧关系驱动",
+    "- 所属集数：第 X 集或全局",
+    "- 预计时长：按 options.episodeDuration 估算",
+    "- 戏剧功能：这张节拍在故事中承担什么功能",
+    "- 核心冲突：人物之间的直接冲突",
+    "- 价值变化：例如信任 -> 怀疑、羞辱 -> 反击、希望 -> 绝望",
+    "- 情绪爆点：观众应感受到的主要情绪",
+    "- 参与角色：角色名列表",
+    "- 画面提示：适合漫剧/竖屏短剧的强画面",
+    "- 钩子：推动下一张节拍或下一集的悬念",
+    "必须覆盖 Opening Image、Catalyst、Midpoint、All Is Lost、Finale 等关键节点。",
+    "如果 options.episodeCount 较多，优先生成全局节拍和前 15 集核心节拍，不要泛泛而谈。",
   ].join("\n"),
 
   series_outline: [
@@ -273,6 +313,29 @@ const promptByTask: Record<TaskType, string> = {
     "输出标题必须为：经过评估修订后的最终剧本",
     "标题下一行必须标明版本：中文剧本 / 外语剧本 / 双语剧本。",
     "要求：保留 Scene List；落实诊断修订和计时删减；统一格式；删掉过程说明、问题清单和无关提示。",
+  ].join("\n"),
+
+  format_check: [
+    "任务：检查当前剧本是否符合专业交付格式，并给出可执行修复建议。",
+    "重点检查 Hollywood Screenplay、亚洲剧本格式、漫剧脚本格式三类适配问题。",
+    "必须检查：",
+    "1. 场景标题：是否有 INT./EXT.、地点、DAY/NIGHT 或对应中文场景信息",
+    "2. 动作段落：是否现在时、可视化、不过长",
+    "3. 人物名：是否统一，英文版是否大写，是否有角色名混乱",
+    "4. 对白：是否短句、符合角色、是否有过多解释",
+    "5. 括号提示：是否过多，是否误写成导演说明",
+    "6. 转场：FADE IN、CUT TO、DISSOLVE TO、FADE OUT、THE END 是否需要补充",
+    "7. Scene List：每场戏是否有功能、冲突、价值变化、前后因果",
+    "8. 竖屏漫剧适配：是否有强画面、强冲突、集尾钩子",
+    "输出结构：",
+    "## 格式问题清单",
+    "按严重程度列出问题。",
+    "## 一键修复建议",
+    "列出可自动修复的具体动作。",
+    "## 推荐输出格式",
+    "给出最适合当前项目的格式：漫剧 / Asian / Hollywood / 双语。",
+    "## 修复后的片段示例",
+    "只示范 1-2 个关键片段，不要重写全剧。",
   ].join("\n"),
 
   storyboard_script: [

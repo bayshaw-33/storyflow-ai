@@ -800,6 +800,82 @@ textarea {
   resize: vertical;
 }
 
+.relationship-image-workspace {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(260px, 0.9fr) minmax(180px, 0.6fr);
+  gap: 12px;
+  overflow: auto;
+}
+
+.relationship-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 12px;
+}
+
+.relationship-toolbar div {
+  display: grid;
+  gap: 3px;
+}
+
+.relationship-toolbar strong {
+  color: #f6f7fb;
+}
+
+.relationship-toolbar span {
+  color: #a9b2c3;
+  font-size: 12px;
+}
+
+.relationship-image-preview,
+.relationship-image-empty {
+  min-height: 260px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.relationship-image-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.relationship-image-preview img {
+  width: 100%;
+  height: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.relationship-image-preview a {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+}
+
+.relationship-image-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: #a9b2c3;
+  text-align: center;
+  padding: 22px;
+}
+
+.relationship-source {
+  min-height: 180px;
+}
+
 .ai-panel {
   display: flex;
   flex-direction: column;
