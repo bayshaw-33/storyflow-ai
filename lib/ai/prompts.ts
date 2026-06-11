@@ -110,6 +110,10 @@ const promptByTask: Record<TaskType, string> = {
 
   brief: [
     "任务：根据故事创意或附件文本生成项目 Brief，并自动生成剧名。",
+    "创意原则：必须优先响应用户 input 和优化要求，不要套用默认豪门复仇模板。",
+    "差异化要求：除非用户明确要求，否则不要默认使用重生、订婚宴羞辱、继妹顶替、隐藏继承人、董事文件、雨夜黑车等高频桥段。",
+    "如果用户给出修改意见，必须让剧名、主角职业/身份、核心冲突、开场钩子、反派阻力、视觉风格至少 4 项发生清晰变化。",
+    "如果题材选项较常见，也要给出一个反套路锚点，例如特殊职业、罕见地域、非典型亲密关系、道德两难、超现实规则或独特视觉母题。",
     "输出结构必须严格包含：",
     "剧名：给出一个适合海外漫剧传播的中文暂定剧名",
     "1. 故事定位",
@@ -120,6 +124,7 @@ const promptByTask: Record<TaskType, string> = {
     "6. 情绪基调",
     "7. 目标受众",
     "8. 视觉风格",
+    "9. 差异化锚点：列出 3 个让该项目区别于同类短剧的具体设定",
     "要求：如果 input 是小说或剧本附件文本，要先提炼核心故事，不要照抄原文。",
   ].join("\n"),
 
@@ -402,7 +407,9 @@ function buildContext(payload: GeneratePayload) {
       ? `竞品链接：${payload.benchmarkLink || payload.options?.benchmarkLink}`
       : "",
     payload.idea ? `故事创意：${payload.idea}` : "",
-    payload.options?.optimizeInstruction ? `优化要求：${payload.options.optimizeInstruction}` : "",
+    payload.options?.optimizeInstruction
+      ? `优化要求：${payload.options.optimizeInstruction}\n执行要求：必须产生可见结构变化，不能只润色措辞；如果与前序内容冲突，以优化要求为准。`
+      : "",
     payload.context ? `补充上下文：\n${payload.context}` : "",
     priorSteps ? `前序步骤内容：\n${priorSteps}` : "",
   ]

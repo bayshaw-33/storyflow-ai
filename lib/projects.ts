@@ -26,6 +26,7 @@ export type CharacterCard = {
   entrance: string;
   line: string;
   appearancePrompt: string;
+  imageUrl: string;
 };
 
 export type StoryboardEpisode = {
@@ -507,6 +508,7 @@ export function createEmptyCharacterCard(): CharacterCard {
     entrance: "",
     line: "",
     appearancePrompt: "",
+    imageUrl: "",
   };
 }
 
@@ -525,6 +527,7 @@ export function characterCardsToMarkdown(cards: CharacterCard[]) {
         `- 首次登场画面：${card.entrance || ""}`,
         `- 典型短对白：${card.line || ""}`,
         `- 人物形象提示词：${card.appearancePrompt || ""}`,
+        card.imageUrl ? `- 角色图片：${card.imageUrl}` : "",
       ].join("\n"),
     )
     .join("\n\n");
@@ -717,6 +720,7 @@ function normalizeCharacterCard(card: Partial<CharacterCard>): CharacterCard {
     entrance: card.entrance || "",
     line: card.line || "",
     appearancePrompt: card.appearancePrompt || "",
+    imageUrl: card.imageUrl || "",
   };
 }
 

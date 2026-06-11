@@ -752,6 +752,38 @@ textarea {
   background: #fffefa;
 }
 
+.character-image-panel {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.character-image-panel img,
+.character-image-placeholder {
+  width: 86px;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  border: 1px solid rgba(19, 34, 28, 0.16);
+  background: #eef1ed;
+  object-fit: cover;
+}
+
+.character-image-placeholder {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  color: #68736e;
+  font-size: 12px;
+}
+
+.character-image-panel .secondary-button {
+  align-self: end;
+  justify-content: center;
+  min-height: 38px;
+}
+
 .character-fields {
   display: grid;
   gap: 9px;

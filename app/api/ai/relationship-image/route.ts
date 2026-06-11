@@ -85,7 +85,7 @@ function toFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
   if (message === "MISSING_MINIMAX_API_KEY") {
-    return "MiniMax 图片生成尚未完成服务端配置，请先配置 MINIMAX_API_KEY。";
+    return "MiniMax 图片生成尚未完成服务端配置，请在 Vercel 环境变量中添加 MINIMAX_API_KEY 后重新部署。";
   }
 
   if (message.includes("MINIMAX_IMAGE_API_ERROR:401") || message.includes("MINIMAX_IMAGE_API_ERROR:403")) {
@@ -102,4 +102,3 @@ function toFriendlyError(error: unknown) {
 
   return "MiniMax 图片生成失败，请稍后重试。";
 }
-

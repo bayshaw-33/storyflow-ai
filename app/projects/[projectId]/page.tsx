@@ -210,6 +210,7 @@ export default function WorkflowPage() {
   const [activeStep, setActiveStep] = useState<TaskType>("market_analysis");
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
+  const [characterImageLoadingId, setCharacterImageLoadingId] = useState("");
   const [parsingFile, setParsingFile] = useState(false);
   const [error, setError] = useState("");
   const [statusText, setStatusText] = useState("");
@@ -374,6 +375,53 @@ export default function WorkflowPage() {
     }
   }
 
+  async function generateCharacterImage(card: CharacterCard) {
+    if (!project) return;
+    if (!card.name.trim() && !card.appearancePrompt.trim()) {
+      setError("请先填写角色名称或人物形象提示词。");
+      return;
+    }
+
+    setCharacterImageLoadingId(card.id);
+    setError("");
+    setStatusText("");
+
+    try {
+      const response = await fetch("/api/ai/character-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectTitle: project.title,
+          market: project.market,
+          genre: project.genre,
+          context: [project.brief, project.relationshipDiagram].filter(Boolean).join("\n\n"),
+          character: card,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "角色图片生成失败，请稍后重试。");
+      }
+
+      const nextCards = project.characterCards.map((item) =>
+        item.id === card.id
+          ? {
+              ...item,
+              imageUrl: data.imageUrl,
+              appearancePrompt: item.appearancePrompt || data.prompt || "",
+            }
+          : item,
+      );
+      syncCharacterCards(nextCards);
+      setStatusText(`已生成角色图片：${card.name || "未命名角色"}（${data.model || "MiniMax"}）`);
+    } catch (imageError) {
+      setError(imageError instanceof Error ? imageError.message : "角色图片生成失败，请稍后重试。");
+    } finally {
+      setCharacterImageLoadingId("");
+    }
+  }
+
   function syncStoryboardEpisodes(episodes: StoryboardEpisode[]) {
     updateProject((current) => ({
       ...current,
@@ -436,15 +484,14 @@ export default function WorkflowPage() {
     input: string,
     optimizeInstruction = "",
   ) {
+    const generationContext = buildGenerationContext(baseProject, step, optimizeInstruction);
     const response = await fetch("/api/ai/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         taskType: step,
         input,
-        context: optimizeInstruction
-          ? `请根据以下优化要求重写当前页内容：${optimizeInstruction}`
-          : baseProject.idea,
+        context: generationContext,
         options: {
           market: baseProject.market,
           genre: baseProject.genre,
@@ -474,6 +521,41 @@ export default function WorkflowPage() {
       throw new Error(data.error || "生成失败，请检查 DeepSeek API。已有内容已保留。");
     }
     return data;
+  }
+
+  function buildGenerationContext(baseProject: DramaProject, step: TaskType, optimizeInstruction = "") {
+    const baseContext = baseProject.idea || "";
+    if (step !== "brief") {
+      return optimizeInstruction
+        ? `请根据以下优化要求重写当前页内容：${optimizeInstruction}`
+        : baseContext;
+    }
+
+    const variationSeed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+    if (optimizeInstruction.trim()) {
+      return [
+        "【创意优化硬约束】",
+        `优化要求：${optimizeInstruction.trim()}`,
+        "必须对当前 Brief 做结构性改写，不允许只替换同义词。",
+        "至少改变以下 4 项：剧名、主角职业/身份、开场钩子、核心冲突、反派阻力、视觉母题、情绪基调。",
+        "保留用户明确要求保留的设定；其余部分要大胆重构。",
+        "避免套用默认桥段：重生、订婚宴羞辱、继妹顶替、隐藏继承人、董事文件、雨夜黑车，除非用户明确要求。",
+        `差异化变体编号：${variationSeed}`,
+        "",
+        "【原始故事创意】",
+        baseContext,
+      ].join("\n");
+    }
+
+    return [
+      baseContext,
+      "",
+      "【差异化生成要求】",
+      "请生成一个区别于常见豪门复仇模板的版本，不要默认使用重生、订婚宴羞辱、继妹顶替、隐藏继承人、董事文件、雨夜黑车。",
+      "必须加入一个鲜明的反套路锚点：特殊职业、罕见地域、非典型关系、道德两难、超现实规则或独特视觉母题。",
+      `差异化变体编号：${variationSeed}`,
+    ].join("\n");
   }
 
   async function generateForStep(
@@ -1067,6 +1149,24 @@ export default function WorkflowPage() {
                         <input value={card.name} onChange={(event) => updateCharacterCard(card.id, "name", event.target.value)} placeholder="角色名" />
                         <button className="icon-button subtle" onClick={() => removeCharacter(card.id)} title="删除角色">
                           <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <div className="character-image-panel">
+                        {card.imageUrl ? (
+                          <img src={card.imageUrl} alt={`${card.name || "角色"}形象图`} />
+                        ) : (
+                          <div className="character-image-placeholder">
+                            <UserPlus size={22} />
+                            <span>角色图</span>
+                          </div>
+                        )}
+                        <button
+                          className="secondary-button"
+                          onClick={() => generateCharacterImage(card)}
+                          disabled={characterImageLoadingId === card.id || (!card.name.trim() && !card.appearancePrompt.trim())}
+                        >
+                          {characterImageLoadingId === card.id ? <Loader2 className="spin" size={16} /> : <WandSparkles size={16} />}
+                          生成角色图片
                         </button>
                       </div>
                       <div className="character-fields">
