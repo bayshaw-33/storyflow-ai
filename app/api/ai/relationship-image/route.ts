@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       error: null,
     });
   } catch (error) {
-    if (isImagePermissionError(error)) {
+    if (shouldFallbackToSvg(error)) {
       try {
         const fallback = await generateRelationshipSvg(body.projectTitle, characters, body.relationshipDiagram || "");
         return NextResponse.json({
@@ -128,9 +128,14 @@ function failure(error: string, status: number) {
   return NextResponse.json({ success: false, imageUrl: "", error }, { status });
 }
 
-function isImagePermissionError(error: unknown) {
+function shouldFallbackToSvg(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  return message.includes("MINIMAX_IMAGE_API_ERROR:401") || message.includes("MINIMAX_IMAGE_API_ERROR:403");
+  return (
+    message === "EMPTY_MINIMAX_IMAGE_OUTPUT" ||
+    message === "MINIMAX_NETWORK_ERROR" ||
+    message === "MINIMAX_TIMEOUT" ||
+    message.includes("MINIMAX_IMAGE_API_ERROR")
+  );
 }
 
 function sanitizeSvg(raw: string) {

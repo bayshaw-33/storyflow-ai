@@ -185,7 +185,7 @@ export async function generateMiniMaxImage(prompt: string): Promise<AIProviderRe
   }
 
   const data = await response.json();
-  const imageUrl = data.data?.image_urls?.[0] || data.data?.image_url || data.data?.images?.[0]?.url;
+  const imageUrl = extractImageUrl(data);
 
   if (!imageUrl) {
     throw new Error("EMPTY_MINIMAX_IMAGE_OUTPUT");
@@ -198,6 +198,52 @@ export async function generateMiniMaxImage(prompt: string): Promise<AIProviderRe
     model,
     provider: "minimax",
   };
+}
+
+function extractImageUrl(data: unknown): string {
+  if (typeof data === "string") {
+    if (/^https?:\/\//i.test(data) || /^data:image\//i.test(data)) return data;
+    return "";
+  }
+
+  if (!data || typeof data !== "object") return "";
+
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const found = extractImageUrl(item);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  const record = data as Record<string, unknown>;
+  const preferredKeys = [
+    "image_url",
+    "imageUrl",
+    "url",
+    "download_url",
+    "downloadUrl",
+    "presigned_url",
+    "presignedUrl",
+    "base64",
+    "image_base64",
+    "imageBase64",
+  ];
+
+  for (const key of preferredKeys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      if (/^https?:\/\//i.test(value) || /^data:image\//i.test(value)) return value;
+      if (key.toLowerCase().includes("base64") && value.length > 100) return `data:image/png;base64,${value}`;
+    }
+  }
+
+  for (const value of Object.values(record)) {
+    const found = extractImageUrl(value);
+    if (found) return found;
+  }
+
+  return "";
 }
 
 function stripThinking(output: string) {
