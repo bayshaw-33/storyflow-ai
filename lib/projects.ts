@@ -76,6 +76,7 @@ export type DramaProject = {
   storyboardScript: string;
   storyboardEpisodes: StoryboardEpisode[];
   deliveryPackage: string;
+  projectGroup: string;
   stepVersions: StepVersion[];
   status: ProjectStatus;
   createdAt: string;
@@ -97,6 +98,8 @@ type LegacyProject = Partial<DramaProject> & {
 };
 
 export const STORAGE_KEY = "storyflow-ai-projects-v1";
+export const GROUP_STORAGE_KEY = "storyflow-ai-project-groups-v1";
+export const DEFAULT_PROJECT_GROUP = "默认分组";
 
 export const MARKET_OPTIONS = ["北美", "欧洲", "东南亚", "中东", "拉美", "日本", "韩国", "其他"];
 
@@ -249,6 +252,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     storyboardScript: "",
     storyboardEpisodes: [],
     deliveryPackage: "",
+    projectGroup: DEFAULT_PROJECT_GROUP,
     stepVersions: [],
     status: "draft",
     createdAt: now,
@@ -372,6 +376,26 @@ export function readProjectsFromStorage(): DramaProject[] {
 export function saveProjectsToStorage(projects: DramaProject[]) {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
+export function readProjectGroupsFromStorage() {
+  if (typeof localStorage === "undefined") return [DEFAULT_PROJECT_GROUP];
+
+  try {
+    const raw = localStorage.getItem(GROUP_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    const groups = Array.isArray(parsed)
+      ? parsed.filter((group): group is string => typeof group === "string" && Boolean(group.trim()))
+      : [];
+    return uniqueGroups([DEFAULT_PROJECT_GROUP, ...groups]);
+  } catch {
+    return [DEFAULT_PROJECT_GROUP];
+  }
+}
+
+export function saveProjectGroupsToStorage(groups: string[]) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(GROUP_STORAGE_KEY, JSON.stringify(uniqueGroups([DEFAULT_PROJECT_GROUP, ...groups])));
 }
 
 export function upsertProject(project: DramaProject) {
@@ -622,6 +646,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     storyboardScript: storyboardEpisodesToMarkdown(storyboardEpisodes) || project.storyboardScript || "",
     storyboardEpisodes,
     deliveryPackage: project.deliveryPackage || "",
+    projectGroup: normalizeProjectGroup(project.projectGroup),
     stepVersions: Array.isArray(project.stepVersions) ? project.stepVersions.map(normalizeStepVersion).filter(Boolean) as StepVersion[] : [],
     status: project.status || "draft",
     createdAt: project.createdAt || now,
@@ -798,6 +823,14 @@ function normalizeLanguage(language?: string) {
   if (!language) return "英文";
   const map: Record<string, string> = { 英语: "英文", English: "英文", 中文: "中文", "鑻辨枃": "英文" };
   return map[language] || language;
+}
+
+function normalizeProjectGroup(group?: string) {
+  return group?.trim() || DEFAULT_PROJECT_GROUP;
+}
+
+function uniqueGroups(groups: string[]) {
+  return Array.from(new Set(groups.map(normalizeProjectGroup)));
 }
 
 function createId() {

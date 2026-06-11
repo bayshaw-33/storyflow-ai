@@ -13,7 +13,7 @@ export async function callMiniMax({
   timeoutMs = 120000,
   maxTokens = 12000,
 }: MiniMaxOptions): Promise<AIProviderResult> {
-  const apiKey = process.env.MINIMAX_API_KEY || process.env.MINIMAX_SUBSCRIPTION_KEY;
+  const apiKey = getMiniMaxApiKey();
   const model = process.env.MINIMAX_MODEL || "MiniMax-M3";
   const baseUrl = process.env.MINIMAX_API_BASE_URL || "https://api.minimax.io/v1/chat/completions";
 
@@ -72,7 +72,7 @@ export async function callMiniMax({
 }
 
 export async function generateMiniMaxImage(prompt: string): Promise<AIProviderResult & { imageUrl: string }> {
-  const apiKey = process.env.MINIMAX_API_KEY || process.env.MINIMAX_SUBSCRIPTION_KEY;
+  const apiKey = getMiniMaxApiKey();
   const model = process.env.MINIMAX_IMAGE_MODEL || "image-01";
   const baseUrl = process.env.MINIMAX_IMAGE_API_BASE_URL || "https://api.minimax.io/v1/image_generation";
 
@@ -118,6 +118,17 @@ export async function generateMiniMaxImage(prompt: string): Promise<AIProviderRe
 
 function stripThinking(output: string) {
   return output.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
+export function getMiniMaxApiKey() {
+  return (
+    process.env.MINIMAX_API_KEY ||
+    process.env.MINIMAX_TOKEN ||
+    process.env.MINIMAX_APIKEY ||
+    process.env.MINIMAX_API_SECRET ||
+    process.env.MINIMAX_SUBSCRIPTION_KEY ||
+    ""
+  ).trim();
 }
 
 async function readErrorDetail(response: Response) {

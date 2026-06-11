@@ -64,7 +64,7 @@ button:disabled {
 .sidebar-projects {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   gap: 10px;
 }
 
@@ -96,6 +96,7 @@ button:disabled {
   padding: 0 0 6px;
 }
 
+.sidebar-group-button,
 .sidebar-project-item,
 .sidebar-empty {
   border: 1px solid rgba(89, 214, 166, 0.18);
@@ -105,11 +106,40 @@ button:disabled {
   padding: 12px;
 }
 
+.sidebar-group-button {
+  width: calc(100% - 16px);
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 8px;
+  color: #dfe6f5;
+  font-weight: 800;
+}
+
+.sidebar-project-group {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 0;
+  color: #aab4c7;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.sidebar-group-title small {
+  color: #6f7a8d;
+}
+
 .sidebar-project-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
+  gap: 10px;
 }
 
 .sidebar-project-item:hover {
@@ -117,31 +147,68 @@ button:disabled {
   background: rgba(35, 138, 103, 0.18);
 }
 
-.sidebar-project-item div {
+.sidebar-project-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.sidebar-project-link div {
   min-width: 0;
   display: grid;
   gap: 6px;
 }
 
-.sidebar-project-item span {
+.sidebar-project-link span {
   color: #59d6a6;
   font-size: 13px;
   font-weight: 800;
 }
 
-.sidebar-project-item strong {
+.sidebar-project-link strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
 }
 
-.sidebar-project-item small {
+.sidebar-project-link small {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: #a9b2c3;
   font-size: 12px;
+}
+
+.sidebar-project-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+}
+
+.sidebar-project-actions select,
+.sidebar-delete-button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(7, 9, 15, 0.52);
+  color: #dfe6f5;
+}
+
+.sidebar-project-actions select {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.sidebar-delete-button {
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-delete-button:hover {
+  border-color: rgba(255, 100, 100, 0.55);
+  color: #ffb8b8;
 }
 
 .sidebar-empty {

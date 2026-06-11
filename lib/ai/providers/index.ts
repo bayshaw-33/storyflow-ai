@@ -1,6 +1,6 @@
 import type { TaskType } from "../prompts";
 import { callDeepSeek } from "./deepseek";
-import { callMiniMax } from "./minimax";
+import { callMiniMax, getMiniMaxApiKey } from "./minimax";
 import type { AIMessage, AIProviderName, AIProviderResult, AIUsage } from "./types";
 
 export type { AIMessage, AIProviderName, AIProviderResult, AIUsage };
@@ -28,8 +28,9 @@ export function getProviderStatus() {
       model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
     },
     minimax: {
-      configured: Boolean(process.env.MINIMAX_API_KEY || process.env.MINIMAX_SUBSCRIPTION_KEY),
+      configured: Boolean(getMiniMaxApiKey()),
       model: process.env.MINIMAX_MODEL || "MiniMax-M3",
+      imageModel: process.env.MINIMAX_IMAGE_MODEL || "image-01",
     },
   };
 }
