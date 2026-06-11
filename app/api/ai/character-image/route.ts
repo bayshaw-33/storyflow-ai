@@ -50,31 +50,63 @@ export async function POST(request: Request) {
       error: null,
     });
   } catch (error) {
-    if (shouldFallbackToSvg(error)) {
-      try {
-        const visualPrompt = await buildVisualPrompt(body);
-        const fallback = await generateCharacterSvg(body, visualPrompt);
-        return NextResponse.json({
-          success: true,
-          imageUrl: svgToDataUrl(fallback),
-          prompt: visualPrompt,
-          provider: "minimax",
-          model: "MiniMax-M3",
-          fallback: "svg",
-          error: null,
-        });
-      } catch {
-        return failure("MiniMax 图片生成权限不足，且 SVG 角色图兜底生成失败。请检查 MiniMax 文本模型和 image-01 权限。", 500);
-      }
-    }
-
-    return failure(toFriendlyError(error), 500);
+    const visualPrompt = buildLocalVisualPrompt(body);
+    const fallback = generateCharacterSvg(body, visualPrompt, toFriendlyError(error));
+    return NextResponse.json({
+      success: true,
+      imageUrl: svgToDataUrl(fallback),
+      prompt: visualPrompt,
+      provider: "local",
+      model: "deterministic-svg",
+      fallback: "local_svg",
+      error: null,
+    });
   }
 }
 
 async function buildVisualPrompt(body: CharacterImageRequest) {
+  const fallbackPrompt = buildLocalVisualPrompt(body);
+
+  try {
+    const promptResult = await callMiniMax({
+      temperature: 0.6,
+      maxTokens: 900,
+      messages: [
+        {
+          role: "system",
+          content:
+            "你是 StoryFlow AI 的角色视觉提示词设计师。只输出一段可直接用于图片生成的提示词，不要解释，不要 Markdown。",
+        },
+        {
+          role: "user",
+          content: [
+            "请把以下角色卡整理成 MiniMax 图片生成提示词。",
+            "要求：保留角色气质和戏剧功能；避免多人同框；输出单人角色概念图；画面适合海外漫剧/竖屏短剧；包含年龄、性别、发型、服装、表情、姿态、镜头、光线、色彩、背景。",
+            "不要生成血腥、色情、过度暴力内容。",
+            `项目：${body.projectTitle || "StoryFlow 项目"}`,
+            `市场：${body.market || "未选择"}`,
+            `题材：${body.genre || "未选择"}`,
+            body.context ? `项目上下文：${body.context.slice(0, 1200)}` : "",
+            "角色卡：",
+            JSON.stringify(body.character || {}, null, 2),
+            "",
+            "如果角色卡信息不足，请基于题材补全一个高辨识度但不俗套的视觉方案。",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+      ],
+    });
+
+    return promptResult.output.trim() || fallbackPrompt;
+  } catch {
+    return fallbackPrompt;
+  }
+}
+
+function buildLocalVisualPrompt(body: CharacterImageRequest) {
   const character = body.character || {};
-  const fallbackPrompt = [
+  return [
     character.appearancePrompt || "",
     `${character.name || "角色"}，${character.role || "戏剧角色"}，${character.identity || ""}`,
     character.entrance ? `首次登场画面：${character.entrance}` : "",
@@ -82,99 +114,69 @@ async function buildVisualPrompt(body: CharacterImageRequest) {
   ]
     .filter(Boolean)
     .join("，");
-
-  const promptResult = await callMiniMax({
-    temperature: 0.6,
-    maxTokens: 900,
-    messages: [
-      {
-        role: "system",
-        content:
-          "你是 StoryFlow AI 的角色视觉提示词设计师。只输出一段可直接用于图片生成的提示词，不要解释，不要 Markdown。",
-      },
-      {
-        role: "user",
-        content: [
-          "请把以下角色卡整理成 MiniMax 图片生成提示词。",
-          "要求：保留角色气质和戏剧功能；避免多人同框；输出单人角色概念图；画面适合海外漫剧/竖屏短剧；包含年龄、性别、发型、服装、表情、姿态、镜头、光线、色彩、背景。",
-          "不要生成血腥、色情、过度暴力内容。",
-          `项目：${body.projectTitle || "StoryFlow 项目"}`,
-          `市场：${body.market || "未选择"}`,
-          `题材：${body.genre || "未选择"}`,
-          body.context ? `项目上下文：${body.context.slice(0, 1200)}` : "",
-          "角色卡：",
-          JSON.stringify(character, null, 2),
-          "",
-          "如果角色卡信息不足，请基于题材补全一个高辨识度但不俗套的视觉方案。",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      },
-    ],
-  });
-
-  return promptResult.output.trim() || fallbackPrompt;
 }
 
-async function generateCharacterSvg(body: CharacterImageRequest, visualPrompt: string) {
-  const result = await callMiniMax({
-    temperature: 0.45,
-    maxTokens: 2200,
-    messages: [
-      {
-        role: "system",
-        content:
-          "你是 StoryFlow AI 的角色概念图设计师。只输出一个完整 SVG，不要 Markdown，不要解释。SVG 必须安全：禁止 script、foreignObject、外链图片、事件属性。",
-      },
-      {
-        role: "user",
-        content: [
-          "请生成一张 768x1024 的单人角色概念图 SVG。",
-          "风格：深色高级漫剧角色卡，半身肖像感，清晰轮廓，戏剧化光线。",
-          "可以用抽象插画、几何剪影、服装色块和文字标签表达角色，不要追求照片真实。",
-          "顶部显示角色名，底部显示一句短标签；整体必须是图片构图，不要像表格。",
-          `项目：${body.projectTitle || "StoryFlow 项目"}`,
-          `题材：${body.genre || "未选择"}`,
-          "角色卡：",
-          JSON.stringify(body.character || {}, null, 2),
-          "视觉提示词：",
-          visualPrompt,
-        ].join("\n"),
-      },
-    ],
-  });
+function generateCharacterSvg(body: CharacterImageRequest, visualPrompt: string, note = "") {
+  const character = body.character || {};
+  const name = character.name || "未命名角色";
+  const role = character.role || character.identity || "角色";
+  const line = character.line || character.goal || character.conflict || "推动故事冲突";
+  const accent = pickAccent(body.genre || character.role || "");
 
-  return sanitizeSvg(result.output);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#06080f"/>
+        <stop offset="0.58" stop-color="#111821"/>
+        <stop offset="1" stop-color="${accent.dark}"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="50%" cy="34%" r="55%">
+        <stop offset="0" stop-color="${accent.light}" stop-opacity="0.42"/>
+        <stop offset="1" stop-color="${accent.light}" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="768" height="1024" fill="url(#bg)"/>
+    <circle cx="384" cy="350" r="320" fill="url(#glow)"/>
+    <rect x="64" y="68" width="640" height="888" rx="36" fill="#0e151d" opacity="0.78" stroke="${accent.light}" stroke-opacity="0.42"/>
+    <circle cx="384" cy="316" r="138" fill="${accent.mid}" opacity="0.72"/>
+    <path d="M248 330 C270 202 498 202 520 330 C500 450 268 450 248 330Z" fill="#f0efe7" opacity="0.92"/>
+    <path d="M255 315 C292 200 475 190 520 316 C482 275 411 258 330 282 C294 292 272 305 255 315Z" fill="#111827"/>
+    <circle cx="342" cy="340" r="8" fill="#101820"/>
+    <circle cx="426" cy="340" r="8" fill="#101820"/>
+    <path d="M350 392 C372 410 402 410 424 392" fill="none" stroke="#101820" stroke-width="7" stroke-linecap="round"/>
+    <path d="M210 762 C235 588 305 494 384 494 C463 494 533 588 558 762Z" fill="${accent.mid}" opacity="0.92"/>
+    <path d="M273 760 L384 516 L495 760Z" fill="#0b1017" opacity="0.82"/>
+    <text x="384" y="118" text-anchor="middle" fill="#ffffff" font-size="44" font-weight="900">${escapeXml(truncate(name, 12))}</text>
+    <text x="384" y="162" text-anchor="middle" fill="${accent.light}" font-size="23" font-weight="800">${escapeXml(truncate(role, 18))}</text>
+    <text x="384" y="835" text-anchor="middle" fill="#ffffff" font-size="24" font-weight="800">${escapeXml(truncate(line, 24))}</text>
+    <text x="384" y="876" text-anchor="middle" fill="#9aa7b7" font-size="16">${escapeXml(truncate(visualPrompt, 44))}</text>
+    <text x="384" y="920" text-anchor="middle" fill="#647186" font-size="13">${escapeXml(truncate(note || "StoryFlow 角色图", 58))}</text>
+  </svg>`;
 }
 
 function failure(error: string, status: number) {
   return NextResponse.json({ success: false, imageUrl: "", prompt: "", error }, { status });
 }
 
-function shouldFallbackToSvg(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
-  return (
-    message === "EMPTY_MINIMAX_IMAGE_OUTPUT" ||
-    message === "MINIMAX_NETWORK_ERROR" ||
-    message === "MINIMAX_TIMEOUT" ||
-    message.includes("MINIMAX_IMAGE_API_ERROR")
-  );
+function pickAccent(seed: string) {
+  if (seed.includes("狼人") || seed.toLowerCase().includes("alpha")) return { dark: "#14251f", mid: "#356b55", light: "#78e0ae" };
+  if (seed.includes("黑帮") || seed.includes("犯罪")) return { dark: "#241416", mid: "#7f2c35", light: "#f07f86" };
+  if (seed.includes("恐怖") || seed.includes("异能")) return { dark: "#1d1730", mid: "#54378a", light: "#b997ff" };
+  if (seed.includes("神话")) return { dark: "#28210f", mid: "#8a6926", light: "#f0d27a" };
+  return { dark: "#172b23", mid: "#2d7257", light: "#59d6a6" };
 }
 
-function sanitizeSvg(raw: string) {
-  const match = raw.match(/<svg[\s\S]*<\/svg>/i);
-  const svg = (match?.[0] || raw)
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/javascript:/gi, "");
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  if (!/<svg[\s\S]*<\/svg>/i.test(svg)) {
-    throw new Error("EMPTY_SVG_OUTPUT");
-  }
-
-  return svg;
+function truncate(value = "", max = 20) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
 function svgToDataUrl(svg: string) {
