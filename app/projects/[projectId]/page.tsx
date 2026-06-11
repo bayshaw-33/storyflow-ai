@@ -367,7 +367,7 @@ export default function WorkflowPage() {
         status: "ready" as const,
         updatedAt: new Date().toISOString(),
       }), true);
-      setStatusText(`已生成图片关系图（${data.model || "MiniMax"}）`);
+      setStatusText(`已生成图片关系图（${data.fallback === "svg" ? "MiniMax SVG 兜底" : data.model || "MiniMax"}）`);
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : "人物关系图生成失败，请稍后重试。");
     } finally {
@@ -414,7 +414,7 @@ export default function WorkflowPage() {
           : item,
       );
       syncCharacterCards(nextCards);
-      setStatusText(`已生成角色图片：${card.name || "未命名角色"}（${data.model || "MiniMax"}）`);
+      setStatusText(`已生成角色图片：${card.name || "未命名角色"}（${data.fallback === "svg" ? "MiniMax SVG 兜底" : data.model || "MiniMax"}）`);
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : "角色图片生成失败，请稍后重试。");
     } finally {

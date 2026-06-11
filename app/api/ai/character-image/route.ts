@@ -50,6 +50,24 @@ export async function POST(request: Request) {
       error: null,
     });
   } catch (error) {
+    if (isImagePermissionError(error)) {
+      try {
+        const visualPrompt = await buildVisualPrompt(body);
+        const fallback = await generateCharacterSvg(body, visualPrompt);
+        return NextResponse.json({
+          success: true,
+          imageUrl: svgToDataUrl(fallback),
+          prompt: visualPrompt,
+          provider: "minimax",
+          model: "MiniMax-M3",
+          fallback: "svg",
+          error: null,
+        });
+      } catch {
+        return failure("MiniMax 图片生成权限不足，且 SVG 角色图兜底生成失败。请检查 MiniMax 文本模型和 image-01 权限。", 500);
+      }
+    }
+
     return failure(toFriendlyError(error), 500);
   }
 }
@@ -98,8 +116,64 @@ async function buildVisualPrompt(body: CharacterImageRequest) {
   return promptResult.output.trim() || fallbackPrompt;
 }
 
+async function generateCharacterSvg(body: CharacterImageRequest, visualPrompt: string) {
+  const result = await callMiniMax({
+    temperature: 0.45,
+    maxTokens: 2200,
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是 StoryFlow AI 的角色概念图设计师。只输出一个完整 SVG，不要 Markdown，不要解释。SVG 必须安全：禁止 script、foreignObject、外链图片、事件属性。",
+      },
+      {
+        role: "user",
+        content: [
+          "请生成一张 768x1024 的单人角色概念图 SVG。",
+          "风格：深色高级漫剧角色卡，半身肖像感，清晰轮廓，戏剧化光线。",
+          "可以用抽象插画、几何剪影、服装色块和文字标签表达角色，不要追求照片真实。",
+          "顶部显示角色名，底部显示一句短标签；整体必须是图片构图，不要像表格。",
+          `项目：${body.projectTitle || "StoryFlow 项目"}`,
+          `题材：${body.genre || "未选择"}`,
+          "角色卡：",
+          JSON.stringify(body.character || {}, null, 2),
+          "视觉提示词：",
+          visualPrompt,
+        ].join("\n"),
+      },
+    ],
+  });
+
+  return sanitizeSvg(result.output);
+}
+
 function failure(error: string, status: number) {
   return NextResponse.json({ success: false, imageUrl: "", prompt: "", error }, { status });
+}
+
+function isImagePermissionError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("MINIMAX_IMAGE_API_ERROR:401") || message.includes("MINIMAX_IMAGE_API_ERROR:403");
+}
+
+function sanitizeSvg(raw: string) {
+  const match = raw.match(/<svg[\s\S]*<\/svg>/i);
+  const svg = (match?.[0] || raw)
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "");
+
+  if (!/<svg[\s\S]*<\/svg>/i.test(svg)) {
+    throw new Error("EMPTY_SVG_OUTPUT");
+  }
+
+  return svg;
+}
+
+function svgToDataUrl(svg: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 function toFriendlyError(error: unknown) {

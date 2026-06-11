@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateMiniMaxImage } from "@/lib/ai/providers/minimax";
+import { callMiniMax, generateMiniMaxImage } from "@/lib/ai/providers/minimax";
 
 type CharacterInput = {
   name?: string;
@@ -42,6 +42,22 @@ export async function POST(request: Request) {
       error: null,
     });
   } catch (error) {
+    if (isImagePermissionError(error)) {
+      try {
+        const fallback = await generateRelationshipSvg(body.projectTitle, characters, body.relationshipDiagram || "");
+        return NextResponse.json({
+          success: true,
+          imageUrl: svgToDataUrl(fallback),
+          provider: "minimax",
+          model: "MiniMax-M3",
+          fallback: "svg",
+          error: null,
+        });
+      } catch {
+        return failure("MiniMax 图片生成权限不足，且 SVG 兜底生成失败。请检查 MiniMax 文本模型和 image-01 权限。", 500);
+      }
+    }
+
     return failure(toFriendlyError(error), 500);
   }
 }
@@ -77,8 +93,64 @@ function buildRelationshipPrompt(projectTitle = "StoryFlow 项目", characters: 
   ].join("\n");
 }
 
+async function generateRelationshipSvg(projectTitle = "StoryFlow 项目", characters: CharacterInput[], relationshipDiagram: string) {
+  const result = await callMiniMax({
+    temperature: 0.45,
+    maxTokens: 2500,
+    messages: [
+      {
+        role: "system",
+        content:
+          "你是 StoryFlow AI 的信息图设计师。只输出一个完整 SVG，不要 Markdown，不要解释。SVG 必须安全：禁止 script、foreignObject、外链图片、事件属性。",
+      },
+      {
+        role: "user",
+        content: [
+          "请生成一张深色专业风格的人物关系图 SVG。",
+          "尺寸固定为 1280x720，背景深色，文字白色和绿色，高级创作后台风格。",
+          "每个角色用卡片节点表示，节点内包含中文角色名和角色功能。",
+          "用箭头线表示爱情、亲属、敌对、秘密盟友、背叛等关系，线条旁写短标签。",
+          "文本必须清晰可读，不要拥挤，不要输出代码块。",
+          `项目：${projectTitle}`,
+          "角色：",
+          JSON.stringify(characters, null, 2),
+          "关系描述：",
+          relationshipDiagram || "请根据角色目标和冲突推断。",
+        ].join("\n"),
+      },
+    ],
+  });
+
+  return sanitizeSvg(result.output);
+}
+
 function failure(error: string, status: number) {
   return NextResponse.json({ success: false, imageUrl: "", error }, { status });
+}
+
+function isImagePermissionError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("MINIMAX_IMAGE_API_ERROR:401") || message.includes("MINIMAX_IMAGE_API_ERROR:403");
+}
+
+function sanitizeSvg(raw: string) {
+  const match = raw.match(/<svg[\s\S]*<\/svg>/i);
+  const svg = (match?.[0] || raw)
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "");
+
+  if (!/<svg[\s\S]*<\/svg>/i.test(svg)) {
+    throw new Error("EMPTY_SVG_OUTPUT");
+  }
+
+  return svg;
+}
+
+function svgToDataUrl(svg: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 function toFriendlyError(error: unknown) {
