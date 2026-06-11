@@ -15,7 +15,7 @@ export async function callMiniMax({
 }: MiniMaxOptions): Promise<AIProviderResult> {
   const apiKey = getMiniMaxApiKey();
   const model = process.env.MINIMAX_MODEL || "MiniMax-M3";
-  const baseUrl = process.env.MINIMAX_API_BASE_URL || "https://api.minimax.io/v1/chat/completions";
+  const baseUrl = process.env.MINIMAX_API_BASE_URL || (isTokenPlanKey(apiKey) ? "https://api.minimaxi.com/v1/chat/completions" : "https://api.minimax.io/v1/chat/completions");
 
   if (!apiKey) {
     throw new Error("MISSING_MINIMAX_API_KEY");
@@ -90,7 +90,7 @@ async function callMiniMaxAnthropic({
   timeoutMs,
   maxTokens,
 }: MiniMaxOptions & { apiKey: string; model: string }): Promise<AIProviderResult> {
-  const baseUrl = process.env.MINIMAX_ANTHROPIC_API_BASE_URL || "https://api.minimax.io/anthropic/v1/messages";
+  const baseUrl = process.env.MINIMAX_ANTHROPIC_API_BASE_URL || "https://api.minimaxi.com/anthropic/v1/messages";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const system = messages
@@ -158,7 +158,7 @@ async function callMiniMaxAnthropic({
 export async function generateMiniMaxImage(prompt: string): Promise<AIProviderResult & { imageUrl: string }> {
   const apiKey = getMiniMaxApiKey();
   const model = process.env.MINIMAX_IMAGE_MODEL || "image-01";
-  const baseUrl = process.env.MINIMAX_IMAGE_API_BASE_URL || "https://api.minimax.io/v1/image_generation";
+  const baseUrl = process.env.MINIMAX_IMAGE_API_BASE_URL || (isTokenPlanKey(apiKey) ? "https://api.minimaxi.com/v1/image_generation" : "https://api.minimax.io/v1/image_generation");
 
   if (!apiKey) {
     throw new Error("MISSING_MINIMAX_API_KEY");
