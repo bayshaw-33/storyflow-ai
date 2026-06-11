@@ -21,6 +21,17 @@ export async function callMiniMax({
     throw new Error("MISSING_MINIMAX_API_KEY");
   }
 
+  if (isTokenPlanKey(apiKey) && !process.env.MINIMAX_API_BASE_URL) {
+    return callMiniMaxAnthropic({
+      apiKey,
+      model,
+      messages,
+      temperature,
+      timeoutMs,
+      maxTokens,
+    });
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
@@ -58,6 +69,79 @@ export async function callMiniMax({
 
   const data = await response.json();
   const output = data.choices?.[0]?.message?.content;
+
+  if (!output) {
+    throw new Error("EMPTY_MINIMAX_OUTPUT");
+  }
+
+  return {
+    output: stripThinking(String(output)).trim(),
+    usage: data.usage || null,
+    model,
+    provider: "minimax",
+  };
+}
+
+async function callMiniMaxAnthropic({
+  apiKey,
+  model,
+  messages,
+  temperature,
+  timeoutMs,
+  maxTokens,
+}: MiniMaxOptions & { apiKey: string; model: string }): Promise<AIProviderResult> {
+  const baseUrl = process.env.MINIMAX_ANTHROPIC_API_BASE_URL || "https://api.minimax.io/anthropic/v1/messages";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const system = messages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
+  const chatMessages = messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content,
+    }));
+  let response: Response;
+
+  try {
+    response = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": apiKey,
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        system,
+        messages: chatMessages,
+        max_tokens: maxTokens,
+        temperature,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("MINIMAX_TIMEOUT");
+    }
+
+    throw new Error("MINIMAX_NETWORK_ERROR");
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    const detail = await readErrorDetail(response);
+    throw new Error(`MINIMAX_API_ERROR:${response.status}:${detail}`);
+  }
+
+  const data = await response.json();
+  const output = Array.isArray(data.content)
+    ? data.content.map((item: { text?: string }) => item.text || "").join("")
+    : data.choices?.[0]?.message?.content;
 
   if (!output) {
     throw new Error("EMPTY_MINIMAX_OUTPUT");
@@ -129,6 +213,10 @@ export function getMiniMaxApiKey() {
     process.env.MINIMAX_SUBSCRIPTION_KEY ||
     ""
   ).trim();
+}
+
+function isTokenPlanKey(apiKey: string) {
+  return apiKey.startsWith("sk-cp-");
 }
 
 async function readErrorDetail(response: Response) {
