@@ -28,6 +28,12 @@ import {
   saveProjectGroupsToStorage,
   saveProjectsToStorage,
 } from "@/lib/projects";
+import {
+  deleteProjectFromSupabase,
+  saveProjectGroupsToSupabase,
+  syncProjectsWithSupabase,
+  upsertProjectToSupabase,
+} from "@/lib/supabase/projects";
 
 export default function ProjectListPage() {
   const router = useRouter();
@@ -36,11 +42,17 @@ export default function ProjectListPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setProjects(readProjectsFromStorage());
+    const localProjects = readProjectsFromStorage();
+    setProjects(localProjects);
     const storedGroups = readProjectGroupsFromStorage();
-    const projectGroups = readProjectsFromStorage().map((project) => project.projectGroup || DEFAULT_PROJECT_GROUP);
+    const projectGroups = localProjects.map((project) => project.projectGroup || DEFAULT_PROJECT_GROUP);
     setGroups(Array.from(new Set([DEFAULT_PROJECT_GROUP, ...storedGroups, ...projectGroups])));
     setLoaded(true);
+
+    void syncProjectsWithSupabase(localProjects).then((result) => {
+      setProjects(result.projects);
+      setGroups(result.groups);
+    });
   }, []);
 
   const sortedProjects = useMemo(
@@ -72,6 +84,7 @@ export default function ProjectListPage() {
     const nextGroups = Array.from(new Set([DEFAULT_PROJECT_GROUP, ...groups, nextName]));
     setGroups(nextGroups);
     saveProjectGroupsToStorage(nextGroups);
+    void saveProjectGroupsToSupabase(nextGroups);
   }
 
   function moveProject(projectId: string, group: string) {
@@ -82,6 +95,8 @@ export default function ProjectListPage() {
     );
     setProjects(nextProjects);
     saveProjectsToStorage(nextProjects);
+    const moved = nextProjects.find((project) => project.id === projectId);
+    if (moved) void upsertProjectToSupabase(moved);
   }
 
   function removeProject(projectId: string, title: string) {
@@ -89,6 +104,7 @@ export default function ProjectListPage() {
     if (!confirmed) return;
 
     deleteProject(projectId);
+    void deleteProjectFromSupabase(projectId);
     setProjects(readProjectsFromStorage());
   }
 

@@ -378,6 +378,10 @@ export function saveProjectsToStorage(projects: DramaProject[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
+export function normalizeStoredProject(project: Partial<DramaProject>): DramaProject {
+  return normalizeProject(project as LegacyProject);
+}
+
 export function readProjectGroupsFromStorage() {
   if (typeof localStorage === "undefined") return [DEFAULT_PROJECT_GROUP];
 

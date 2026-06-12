@@ -53,6 +53,7 @@ import {
   storyboardEpisodesToMarkdown,
   upsertProject,
 } from "@/lib/projects";
+import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 
 const DEFAULT_TITLE = "未命名短剧项目";
 
@@ -222,18 +223,30 @@ export default function WorkflowPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const projects = readProjectsFromStorage();
     const found = projects.find((item) => item.id === params.projectId);
+    const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
+    const isDemo = searchParams.get("template") === "demo";
 
     if (found) {
       setProject(found);
       const steps = getWorkflowSteps(found);
       setActiveStep((current) => (steps.some((step) => step.key === current) ? current : steps[0].key));
-      return;
+      void readProjectFromSupabase(params.projectId).then((cloudProject) => {
+        if (cancelled || !cloudProject) return;
+        if (cloudProject.updatedAt.localeCompare(found.updatedAt) >= 0) {
+          setProject(cloudProject);
+          saveProjectEverywhere(cloudProject);
+          const cloudSteps = getWorkflowSteps(cloudProject);
+          setActiveStep((current) => (cloudSteps.some((step) => step.key === current) ? current : cloudSteps[0].key));
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
     }
 
-    const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
-    const isDemo = searchParams.get("template") === "demo";
     const created = isDemo
       ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
       : requestedWorkflow === "continuation"
@@ -242,7 +255,21 @@ export default function WorkflowPage() {
 
     setProject(created);
     setActiveStep(getWorkflowSteps(created)[0].key);
-    if (isDemo) upsertProject(created);
+    if (isDemo) saveProjectEverywhere(created);
+
+    if (!isDemo) {
+      void readProjectFromSupabase(params.projectId).then((cloudProject) => {
+        if (cancelled || !cloudProject) return;
+        setProject(cloudProject);
+        const cloudSteps = getWorkflowSteps(cloudProject);
+        setActiveStep(cloudSteps[0].key);
+        saveProjectEverywhere(cloudProject);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.projectId, searchParams]);
 
   useEffect(() => {
@@ -272,18 +299,25 @@ export default function WorkflowPage() {
   const activeContent = project ? getStepContent(project, activeStep) : "";
   const activeVersions = project ? getStepVersions(project, activeStep) : [];
 
+  function saveProjectEverywhere(nextProject: DramaProject) {
+    upsertProject(nextProject);
+    void upsertProjectToSupabase(nextProject).catch(() => {
+      // 本地保存优先，云端同步失败时保持 MVP 可演示。
+    });
+  }
+
   function persist(nextProject: DramaProject, immediate = false) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
 
     if (immediate) {
-      upsertProject(nextProject);
+      saveProjectEverywhere(nextProject);
       setStatusText("已自动保存");
       return;
     }
 
     setStatusText("正在保存...");
     saveTimer.current = setTimeout(() => {
-      upsertProject(nextProject);
+      saveProjectEverywhere(nextProject);
       setStatusText("已自动保存");
     }, 500);
   }
@@ -580,7 +614,7 @@ export default function WorkflowPage() {
       };
       const versionedProject = saveStepVersion(nextProject, "existing_script", existingContent, "manual", "导入内容自动带入");
       setProject(versionedProject);
-      upsertProject(versionedProject);
+      saveProjectEverywhere(versionedProject);
       setError("");
       setStatusText("已有剧本已从导入内容自动带入，可直接编辑。");
       return;
@@ -643,7 +677,7 @@ export default function WorkflowPage() {
       );
 
       setProject(nextProject);
-      upsertProject(nextProject);
+      saveProjectEverywhere(nextProject);
       const finalCount = countGeneratedEpisodes(output);
       const incompleteNotice = expectedCount > 0 && finalCount > 0 && finalCount < expectedCount
         ? `，但仍只检测到 ${finalCount}/${expectedCount} 集，可再次点击内容生成继续补齐`
@@ -709,7 +743,7 @@ export default function WorkflowPage() {
       }
 
       setProject(nextProject);
-      upsertProject(nextProject);
+      saveProjectEverywhere(nextProject);
       setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})`);
     } catch (generateError) {
       setLoading(false);
@@ -724,14 +758,14 @@ export default function WorkflowPage() {
   function markError(baseProject: DramaProject, message: string) {
     const erroredProject = { ...baseProject, status: "error" as const, updatedAt: new Date().toISOString() };
     setProject(erroredProject);
-    upsertProject(erroredProject);
+    saveProjectEverywhere(erroredProject);
     setError(message);
   }
 
   function fillDemo() {
     const demo = { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() };
     setProject(demo);
-    upsertProject(demo);
+    saveProjectEverywhere(demo);
     setActiveStep("market_analysis");
     setStatusText("已填入演示案例");
     setError("");
@@ -742,7 +776,7 @@ export default function WorkflowPage() {
     const demoStep = applyDemoStep(project, activeStep);
     const nextProject = saveStepVersion(demoStep, activeStep, getStepContent(demoStep, activeStep), "demo");
     setProject(nextProject);
-    upsertProject(nextProject);
+    saveProjectEverywhere(nextProject);
     setStatusText("已加载示例内容，仅用于现场演示");
     setError("");
   }
