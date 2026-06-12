@@ -127,6 +127,7 @@ export async function createGenerationTask(params: {
   status?: GenerationTaskStatus;
 }) {
   if (!hasServiceRoleConfig()) return null;
+  const target = params.payload as GeneratePayload & { targetEntityType?: string; targetEntityId?: string };
 
   const task = {
     id: crypto.randomUUID(),
@@ -136,6 +137,8 @@ export async function createGenerationTask(params: {
     step_key: params.payload.taskType,
     phase_key: resolvePhaseKey(params.payload.taskType),
     status: params.status || "running",
+    target_entity_type: target.targetEntityType || null,
+    target_entity_id: target.targetEntityId || null,
     input_snapshot: params.payload,
     started_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
@@ -161,6 +164,7 @@ export async function completeGenerationTask(params: {
   costEstimate: number;
 }) {
   if (!hasServiceRoleConfig()) return;
+  const target = params.payload as GeneratePayload & { targetEntityType?: string; targetEntityId?: string };
 
   const completedAt = new Date().toISOString();
 
@@ -172,6 +176,8 @@ export async function completeGenerationTask(params: {
         provider: params.provider,
         model: params.model,
         output_snapshot: params.output,
+        target_entity_type: target.targetEntityType || null,
+        target_entity_id: target.targetEntityId || null,
         token_usage: params.usage,
         cost_estimate: params.costEstimate,
         latency_ms: params.latencyMs,
@@ -193,6 +199,8 @@ export async function completeGenerationTask(params: {
       model: params.model,
       input_snapshot: params.payload,
       output_snapshot: params.output,
+      target_entity_type: target.targetEntityType || null,
+      target_entity_id: target.targetEntityId || null,
       token_usage: params.usage,
       cost_estimate: params.costEstimate,
       latency_ms: params.latencyMs,
@@ -224,7 +232,7 @@ export async function listGenerationTasks(params: { userId: string; projectId?: 
   const filters = [
     `user_id=eq.${encodeURIComponent(params.userId)}`,
     params.projectId ? `project_id=eq.${encodeURIComponent(params.projectId)}` : "",
-    "select=id,step_key,phase_key,status,provider,model,output_snapshot,error_message,latency_ms,created_at,completed_at",
+    "select=id,step_key,phase_key,status,provider,model,output_snapshot,error_message,latency_ms,target_entity_type,target_entity_id,applied_at,created_at,completed_at",
     "order=created_at.desc",
     `limit=${params.limit || 20}`,
   ].filter(Boolean).join("&");
@@ -260,7 +268,7 @@ export function resolvePhaseKey(taskType: TaskType) {
   return "delivery";
 }
 
-async function serviceFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+export async function serviceFetch<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${getSupabaseUrl()}${path}`, {
     ...init,
     headers: {

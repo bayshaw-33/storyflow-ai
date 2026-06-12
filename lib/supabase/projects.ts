@@ -10,8 +10,18 @@ import {
 type ProjectRow = {
   id: string;
   user_id?: string | null;
+  owner_id?: string | null;
+  organization_id?: string | null;
   title: string | null;
   workflow_type: string | null;
+  mode?: string | null;
+  target_market?: string | null;
+  genre?: string | null;
+  language?: string | null;
+  episode_count?: number | null;
+  episode_duration?: string | null;
+  current_phase?: string | null;
+  story_bible?: DramaProject["storyBible"] | null;
   project_group: string | null;
   status: string | null;
   created_at: string | null;
@@ -106,13 +116,26 @@ export async function readProjectFromSupabase(id: string, options: SupabaseSyncO
 export async function upsertProjectToSupabase(project: DramaProject, options: SupabaseSyncOptions = {}) {
   if (!isSupabaseConfigured() || !options.accessToken) return;
 
-  await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates",
-    },
-    body: JSON.stringify(projectToRow(project, options.accessToken)),
-  }, options);
+  try {
+    await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify(projectToRow(project, options.accessToken)),
+    }, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!isMissingPhase2ColumnError(message)) throw error;
+
+    await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify(legacyProjectToRow(project, options.accessToken)),
+    }, options);
+  }
 }
 
 export async function deleteProjectFromSupabase(id: string, options: SupabaseSyncOptions = {}) {
@@ -152,6 +175,30 @@ export async function saveProjectGroupsToSupabase(groups: string[], options: Sup
 }
 
 function projectToRow(project: DramaProject, accessToken?: string | null): ProjectRow {
+  const userId = getUserIdFromAccessToken(accessToken);
+  return {
+    id: project.id,
+    user_id: userId,
+    owner_id: userId,
+    title: project.title,
+    workflow_type: project.workflowType,
+    mode: project.workflowType,
+    target_market: project.market,
+    genre: project.genre,
+    language: project.targetLanguage,
+    episode_count: project.episodeCount,
+    episode_duration: project.episodeDuration,
+    current_phase: "project_setup",
+    story_bible: project.storyBible,
+    project_group: project.projectGroup || DEFAULT_PROJECT_GROUP,
+    status: project.status,
+    created_at: project.createdAt,
+    updated_at: project.updatedAt,
+    data: project,
+  };
+}
+
+function legacyProjectToRow(project: DramaProject, accessToken?: string | null): ProjectRow {
   return {
     id: project.id,
     user_id: getUserIdFromAccessToken(accessToken),
@@ -170,7 +217,13 @@ function rowToProject(row: ProjectRow): DramaProject {
     ...row.data,
     id: row.id || row.data?.id,
     title: row.data?.title || row.title || "未命名短剧项目",
-    workflowType: row.data?.workflowType || (row.workflow_type === "continuation" ? "continuation" : "creation"),
+    workflowType: row.data?.workflowType || (row.mode === "continuation" || row.workflow_type === "continuation" ? "continuation" : "creation"),
+    market: row.data?.market || row.target_market || undefined,
+    genre: row.data?.genre || row.genre || undefined,
+    targetLanguage: row.data?.targetLanguage || row.language || undefined,
+    episodeCount: row.data?.episodeCount || row.episode_count || undefined,
+    episodeDuration: row.data?.episodeDuration || row.episode_duration || undefined,
+    storyBible: row.data?.storyBible || row.story_bible || undefined,
     projectGroup: row.data?.projectGroup || row.project_group || DEFAULT_PROJECT_GROUP,
     status: row.data?.status || (row.status as DramaProject["status"]) || "draft",
     createdAt: row.data?.createdAt || row.created_at || new Date().toISOString(),
@@ -193,6 +246,10 @@ function mergeProjects(localProjects: DramaProject[], cloudProjects: DramaProjec
 
 function mergeGroups(groups: string[]) {
   return Array.from(new Set([DEFAULT_PROJECT_GROUP, ...groups.map(normalizeGroup).filter(Boolean)]));
+}
+
+function isMissingPhase2ColumnError(message: string) {
+  return /owner_id|mode|target_market|language|episode_count|episode_duration|current_phase|story_bible|schema cache|PGRST204/i.test(message);
 }
 
 function normalizeGroup(group: string) {
