@@ -219,6 +219,39 @@ export async function failGenerationTask(params: {
   });
 }
 
+export async function listGenerationTasks(params: { userId: string; projectId?: string | null; limit?: number }) {
+  if (!hasServiceRoleConfig()) return [];
+  const filters = [
+    `user_id=eq.${encodeURIComponent(params.userId)}`,
+    params.projectId ? `project_id=eq.${encodeURIComponent(params.projectId)}` : "",
+    "select=id,step_key,phase_key,status,provider,model,output_snapshot,error_message,latency_ms,created_at,completed_at",
+    "order=created_at.desc",
+    `limit=${params.limit || 20}`,
+  ].filter(Boolean).join("&");
+
+  return serviceFetch(`/rest/v1/storyflow_generation_tasks?${filters}`);
+}
+
+export async function cancelGenerationTask(params: { userId: string; taskId: string }) {
+  if (!hasServiceRoleConfig()) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
+  const existing = await serviceFetch<Array<{ id: string; user_id: string; status: GenerationTaskStatus }>>(
+    `/rest/v1/storyflow_generation_tasks?id=eq.${encodeURIComponent(params.taskId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=id,user_id,status&limit=1`,
+  );
+  const task = existing[0];
+  if (!task) throw new Error("TASK_NOT_FOUND");
+  if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") return task;
+
+  await serviceFetch(`/rest/v1/storyflow_generation_tasks?id=eq.${encodeURIComponent(params.taskId)}&user_id=eq.${encodeURIComponent(params.userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status: "cancelled",
+      completed_at: new Date().toISOString(),
+    }),
+  });
+
+  return { ...task, status: "cancelled" as GenerationTaskStatus };
+}
+
 export function resolvePhaseKey(taskType: TaskType) {
   if (taskType === "market_analysis" || taskType === "brief" || taskType === "script_import") return "development";
   if (taskType === "characters" || taskType === "structure_model" || taskType === "beat_cards" || taskType === "series_outline") return "story_bible";

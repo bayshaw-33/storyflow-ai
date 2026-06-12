@@ -22,12 +22,18 @@ import {
   DEFAULT_PROJECT_GROUP,
   deleteProject,
   DramaProject,
+  EPISODE_COUNT_OPTIONS,
+  EPISODE_DURATION_OPTIONS,
+  GENRE_OPTIONS,
   getCompletedStepCount,
   getWorkflowSteps,
+  LANGUAGE_OPTIONS,
+  MARKET_OPTIONS,
   readProjectGroupsFromStorage,
   readProjectsFromStorage,
   saveProjectGroupsToStorage,
   saveProjectsToStorage,
+  WorkflowType,
 } from "@/lib/projects";
 import {
   deleteProjectFromSupabase,
@@ -48,6 +54,17 @@ export default function ProjectListPage() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardError, setWizardError] = useState("");
+  const [wizardData, setWizardData] = useState({
+    title: "",
+    workflowType: "creation" as WorkflowType,
+    market: "北美",
+    genre: "逆袭复仇",
+    targetLanguage: "英文",
+    episodeCount: 12,
+    episodeDuration: "2 分钟",
+  });
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -100,9 +117,46 @@ export default function ProjectListPage() {
     [groups, sortedProjects],
   );
 
-  function createAndOpen(type: "creation" | "continuation") {
-    const project = type === "continuation" ? createContinuationProject() : createProject();
-    router.push(`/projects/${project.id}?mode=${type === "continuation" ? "continuation" : "creation"}`);
+  function openWizard(type: WorkflowType) {
+    setWizardError("");
+    setWizardData((current) => ({ ...current, workflowType: type, title: "" }));
+    setWizardOpen(true);
+  }
+
+  function submitWizard() {
+    const title = wizardData.title.trim();
+    if (!title) {
+      setWizardError("请先填写项目标题。");
+      return;
+    }
+
+    const base = {
+      title,
+      market: wizardData.market,
+      genre: wizardData.genre,
+      targetLanguage: wizardData.targetLanguage,
+      episodeCount: wizardData.episodeCount,
+      episodeDuration: wizardData.episodeDuration,
+      storyBible: {
+        logline: "",
+        sellingPoint: "",
+        targetMarket: wizardData.market,
+        genreType: wizardData.genre,
+        world: "",
+        mainConflict: "",
+        characterRelationships: "",
+        lockedCanon: "",
+        languageStyle: "短对白、强情绪、强画面感、少解释。",
+        pacingRules: "前 3 秒出钩子，每集结尾留强钩子。",
+        confirmedFacts: "",
+      },
+    };
+    const project = wizardData.workflowType === "continuation"
+      ? createContinuationProject(base)
+      : createProject(base);
+
+    setWizardOpen(false);
+    router.push(`/projects/${project.id}?mode=${wizardData.workflowType}`);
   }
 
   function addGroup() {
@@ -289,11 +343,11 @@ export default function ProjectListPage() {
         </div>
 
         <div className="home-actions-center">
-          <button className="home-action-card" onClick={() => createAndOpen("creation")}>
+          <button className="home-action-card" onClick={() => openWizard("creation")}>
             <FilePlus2 size={28} />
             <span>新建项目</span>
           </button>
-          <button className="home-action-card" onClick={() => createAndOpen("continuation")}>
+          <button className="home-action-card" onClick={() => openWizard("continuation")}>
             <PenLine size={28} />
             <span>剧本续写</span>
           </button>
@@ -330,6 +384,71 @@ export default function ProjectListPage() {
               <button className="primary-button" onClick={submitAuth}>
                 {authMode === "signup" ? "注册" : "登录"}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {wizardOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal wizard-modal">
+            <h2>{wizardData.workflowType === "continuation" ? "创建剧本续写项目" : "创建原创项目"}</h2>
+            <p>先完成基础设定，再进入 StoryFlow 2.0 工作台。</p>
+            <label>
+              项目标题
+              <input
+                value={wizardData.title}
+                onChange={(event) => setWizardData((current) => ({ ...current, title: event.target.value }))}
+                placeholder="例如：午夜继承人"
+                autoFocus
+              />
+            </label>
+            <div className="wizard-grid">
+              <label>
+                创作模式
+                <select
+                  value={wizardData.workflowType}
+                  onChange={(event) => setWizardData((current) => ({ ...current, workflowType: event.target.value as WorkflowType }))}
+                >
+                  <option value="creation">原创</option>
+                  <option value="continuation">续写</option>
+                </select>
+              </label>
+              <label>
+                目标市场
+                <select value={wizardData.market} onChange={(event) => setWizardData((current) => ({ ...current, market: event.target.value }))}>
+                  {MARKET_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                题材类型
+                <select value={wizardData.genre} onChange={(event) => setWizardData((current) => ({ ...current, genre: event.target.value }))}>
+                  {GENRE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                输出语言
+                <select value={wizardData.targetLanguage} onChange={(event) => setWizardData((current) => ({ ...current, targetLanguage: event.target.value }))}>
+                  {LANGUAGE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                集数
+                <select value={wizardData.episodeCount} onChange={(event) => setWizardData((current) => ({ ...current, episodeCount: Number(event.target.value) }))}>
+                  {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} 集</option>)}
+                </select>
+              </label>
+              <label>
+                单集时长
+                <select value={wizardData.episodeDuration} onChange={(event) => setWizardData((current) => ({ ...current, episodeDuration: event.target.value }))}>
+                  {EPISODE_DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+            </div>
+            {wizardError ? <div className="notice error">{wizardError}</div> : null}
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setWizardOpen(false)}>取消</button>
+              <button className="primary-button" onClick={submitWizard}>进入工作台</button>
             </div>
           </div>
         </div>

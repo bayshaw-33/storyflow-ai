@@ -25,6 +25,7 @@ import {
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   applyDemoStep,
+  buildStoryBibleSummary,
   buildDeliveryMarkdown,
   CharacterCard,
   characterCardsToMarkdown,
@@ -41,8 +42,11 @@ import {
   FINAL_SCRIPT_VERSION_OPTIONS,
   GENRE_OPTIONS,
   getSelectedFinalScript,
+  getPhaseCompletion,
   getStepContent,
+  getStepStatus,
   getStepVersions,
+  getWorkflowPhases,
   getWorkflowSteps,
   LANGUAGE_OPTIONS,
   LOCALIZATION_MODE_OPTIONS,
@@ -50,14 +54,30 @@ import {
   readProjectsFromStorage,
   saveStepVersion,
   setStepContent,
+  parseStructuredEpisodes,
   StoryboardEpisode,
   storyboardEpisodesToMarkdown,
   upsertProject,
+  WorkflowPhaseKey,
 } from "@/lib/projects";
 import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const DEFAULT_TITLE = "未命名短剧项目";
+
+type GenerationTaskRecord = {
+  id: string;
+  step_key: TaskType;
+  phase_key: string;
+  status: "queued" | "running" | "streaming" | "completed" | "failed" | "retrying" | "cancelled";
+  provider: string | null;
+  model: string | null;
+  output_snapshot: string | null;
+  error_message: string | null;
+  latency_ms: number | null;
+  created_at: string;
+  completed_at: string | null;
+};
 
 function getPreviousKey(project: DramaProject, taskType: TaskType): TaskType | null {
   const workflowSteps = getWorkflowSteps(project);
@@ -204,6 +224,60 @@ function revisionMarkupToHtml(content: string) {
     .replace(/\n/g, "<br />");
 }
 
+function buildLocalizationDiffRows(source: string, localized: string) {
+  const sourceLines = source.split("\n").filter((line) => line.trim()).slice(0, 16);
+  const localizedLines = localized.split("\n").filter((line) => line.trim()).slice(0, 16);
+  const max = Math.max(sourceLines.length, localizedLines.length, 1);
+  return Array.from({ length: max }, (_, index) => {
+    const before = sourceLines[index] || "";
+    const after = localizedLines[index] || "";
+    const reason = after.length < before.length
+      ? "口语化"
+      : /taboo|blood|death|kill|sex|drug|暴力|死亡|血/i.test(before + after)
+        ? "禁忌规避"
+        : before && after && before !== after
+          ? "文化适配"
+          : "情绪增强";
+    return { before, after, reason };
+  });
+}
+
+function buildDramaScoreCards(content: string) {
+  const items = [
+    "前 3 秒钩子",
+    "冲突密度",
+    "情绪推进",
+    "反转力度",
+    "结尾钩子",
+    "对白口语度",
+    "本土化自然度",
+    "拍摄可执行性",
+  ];
+  const total = Number(content.match(/(?:总分|综合评分)\D*(\d+(?:\.\d+)?)/)?.[1] || 0);
+
+  return {
+    total: total || Math.round(
+      items.reduce((sum, item) => sum + Number(content.match(new RegExp(`${item}\\\\D*(\\\\d+(?:\\\\.\\\\d+)?)`))?.[1] || 7), 0) / items.length,
+    ),
+    items: items.map((item) => ({
+      item,
+      score: Number(content.match(new RegExp(`${item}\\\\D*(\\\\d+(?:\\\\.\\\\d+)?)`))?.[1] || 7),
+      issue: pickScoreLine(content, item, ["问题", "风险", "诊断"]) || "等待 AI 输出更细的诊断。",
+      suggestion: pickScoreLine(content, item, ["建议", "修改建议", "修订"]) || "可在右侧输入优化要求后重新生成。",
+    })),
+  };
+}
+
+function pickScoreLine(content: string, anchor: string, labels: string[]) {
+  const start = content.indexOf(anchor);
+  const section = start >= 0 ? content.slice(start, start + 500) : content;
+  for (const label of labels) {
+    const match = section.match(new RegExp(`${label}\\s*[：:]\\s*(.+)`));
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+}
+
 export default function WorkflowPage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
@@ -225,6 +299,14 @@ export default function WorkflowPage() {
   const [optimizeInstruction, setOptimizeInstruction] = useState("");
   const [projectFieldsOpen, setProjectFieldsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [openPhases, setOpenPhases] = useState<Record<WorkflowPhaseKey, boolean>>({
+    project_setup: true,
+    story_design: true,
+    script_production: false,
+    localization_evaluation: false,
+    storyboard_delivery: false,
+  });
+  const [generationTasks, setGenerationTasks] = useState<GenerationTaskRecord[]>([]);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -311,14 +393,36 @@ export default function WorkflowPage() {
   }, [activeStep]);
 
   const workflowSteps = useMemo(() => getWorkflowSteps(project || undefined), [project?.workflowType]);
+  const workflowPhases = useMemo(() => getWorkflowPhases(project || undefined), [project?.workflowType]);
   const activeMeta = useMemo(
     () => workflowSteps.find((step) => step.key === activeStep) || workflowSteps[0],
     [activeStep, workflowSteps],
+  );
+  const activePhase = useMemo(
+    () => workflowPhases.find((phase) => phase.stepKeys.includes(activeStep)) || workflowPhases[0],
+    [activeStep, workflowPhases],
   );
 
   const requirement = project ? getRequirement(project, activeStep) : "";
   const activeContent = project ? getStepContent(project, activeStep) : "";
   const activeVersions = project ? getStepVersions(project, activeStep) : [];
+  const storyBible = project?.storyBible;
+  const structuredEpisodes = useMemo(
+    () => parseStructuredEpisodes(activeContent),
+    [activeContent],
+  );
+  const localizationDiffRows = useMemo(
+    () => project ? buildLocalizationDiffRows(project.translation, activeContent) : [],
+    [project?.translation, activeContent],
+  );
+  const dramaScore = useMemo(
+    () => buildDramaScoreCards(activeContent),
+    [activeContent],
+  );
+  const activeTaskRecords = useMemo(
+    () => generationTasks.filter((task) => task.step_key === activeStep).slice(0, 4),
+    [generationTasks, activeStep],
+  );
 
   async function refreshCredits(nextSession: Session | null = session) {
     if (!nextSession?.access_token) {
@@ -338,6 +442,27 @@ export default function WorkflowPage() {
       setCredits(null);
     }
   }
+
+  async function refreshGenerationTasks(nextSession: Session | null = session) {
+    if (!project?.id || !nextSession?.access_token) {
+      setGenerationTasks([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/ai/tasks?projectId=${encodeURIComponent(project.id)}`, {
+        headers: { Authorization: `Bearer ${nextSession.access_token}` },
+      });
+      const data = await response.json();
+      if (response.ok && data.success) setGenerationTasks(data.tasks || []);
+    } catch {
+      setGenerationTasks([]);
+    }
+  }
+
+  useEffect(() => {
+    void refreshGenerationTasks();
+  }, [project?.id, session?.access_token, activeStep]);
 
   function getAuthHeaders(): Record<string, string> {
     return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
@@ -391,6 +516,17 @@ export default function WorkflowPage() {
 
       return next;
     });
+  }
+
+  function updateStoryBibleField(key: keyof NonNullable<DramaProject["storyBible"]>, value: string) {
+    updateProject((current) => ({
+      ...current,
+      storyBible: {
+        ...current.storyBible,
+        [key]: value,
+      },
+      updatedAt: new Date().toISOString(),
+    }));
   }
 
   function updateStep(taskType: TaskType, content: string) {
@@ -623,10 +759,11 @@ export default function WorkflowPage() {
   }
 
   function buildGenerationContext(baseProject: DramaProject, step: TaskType, optimizeInstruction = "") {
-    const baseContext = baseProject.idea || "";
+    const bibleContext = buildStoryBibleSummary(baseProject);
+    const baseContext = [bibleContext, baseProject.idea || ""].filter(Boolean).join("\n\n");
     if (step !== "brief") {
       return optimizeInstruction
-        ? `请根据以下优化要求重写当前页内容：${optimizeInstruction}`
+        ? `${bibleContext}\n\n请根据以下优化要求重写当前页内容：${optimizeInstruction}`
         : baseContext;
     }
 
@@ -674,8 +811,7 @@ export default function WorkflowPage() {
 
     const blocked = getRequirement(baseProject, step);
     if (blocked) {
-      setError(blocked);
-      return;
+      setStatusText(`建议先处理：${blocked}`);
     }
 
     if (baseProject.workflowType === "continuation" && step === "existing_script") {
@@ -756,6 +892,7 @@ export default function WorkflowPage() {
         ? `，但仍只检测到 ${finalCount}/${expectedCount} 集，可再次点击内容生成继续补齐`
         : "";
       setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`);
+      void refreshGenerationTasks();
       return;
       }
 
@@ -818,8 +955,10 @@ export default function WorkflowPage() {
       setProject(nextProject);
       saveProjectEverywhere(nextProject);
       setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})`);
+      void refreshGenerationTasks();
     } catch (generateError) {
       setLoading(false);
+      void refreshGenerationTasks();
       if (generateError instanceof Error) {
         markError(generatingProject, generateError.message);
         return;
@@ -833,6 +972,29 @@ export default function WorkflowPage() {
     setProject(erroredProject);
     saveProjectEverywhere(erroredProject);
     setError(message);
+  }
+
+  async function cancelTask(taskId: string) {
+    if (!session?.access_token) return;
+    try {
+      const response = await fetch("/api/ai/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ taskId, action: "cancel" }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "取消失败");
+      setStatusText("任务已标记为取消");
+      void refreshGenerationTasks();
+    } catch (taskError) {
+      setError(taskError instanceof Error ? taskError.message : "取消任务失败");
+    }
+  }
+
+  function applyTaskOutput(task: GenerationTaskRecord) {
+    if (!task.output_snapshot?.trim()) return;
+    updateProject((current) => saveStepVersion(setStepContent(current, task.step_key, task.output_snapshot || ""), task.step_key, task.output_snapshot || "", "restore", "任务结果应用"), true);
+    setStatusText("已应用任务结果，手动编辑内容已保留在历史记录中");
   }
 
   function fillDemo() {
@@ -1053,32 +1215,53 @@ export default function WorkflowPage() {
       <section className="workflow-grid">
         <aside className="steps-panel">
           <div className="panel-title">
-            <span>流程导航</span>
+            <span>5 阶段工作台</span>
             <strong>{workflowSteps.findIndex((step) => step.key === activeStep) + 1}/{workflowSteps.length}</strong>
           </div>
-          {workflowSteps.map((step, index) => {
-            const done = step.key === "characters"
-              ? project.characterCards.length > 0
-              : step.key === "storyboard_script"
-                ? project.storyboardEpisodes.length > 0
-                : step.key === "final_delivery"
-                  ? Boolean(getSelectedFinalScript(project).trim()) || project.storyboardEpisodes.length > 0 || Boolean(project.storyboardScript.trim())
-                : Boolean(getStepContent(project, step.key).trim());
-            const blocked = Boolean(getRequirement(project, step.key));
+          {workflowPhases.map((phase, phaseIndex) => {
+            const completion = getPhaseCompletion(project, phase);
+            const phaseOpen = openPhases[phase.key];
+            const phaseSteps = workflowSteps.filter((step) => phase.stepKeys.includes(step.key));
 
             return (
-              <button
-                key={step.key}
-                className={step.key === activeStep ? "step-item active" : "step-item"}
-                onClick={() => setActiveStep(step.key)}
-              >
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <strong>{step.short}</strong>
-                  <small>{step.label}</small>
-                </div>
-                {done ? <CheckCircle2 size={16} /> : blocked ? <AlertCircle size={16} /> : null}
-              </button>
+              <div className="phase-group" key={phase.key}>
+                <button
+                  className={activePhase?.key === phase.key ? "phase-header active" : "phase-header"}
+                  onClick={() => setOpenPhases((current) => ({ ...current, [phase.key]: !current[phase.key] }))}
+                >
+                  <span>{String(phaseIndex + 1).padStart(2, "0")}</span>
+                  <div>
+                    <strong>{phase.title}</strong>
+                    <small>{phase.englishTitle}</small>
+                  </div>
+                  <em>{completion.completed}/{completion.total}</em>
+                  <ChevronDown className={phaseOpen ? "toggle-icon open" : "toggle-icon"} size={16} />
+                </button>
+                {phaseOpen ? (
+                  <div className="phase-steps">
+                    {phaseSteps.map((step) => {
+                      const status = getStepStatus(project, step);
+                      const blocked = Boolean(getRequirement(project, step.key));
+                      const statusLabel = status === "empty" ? "空" : status === "draft" ? "草稿" : status === "confirmed" ? "确认" : "需同步";
+
+                      return (
+                        <button
+                          key={step.key}
+                          className={step.key === activeStep ? "step-item active" : "step-item"}
+                          onClick={() => setActiveStep(step.key)}
+                        >
+                          <span>{statusLabel}</span>
+                          <div>
+                            <strong>{step.short}</strong>
+                            <small>{step.label}</small>
+                          </div>
+                          {status !== "empty" ? <CheckCircle2 size={16} /> : blocked ? <AlertCircle size={16} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </aside>
@@ -1190,6 +1373,59 @@ export default function WorkflowPage() {
             </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="story-bible-panel">
+            <div className="story-bible-head">
+              <div>
+                <span>Story Bible</span>
+                <strong>统一设定库</strong>
+              </div>
+              <small>AI 生成会自动读取这些核心设定</small>
+            </div>
+            <div className="story-bible-grid">
+              <label>
+                一句话故事
+                <textarea value={storyBible?.logline || ""} onChange={(event) => updateStoryBibleField("logline", event.target.value)} />
+              </label>
+              <label>
+                核心卖点
+                <textarea value={storyBible?.sellingPoint || ""} onChange={(event) => updateStoryBibleField("sellingPoint", event.target.value)} />
+              </label>
+              <label>
+                主线冲突
+                <textarea value={storyBible?.mainConflict || ""} onChange={(event) => updateStoryBibleField("mainConflict", event.target.value)} />
+              </label>
+              <label>
+                禁改设定
+                <textarea value={storyBible?.lockedCanon || ""} onChange={(event) => updateStoryBibleField("lockedCanon", event.target.value)} />
+              </label>
+            </div>
+            <details className="story-bible-more">
+              <summary>更多设定</summary>
+              <div className="story-bible-grid">
+                <label>
+                  世界观
+                  <textarea value={storyBible?.world || ""} onChange={(event) => updateStoryBibleField("world", event.target.value)} />
+                </label>
+                <label>
+                  角色关系
+                  <textarea value={storyBible?.characterRelationships || ""} onChange={(event) => updateStoryBibleField("characterRelationships", event.target.value)} />
+                </label>
+                <label>
+                  语言风格
+                  <textarea value={storyBible?.languageStyle || ""} onChange={(event) => updateStoryBibleField("languageStyle", event.target.value)} />
+                </label>
+                <label>
+                  节奏规则
+                  <textarea value={storyBible?.pacingRules || ""} onChange={(event) => updateStoryBibleField("pacingRules", event.target.value)} />
+                </label>
+                <label>
+                  已确认事实
+                  <textarea value={storyBible?.confirmedFacts || ""} onChange={(event) => updateStoryBibleField("confirmedFacts", event.target.value)} />
+                </label>
+              </div>
+            </details>
           </div>
 
           <div className="editor-head">
@@ -1345,6 +1581,101 @@ export default function WorkflowPage() {
                 placeholder="红色修订模式会使用 <span class=&quot;revision-mark&quot;>...</span> 标注修改部分，也可以在这里手动编辑。"
               />
             </div>
+          ) : activeStep === "localization" && activeContent.trim() ? (
+            <div className="hybrid-editor">
+              <div className="localization-diff-grid">
+                <div className="diff-head">原文</div>
+                <div className="diff-head">本土化版本</div>
+                <div className="diff-head">修改原因</div>
+                {localizationDiffRows.map((row, index) => (
+                  <div className="diff-row" key={index}>
+                    <p>{row.before || "—"}</p>
+                    <p>{row.after || "—"}</p>
+                    <strong>{row.reason}</strong>
+                  </div>
+                ))}
+              </div>
+              <textarea
+                className="script-editor"
+                value={activeContent}
+                onChange={(event) => updateStep(activeStep, event.target.value)}
+                placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+              />
+            </div>
+          ) : (activeStep === "chinese_script" || activeStep === "continuation_script" || activeStep === "final_script") && activeContent.trim() ? (
+            <div className="hybrid-editor">
+              <div className="structured-script">
+                {structuredEpisodes.slice(0, 12).map((episode) => (
+                  <article className="structured-episode" key={episode.id}>
+                    <div className="structured-episode-head">
+                      <span>Episode {episode.episodeNo}</span>
+                      <strong>{episode.title}</strong>
+                    </div>
+                    <div className="structured-meta">
+                      <p><b>开场钩子</b>{episode.openingHook || "待补充"}</p>
+                      <p><b>情绪目标</b>{episode.emotionalGoal || "待补充"}</p>
+                      <p><b>核心冲突</b>{episode.conflict || "待补充"}</p>
+                      <p><b>集尾钩子</b>{episode.cliffhanger || "待补充"}</p>
+                    </div>
+                    <div className="structured-scenes">
+                      {episode.scenes.slice(0, 8).map((scene) => (
+                        <section className="structured-scene" key={scene.id}>
+                          <div>
+                            <strong>Scene {scene.sceneNo}</strong>
+                            <span>{scene.location || "地点待补充"} · {scene.time || "时间待补充"}</span>
+                          </div>
+                          <p><b>功能</b>{scene.function || "待补充"}</p>
+                          <p><b>冲突</b>{scene.conflict || "待补充"}</p>
+                          <p><b>价值变化</b>{scene.valueShift || "待补充"}</p>
+                          <p><b>前后因果</b>{scene.causeEffect || "待补充"}</p>
+                          {scene.visualPrompt ? <p><b>视觉提示词</b>{scene.visualPrompt}</p> : null}
+                          <div className="beat-list">
+                            {scene.beats.slice(0, 6).map((beat) => (
+                              <span key={beat.id}>{beat.type}{beat.character ? ` · ${beat.character}` : ""}</span>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <textarea
+                className="script-editor"
+                value={activeContent}
+                onChange={(event) => updateStep(activeStep, event.target.value)}
+                placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+              />
+            </div>
+          ) : activeStep === "quality_evaluation" && activeContent.trim() ? (
+            <div className="hybrid-editor">
+              <div className="drama-score-panel">
+                <div className="drama-score-total">
+                  <span>DramaScore</span>
+                  <strong>{dramaScore.total}</strong>
+                  <small>/ 10</small>
+                </div>
+                <div className="drama-score-grid">
+                  {dramaScore.items.map((item) => (
+                    <article className="drama-score-card" key={item.item}>
+                      <div>
+                        <strong>{item.item}</strong>
+                        <span>{item.score}/10</span>
+                      </div>
+                      <p><b>问题</b>{item.issue}</p>
+                      <p><b>建议</b>{item.suggestion}</p>
+                      <button className="secondary-button" disabled>一键改写（预留）</button>
+                    </article>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                className="script-editor"
+                value={activeContent}
+                onChange={(event) => updateStep(activeStep, event.target.value)}
+                placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+              />
+            </div>
           ) : (
             <textarea
               className="script-editor"
@@ -1467,6 +1798,30 @@ export default function WorkflowPage() {
             </div>
           ) : null}
 
+          {activeTaskRecords.length ? (
+            <div className="task-status-panel">
+              <div className="task-status-head">
+                <strong>AI 任务状态</strong>
+                <button onClick={() => void refreshGenerationTasks()}>刷新</button>
+              </div>
+              {activeTaskRecords.map((task) => (
+                <article className={`task-status-card ${task.status}`} key={task.id}>
+                  <div>
+                    <span>{task.status}</span>
+                    <small>{task.provider || "AI"} · {task.model || "model"}</small>
+                  </div>
+                  {task.error_message ? <p>{task.error_message}</p> : null}
+                  <div className="task-actions">
+                    {task.status === "failed" ? <button onClick={() => generateForStep(task.step_key)}>重试</button> : null}
+                    {task.output_snapshot ? <button onClick={() => applyTaskOutput(task)}>应用结果</button> : null}
+                    {task.output_snapshot ? <button onClick={() => recordStepVersion(task.step_key, task.output_snapshot || "", "restore", "任务结果版本")}>保存版本</button> : null}
+                    {["queued", "running", "streaming", "retrying"].includes(task.status) ? <button onClick={() => cancelTask(task.id)}>取消</button> : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+
           {requirement ? <div className="notice warning"><AlertCircle size={17} /> {requirement}</div> : null}
           {!session ? (
             <div className="notice warning"><AlertCircle size={17} /> 登录后才可以调用 AI 生成；当前内容仍会保存为本地草稿。</div>
@@ -1483,11 +1838,11 @@ export default function WorkflowPage() {
             <div className="notice success"><CheckCircle2 size={17} /> 交付文件已整理为下载清单。</div>
           ) : (
             <>
-              <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || Boolean(requirement) || !session || credits?.balance === 0}>
+              <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || !session || credits?.balance === 0}>
                 {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
                 内容生成
               </button>
-              <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || Boolean(requirement) || !activeContent.trim() || !session || credits?.balance === 0}>
+              <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || !activeContent.trim() || !session || credits?.balance === 0}>
                 优化内容
               </button>
               <button className="secondary-button full" onClick={continueNextStep} disabled={loading || !session || credits?.balance === 0}>

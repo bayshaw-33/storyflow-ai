@@ -13,6 +13,29 @@ export type StepVersion = {
   createdAt: string;
 };
 
+export type WorkflowPhaseKey =
+  | "project_setup"
+  | "story_design"
+  | "script_production"
+  | "localization_evaluation"
+  | "storyboard_delivery";
+
+export type StepStatus = "empty" | "draft" | "confirmed" | "stale";
+
+export type StoryBible = {
+  logline: string;
+  sellingPoint: string;
+  targetMarket: string;
+  genreType: string;
+  world: string;
+  mainConflict: string;
+  characterRelationships: string;
+  lockedCanon: string;
+  languageStyle: string;
+  pacingRules: string;
+  confirmedFacts: string;
+};
+
 export type CharacterCard = {
   id: string;
   name: string;
@@ -35,6 +58,39 @@ export type StoryboardEpisode = {
   content: string;
 };
 
+export type StructuredBeat = {
+  id: string;
+  type: "action" | "dialogue" | "parenthetical" | "transition" | "note";
+  character: string;
+  emotion: string;
+  text: string;
+};
+
+export type StructuredScene = {
+  id: string;
+  sceneNo: number;
+  location: string;
+  time: string;
+  characters: string;
+  function: string;
+  conflict: string;
+  valueShift: string;
+  causeEffect: string;
+  visualPrompt: string;
+  beats: StructuredBeat[];
+};
+
+export type StructuredEpisode = {
+  id: string;
+  episodeNo: number;
+  title: string;
+  openingHook: string;
+  emotionalGoal: string;
+  conflict: string;
+  cliffhanger: string;
+  scenes: StructuredScene[];
+};
+
 export type DramaProject = {
   id: string;
   workflowType: WorkflowType;
@@ -51,6 +107,7 @@ export type DramaProject = {
   benchmarkLink: string;
   idea: string;
   importedScript: string;
+  storyBible: StoryBible;
   marketAnalysis: string;
   brief: string;
   characters: string;
@@ -203,9 +260,70 @@ export const continuationWorkflowSteps: WorkflowStep[] = [
 
 export const workflowSteps = creationWorkflowSteps;
 
+export type WorkflowPhase = {
+  key: WorkflowPhaseKey;
+  title: string;
+  englishTitle: string;
+  description: string;
+  stepKeys: TaskType[];
+};
+
+export const workflowPhases: WorkflowPhase[] = [
+  {
+    key: "project_setup",
+    title: "项目设定",
+    englishTitle: "Project Setup",
+    description: "标题、模式、市场、题材、语言、集数、片长与参考素材。",
+    stepKeys: ["market_analysis", "script_import"],
+  },
+  {
+    key: "story_design",
+    title: "故事设计",
+    englishTitle: "Story Design",
+    description: "创意 Brief、Story Bible、角色、结构、节拍与大纲。",
+    stepKeys: ["brief", "characters", "structure_model", "beat_cards", "series_outline"],
+  },
+  {
+    key: "script_production",
+    title: "剧本生产",
+    englishTitle: "Script Production",
+    description: "中文剧本、已有剧本整理、续写剧本与分集编辑。",
+    stepKeys: ["existing_script", "chinese_script", "continuation_script"],
+  },
+  {
+    key: "localization_evaluation",
+    title: "本土化与评估",
+    englishTitle: "Localization & Evaluation",
+    description: "翻译、本土化 Diff、DramaScore、诊断修订和格式检查。",
+    stepKeys: ["translation", "localization", "quality_evaluation", "final_script", "format_check"],
+  },
+  {
+    key: "storyboard_delivery",
+    title: "分镜与交付",
+    englishTitle: "Storyboard & Delivery",
+    description: "最终剧本、分集分镜、视觉提示词、导出面板和交付包。",
+    stepKeys: ["storyboard_script", "final_delivery"],
+  },
+];
+
 export function getWorkflowSteps(projectOrType?: DramaProject | WorkflowType) {
   const workflowType = typeof projectOrType === "string" ? projectOrType : projectOrType?.workflowType;
   return workflowType === "continuation" ? continuationWorkflowSteps : creationWorkflowSteps;
+}
+
+export function getWorkflowPhases(projectOrType?: DramaProject | WorkflowType) {
+  const steps = getWorkflowSteps(projectOrType);
+  const availableStepKeys = new Set(steps.map((step) => step.key));
+  return workflowPhases
+    .map((phase) => ({
+      ...phase,
+      stepKeys: phase.stepKeys.filter((key) => availableStepKeys.has(key)),
+    }))
+    .filter((phase) => phase.stepKeys.length > 0);
+}
+
+export function getPhaseForStep(taskType: TaskType) {
+  return workflowPhases.find((phase) => phase.stepKeys.includes(taskType))?.key || "story_design";
 }
 
 export function createProject(overrides: Partial<DramaProject> = {}): DramaProject {
@@ -227,6 +345,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     benchmarkLink: "",
     idea: "",
     importedScript: "",
+    storyBible: createEmptyStoryBible(),
     marketAnalysis: "",
     brief: "",
     characters: "",
@@ -583,6 +702,148 @@ export function getSelectedFinalScript(project: DramaProject) {
   return project.finalScriptForeign || "";
 }
 
+export function createEmptyStoryBible(overrides: Partial<StoryBible> = {}): StoryBible {
+  return {
+    logline: "",
+    sellingPoint: "",
+    targetMarket: "",
+    genreType: "",
+    world: "",
+    mainConflict: "",
+    characterRelationships: "",
+    lockedCanon: "",
+    languageStyle: "",
+    pacingRules: "",
+    confirmedFacts: "",
+    ...overrides,
+  };
+}
+
+export function buildStoryBibleSummary(project: DramaProject) {
+  const bible = normalizeStoryBible(project.storyBible, project);
+  return [
+    "【Story Bible】",
+    `一句话故事：${bible.logline || project.idea || "未填写"}`,
+    `核心卖点：${bible.sellingPoint || "未填写"}`,
+    `目标市场：${bible.targetMarket || project.market}`,
+    `题材类型：${bible.genreType || project.genre}`,
+    `世界观：${bible.world || "未填写"}`,
+    `主线冲突：${bible.mainConflict || "未填写"}`,
+    `角色关系：${bible.characterRelationships || project.relationshipDiagram || "未填写"}`,
+    `禁改设定：${bible.lockedCanon || "未填写"}`,
+    `语言风格：${bible.languageStyle || "短对白、强情绪、强画面感"}`,
+    `节奏规则：${bible.pacingRules || "前 3 秒钩子，每集结尾钩子"}`,
+    `已确认事实：${bible.confirmedFacts || "未填写"}`,
+  ].join("\n");
+}
+
+export function getStepStatus(project: DramaProject, step: WorkflowStep): StepStatus {
+  const content =
+    step.key === "characters"
+      ? characterCardsToMarkdown(project.characterCards) || project.characters
+      : step.key === "storyboard_script"
+        ? storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript
+        : step.key === "final_script"
+          ? getSelectedFinalScript(project)
+          : step.key === "final_delivery"
+            ? buildDeliveryMarkdown(project, true)
+            : getStepContent(project, step.key);
+
+  if (!content.trim()) return "empty";
+  const versions = getStepVersions(project, step.key);
+  const latest = versions[0];
+  if (!latest) return "draft";
+  if (latest.content.trim() !== content.trim()) return "draft";
+
+  const latestTime = new Date(latest.createdAt).getTime();
+  const earlierSteps = getWorkflowSteps(project).slice(0, getWorkflowSteps(project).findIndex((item) => item.key === step.key));
+  const hasNewerUpstream = earlierSteps.some((item) => {
+    const upstreamLatest = getStepVersions(project, item.key)[0];
+    return upstreamLatest && new Date(upstreamLatest.createdAt).getTime() > latestTime;
+  });
+
+  return hasNewerUpstream ? "stale" : "confirmed";
+}
+
+export function getPhaseCompletion(project: DramaProject, phase: WorkflowPhase) {
+  const steps = getWorkflowSteps(project).filter((step) => phase.stepKeys.includes(step.key));
+  const completed = steps.filter((step) => getStepStatus(project, step) !== "empty").length;
+  return { completed, total: steps.length, percent: steps.length ? Math.round((completed / steps.length) * 100) : 0 };
+}
+
+export function parseStructuredEpisodes(content: string): StructuredEpisode[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+
+  const episodeSections = trimmed
+    .split(/\n(?=##\s*(?:第\s*\d+\s*集|Episode\s*\d+))/i)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  const sourceSections = episodeSections.length ? episodeSections : [trimmed];
+
+  return sourceSections.map((section, episodeIndex) => {
+    const episodeNo = Number(section.match(/(?:第\s*|Episode\s*)(\d+)/i)?.[1] || episodeIndex + 1);
+    const title = section.match(/^##\s*(.+)$/m)?.[1]?.trim() || `第 ${episodeNo} 集`;
+    const scenes = parseStructuredScenes(section);
+    return {
+      id: `${episodeNo}-${episodeIndex}`,
+      episodeNo,
+      title,
+      openingHook: pickLine(section, ["开场钩子", "Opening Hook", "Hook"]),
+      emotionalGoal: pickLine(section, ["情绪目标", "Emotional Goal"]),
+      conflict: pickLine(section, ["冲突", "Conflict"]),
+      cliffhanger: pickLine(section, ["集尾钩子", "Ending Hook", "Cliffhanger"]),
+      scenes,
+    };
+  });
+}
+
+function parseStructuredScenes(content: string): StructuredScene[] {
+  const sections = content
+    .split(/\n(?=###\s*(?:场景|Scene)\s*\d*)/i)
+    .map((section) => section.trim())
+    .filter((section) => /^###\s*(?:场景|Scene)/i.test(section));
+
+  const sourceSections = sections.length ? sections : [content];
+  return sourceSections.slice(0, 30).map((section, index) => {
+    const sceneNo = Number(section.match(/(?:场景|Scene)\s*(\d+)/i)?.[1] || index + 1);
+    const visualPrompt = pickLine(section, ["AI 生成提示词", "视觉提示词", "镜头提示", "Visual Prompt"]);
+    return {
+      id: `${sceneNo}-${index}`,
+      sceneNo,
+      location: pickLine(section, ["地点", "场次", "Scene", "Location"]),
+      time: pickLine(section, ["时间", "Time"]),
+      characters: pickLine(section, ["人物", "Characters"]),
+      function: pickLine(section, ["功能", "Function"]),
+      conflict: pickLine(section, ["冲突", "Conflict"]),
+      valueShift: pickLine(section, ["价值变化", "Value Shift"]),
+      causeEffect: pickLine(section, ["前后因果", "Cause and Effect"]),
+      visualPrompt,
+      beats: parseStructuredBeats(section),
+    };
+  });
+}
+
+function parseStructuredBeats(content: string): StructuredBeat[] {
+  return content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^[-*]\s+/.test(line))
+    .slice(0, 80)
+    .map((line, index) => {
+      const text = line.replace(/^[-*]\s+/, "");
+      const dialogue = text.match(/^([^：:]{1,16})[：:](.+)$/);
+      return {
+        id: `${index}`,
+        type: dialogue ? "dialogue" : text.includes("转场") ? "transition" : text.includes("备注") ? "note" : "action",
+        character: dialogue?.[1]?.trim() || "",
+        emotion: pickInlineValue(text, ["情绪", "emotion"]),
+        text: dialogue?.[2]?.trim() || text,
+      };
+    });
+}
+
 function normalizeProject(project: LegacyProject): DramaProject {
   const now = new Date().toISOString();
   const steps = project.steps || {};
@@ -625,6 +886,12 @@ function normalizeProject(project: LegacyProject): DramaProject {
     benchmarkLink: project.benchmarkLink || "",
     idea: project.idea || project.storyIdea || "",
     importedScript: project.importedScript || "",
+    storyBible: normalizeStoryBible(project.storyBible, {
+      market: normalizeMarket(project.market),
+      genre: normalizeGenre(project.genre),
+      idea: project.idea || project.storyIdea || "",
+      relationshipDiagram: parsed.relationshipDiagram || project.relationshipDiagram || "",
+    }),
     marketAnalysis: legacyMarketAnalysis,
     brief: project.brief || steps.brief?.content || "",
     characters: characterCardsToMarkdown(parsed.cards) || project.characters || steps.characters?.content || "",
@@ -733,6 +1000,34 @@ function pickLine(section: string, labels: string[]) {
     if (match?.[1]) return match[1].trim();
   }
   return "";
+}
+
+function pickInlineValue(text: string, labels: string[]) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = text.match(new RegExp(`${escaped}\\s*[：:]\\s*([^，,；;]+)`, "i"));
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+}
+
+function normalizeStoryBible(
+  storyBible?: Partial<StoryBible>,
+  fallback?: Partial<Pick<DramaProject, "market" | "genre" | "idea" | "relationshipDiagram">>,
+): StoryBible {
+  return createEmptyStoryBible({
+    logline: storyBible?.logline || fallback?.idea || "",
+    sellingPoint: storyBible?.sellingPoint || "",
+    targetMarket: storyBible?.targetMarket || fallback?.market || "",
+    genreType: storyBible?.genreType || fallback?.genre || "",
+    world: storyBible?.world || "",
+    mainConflict: storyBible?.mainConflict || "",
+    characterRelationships: storyBible?.characterRelationships || fallback?.relationshipDiagram || "",
+    lockedCanon: storyBible?.lockedCanon || "",
+    languageStyle: storyBible?.languageStyle || "短对白、强情绪、强画面感、少解释。",
+    pacingRules: storyBible?.pacingRules || "前 3 秒出钩子，每 30-45 秒有价值变化，每集结尾留强钩子。",
+    confirmedFacts: storyBible?.confirmedFacts || "",
+  });
 }
 
 function normalizeCharacterCard(card: Partial<CharacterCard>): CharacterCard {
