@@ -239,7 +239,7 @@ create policy "organization_members_owner_all" on public.storyflow_organization_
 
 create policy "projects_owner_select" on public.storyflow_projects for select to authenticated using (user_id = auth.uid() and deleted_at is null);
 create policy "projects_owner_insert" on public.storyflow_projects for insert to authenticated with check (user_id = auth.uid());
-create policy "projects_owner_update" on public.storyflow_projects for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "projects_owner_update" on public.storyflow_projects for update to authenticated using (user_id = auth.uid() or user_id is null) with check (user_id = auth.uid());
 create policy "projects_owner_delete" on public.storyflow_projects for delete to authenticated using (user_id = auth.uid());
 
 create policy "groups_owner_select" on public.storyflow_project_groups for select to authenticated using (user_id = auth.uid());

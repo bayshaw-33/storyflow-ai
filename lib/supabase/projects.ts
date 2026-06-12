@@ -111,7 +111,7 @@ export async function upsertProjectToSupabase(project: DramaProject, options: Su
     headers: {
       Prefer: "resolution=merge-duplicates",
     },
-    body: JSON.stringify(projectToRow(project)),
+    body: JSON.stringify(projectToRow(project, options.accessToken)),
   }, options);
 }
 
@@ -142,7 +142,7 @@ export async function upsertProjectGroupToSupabase(name: string, options: Supaba
     headers: {
       Prefer: "resolution=merge-duplicates",
     },
-    body: JSON.stringify({ name: group }),
+    body: JSON.stringify({ name: group, user_id: getUserIdFromAccessToken(options.accessToken) }),
   }, options);
 }
 
@@ -151,9 +151,10 @@ export async function saveProjectGroupsToSupabase(groups: string[], options: Sup
   await Promise.allSettled(mergeGroups(groups).map((group) => upsertProjectGroupToSupabase(group, options)));
 }
 
-function projectToRow(project: DramaProject): ProjectRow {
+function projectToRow(project: DramaProject, accessToken?: string | null): ProjectRow {
   return {
     id: project.id,
+    user_id: getUserIdFromAccessToken(accessToken),
     title: project.title,
     workflow_type: project.workflowType,
     project_group: project.projectGroup || DEFAULT_PROJECT_GROUP,
@@ -234,4 +235,23 @@ function getSupabaseUrl() {
 
 function getSupabaseAnonKey() {
   return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+}
+
+function getUserIdFromAccessToken(accessToken?: string | null) {
+  if (!accessToken) return undefined;
+
+  try {
+    const [, payload] = accessToken.split(".");
+    if (!payload) return undefined;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const decoded =
+      typeof atob === "function"
+        ? atob(padded)
+        : Buffer.from(padded, "base64").toString("utf8");
+    const claims = JSON.parse(decoded) as { sub?: string };
+    return claims.sub;
+  } catch {
+    return undefined;
+  }
 }
