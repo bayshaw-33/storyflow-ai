@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   AlertCircle,
   ArrowLeft,
@@ -54,6 +55,7 @@ import {
   upsertProject,
 } from "@/lib/projects";
 import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const DEFAULT_TITLE = "未命名短剧项目";
 
@@ -208,6 +210,8 @@ export default function WorkflowPage() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [project, setProject] = useState<DramaProject | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [credits, setCredits] = useState<{ balance: number; monthlyLimit: number } | null>(null);
   const [activeStep, setActiveStep] = useState<TaskType>("market_analysis");
   const [loading, setLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
@@ -223,7 +227,24 @@ export default function WorkflowPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    void supabase?.auth.getSession().then(({ data }) => {
+      setSession(data.session || null);
+      void refreshCredits(data.session || null);
+    });
+
+    const { data: listener } =
+      supabase?.auth.onAuthStateChange((_event, nextSession) => {
+        setSession(nextSession);
+        void refreshCredits(nextSession);
+      }) || {};
+
+    return () => listener?.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
+    const accessToken = session?.access_token || null;
     const projects = readProjectsFromStorage();
     const found = projects.find((item) => item.id === params.projectId);
     const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
@@ -233,7 +254,7 @@ export default function WorkflowPage() {
       setProject(found);
       const steps = getWorkflowSteps(found);
       setActiveStep((current) => (steps.some((step) => step.key === current) ? current : steps[0].key));
-      void readProjectFromSupabase(params.projectId).then((cloudProject) => {
+      void readProjectFromSupabase(params.projectId, { accessToken }).then((cloudProject) => {
         if (cancelled || !cloudProject) return;
         if (cloudProject.updatedAt.localeCompare(found.updatedAt) >= 0) {
           setProject(cloudProject);
@@ -258,7 +279,7 @@ export default function WorkflowPage() {
     if (isDemo) saveProjectEverywhere(created);
 
     if (!isDemo) {
-      void readProjectFromSupabase(params.projectId).then((cloudProject) => {
+      void readProjectFromSupabase(params.projectId, { accessToken }).then((cloudProject) => {
         if (cancelled || !cloudProject) return;
         setProject(cloudProject);
         const cloudSteps = getWorkflowSteps(cloudProject);
@@ -270,7 +291,7 @@ export default function WorkflowPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.projectId, searchParams]);
+  }, [params.projectId, searchParams, session?.access_token]);
 
   useEffect(() => {
     fetch("/api/ai/generate")
@@ -299,9 +320,32 @@ export default function WorkflowPage() {
   const activeContent = project ? getStepContent(project, activeStep) : "";
   const activeVersions = project ? getStepVersions(project, activeStep) : [];
 
+  async function refreshCredits(nextSession: Session | null = session) {
+    if (!nextSession?.access_token) {
+      setCredits(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/account/credits", {
+        headers: { Authorization: `Bearer ${nextSession.access_token}` },
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setCredits({ balance: data.credits.balance, monthlyLimit: data.credits.monthlyLimit });
+      }
+    } catch {
+      setCredits(null);
+    }
+  }
+
+  function getAuthHeaders(): Record<string, string> {
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  }
+
   function saveProjectEverywhere(nextProject: DramaProject) {
     upsertProject(nextProject);
-    void upsertProjectToSupabase(nextProject).catch(() => {
+    void upsertProjectToSupabase(nextProject, { accessToken: session?.access_token }).catch(() => {
       // 本地保存优先，云端同步失败时保持 MVP 可演示。
     });
   }
@@ -370,6 +414,14 @@ export default function WorkflowPage() {
 
   async function generateRelationshipImage() {
     if (!project) return;
+    if (!session?.access_token) {
+      setError("请先登录后再生成人物关系图。");
+      return;
+    }
+    if (credits?.balance === 0) {
+      setError("本月 AI 额度已用完，暂时不能继续生成人物关系图。");
+      return;
+    }
     if (!project.characterCards.length && !project.relationshipDiagram.trim()) {
       setError("请先生成或添加角色卡，再生成图片关系图。");
       return;
@@ -382,7 +434,7 @@ export default function WorkflowPage() {
     try {
       const response = await fetch("/api/ai/relationship-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           projectTitle: project.title,
           relationshipDiagram: project.relationshipDiagram,
@@ -401,6 +453,7 @@ export default function WorkflowPage() {
         status: "ready" as const,
         updatedAt: new Date().toISOString(),
       }), true);
+      void refreshCredits();
       setStatusText(`已生成图片关系图（${data.fallback === "svg" ? "MiniMax SVG 兜底" : data.model || "MiniMax"}）`);
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : "人物关系图生成失败，请稍后重试。");
@@ -411,6 +464,14 @@ export default function WorkflowPage() {
 
   async function generateCharacterImage(card: CharacterCard) {
     if (!project) return;
+    if (!session?.access_token) {
+      setError("请先登录后再生成角色图片。");
+      return;
+    }
+    if (credits?.balance === 0) {
+      setError("本月 AI 额度已用完，暂时不能继续生成角色图片。");
+      return;
+    }
     if (!card.name.trim() && !card.appearancePrompt.trim()) {
       setError("请先填写角色名称或人物形象提示词。");
       return;
@@ -423,7 +484,7 @@ export default function WorkflowPage() {
     try {
       const response = await fetch("/api/ai/character-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           projectTitle: project.title,
           market: project.market,
@@ -448,6 +509,7 @@ export default function WorkflowPage() {
           : item,
       );
       syncCharacterCards(nextCards);
+      void refreshCredits();
       setStatusText(`已生成角色图片：${card.name || "未命名角色"}（${data.fallback === "svg" ? "MiniMax SVG 兜底" : data.model || "MiniMax"}）`);
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : "角色图片生成失败，请稍后重试。");
@@ -521,9 +583,10 @@ export default function WorkflowPage() {
     const generationContext = buildGenerationContext(baseProject, step, optimizeInstruction);
     const response = await fetch("/api/ai/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({
         taskType: step,
+        projectId: baseProject.id,
         input,
         context: generationContext,
         options: {
@@ -552,8 +615,10 @@ export default function WorkflowPage() {
 
     const data = await response.json();
     if (!response.ok || !data.success) {
+      void refreshCredits();
       throw new Error(data.error || "生成失败，请检查 DeepSeek API。已有内容已保留。");
     }
+    void refreshCredits();
     return data;
   }
 
@@ -598,6 +663,14 @@ export default function WorkflowPage() {
     extra?: { optimizeInstruction?: string; inputOverride?: string },
   ) {
     if (!baseProject) return;
+    if (!session?.access_token) {
+      setError("请先登录后再调用 AI 生成。本地草稿会继续保留。");
+      return;
+    }
+    if (credits?.balance === 0) {
+      setError("本月 AI 额度已用完，暂时不能继续生成。");
+      return;
+    }
 
     const blocked = getRequirement(baseProject, step);
     if (blocked) {
@@ -1142,7 +1215,7 @@ export default function WorkflowPage() {
                       <strong>图片关系图</strong>
                       <span>由 MiniMax 根据角色卡和关系描述生成</span>
                     </div>
-                    <button className="primary-button" onClick={generateRelationshipImage} disabled={imageLoading || (!project.characterCards.length && !project.relationshipDiagram.trim())}>
+                    <button className="primary-button" onClick={generateRelationshipImage} disabled={imageLoading || !session || credits?.balance === 0 || (!project.characterCards.length && !project.relationshipDiagram.trim())}>
                       {imageLoading ? <Loader2 className="spin" size={17} /> : <WandSparkles size={17} />}
                       生成图片关系图
                     </button>
@@ -1197,7 +1270,7 @@ export default function WorkflowPage() {
                         <button
                           className="secondary-button"
                           onClick={() => generateCharacterImage(card)}
-                          disabled={characterImageLoadingId === card.id || (!card.name.trim() && !card.appearancePrompt.trim())}
+                          disabled={characterImageLoadingId === card.id || !session || credits?.balance === 0 || (!card.name.trim() && !card.appearancePrompt.trim())}
                         >
                           {characterImageLoadingId === card.id ? <Loader2 className="spin" size={16} /> : <WandSparkles size={16} />}
                           生成角色图片
@@ -1286,6 +1359,7 @@ export default function WorkflowPage() {
           <div>
             <span className="kicker">AI 助手</span>
             <h2>内容生成</h2>
+            {credits ? <small className="field-note">剩余额度：{credits.balance}/{credits.monthlyLimit}</small> : null}
           </div>
 
           {activeStep === "chinese_script" ? (
@@ -1394,6 +1468,9 @@ export default function WorkflowPage() {
           ) : null}
 
           {requirement ? <div className="notice warning"><AlertCircle size={17} /> {requirement}</div> : null}
+          {!session ? (
+            <div className="notice warning"><AlertCircle size={17} /> 登录后才可以调用 AI 生成；当前内容仍会保存为本地草稿。</div>
+          ) : null}
           {aiConfigured === false ? (
             <div className="notice warning">
               <AlertCircle size={17} /> AI 生成尚未完成服务端配置，可先加载示例内容演示。
@@ -1406,14 +1483,14 @@ export default function WorkflowPage() {
             <div className="notice success"><CheckCircle2 size={17} /> 交付文件已整理为下载清单。</div>
           ) : (
             <>
-              <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || Boolean(requirement)}>
+              <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || Boolean(requirement) || !session || credits?.balance === 0}>
                 {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
                 内容生成
               </button>
-              <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || Boolean(requirement) || !activeContent.trim()}>
+              <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || Boolean(requirement) || !activeContent.trim() || !session || credits?.balance === 0}>
                 优化内容
               </button>
-              <button className="secondary-button full" onClick={continueNextStep} disabled={loading}>
+              <button className="secondary-button full" onClick={continueNextStep} disabled={loading || !session || credits?.balance === 0}>
                 继续下一步并生成
               </button>
               <button className="secondary-button full" onClick={loadDemoStep}>

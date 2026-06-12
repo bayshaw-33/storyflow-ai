@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateMiniMaxImage } from "@/lib/ai/providers/minimax";
+import { authenticateRequest, consumeCredits, refundCredits } from "@/lib/supabase/server";
 
 type CharacterInput = {
   name?: string;
@@ -19,6 +20,8 @@ type RelationshipImageRequest = {
 
 export async function POST(request: Request) {
   let body: RelationshipImageRequest;
+  let userId = "";
+  const creditCost = 2;
 
   try {
     body = (await request.json()) as RelationshipImageRequest;
@@ -33,6 +36,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const user = await authenticateRequest(request);
+    userId = user.id;
+    await consumeCredits(user.id, creditCost);
     const result = await generateMiniMaxImage(buildRelationshipPrompt(body.projectTitle, characters, body.relationshipDiagram || ""));
     return NextResponse.json({
       success: true,
@@ -42,6 +48,8 @@ export async function POST(request: Request) {
       error: null,
     });
   } catch (error) {
+    if (userId) await refundCredits(userId, creditCost).catch(() => null);
+    if (isAuthOrCreditError(error)) return failure(toFriendlyError(error), 401);
     const fallback = generateRelationshipSvg(body.projectTitle, characters, body.relationshipDiagram || "", toFriendlyError(error));
     return NextResponse.json({
       success: true,
@@ -177,6 +185,18 @@ function svgToDataUrl(svg: string) {
 function toFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
+  if (message === "MISSING_AUTH_TOKEN" || message === "INVALID_AUTH_TOKEN") {
+    return "请先登录后再生成人物关系图。";
+  }
+
+  if (message === "MISSING_SUPABASE_SERVICE_ROLE_KEY") {
+    return "额度系统尚未完成服务端配置，请在 Vercel 添加 SUPABASE_SERVICE_ROLE_KEY。";
+  }
+
+  if (message === "INSUFFICIENT_CREDITS") {
+    return "本月 AI 额度已用完，暂时不能继续生成人物关系图。";
+  }
+
   if (message === "MISSING_MINIMAX_API_KEY") {
     return "MiniMax 图片生成尚未完成服务端配置，请在 Vercel 环境变量中添加 MINIMAX_API_KEY 后重新部署。";
   }
@@ -194,4 +214,14 @@ function toFriendlyError(error: unknown) {
   }
 
   return "MiniMax 图片生成失败，请稍后重试。";
+}
+
+function isAuthOrCreditError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  return [
+    "MISSING_AUTH_TOKEN",
+    "INVALID_AUTH_TOKEN",
+    "MISSING_SUPABASE_SERVICE_ROLE_KEY",
+    "INSUFFICIENT_CREDITS",
+  ].includes(message);
 }

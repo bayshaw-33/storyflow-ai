@@ -39,6 +39,7 @@ export type GenerateOptions = {
 
 export type GeneratePayload = {
   taskType: TaskType;
+  projectId?: string;
   input?: string;
   context?: string;
   options?: GenerateOptions;

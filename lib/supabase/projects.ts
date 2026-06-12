@@ -9,6 +9,7 @@ import {
 
 type ProjectRow = {
   id: string;
+  user_id?: string | null;
   title: string | null;
   workflow_type: string | null;
   project_group: string | null;
@@ -22,6 +23,10 @@ type GroupRow = {
   name: string;
 };
 
+type SupabaseSyncOptions = {
+  accessToken?: string | null;
+};
+
 const PROJECT_TABLE = "storyflow_projects";
 const GROUP_TABLE = "storyflow_project_groups";
 
@@ -29,8 +34,8 @@ export function isSupabaseConfigured() {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
 }
 
-export async function syncProjectsWithSupabase(localProjects: DramaProject[]) {
-  if (!isSupabaseConfigured()) {
+export async function syncProjectsWithSupabase(localProjects: DramaProject[], options: SupabaseSyncOptions = {}) {
+  if (!isSupabaseConfigured() || !options.accessToken) {
     return {
       projects: localProjects,
       groups: readProjectGroupsFromStorage(),
@@ -41,8 +46,8 @@ export async function syncProjectsWithSupabase(localProjects: DramaProject[]) {
 
   try {
     const [cloudProjects, cloudGroups] = await Promise.all([
-      readProjectsFromSupabase(),
-      readProjectGroupsFromSupabase(),
+      readProjectsFromSupabase(options),
+      readProjectGroupsFromSupabase(options),
     ]);
     const mergedProjects = mergeProjects(localProjects, cloudProjects);
     const groups = mergeGroups([
@@ -55,8 +60,8 @@ export async function syncProjectsWithSupabase(localProjects: DramaProject[]) {
     saveProjectGroupsToStorage(groups);
 
     await Promise.allSettled([
-      ...mergedProjects.map((project) => upsertProjectToSupabase(project)),
-      ...groups.map((group) => upsertProjectGroupToSupabase(group)),
+      ...mergedProjects.map((project) => upsertProjectToSupabase(project, options)),
+      ...groups.map((group) => upsertProjectGroupToSupabase(group, options)),
     ]);
 
     return {
@@ -75,23 +80,31 @@ export async function syncProjectsWithSupabase(localProjects: DramaProject[]) {
   }
 }
 
-export async function readProjectsFromSupabase(): Promise<DramaProject[]> {
+export async function readProjectsFromSupabase(options: SupabaseSyncOptions = {}): Promise<DramaProject[]> {
+  if (!options.accessToken) return [];
+
   const rows = await supabaseFetch<ProjectRow[]>(
     `${tableUrl(PROJECT_TABLE)}?select=*&order=updated_at.desc`,
+    {},
+    options,
   );
 
   return rows.map(rowToProject);
 }
 
-export async function readProjectFromSupabase(id: string): Promise<DramaProject | null> {
+export async function readProjectFromSupabase(id: string, options: SupabaseSyncOptions = {}): Promise<DramaProject | null> {
+  if (!options.accessToken) return null;
+
   const rows = await supabaseFetch<ProjectRow[]>(
     `${tableUrl(PROJECT_TABLE)}?id=eq.${encodeURIComponent(id)}&select=*&limit=1`,
+    {},
+    options,
   );
   return rows[0] ? rowToProject(rows[0]) : null;
 }
 
-export async function upsertProjectToSupabase(project: DramaProject) {
-  if (!isSupabaseConfigured()) return;
+export async function upsertProjectToSupabase(project: DramaProject, options: SupabaseSyncOptions = {}) {
+  if (!isSupabaseConfigured() || !options.accessToken) return;
 
   await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
     method: "POST",
@@ -99,39 +112,43 @@ export async function upsertProjectToSupabase(project: DramaProject) {
       Prefer: "resolution=merge-duplicates",
     },
     body: JSON.stringify(projectToRow(project)),
-  });
+  }, options);
 }
 
-export async function deleteProjectFromSupabase(id: string) {
-  if (!isSupabaseConfigured()) return;
+export async function deleteProjectFromSupabase(id: string, options: SupabaseSyncOptions = {}) {
+  if (!isSupabaseConfigured() || !options.accessToken) return;
 
   await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?id=eq.${encodeURIComponent(id)}`, {
     method: "DELETE",
-  });
+  }, options);
 }
 
-export async function readProjectGroupsFromSupabase(): Promise<string[]> {
+export async function readProjectGroupsFromSupabase(options: SupabaseSyncOptions = {}): Promise<string[]> {
+  if (!options.accessToken) return [];
+
   const rows = await supabaseFetch<GroupRow[]>(
     `${tableUrl(GROUP_TABLE)}?select=name&order=name.asc`,
+    {},
+    options,
   );
   return mergeGroups(rows.map((row) => row.name));
 }
 
-export async function upsertProjectGroupToSupabase(name: string) {
-  if (!isSupabaseConfigured()) return;
+export async function upsertProjectGroupToSupabase(name: string, options: SupabaseSyncOptions = {}) {
+  if (!isSupabaseConfigured() || !options.accessToken) return;
   const group = normalizeGroup(name);
-  await supabaseFetch(`${tableUrl(GROUP_TABLE)}?on_conflict=name`, {
+  await supabaseFetch(`${tableUrl(GROUP_TABLE)}?on_conflict=user_id,name`, {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates",
     },
     body: JSON.stringify({ name: group }),
-  });
+  }, options);
 }
 
-export async function saveProjectGroupsToSupabase(groups: string[]) {
-  if (!isSupabaseConfigured()) return;
-  await Promise.allSettled(mergeGroups(groups).map((group) => upsertProjectGroupToSupabase(group)));
+export async function saveProjectGroupsToSupabase(groups: string[], options: SupabaseSyncOptions = {}) {
+  if (!isSupabaseConfigured() || !options.accessToken) return;
+  await Promise.allSettled(mergeGroups(groups).map((group) => upsertProjectGroupToSupabase(group, options)));
 }
 
 function projectToRow(project: DramaProject): ProjectRow {
@@ -181,12 +198,18 @@ function normalizeGroup(group: string) {
   return group.trim() || DEFAULT_PROJECT_GROUP;
 }
 
-async function supabaseFetch<T = unknown>(url: string, init: RequestInit = {}): Promise<T> {
+async function supabaseFetch<T = unknown>(
+  url: string,
+  init: RequestInit = {},
+  options: SupabaseSyncOptions = {},
+): Promise<T> {
+  const authToken = options.accessToken || getSupabaseAnonKey();
+
   const response = await fetch(url, {
     ...init,
     headers: {
       apikey: getSupabaseAnonKey(),
-      Authorization: `Bearer ${getSupabaseAnonKey()}`,
+      Authorization: `Bearer ${authToken}`,
       "Content-Type": "application/json",
       ...(init.headers || {}),
     },

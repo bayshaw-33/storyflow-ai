@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   Clock,
   FilePlus2,
@@ -34,14 +35,42 @@ import {
   syncProjectsWithSupabase,
   upsertProjectToSupabase,
 } from "@/lib/supabase/projects";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function ProjectListPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_PROJECT_GROUP]);
   const [loaded, setLoaded] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+
+    void supabase?.auth.getSession().then(({ data }) => {
+      setSession(data.session || null);
+      loadProjects(data.session?.access_token || null);
+    });
+
+    const { data: listener } =
+      supabase?.auth.onAuthStateChange((_event, nextSession) => {
+        setSession(nextSession);
+        loadProjects(nextSession?.access_token || null);
+      }) || {};
+
+    if (!supabase) loadProjects(null);
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
+
+  function loadProjects(accessToken: string | null) {
     const localProjects = readProjectsFromStorage();
     setProjects(localProjects);
     const storedGroups = readProjectGroupsFromStorage();
@@ -49,11 +78,11 @@ export default function ProjectListPage() {
     setGroups(Array.from(new Set([DEFAULT_PROJECT_GROUP, ...storedGroups, ...projectGroups])));
     setLoaded(true);
 
-    void syncProjectsWithSupabase(localProjects).then((result) => {
+    void syncProjectsWithSupabase(localProjects, { accessToken }).then((result) => {
       setProjects(result.projects);
       setGroups(result.groups);
     });
-  }, []);
+  }
 
   const sortedProjects = useMemo(
     () => [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -84,7 +113,7 @@ export default function ProjectListPage() {
     const nextGroups = Array.from(new Set([DEFAULT_PROJECT_GROUP, ...groups, nextName]));
     setGroups(nextGroups);
     saveProjectGroupsToStorage(nextGroups);
-    void saveProjectGroupsToSupabase(nextGroups);
+    void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
   }
 
   function moveProject(projectId: string, group: string) {
@@ -96,7 +125,7 @@ export default function ProjectListPage() {
     setProjects(nextProjects);
     saveProjectsToStorage(nextProjects);
     const moved = nextProjects.find((project) => project.id === projectId);
-    if (moved) void upsertProjectToSupabase(moved);
+    if (moved) void upsertProjectToSupabase(moved, { accessToken: session?.access_token });
   }
 
   function removeProject(projectId: string, title: string) {
@@ -104,8 +133,44 @@ export default function ProjectListPage() {
     if (!confirmed) return;
 
     deleteProject(projectId);
-    void deleteProjectFromSupabase(projectId);
+    void deleteProjectFromSupabase(projectId, { accessToken: session?.access_token });
     setProjects(readProjectsFromStorage());
+  }
+
+  async function submitAuth() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setAuthError("Supabase 尚未配置，暂时只能使用本地草稿。");
+      return;
+    }
+
+    setAuthError("");
+    const email = authEmail.trim();
+    const password = authPassword.trim();
+    if (!email || password.length < 6) {
+      setAuthError("请输入邮箱和至少 6 位密码。");
+      return;
+    }
+
+    const result =
+      authMode === "signup"
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+    if (result.error) {
+      setAuthError(result.error.message);
+      return;
+    }
+
+    setAuthOpen(false);
+    setAuthPassword("");
+  }
+
+  async function signOut() {
+    const supabase = getSupabaseBrowserClient();
+    await supabase?.auth.signOut();
+    setSession(null);
+    loadProjects(null);
   }
 
   return (
@@ -190,12 +255,37 @@ export default function ProjectListPage() {
 
       <section className="home-main">
         <div className="home-auth">
-          <button className="icon-button" title="注册">
-            <UserPlus size={18} />
-          </button>
-          <button className="icon-button" title="登录">
-            <LogIn size={18} />
-          </button>
+          {session ? (
+            <>
+              <span className="auth-email">{session.user.email}</span>
+              <button className="icon-button" title="退出登录" onClick={signOut}>
+                <LogIn size={18} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="icon-button"
+                title="注册"
+                onClick={() => {
+                  setAuthMode("signup");
+                  setAuthOpen(true);
+                }}
+              >
+                <UserPlus size={18} />
+              </button>
+              <button
+                className="icon-button"
+                title="登录"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setAuthOpen(true);
+                }}
+              >
+                <LogIn size={18} />
+              </button>
+            </>
+          )}
         </div>
 
         <div className="home-actions-center">
@@ -216,6 +306,34 @@ export default function ProjectListPage() {
           <img src="/wechat-qr.svg" alt="微信二维码" />
         </footer>
       </section>
+
+      {authOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h2>{authMode === "signup" ? "注册 StoryFlow" : "登录 StoryFlow"}</h2>
+            <p>登录后项目会保存到云端，本地草稿会自动合并导入。</p>
+            <input
+              value={authEmail}
+              onChange={(event) => setAuthEmail(event.target.value)}
+              placeholder="邮箱"
+              type="email"
+            />
+            <input
+              value={authPassword}
+              onChange={(event) => setAuthPassword(event.target.value)}
+              placeholder="密码"
+              type="password"
+            />
+            {authError ? <div className="notice error">{authError}</div> : null}
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setAuthOpen(false)}>取消</button>
+              <button className="primary-button" onClick={submitAuth}>
+                {authMode === "signup" ? "注册" : "登录"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
