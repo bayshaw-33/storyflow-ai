@@ -48,6 +48,48 @@ a[href="/projects/demo?template=demo"] {
   display: none !important;
 }
 
+.kk-app-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  background: var(--kk-black);
+}
+
+.kk-universe-background,
+.kk-gravity-system,
+.kk-ip-universe-layer,
+.kk-control-layer,
+.kk-future-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.kk-universe-background {
+  z-index: -2;
+  background:
+    radial-gradient(circle at 52% 38%, rgba(138, 223, 218, 0.08), transparent 24rem),
+    linear-gradient(135deg, var(--kk-black), var(--kk-obsidian) 58%, #101117);
+}
+
+.kk-gravity-system {
+  z-index: -1;
+}
+
+.kk-gravity-core,
+.kk-orbit-system,
+.kk-ip-universe-layer,
+.kk-control-layer,
+.kk-future-layer {
+  display: none;
+}
+
+.kk-creative-field {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
 .home-shell {
   position: relative;
   z-index: 1;

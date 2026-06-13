@@ -45,12 +45,25 @@ import {
 } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { AppShell } from "@/components/AppShell";
 import { BRAND_NAME, LEGACY_ENGINE_NAME } from "@/lib/brand";
+import { useGravity } from "@/lib/gravity/GravityContext";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { useOrbit } from "@/lib/orbit/OrbitContext";
 
 export default function ProjectListPage() {
+  return (
+    <AppShell>
+      <ProjectListExperience />
+    </AppShell>
+  );
+}
+
+function ProjectListExperience() {
   const router = useRouter();
   const { t } = useI18n();
+  const { setProjectFocus, setWorkflowProgress } = useGravity();
+  const { focusProjectOrbit, registerProjects } = useOrbit();
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_PROJECT_GROUP]);
   const [loaded, setLoaded] = useState(false);
@@ -122,6 +135,24 @@ export default function ProjectListPage() {
         .filter((item) => item.projects.length > 0 || item.group === DEFAULT_PROJECT_GROUP),
     [groups, sortedProjects],
   );
+
+  useEffect(() => {
+    registerProjects(sortedProjects);
+  }, [registerProjects, sortedProjects]);
+
+  function focusCreativeOrbit(project: DramaProject, completedSteps: number, totalSteps: number) {
+    focusProjectOrbit(project.id);
+    setProjectFocus({
+      projectId: project.id,
+      title: project.title,
+      workflowType: project.workflowType,
+    });
+    setWorkflowProgress({
+      currentStepKey: null,
+      completedSteps,
+      totalSteps,
+    });
+  }
 
   function openWizard(type: WorkflowType) {
     setWizardError("");
@@ -277,7 +308,12 @@ export default function ProjectListPage() {
 
                   return (
                     <div className="sidebar-project-item" key={project.id}>
-                      <Link className="sidebar-project-link" href={`/projects/${project.id}`}>
+                      <Link
+                        className="sidebar-project-link"
+                        href={`/projects/${project.id}`}
+                        onFocus={() => focusCreativeOrbit(project, completed, total)}
+                        onMouseEnter={() => focusCreativeOrbit(project, completed, total)}
+                      >
                         <div>
                           <span>{project.workflowType === "continuation" ? "剧本续写" : "原创项目"}</span>
                           <strong>{project.title}</strong>
