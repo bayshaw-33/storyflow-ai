@@ -312,6 +312,7 @@ export default function WorkflowPage() {
   const [optimizeOpen, setOptimizeOpen] = useState(false);
   const [optimizeInstruction, setOptimizeInstruction] = useState("");
   const [projectFieldsOpen, setProjectFieldsOpen] = useState(false);
+  const [storyBibleOpen, setStoryBibleOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [universeBundle, setUniverseBundle] = useState<UniverseBundle | null>(null);
   const [universeEntitlement, setUniverseEntitlement] = useState<UniverseEntitlement>(canUseUniverseEngine(null));
@@ -356,7 +357,7 @@ export default function WorkflowPage() {
     const projects = readProjectsFromStorage();
     const found = projects.find((item) => item.id === params.projectId);
     const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
-    const isDemo = searchParams.get("template") === "demo";
+    const isDemo = false;
 
     if (found) {
       setProject(found);
@@ -1597,7 +1598,7 @@ export default function WorkflowPage() {
               <span>{activeMeta.label}</span>
               <h1>{activeMeta.short}</h1>
             </div>
-            <button className="secondary-button" onClick={fillDemo}>
+            <button className="secondary-button demo-control" onClick={fillDemo}>
               <WandSparkles size={17} /> 演示案例
             </button>
           </div>
@@ -2046,7 +2047,7 @@ export default function WorkflowPage() {
           {!session ? (
             <div className="notice warning"><AlertCircle size={17} /> 登录后才可以调用 AI 生成；当前内容仍会保存为本地草稿。</div>
           ) : null}
-          {aiConfigured === false ? (
+          {false && aiConfigured === false ? (
             <div className="notice warning">
               <AlertCircle size={17} /> AI 生成尚未完成服务端配置，可先加载示例内容演示。
             </div>
@@ -2068,7 +2069,7 @@ export default function WorkflowPage() {
               <button className="secondary-button full" onClick={continueNextStep} disabled={loading || !session || credits?.balance === 0}>
                 继续下一步并生成
               </button>
-              <button className="secondary-button full" onClick={loadDemoStep}>
+              <button className="secondary-button full demo-control" onClick={loadDemoStep}>
                 <WandSparkles size={18} /> 加载当前步骤示例内容
               </button>
             </>
