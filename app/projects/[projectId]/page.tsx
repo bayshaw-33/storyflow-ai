@@ -7,6 +7,7 @@ import type { Session } from "@supabase/supabase-js";
 import {
   AlertCircle,
   ArrowLeft,
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   Download,
@@ -62,6 +63,19 @@ import {
 } from "@/lib/projects";
 import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  canUseUniverseEngine,
+  createUniverseFromProject,
+  DEFAULT_INHERITANCE_SETTINGS,
+  getProjectUniverseLink,
+  getUniverseBundle,
+  readUniverseEntitlement,
+  saveCanonCheckReport,
+  saveInboxItems,
+  Universe,
+  UniverseBundle,
+  UniverseEntitlement,
+} from "@/lib/universe";
 
 const DEFAULT_TITLE = "未命名短剧项目";
 
@@ -299,6 +313,18 @@ export default function WorkflowPage() {
   const [optimizeInstruction, setOptimizeInstruction] = useState("");
   const [projectFieldsOpen, setProjectFieldsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [universeBundle, setUniverseBundle] = useState<UniverseBundle | null>(null);
+  const [universeEntitlement, setUniverseEntitlement] = useState<UniverseEntitlement>(canUseUniverseEngine(null));
+  const [universeModalOpen, setUniverseModalOpen] = useState(false);
+  const [universeBusy, setUniverseBusy] = useState(false);
+  const [universeForm, setUniverseForm] = useState({
+    name: "",
+    description: "",
+    genre: "",
+    defaultLanguage: "English",
+    targetMarkets: "North America",
+    tone: "",
+  });
   const [openPhases, setOpenPhases] = useState<Record<WorkflowPhaseKey, boolean>>({
     project_setup: true,
     story_design: true,
@@ -463,6 +489,31 @@ export default function WorkflowPage() {
   useEffect(() => {
     void refreshGenerationTasks();
   }, [project?.id, session?.access_token, activeStep]);
+
+  useEffect(() => {
+    void refreshUniverseContext();
+  }, [project?.id, project?.universeId, session?.access_token]);
+
+  async function refreshUniverseContext() {
+    const accessToken = session?.access_token || null;
+    const entitlement = await readUniverseEntitlement({ accessToken }).catch(() => canUseUniverseEngine({ email: session?.user.email || "" }));
+    setUniverseEntitlement(entitlement);
+
+    if (!project?.id) {
+      setUniverseBundle(null);
+      return;
+    }
+
+    const link = await getProjectUniverseLink(project.id, { accessToken });
+    const universeId = project.universeId || link?.universe_id || null;
+    if (!universeId) {
+      setUniverseBundle(null);
+      return;
+    }
+
+    const bundle = await getUniverseBundle(universeId, { accessToken });
+    setUniverseBundle(bundle);
+  }
 
   function getAuthHeaders(): Record<string, string> {
     return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
@@ -1152,6 +1203,119 @@ export default function WorkflowPage() {
     downloadBlob(`${safeFileName(project.title)}-${date}.md`, markdown, "text/markdown;charset=utf-8");
   }
 
+  async function upgradeCurrentProjectToUniverse() {
+    if (!project) return;
+    if (!session?.access_token) {
+      setError("Please sign in before creating a Universe.");
+      return;
+    }
+    if (!universeEntitlement.canUse) {
+      setError(universeEntitlement.reason);
+      return;
+    }
+
+    const name = universeForm.name.trim() || `${project.title} Universe`;
+    setUniverseBusy(true);
+    setError("");
+    setStatusText("");
+
+    try {
+      const { universe } = await createUniverseFromProject({
+        project,
+        accessToken: session.access_token,
+        form: {
+          name,
+          description: universeForm.description || project.storyBible?.logline || project.idea,
+          genre: universeForm.genre || project.genre,
+          default_language: universeForm.defaultLanguage || project.targetLanguage,
+          target_markets: universeForm.targetMarkets.split(",").map((item) => item.trim()).filter(Boolean),
+          tone: universeForm.tone || project.storyBible?.languageStyle || "",
+        },
+      });
+      const nextProject: DramaProject = {
+        ...project,
+        universeId: universe.id,
+        seasonNumber: project.seasonNumber || 1,
+        projectRole: project.projectRole || "main_season",
+        inheritanceSettings: project.inheritanceSettings || DEFAULT_INHERITANCE_SETTINGS,
+        updatedAt: new Date().toISOString(),
+      };
+      setProject(nextProject);
+      saveProjectEverywhere(nextProject);
+      setUniverseModalOpen(false);
+      setStatusText("Universe created and linked. Extract candidates to Inbox when ready.");
+      await refreshUniverseContext();
+    } catch (upgradeError) {
+      setError(upgradeError instanceof Error ? upgradeError.message : "Universe upgrade failed.");
+    } finally {
+      setUniverseBusy(false);
+    }
+  }
+
+  async function extractProjectToUniverse() {
+    if (!project || !universeBundle) return;
+    if (!session?.access_token) {
+      setError("Please sign in before extracting Universe updates.");
+      return;
+    }
+    if (!universeEntitlement.canUse) {
+      setError(universeEntitlement.reason);
+      return;
+    }
+
+    setUniverseBusy(true);
+    setError("");
+    setStatusText("Extracting Universe candidates...");
+    try {
+      const response = await fetch("/api/universe/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ universeId: universeBundle.universe.id, project }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Extract failed.");
+      await saveInboxItems(data.items || [], { accessToken: session.access_token });
+      setStatusText(`Extracted ${(data.items || []).length} candidate updates to Universe Inbox.`);
+      await refreshUniverseContext();
+    } catch (extractError) {
+      setError(extractError instanceof Error ? extractError.message : "Extract failed.");
+    } finally {
+      setUniverseBusy(false);
+    }
+  }
+
+  async function runProjectCanonCheck() {
+    if (!project || !universeBundle) return;
+    if (!session?.access_token) {
+      setError("Please sign in before running Canon Check.");
+      return;
+    }
+    if (!universeEntitlement.canUse) {
+      setError(universeEntitlement.reason);
+      return;
+    }
+
+    setUniverseBusy(true);
+    setError("");
+    setStatusText("Running Canon Check...");
+    try {
+      const response = await fetch("/api/universe/canon-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ bundle: universeBundle, project }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Canon Check failed.");
+      await saveCanonCheckReport(data.report, { accessToken: session.access_token });
+      setStatusText(`Canon Check saved. Score ${data.report.score}/100 with ${data.report.issues_json?.length || 0} issue(s).`);
+      await refreshUniverseContext();
+    } catch (checkError) {
+      setError(checkError instanceof Error ? checkError.message : "Canon Check failed.");
+    } finally {
+      setUniverseBusy(false);
+    }
+  }
+
   if (!project) {
     return (
       <main className="app-shell">
@@ -1693,6 +1857,62 @@ export default function WorkflowPage() {
             {credits ? <small className="field-note">剩余额度：{credits.balance}/{credits.monthlyLimit}</small> : null}
           </div>
 
+          <div className="universe-mini-panel">
+            <div className="universe-mini-head">
+              <div>
+                <span className="kicker">Universe Engine</span>
+                <h2>{universeBundle?.universe.name || "No Universe linked"}</h2>
+              </div>
+              <BookOpen size={20} />
+            </div>
+            {universeBundle ? (
+              <>
+                <div className="universe-mini-stats">
+                  <span>{universeBundle.entities.filter((item) => item.type === "character").length} characters</span>
+                  <span>{universeBundle.relationships.length} relationships</span>
+                  <span>{universeBundle.canonFacts.length} facts</span>
+                  <span>{universeBundle.inbox.filter((item) => item.status === "pending").length} inbox</span>
+                </div>
+                <p className="universe-mini-fact">
+                  {universeBundle.canonFacts[0]?.fact_text || "Extract project updates into Inbox, then accept items to build canon."}
+                </p>
+                <div className="universe-mini-actions">
+                  <Link className="secondary-button full" href={`/universes/${universeBundle.universe.id}`}>View Universe</Link>
+                  <button className="secondary-button full" disabled={universeBusy || !universeEntitlement.canUse} onClick={extractProjectToUniverse}>
+                    {universeBusy ? <Loader2 className="spin" size={16} /> : null}
+                    Extract to Inbox
+                  </button>
+                  <button className="secondary-button full" disabled={universeBusy || !universeEntitlement.canUse} onClick={runProjectCanonCheck}>
+                    Run Canon Check
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>Upgrade this project into a reusable IP Universe. AI suggestions go to Inbox first and never become canon without review.</p>
+                <button
+                  className="primary-button full"
+                  disabled={!universeEntitlement.canUse}
+                  onClick={() => {
+                    setUniverseForm((current) => ({
+                      ...current,
+                      name: current.name || `${project.title} Universe`,
+                      description: current.description || project.storyBible?.logline || project.idea,
+                      genre: current.genre || project.genre,
+                      defaultLanguage: current.defaultLanguage || project.targetLanguage,
+                      targetMarkets: current.targetMarkets || project.market,
+                      tone: current.tone || project.storyBible?.languageStyle || "",
+                    }));
+                    setUniverseModalOpen(true);
+                  }}
+                >
+                  Upgrade to Universe
+                </button>
+                {!universeEntitlement.canUse ? <div className="notice warning">Studio Annual / Enterprise required. Owned Universes stay read-only and exportable.</div> : null}
+              </>
+            )}
+          </div>
+
           {activeStep === "chinese_script" ? (
             <label>
               中文剧本范围
@@ -1855,6 +2075,48 @@ export default function WorkflowPage() {
           )}
         </aside>
       </section>
+
+      {universeModalOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal wizard-modal">
+            <h2>Upgrade to Universe</h2>
+            <p>Create the long-term IP layer for this project. Extracted updates will go to Inbox first for manual canon review.</p>
+            <div className="wizard-grid">
+              <label>
+                Universe name
+                <input value={universeForm.name} onChange={(event) => setUniverseForm((current) => ({ ...current, name: event.target.value }))} autoFocus />
+              </label>
+              <label>
+                Genre
+                <input value={universeForm.genre} onChange={(event) => setUniverseForm((current) => ({ ...current, genre: event.target.value }))} />
+              </label>
+              <label>
+                Default language
+                <input value={universeForm.defaultLanguage} onChange={(event) => setUniverseForm((current) => ({ ...current, defaultLanguage: event.target.value }))} />
+              </label>
+              <label>
+                Target markets
+                <input value={universeForm.targetMarkets} onChange={(event) => setUniverseForm((current) => ({ ...current, targetMarkets: event.target.value }))} />
+              </label>
+            </div>
+            <label>
+              Description
+              <textarea value={universeForm.description} onChange={(event) => setUniverseForm((current) => ({ ...current, description: event.target.value }))} />
+            </label>
+            <label>
+              Tone / style guide
+              <textarea value={universeForm.tone} onChange={(event) => setUniverseForm((current) => ({ ...current, tone: event.target.value }))} />
+            </label>
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setUniverseModalOpen(false)} disabled={universeBusy}>Cancel</button>
+              <button className="primary-button" onClick={upgradeCurrentProjectToUniverse} disabled={universeBusy}>
+                {universeBusy ? <Loader2 className="spin" size={17} /> : null}
+                Create Universe
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {optimizeOpen ? (
         <div className="modal-backdrop">

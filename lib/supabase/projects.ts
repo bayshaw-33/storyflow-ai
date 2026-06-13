@@ -22,6 +22,10 @@ type ProjectRow = {
   episode_duration?: string | null;
   current_phase?: string | null;
   story_bible?: DramaProject["storyBible"] | null;
+  universe_id?: string | null;
+  season_number?: number | null;
+  project_role?: string | null;
+  inheritance_settings?: Record<string, unknown> | null;
   project_group: string | null;
   status: string | null;
   created_at: string | null;
@@ -190,6 +194,10 @@ function projectToRow(project: DramaProject, accessToken?: string | null): Proje
     episode_duration: project.episodeDuration,
     current_phase: "project_setup",
     story_bible: project.storyBible,
+    universe_id: project.universeId || null,
+    season_number: project.seasonNumber || null,
+    project_role: project.projectRole || null,
+    inheritance_settings: project.inheritanceSettings || null,
     project_group: project.projectGroup || DEFAULT_PROJECT_GROUP,
     status: project.status,
     created_at: project.createdAt,
@@ -224,6 +232,10 @@ function rowToProject(row: ProjectRow): DramaProject {
     episodeCount: row.data?.episodeCount || row.episode_count || undefined,
     episodeDuration: row.data?.episodeDuration || row.episode_duration || undefined,
     storyBible: row.data?.storyBible || row.story_bible || undefined,
+    universeId: row.data?.universeId || row.universe_id || null,
+    seasonNumber: row.data?.seasonNumber || row.season_number || null,
+    projectRole: (row.data?.projectRole || row.project_role || null) as DramaProject["projectRole"],
+    inheritanceSettings: row.data?.inheritanceSettings || row.inheritance_settings || null,
     projectGroup: row.data?.projectGroup || row.project_group || DEFAULT_PROJECT_GROUP,
     status: row.data?.status || (row.status as DramaProject["status"]) || "draft",
     createdAt: row.data?.createdAt || row.created_at || new Date().toISOString(),
@@ -249,7 +261,7 @@ function mergeGroups(groups: string[]) {
 }
 
 function isMissingPhase2ColumnError(message: string) {
-  return /owner_id|mode|target_market|language|episode_count|episode_duration|current_phase|story_bible|schema cache|PGRST204/i.test(message);
+  return /owner_id|mode|target_market|language|episode_count|episode_duration|current_phase|story_bible|universe_id|season_number|project_role|inheritance_settings|schema cache|PGRST204/i.test(message);
 }
 
 function normalizeGroup(group: string) {

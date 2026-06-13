@@ -3,6 +3,7 @@ import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation";
 export type StepVersionSource = "ai" | "manual" | "demo" | "optimize" | "restore";
+export type ProjectRole = "main_season" | "spin_off" | "prequel" | "adaptation" | "localization" | "other";
 
 export type StepVersion = {
   id: string;
@@ -134,6 +135,10 @@ export type DramaProject = {
   storyboardEpisodes: StoryboardEpisode[];
   deliveryPackage: string;
   projectGroup: string;
+  universeId?: string | null;
+  seasonNumber?: number | null;
+  projectRole?: ProjectRole | null;
+  inheritanceSettings?: Record<string, unknown> | null;
   stepVersions: StepVersion[];
   status: ProjectStatus;
   createdAt: string;
@@ -372,6 +377,10 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     storyboardEpisodes: [],
     deliveryPackage: "",
     projectGroup: DEFAULT_PROJECT_GROUP,
+    universeId: null,
+    seasonNumber: null,
+    projectRole: null,
+    inheritanceSettings: null,
     stepVersions: [],
     status: "draft",
     createdAt: now,
@@ -918,6 +927,10 @@ function normalizeProject(project: LegacyProject): DramaProject {
     storyboardEpisodes,
     deliveryPackage: project.deliveryPackage || "",
     projectGroup: normalizeProjectGroup(project.projectGroup),
+    universeId: typeof project.universeId === "string" ? project.universeId : null,
+    seasonNumber: Number.isFinite(Number(project.seasonNumber)) ? Number(project.seasonNumber) : null,
+    projectRole: normalizeProjectRole(project.projectRole),
+    inheritanceSettings: project.inheritanceSettings && typeof project.inheritanceSettings === "object" ? project.inheritanceSettings : null,
     stepVersions: Array.isArray(project.stepVersions) ? project.stepVersions.map(normalizeStepVersion).filter(Boolean) as StepVersion[] : [],
     status: project.status || "draft",
     createdAt: project.createdAt || now,
@@ -1126,6 +1139,11 @@ function normalizeLanguage(language?: string) {
 
 function normalizeProjectGroup(group?: string) {
   return group?.trim() || DEFAULT_PROJECT_GROUP;
+}
+
+function normalizeProjectRole(role?: string | null): ProjectRole | null {
+  const roles: ProjectRole[] = ["main_season", "spin_off", "prequel", "adaptation", "localization", "other"];
+  return roles.includes(role as ProjectRole) ? role as ProjectRole : null;
 }
 
 function uniqueGroups(groups: string[]) {

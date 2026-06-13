@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
+  BookOpen,
   Clock,
   FilePlus2,
   FolderPlus,
@@ -298,6 +299,9 @@ export default function ProjectListPage() {
         </section>
 
         <nav className="sidebar-footer">
+          <Link className="sidebar-link" href="/universes">
+            <BookOpen size={17} /> Universe Engine
+          </Link>
           <Link className="sidebar-link" href="/projects/demo?template=demo">
             <WandSparkles size={17} /> 演示案例
           </Link>
@@ -351,6 +355,10 @@ export default function ProjectListPage() {
             <PenLine size={28} />
             <span>剧本续写</span>
           </button>
+          <Link className="home-action-card" href="/universes">
+            <BookOpen size={28} />
+            <span>From Universe</span>
+          </Link>
         </div>
 
         <footer className="creator-footer">
