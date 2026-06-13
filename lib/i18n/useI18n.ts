@@ -14,12 +14,20 @@ export function useI18n() {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
   useEffect(() => {
-    setLocaleState(normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY)));
+    try {
+      setLocaleState(normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY)));
+    } catch {
+      setLocaleState(DEFAULT_LOCALE);
+    }
   }, []);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
+    } catch {
+      // Some embedded browsers block localStorage; keep the in-memory UI state.
+    }
     window.dispatchEvent(new CustomEvent("kiiskiis:locale-change", { detail: nextLocale }));
   }, []);
 

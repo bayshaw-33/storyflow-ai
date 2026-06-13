@@ -1,22 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import {
-  BookOpen,
-  Clock,
-  FilePlus2,
-  FolderPlus,
-  LogIn,
-  PenLine,
-  Settings,
-  Sparkles,
-  Trash2,
-  UserPlus,
-  WandSparkles,
-} from "lucide-react";
 import {
   createContinuationProject,
   createProject,
@@ -26,8 +12,6 @@ import {
   EPISODE_COUNT_OPTIONS,
   EPISODE_DURATION_OPTIONS,
   GENRE_OPTIONS,
-  getCompletedStepCount,
-  getWorkflowSteps,
   LANGUAGE_OPTIONS,
   MARKET_OPTIONS,
   readProjectGroupsFromStorage,
@@ -44,11 +28,15 @@ import {
   upsertProjectToSupabase,
 } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { AppShell } from "@/components/AppShell";
-import { BRAND_NAME, LEGACY_ENGINE_NAME } from "@/lib/brand";
+import { Hero } from "@/components/home/Hero";
+import { KKFloating } from "@/components/home/KKFloating";
+import { ProjectList } from "@/components/home/ProjectList";
+import { WorkflowGrid } from "@/components/home/WorkflowGrid";
+import { WritersPanel } from "@/components/home/WritersPanel";
+import { TopNav } from "@/components/layout/TopNav";
+import { BRAND_NAME } from "@/lib/brand";
 import { useGravity } from "@/lib/gravity/GravityContext";
-import { useI18n } from "@/lib/i18n/useI18n";
 import { useOrbit } from "@/lib/orbit/OrbitContext";
 
 export default function ProjectListPage() {
@@ -61,7 +49,6 @@ export default function ProjectListPage() {
 
 function ProjectListExperience() {
   const router = useRouter();
-  const { t } = useI18n();
   const { setProjectFocus, setWorkflowProgress } = useGravity();
   const { focusProjectOrbit, registerProjects } = useOrbit();
   const [projects, setProjects] = useState<DramaProject[]>([]);
@@ -267,161 +254,40 @@ function ProjectListExperience() {
   }
 
   return (
-    <main className="home-shell">
-      <aside className="home-sidebar">
-        <div className="sidebar-brand">
-          <img className="brand-logo" src="/storyflow-logo-white.png" alt={BRAND_NAME} />
-          <div className="sidebar-brand-copy">
-            <strong>{BRAND_NAME}</strong>
-            <span>{LEGACY_ENGINE_NAME}</span>
-          </div>
+    <main className="kk-home-shell">
+      <TopNav
+        session={session}
+        onSignIn={() => {
+          setAuthMode("signin");
+          setAuthOpen(true);
+        }}
+        onSignUp={() => {
+          setAuthMode("signup");
+          setAuthOpen(true);
+        }}
+        onSignOut={signOut}
+      />
+
+      <Hero onStartCreating={() => openWizard("creation")} />
+
+      <div className="kk-home-grid">
+        <div className="kk-home-primary">
+          <WorkflowGrid onSelectWorkflow={openWizard} />
+          <ProjectList
+            groupedProjects={groupedProjects}
+            groups={groups}
+            loaded={loaded}
+            projectCount={projects.length}
+            onAddGroup={addGroup}
+            onMoveProject={moveProject}
+            onRemoveProject={removeProject}
+            onFocusProject={focusCreativeOrbit}
+          />
         </div>
+        <WritersPanel />
+      </div>
 
-        <section className="sidebar-projects">
-          <div className="sidebar-section-title">
-            <span>{t("nav.projects")}</span>
-            <strong>{projects.length}</strong>
-          </div>
-          <button className="sidebar-group-button" onClick={addGroup}>
-            <FolderPlus size={15} />
-            新建分组
-          </button>
-
-          <div className="sidebar-project-list">
-            {loaded && sortedProjects.length === 0 ? (
-              <div className="sidebar-empty">
-                <Sparkles size={18} />
-                <span>暂无项目</span>
-              </div>
-            ) : null}
-
-            {groupedProjects.map(({ group, projects: groupProjects }) => (
-              <div className="sidebar-project-group" key={group}>
-                <div className="sidebar-group-title">
-                  <span>{group}</span>
-                  <small>{groupProjects.length}</small>
-                </div>
-
-                {groupProjects.map((project) => {
-                  const completed = getCompletedStepCount(project);
-                  const total = getWorkflowSteps(project).length;
-
-                  return (
-                    <div className="sidebar-project-item" key={project.id}>
-                      <Link
-                        className="sidebar-project-link"
-                        href={`/projects/${project.id}`}
-                        onFocus={() => focusCreativeOrbit(project, completed, total)}
-                        onMouseEnter={() => focusCreativeOrbit(project, completed, total)}
-                      >
-                        <div>
-                          <span>{project.workflowType === "continuation" ? "剧本续写" : "原创项目"}</span>
-                          <strong>{project.title}</strong>
-                        </div>
-                        <small>
-                          <Clock size={13} />
-                          {completed}/{total}
-                        </small>
-                      </Link>
-                      <div className="sidebar-project-actions">
-                        <select
-                          aria-label="移动项目分组"
-                          value={project.projectGroup || DEFAULT_PROJECT_GROUP}
-                          onChange={(event) => moveProject(project.id, event.target.value)}
-                        >
-                          {groups.map((item) => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                        </select>
-                        <button className="sidebar-delete-button" onClick={() => removeProject(project.id, project.title)} title="删除项目">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <nav className="sidebar-footer">
-          <Link className="sidebar-link" href="/universes">
-            <BookOpen size={17} /> {t("nav.universe")}
-          </Link>
-          <Link className="sidebar-link" href="/projects/demo?template=demo">
-            <WandSparkles size={17} /> 演示案例
-          </Link>
-          <Link className="sidebar-link" href="/settings">
-            <Settings size={17} /> {t("nav.settings")}
-          </Link>
-        </nav>
-      </aside>
-
-      <section className="home-main">
-        <div className="home-auth">
-          <LanguageToggle />
-          {session ? (
-            <>
-              <span className="auth-email">{session.user.email}</span>
-              <button className="icon-button" title="退出登录" onClick={signOut}>
-                <LogIn size={18} />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="icon-button"
-                title="注册"
-                onClick={() => {
-                  setAuthMode("signup");
-                  setAuthOpen(true);
-                }}
-              >
-                <UserPlus size={18} />
-              </button>
-              <button
-                className="icon-button"
-                title="登录"
-                onClick={() => {
-                  setAuthMode("signin");
-                  setAuthOpen(true);
-                }}
-              >
-                <LogIn size={18} />
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="home-brand-hero">
-          <span>{t("brand.description")}</span>
-          <h1>{t("brand.name")}</h1>
-          <p>{t("brand.tagline")}</p>
-        </div>
-
-        <div className="home-actions-center">
-          <button className="home-action-card" onClick={() => openWizard("creation")}>
-            <FilePlus2 size={28} />
-            <span>{t("action.createProject")}</span>
-          </button>
-          <button className="home-action-card" onClick={() => openWizard("continuation")}>
-            <PenLine size={28} />
-            <span>{t("action.continueScript")}</span>
-          </button>
-          <Link className="home-action-card" href="/universes">
-            <BookOpen size={28} />
-            <span>{t("action.openUniverse")}</span>
-          </Link>
-        </div>
-
-        <footer className="creator-footer">
-          <div>
-            <span>制作者：萧锦澄</span>
-          </div>
-          <img src="/wechat-qr.svg" alt="微信二维码" />
-        </footer>
-      </section>
+      <KKFloating />
 
       {authOpen ? (
         <div className="modal-backdrop">
