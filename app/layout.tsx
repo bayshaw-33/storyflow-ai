@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { BRAND_NAME, LEGACY_ENGINE_NAME, TAGLINE_EN } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "StoryFlow AI",
-  description: "从创意到海外短剧剧本的 AI 创作工作台。",
+  title: BRAND_NAME,
+  description: TAGLINE_EN,
+  applicationName: `${BRAND_NAME} powered by ${LEGACY_ENGINE_NAME}`,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

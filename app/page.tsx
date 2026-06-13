@@ -44,9 +44,13 @@ import {
   upsertProjectToSupabase,
 } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { BRAND_NAME, LEGACY_ENGINE_NAME } from "@/lib/brand";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 export default function ProjectListPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_PROJECT_GROUP]);
   const [loaded, setLoaded] = useState(false);
@@ -235,12 +239,16 @@ export default function ProjectListPage() {
     <main className="home-shell">
       <aside className="home-sidebar">
         <div className="sidebar-brand">
-          <img className="brand-logo" src="/storyflow-logo-white.png" alt="StoryFlow" />
+          <img className="brand-logo" src="/storyflow-logo-white.png" alt={BRAND_NAME} />
+          <div className="sidebar-brand-copy">
+            <strong>{BRAND_NAME}</strong>
+            <span>{LEGACY_ENGINE_NAME}</span>
+          </div>
         </div>
 
         <section className="sidebar-projects">
           <div className="sidebar-section-title">
-            <span>项目</span>
+            <span>{t("nav.projects")}</span>
             <strong>{projects.length}</strong>
           </div>
           <button className="sidebar-group-button" onClick={addGroup}>
@@ -303,19 +311,20 @@ export default function ProjectListPage() {
 
         <nav className="sidebar-footer">
           <Link className="sidebar-link" href="/universes">
-            <BookOpen size={17} /> Universe Engine
+            <BookOpen size={17} /> {t("nav.universe")}
           </Link>
           <Link className="sidebar-link" href="/projects/demo?template=demo">
             <WandSparkles size={17} /> 演示案例
           </Link>
           <Link className="sidebar-link" href="/settings">
-            <Settings size={17} /> 设置
+            <Settings size={17} /> {t("nav.settings")}
           </Link>
         </nav>
       </aside>
 
       <section className="home-main">
         <div className="home-auth">
+          <LanguageToggle />
           {session ? (
             <>
               <span className="auth-email">{session.user.email}</span>
@@ -349,18 +358,24 @@ export default function ProjectListPage() {
           )}
         </div>
 
+        <div className="home-brand-hero">
+          <span>{t("brand.description")}</span>
+          <h1>{t("brand.name")}</h1>
+          <p>{t("brand.tagline")}</p>
+        </div>
+
         <div className="home-actions-center">
           <button className="home-action-card" onClick={() => openWizard("creation")}>
             <FilePlus2 size={28} />
-            <span>新建项目</span>
+            <span>{t("action.createProject")}</span>
           </button>
           <button className="home-action-card" onClick={() => openWizard("continuation")}>
             <PenLine size={28} />
-            <span>剧本续写</span>
+            <span>{t("action.continueScript")}</span>
           </button>
           <Link className="home-action-card" href="/universes">
             <BookOpen size={28} />
-            <span>From Universe</span>
+            <span>{t("action.openUniverse")}</span>
           </Link>
         </div>
 
@@ -375,7 +390,7 @@ export default function ProjectListPage() {
       {authOpen ? (
         <div className="modal-backdrop">
           <div className="modal">
-            <h2>{authMode === "signup" ? "注册 StoryFlow" : "登录 StoryFlow"}</h2>
+            <h2>{BRAND_NAME}</h2>
             <p>登录后项目会保存到云端，本地草稿会自动合并导入。</p>
             <input
               value={authEmail}
