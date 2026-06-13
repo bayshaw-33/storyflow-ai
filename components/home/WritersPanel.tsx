@@ -1,29 +1,31 @@
-import { WRITERS_ROOM_ROLES } from "@/lib/universe/writersRoom";
+type WriterStatus = "active" | "idle";
 
-const readyRoles = new Set(["story-architect", "script-doctor", "market-analyst"]);
+const writers: Array<{ name: string; status: WriterStatus }> = [
+  { name: "Story Architect", status: "active" },
+  { name: "Character Designer", status: "idle" },
+  { name: "Script Doctor", status: "idle" },
+  { name: "Market Analyst", status: "active" },
+  { name: "Visual Director", status: "idle" },
+];
 
 export function WritersPanel() {
   return (
     <aside className="kk-writers-panel" aria-labelledby="kk-writers-title">
       <div className="kk-panel-head">
         <span>AI Writers</span>
-        <h2 id="kk-writers-title">Writers Room</h2>
+        <h2 id="kk-writers-title">Status</h2>
       </div>
 
       <div className="kk-writer-list">
-        {WRITERS_ROOM_ROLES.map((role) => {
-          const status = readyRoles.has(role.id) ? "Ready" : "Idle";
-
-          return (
-            <div className="kk-writer-row" key={role.id}>
-              <div>
-                <strong>{role.name}</strong>
-                <span>{role.responsibility}</span>
-              </div>
-              <small data-state={status.toLowerCase()}>{status}</small>
-            </div>
-          );
-        })}
+        {writers.map((writer) => (
+          <div className="kk-writer-row" key={writer.name}>
+            <span>{writer.name}</span>
+            <small data-state={writer.status}>
+              <i aria-hidden="true" />
+              {writer.status === "active" ? "Active" : "Idle"}
+            </small>
+          </div>
+        ))}
       </div>
     </aside>
   );

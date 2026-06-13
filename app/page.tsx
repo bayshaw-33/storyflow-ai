@@ -7,7 +7,6 @@ import {
   createContinuationProject,
   createProject,
   DEFAULT_PROJECT_GROUP,
-  deleteProject,
   DramaProject,
   EPISODE_COUNT_OPTIONS,
   EPISODE_DURATION_OPTIONS,
@@ -17,12 +16,10 @@ import {
   readProjectGroupsFromStorage,
   readProjectsFromStorage,
   saveProjectGroupsToStorage,
-  saveProjectsToStorage,
   upsertProject,
   WorkflowType,
 } from "@/lib/projects";
 import {
-  deleteProjectFromSupabase,
   saveProjectGroupsToSupabase,
   syncProjectsWithSupabase,
   upsertProjectToSupabase,
@@ -31,7 +28,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { HeroSection } from "@/components/home/HeroSection";
 import { KKFloatingOrb } from "@/components/home/KKFloatingOrb";
 import { ProjectList } from "@/components/home/ProjectList";
-import { WorkflowGrid } from "@/components/home/WorkflowGrid";
+import { WorkflowList } from "@/components/home/WorkflowList";
 import { WritersPanel } from "@/components/home/WritersPanel";
 import { TopNav } from "@/components/layout/TopNav";
 import { BRAND_NAME } from "@/lib/brand";
@@ -165,27 +162,6 @@ export default function ProjectListPage() {
     void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
   }
 
-  function moveProject(projectId: string, group: string) {
-    const nextProjects = projects.map((project) =>
-      project.id === projectId
-        ? { ...project, projectGroup: group, updatedAt: new Date().toISOString() }
-        : project,
-    );
-    setProjects(nextProjects);
-    saveProjectsToStorage(nextProjects);
-    const moved = nextProjects.find((project) => project.id === projectId);
-    if (moved) void upsertProjectToSupabase(moved, { accessToken: session?.access_token });
-  }
-
-  function removeProject(projectId: string, title: string) {
-    const confirmed = window.confirm(`确定删除「${title || "未命名项目"}」吗？此操作只会删除本机浏览器里的项目记录。`);
-    if (!confirmed) return;
-
-    deleteProject(projectId);
-    void deleteProjectFromSupabase(projectId, { accessToken: session?.access_token });
-    setProjects(readProjectsFromStorage());
-  }
-
   async function submitAuth() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
@@ -241,15 +217,12 @@ export default function ProjectListPage() {
 
       <div className="kk-home-grid">
         <div className="kk-home-primary">
-          <WorkflowGrid onSelectWorkflow={openWizard} />
+          <WorkflowList onSelectWorkflow={openWizard} />
           <ProjectList
             groupedProjects={groupedProjects}
-            groups={groups}
             loaded={loaded}
             projectCount={projects.length}
             onAddGroup={addGroup}
-            onMoveProject={moveProject}
-            onRemoveProject={removeProject}
           />
         </div>
         <WritersPanel />
