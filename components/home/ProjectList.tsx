@@ -18,7 +18,6 @@ type ProjectListProps = {
   onAddGroup: () => void;
   onMoveProject: (projectId: string, group: string) => void;
   onRemoveProject: (projectId: string, title: string) => void;
-  onFocusProject: (project: DramaProject, completedSteps: number, totalSteps: number) => void;
 };
 
 function getProjectStatus(project: DramaProject, completed: number, total: number) {
@@ -32,7 +31,6 @@ export function ProjectList({
   groups,
   loaded,
   onAddGroup,
-  onFocusProject,
   onMoveProject,
   onRemoveProject,
   projectCount,
@@ -42,7 +40,7 @@ export function ProjectList({
       <div className="kk-section-head kk-project-head">
         <div>
           <span>Projects</span>
-          <h2 id="kk-projects-title">Creative planets</h2>
+          <h2 id="kk-projects-title">Recent projects</h2>
         </div>
         <div className="kk-project-tools">
           <strong>{projectCount}</strong>
@@ -79,8 +77,6 @@ export function ProjectList({
                     <Link
                       className="kk-project-main"
                       href={`/projects/${project.id}`}
-                      onFocus={() => onFocusProject(project, completed, total)}
-                      onMouseEnter={() => onFocusProject(project, completed, total)}
                     >
                       <div>
                         <span>{project.workflowType === "continuation" ? "Continuation" : "Original"}</span>

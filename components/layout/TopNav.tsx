@@ -1,8 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
 import { LogIn, Settings, UserPlus } from "lucide-react";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { BRAND_NAME } from "@/lib/brand";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 type TopNavProps = {
   session: Session | null;
@@ -12,6 +14,8 @@ type TopNavProps = {
 };
 
 export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) {
+  const { locale, setLocale } = useI18n();
+
   return (
     <header className="kk-top-nav">
       <Link className="kk-nav-brand" href="/">
@@ -31,7 +35,24 @@ export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) 
       </nav>
 
       <div className="kk-nav-actions">
-        <LanguageToggle />
+        <div className="kk-language-switch" aria-label="Interface language">
+          <button
+            className={locale === "en-US" ? "active" : ""}
+            type="button"
+            onClick={() => setLocale("en-US")}
+            aria-pressed={locale === "en-US"}
+          >
+            EN
+          </button>
+          <button
+            className={locale === "zh-CN" ? "active" : ""}
+            type="button"
+            onClick={() => setLocale("zh-CN")}
+            aria-pressed={locale === "zh-CN"}
+          >
+            CN
+          </button>
+        </div>
         <div className="kk-indicator" aria-label="KK companion status">
           <span />
           KK

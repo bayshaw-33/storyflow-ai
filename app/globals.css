@@ -93,11 +93,10 @@ a[href="/projects/demo?template=demo"] {
 .kk-home-shell {
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
   background:
-    radial-gradient(circle at 76% 18%, rgba(138, 223, 218, 0.14), transparent 320px),
-    radial-gradient(circle at 18% 18%, rgba(238, 241, 244, 0.06), transparent 280px),
-    linear-gradient(135deg, var(--kk-black), var(--kk-obsidian) 62%, #101116);
+    radial-gradient(circle at 50% 8%, rgba(138, 223, 218, 0.08), transparent 360px),
+    linear-gradient(180deg, var(--kk-black), var(--kk-obsidian) 58%, var(--kk-black));
   color: var(--kk-soft-silver);
   padding: 24px 44px 76px;
 }
@@ -182,8 +181,38 @@ a[href="/projects/demo?template=demo"] {
   gap: 9px;
 }
 
+.kk-language-switch,
 .kk-indicator {
   min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+}
+
+.kk-language-switch {
+  gap: 3px;
+  border: 1px solid rgba(216, 220, 226, 0.13);
+  background: rgba(238, 241, 244, 0.05);
+  padding: 3px;
+}
+
+.kk-language-switch button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(216, 220, 226, 0.62);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.kk-language-switch button.active {
+  background: rgba(138, 223, 218, 0.12);
+  color: var(--kk-tiffany);
+}
+
+.kk-indicator {
   gap: 7px;
   border: 1px solid rgba(138, 223, 218, 0.16);
   border-radius: 999px;
@@ -230,26 +259,26 @@ a[href="/projects/demo?template=demo"] {
 .kk-hero {
   position: relative;
   max-width: 1320px;
-  min-height: 430px;
+  min-height: 460px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  align-items: center;
-  gap: 40px;
+  place-items: center;
   margin: 0 auto 34px;
   border: 1px solid rgba(216, 220, 226, 0.1);
-  border-radius: 26px;
+  border-radius: 24px;
   background:
-    radial-gradient(circle at 72% 48%, rgba(138, 223, 218, 0.12), transparent 260px),
+    radial-gradient(circle at 50% 42%, rgba(138, 223, 218, 0.08), transparent 260px),
     rgba(11, 11, 16, 0.62);
-  padding: 64px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.32);
+  padding: 72px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
 }
 
 .kk-hero-copy {
   position: relative;
   z-index: 2;
   display: grid;
+  justify-items: center;
   gap: 18px;
+  text-align: center;
 }
 
 .kk-hero-kicker,
@@ -264,7 +293,7 @@ a[href="/projects/demo?template=demo"] {
 
 .kk-hero h1 {
   color: var(--kk-soft-silver);
-  font-size: 88px;
+  font-size: 84px;
   line-height: 0.95;
   letter-spacing: 0;
 }
@@ -272,7 +301,7 @@ a[href="/projects/demo?template=demo"] {
 .kk-hero p {
   max-width: 540px;
   color: rgba(216, 220, 226, 0.82);
-  font-size: 22px;
+  font-size: 21px;
   line-height: 1.45;
   font-weight: 700;
 }
@@ -296,9 +325,13 @@ a[href="/projects/demo?template=demo"] {
 }
 
 .kk-hero-orb {
+  position: absolute;
+  right: 11%;
+  top: 22%;
   display: grid;
   place-items: center;
   pointer-events: none;
+  opacity: 0.42;
 }
 
 .kk-orb-core,
@@ -317,10 +350,10 @@ a[href="/projects/demo?template=demo"] {
 }
 
 .kk-orb-core {
-  width: 220px;
-  height: 220px;
+  width: 160px;
+  height: 160px;
   border: 1px solid rgba(138, 223, 218, 0.28);
-  font-size: 38px;
+  font-size: 28px;
   animation: kk-breathe 4.8s ease-in-out infinite;
 }
 

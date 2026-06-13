@@ -5,7 +5,7 @@ type HeroProps = {
   onStartCreating: () => void;
 };
 
-export function Hero({ onStartCreating }: HeroProps) {
+export function HeroSection({ onStartCreating }: HeroProps) {
   return (
     <section className="kk-hero" aria-labelledby="kk-home-title">
       <div className="kk-hero-copy">

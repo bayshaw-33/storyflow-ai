@@ -28,29 +28,16 @@ import {
   upsertProjectToSupabase,
 } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { AppShell } from "@/components/AppShell";
-import { Hero } from "@/components/home/Hero";
-import { KKFloating } from "@/components/home/KKFloating";
+import { HeroSection } from "@/components/home/HeroSection";
+import { KKFloatingOrb } from "@/components/home/KKFloatingOrb";
 import { ProjectList } from "@/components/home/ProjectList";
 import { WorkflowGrid } from "@/components/home/WorkflowGrid";
 import { WritersPanel } from "@/components/home/WritersPanel";
 import { TopNav } from "@/components/layout/TopNav";
 import { BRAND_NAME } from "@/lib/brand";
-import { useGravity } from "@/lib/gravity/GravityContext";
-import { useOrbit } from "@/lib/orbit/OrbitContext";
 
 export default function ProjectListPage() {
-  return (
-    <AppShell>
-      <ProjectListExperience />
-    </AppShell>
-  );
-}
-
-function ProjectListExperience() {
   const router = useRouter();
-  const { setProjectFocus, setWorkflowProgress } = useGravity();
-  const { focusProjectOrbit, registerProjects } = useOrbit();
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_PROJECT_GROUP]);
   const [loaded, setLoaded] = useState(false);
@@ -122,24 +109,6 @@ function ProjectListExperience() {
         .filter((item) => item.projects.length > 0 || item.group === DEFAULT_PROJECT_GROUP),
     [groups, sortedProjects],
   );
-
-  useEffect(() => {
-    registerProjects(sortedProjects);
-  }, [registerProjects, sortedProjects]);
-
-  function focusCreativeOrbit(project: DramaProject, completedSteps: number, totalSteps: number) {
-    focusProjectOrbit(project.id);
-    setProjectFocus({
-      projectId: project.id,
-      title: project.title,
-      workflowType: project.workflowType,
-    });
-    setWorkflowProgress({
-      currentStepKey: null,
-      completedSteps,
-      totalSteps,
-    });
-  }
 
   function openWizard(type: WorkflowType) {
     setWizardError("");
@@ -268,7 +237,7 @@ function ProjectListExperience() {
         onSignOut={signOut}
       />
 
-      <Hero onStartCreating={() => openWizard("creation")} />
+      <HeroSection onStartCreating={() => openWizard("creation")} />
 
       <div className="kk-home-grid">
         <div className="kk-home-primary">
@@ -281,13 +250,12 @@ function ProjectListExperience() {
             onAddGroup={addGroup}
             onMoveProject={moveProject}
             onRemoveProject={removeProject}
-            onFocusProject={focusCreativeOrbit}
           />
         </div>
         <WritersPanel />
       </div>
 
-      <KKFloating />
+      <KKFloatingOrb />
 
       {authOpen ? (
         <div className="modal-backdrop">
