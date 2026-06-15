@@ -13,7 +13,7 @@ type TopNavProps = {
 };
 
 export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
 
   return (
     <header className="kk-top-nav">
@@ -22,10 +22,10 @@ export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) 
       </Link>
 
       <nav className="kk-nav-links" aria-label="Primary">
-        <a href="#projects">Projects</a>
-        <a href="#workflows">Workflows</a>
-        <Link href="/universes">Universe</Link>
-        <Link href="/settings">Settings</Link>
+        <a href="#projects">{t("nav.projects")}</a>
+        <a href="#workflows">{t("nav.workflows")}</a>
+        <Link href="/universes">{t("nav.universe")}</Link>
+        <Link href="/settings">{t("nav.settings")}</Link>
       </nav>
 
       <div className="kk-nav-actions">
@@ -52,16 +52,16 @@ export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) 
           <>
             <span className="kk-nav-email">{session.user.email}</span>
             <button className="kk-text-button" type="button" onClick={onSignOut}>
-              Sign out
+              {t("auth.signOut")}
             </button>
           </>
         ) : (
           <>
             <button className="kk-text-button" type="button" onClick={onSignUp}>
-              Sign up
+              {t("auth.signUp")}
             </button>
             <button className="kk-text-button primary" type="button" onClick={onSignIn}>
-              Sign in
+              {t("auth.signIn")}
             </button>
           </>
         )}

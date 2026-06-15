@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   DEFAULT_PROJECT_GROUP,
@@ -5,6 +7,7 @@ import {
   getCompletedStepCount,
   getWorkflowSteps,
 } from "@/lib/projects";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 type ProjectListProps = {
   groupedProjects: Array<{
@@ -22,21 +25,21 @@ function getProjectStatus(project: DramaProject, completed: number, total: numbe
   return "draft";
 }
 
-function formatUpdatedAt(value: string) {
+function formatUpdatedAt(value: string, locale: string, t: (key: string) => string) {
   const updatedAt = new Date(value).getTime();
-  if (Number.isNaN(updatedAt)) return "Unknown";
+  if (Number.isNaN(updatedAt)) return t("home.projects.updated.unknown");
 
   const diffMs = Date.now() - updatedAt;
   const minutes = Math.max(1, Math.floor(diffMs / 60000));
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return locale === "zh-CN" ? `${minutes}${t("home.projects.updated.minute")}` : `${minutes}${t("home.projects.updated.minute")}`;
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return locale === "zh-CN" ? `${hours}${t("home.projects.updated.hour")}` : `${hours}${t("home.projects.updated.hour")}`;
 
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return locale === "zh-CN" ? `${days}${t("home.projects.updated.day")}` : `${days}${t("home.projects.updated.day")}`;
 
-  return new Date(value).toLocaleDateString();
+  return new Date(value).toLocaleDateString(locale);
 }
 
 export function ProjectList({
@@ -45,29 +48,31 @@ export function ProjectList({
   onAddGroup,
   projectCount,
 }: ProjectListProps) {
+  const { locale, t } = useI18n();
+
   return (
     <section className="kk-section kk-project-section" id="projects" aria-labelledby="kk-projects-title">
       <div className="kk-section-head kk-project-head">
         <div>
-          <span>Projects</span>
-          <h2 id="kk-projects-title">Recent projects</h2>
+          <span>{t("home.projects.kicker")}</span>
+          <h2 id="kk-projects-title">{t("home.projects.title")}</h2>
         </div>
         <button className="kk-secondary-button" type="button" onClick={onAddGroup}>
-          New group
+          {t("home.projects.newGroup")}
         </button>
       </div>
 
       {loaded && projectCount === 0 ? (
         <div className="kk-empty-projects">
-          <span>No projects yet</span>
-          <p>Start a workflow to create your first KiisKiis project.</p>
+          <span>{t("home.projects.emptyTitle")}</span>
+          <p>{t("home.projects.emptyBody")}</p>
         </div>
       ) : (
-        <div className="kk-project-table" role="table" aria-label="Recent projects">
+        <div className="kk-project-table" role="table" aria-label={t("home.projects.title")}>
           <div className="kk-project-table-head" role="row">
-            <span role="columnheader">Project Name</span>
-            <span role="columnheader">Status</span>
-            <span role="columnheader">Updated</span>
+            <span role="columnheader">{t("home.projects.column.name")}</span>
+            <span role="columnheader">{t("home.projects.column.status")}</span>
+            <span role="columnheader">{t("home.projects.column.updated")}</span>
           </div>
 
           {groupedProjects.map(({ group, projects }) => (
@@ -85,15 +90,15 @@ export function ProjectList({
                 return (
                   <div className="kk-project-row" role="row" data-status={status} key={project.id}>
                     <Link className="kk-project-name" href={`/projects/${project.id}`} role="cell">
-                      <strong>{project.title || "Untitled Project"}</strong>
-                      <span>{project.workflowType === "continuation" ? "Continuation" : "Original"}</span>
+                      <strong>{project.title || t("home.projects.untitled")}</strong>
+                      <span>{project.workflowType === "continuation" ? t("home.projects.continuation") : t("home.projects.original")}</span>
                     </Link>
                     <span className="kk-status-cell" role="cell">
                       <i aria-hidden="true" />
-                      {status}
+                      {t(`home.projects.status.${status}`)}
                     </span>
                     <span className="kk-updated-cell" role="cell">
-                      {formatUpdatedAt(project.updatedAt)}
+                      {formatUpdatedAt(project.updatedAt, locale, t)}
                     </span>
                   </div>
                 );

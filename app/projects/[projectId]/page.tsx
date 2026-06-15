@@ -63,6 +63,8 @@ import {
 } from "@/lib/projects";
 import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/useI18n";
+import { localizeWorkflowPhase, localizeWorkflowStep } from "@/lib/i18n/workflow";
 import {
   canUseUniverseEngine,
   createUniverseFromProject,
@@ -295,6 +297,7 @@ function pickScoreLine(content: string, anchor: string, labels: string[]) {
 export default function WorkflowPage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
+  const { locale, t } = useI18n();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [project, setProject] = useState<DramaProject | null>(null);
@@ -419,8 +422,14 @@ export default function WorkflowPage() {
     setHistoryOpen(false);
   }, [activeStep]);
 
-  const workflowSteps = useMemo(() => getWorkflowSteps(project || undefined), [project?.workflowType]);
-  const workflowPhases = useMemo(() => getWorkflowPhases(project || undefined), [project?.workflowType]);
+  const workflowSteps = useMemo(
+    () => getWorkflowSteps(project || undefined).map((step) => localizeWorkflowStep(locale, step)),
+    [locale, project?.workflowType],
+  );
+  const workflowPhases = useMemo(
+    () => getWorkflowPhases(project || undefined).map((phase) => localizeWorkflowPhase(locale, phase)),
+    [locale, project?.workflowType],
+  );
   const activeMeta = useMemo(
     () => workflowSteps.find((step) => step.key === activeStep) || workflowSteps[0],
     [activeStep, workflowSteps],
@@ -902,7 +911,11 @@ export default function WorkflowPage() {
 
       while (expectedCount > 0 && generatedCount > 0 && generatedCount < expectedCount && completionAttempts < 2) {
         setLoading(true);
-        setStatusText(`已生成 ${generatedCount}/${expectedCount} 集，正在补全缺失内容...`);
+        setStatusText(
+          locale === "zh-CN"
+            ? `已生成 ${generatedCount}/${expectedCount} 集，正在补全缺失内容...`
+            : `Generated ${generatedCount}/${expectedCount} episodes. Completing missing content...`,
+        );
         const supplement = await requestGenerate(
           step,
           baseProject,
@@ -941,9 +954,15 @@ export default function WorkflowPage() {
       saveProjectEverywhere(nextProject);
       const finalCount = countGeneratedEpisodes(output);
       const incompleteNotice = expectedCount > 0 && finalCount > 0 && finalCount < expectedCount
-        ? `，但仍只检测到 ${finalCount}/${expectedCount} 集，可再次点击内容生成继续补齐`
+        ? locale === "zh-CN"
+          ? `，但仍只检测到 ${finalCount}/${expectedCount} 集，可再次点击内容生成继续补齐`
+          : `, but only ${finalCount}/${expectedCount} episodes were detected. Click generate again to continue filling the gap`
         : "";
-      setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`);
+      setStatusText(
+        locale === "zh-CN"
+          ? `已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`
+          : `Generated: ${data.meta?.taskName || activeMeta.short} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`,
+      );
       void refreshGenerationTasks();
       return;
       }
@@ -1322,9 +1341,9 @@ export default function WorkflowPage() {
       <main className="app-shell">
         <section className="empty-state">
           <Loader2 className="spin" size={30} />
-          <h1>正在加载项目</h1>
-          <p>如果这是新项目，系统会自动创建本地草稿。</p>
-          <Link className="primary-button" href="/">返回项目列表</Link>
+          <h1>{t("workspace.loadingTitle")}</h1>
+          <p>{t("workspace.loadingBody")}</p>
+          <Link className="primary-button" href="/">{t("workspace.backProjects")}</Link>
         </section>
       </main>
     );
@@ -1355,7 +1374,7 @@ export default function WorkflowPage() {
     <main className="workflow-shell">
       <header className="workflow-header">
         <div className="workflow-brand">
-          <Link className="icon-button" href="/" title="返回项目列表">
+          <Link className="icon-button" href="/" title={t("workspace.backProjects")}>
             <ArrowLeft size={18} />
           </Link>
           <img className="brand-logo compact" src="/storyflow-logo-white.png" alt="StoryFlow" />
@@ -1364,14 +1383,14 @@ export default function WorkflowPage() {
           className="title-input"
           value={project.title}
           onChange={(event) => updateField("title", event.target.value)}
-          title="剧名，可手动修改"
+          title={t("workspace.titleInput")}
         />
         <div className="header-actions">
-          <span className="save-state"><Save size={15} /> {statusText || "本地自动保存"}</span>
-          <button className="icon-button" onClick={exportMarkdown} title="导出完整 Markdown">
+          <span className="save-state"><Save size={15} /> {statusText || t("workspace.autoSaved")}</span>
+          <button className="icon-button" onClick={exportMarkdown} title={t("workspace.exportMarkdown")}>
             <Download size={18} />
           </button>
-          <Link className="icon-button" href="/settings" title="设置">
+          <Link className="icon-button" href="/settings" title={t("nav.settings")}>
             <Settings size={18} />
           </Link>
         </div>
@@ -1380,7 +1399,7 @@ export default function WorkflowPage() {
       <section className="workflow-grid">
         <aside className="steps-panel">
           <div className="panel-title">
-            <span>5 阶段工作台</span>
+            <span>{t("workspace.stageWorkbench")}</span>
             <strong>{workflowSteps.findIndex((step) => step.key === activeStep) + 1}/{workflowSteps.length}</strong>
           </div>
           {workflowPhases.map((phase, phaseIndex) => {
@@ -1407,7 +1426,14 @@ export default function WorkflowPage() {
                     {phaseSteps.map((step) => {
                       const status = getStepStatus(project, step);
                       const blocked = Boolean(getRequirement(project, step.key));
-                      const statusLabel = status === "empty" ? "空" : status === "draft" ? "草稿" : status === "confirmed" ? "确认" : "需同步";
+                      const statusLabel =
+                        status === "empty"
+                          ? t("workspace.status.empty")
+                          : status === "draft"
+                            ? t("workspace.status.draft")
+                            : status === "confirmed"
+                              ? t("workspace.status.confirmed")
+                              : t("workspace.status.sync");
 
                       return (
                         <button
@@ -1435,8 +1461,8 @@ export default function WorkflowPage() {
           <div className="project-fields">
             <button className="project-fields-toggle" type="button" onClick={() => setProjectFieldsOpen((open) => !open)}>
               <div>
-                <strong>{project.workflowType === "continuation" ? "续写项目信息" : "项目信息"}</strong>
-                <span>{project.market} / {project.genre} / {project.episodeCount} 集 / {project.episodeDuration}</span>
+                <strong>{project.workflowType === "continuation" ? t("workspace.continuationProjectInfo") : t("workspace.projectInfo")}</strong>
+                <span>{project.market} / {project.genre} / {project.episodeCount} {t("common.episodeUnit")} / {project.episodeDuration}</span>
               </div>
               <ChevronDown className={projectFieldsOpen ? "toggle-icon open" : "toggle-icon"} size={18} />
             </button>
@@ -1445,7 +1471,7 @@ export default function WorkflowPage() {
               <div className="project-fields-body">
             <div className="compact-fields">
               <label>
-                目标市场
+                {t("workspace.targetMarket")}
                 <select
                   value={selectedMarketIsOther ? "其他" : project.market}
                   onChange={(event) => updateField("market", event.target.value)}
@@ -1454,7 +1480,7 @@ export default function WorkflowPage() {
                 </select>
               </label>
               <label>
-                题材
+                {t("workspace.genre")}
                 <select
                   value={selectedGenreIsOther ? "其他" : project.genre}
                   onChange={(event) => updateField("genre", event.target.value)}
@@ -1463,26 +1489,26 @@ export default function WorkflowPage() {
                 </select>
               </label>
               <label>
-                竞品名称
+                {t("workspace.benchmarkTitle")}
                 <input value={project.benchmarkTitle} onChange={(event) => updateField("benchmarkTitle", event.target.value)} />
               </label>
             </div>
 
             <div className="compact-fields">
               <label>
-                集数
+                {t("workspace.episodeCount")}
                 <select value={project.episodeCount} onChange={(event) => updateField("episodeCount", Number(event.target.value))}>
-                  {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} 集</option>)}
+                  {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} {t("common.episodeUnit")}</option>)}
                 </select>
               </label>
               <label>
-                每集片长
+                {t("workspace.episodeDuration")}
                 <select value={project.episodeDuration} onChange={(event) => updateField("episodeDuration", event.target.value)}>
                   {EPISODE_DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                竞品链接
+                {t("workspace.benchmarkLink")}
                 <input
                   value={project.benchmarkLink}
                   onChange={(event) => updateField("benchmarkLink", event.target.value)}
@@ -1495,13 +1521,13 @@ export default function WorkflowPage() {
               <div className="compact-fields">
                 {selectedMarketIsOther ? (
                   <label>
-                    其他市场
+                    {t("workspace.otherMarket")}
                     <input value={project.market === "其他" ? "" : project.market} onChange={(event) => updateField("market", event.target.value || "其他")} />
                   </label>
                 ) : null}
                 {selectedGenreIsOther ? (
                   <label>
-                    其他题材
+                    {t("workspace.otherGenre")}
                     <input value={project.genre === "其他" ? "" : project.genre} onChange={(event) => updateField("genre", event.target.value || "其他")} />
                   </label>
                 ) : null}
@@ -1509,12 +1535,12 @@ export default function WorkflowPage() {
             ) : null}
 
             <label>
-              {project.workflowType === "continuation" ? "剧本导入材料" : "故事创意"}
+              {project.workflowType === "continuation" ? t("workspace.importMaterial") : t("workspace.storyIdea")}
               <textarea
                 className="idea-input"
                 value={project.idea}
                 onChange={(event) => updateField("idea", event.target.value)}
-                placeholder={project.workflowType === "continuation" ? "粘贴已有小说/剧本，或拖入附件解析，系统会先整理成续写底稿。" : "一句话创意，或拖入已有小说/剧本附件，支持 txt、md、pdf、doc、docx。"}
+                placeholder={project.workflowType === "continuation" ? t("workspace.importPlaceholder") : t("workspace.ideaPlaceholder")}
               />
             </label>
             <div
@@ -1524,7 +1550,7 @@ export default function WorkflowPage() {
               onClick={() => fileInputRef.current?.click()}
             >
               {parsingFile ? <Loader2 className="spin" size={18} /> : <UploadCloud size={18} />}
-              <span>一键拖入附件解析：txt / md / pdf / doc / docx</span>
+              <span>{t("workspace.fileDrop")}</span>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1544,49 +1570,49 @@ export default function WorkflowPage() {
             <div className="story-bible-head">
               <div>
                 <span>Story Bible</span>
-                <strong>统一设定库</strong>
+                <strong>{t("workspace.storyBible.title")}</strong>
               </div>
-              <small>AI 生成会自动读取这些核心设定</small>
+              <small>{t("workspace.storyBible.note")}</small>
             </div>
             <div className="story-bible-grid">
               <label>
-                一句话故事
+                {t("workspace.storyBible.logline")}
                 <textarea value={storyBible?.logline || ""} onChange={(event) => updateStoryBibleField("logline", event.target.value)} />
               </label>
               <label>
-                核心卖点
+                {t("workspace.storyBible.sellingPoint")}
                 <textarea value={storyBible?.sellingPoint || ""} onChange={(event) => updateStoryBibleField("sellingPoint", event.target.value)} />
               </label>
               <label>
-                主线冲突
+                {t("workspace.storyBible.mainConflict")}
                 <textarea value={storyBible?.mainConflict || ""} onChange={(event) => updateStoryBibleField("mainConflict", event.target.value)} />
               </label>
               <label>
-                禁改设定
+                {t("workspace.storyBible.lockedCanon")}
                 <textarea value={storyBible?.lockedCanon || ""} onChange={(event) => updateStoryBibleField("lockedCanon", event.target.value)} />
               </label>
             </div>
             <details className="story-bible-more">
-              <summary>更多设定</summary>
+              <summary>{t("workspace.storyBible.more")}</summary>
               <div className="story-bible-grid">
                 <label>
-                  世界观
+                  {t("workspace.storyBible.world")}
                   <textarea value={storyBible?.world || ""} onChange={(event) => updateStoryBibleField("world", event.target.value)} />
                 </label>
                 <label>
-                  角色关系
+                  {t("workspace.storyBible.relationships")}
                   <textarea value={storyBible?.characterRelationships || ""} onChange={(event) => updateStoryBibleField("characterRelationships", event.target.value)} />
                 </label>
                 <label>
-                  语言风格
+                  {t("workspace.storyBible.languageStyle")}
                   <textarea value={storyBible?.languageStyle || ""} onChange={(event) => updateStoryBibleField("languageStyle", event.target.value)} />
                 </label>
                 <label>
-                  节奏规则
+                  {t("workspace.storyBible.pacingRules")}
                   <textarea value={storyBible?.pacingRules || ""} onChange={(event) => updateStoryBibleField("pacingRules", event.target.value)} />
                 </label>
                 <label>
-                  已确认事实
+                  {t("workspace.storyBible.confirmedFacts")}
                   <textarea value={storyBible?.confirmedFacts || ""} onChange={(event) => updateStoryBibleField("confirmedFacts", event.target.value)} />
                 </label>
               </div>
@@ -1606,8 +1632,8 @@ export default function WorkflowPage() {
           {activeStep === "characters" ? (
             <div className="character-workspace">
               <div className="segmented-control">
-                <button className={characterView === "cards" ? "active" : ""} onClick={() => setCharacterView("cards")}>角色卡</button>
-                <button className={characterView === "relationships" ? "active" : ""} onClick={() => setCharacterView("relationships")}>人物关系图</button>
+                <button className={characterView === "cards" ? "active" : ""} onClick={() => setCharacterView("cards")}>{t("workspace.characters")}</button>
+                <button className={characterView === "relationships" ? "active" : ""} onClick={() => setCharacterView("relationships")}>{t("workspace.relationships")}</button>
               </div>
               {characterView === "relationships" ? (
                 <div className="relationship-image-workspace">
@@ -1764,7 +1790,7 @@ export default function WorkflowPage() {
                 className="script-editor"
                 value={activeContent}
                 onChange={(event) => updateStep(activeStep, event.target.value)}
-                placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+                placeholder={t("workspace.editorPlaceholder")}
               />
             </div>
           ) : (activeStep === "chinese_script" || activeStep === "continuation_script" || activeStep === "final_script") && activeContent.trim() ? (
@@ -1809,7 +1835,7 @@ export default function WorkflowPage() {
                 className="script-editor"
                 value={activeContent}
                 onChange={(event) => updateStep(activeStep, event.target.value)}
-                placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+                placeholder={t("workspace.editorPlaceholder")}
               />
             </div>
           ) : activeStep === "quality_evaluation" && activeContent.trim() ? (
@@ -1838,7 +1864,7 @@ export default function WorkflowPage() {
                 className="script-editor"
                 value={activeContent}
                 onChange={(event) => updateStep(activeStep, event.target.value)}
-                placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+                placeholder={t("workspace.editorPlaceholder")}
               />
             </div>
           ) : (
@@ -1846,16 +1872,16 @@ export default function WorkflowPage() {
               className="script-editor"
               value={activeContent}
               onChange={(event) => updateStep(activeStep, event.target.value)}
-              placeholder="AI 生成内容会出现在这里，也可以直接手动编辑。"
+              placeholder={t("workspace.editorPlaceholder")}
             />
           )}
         </section>
 
         <aside className="ai-panel">
           <div>
-            <span className="kicker">AI 助手</span>
-            <h2>内容生成</h2>
-            {credits ? <small className="field-note">剩余额度：{credits.balance}/{credits.monthlyLimit}</small> : null}
+            <span className="kicker">{t("workspace.aiAssistant")}</span>
+            <h2>{t("workspace.contentGeneration")}</h2>
+            {credits ? <small className="field-note">{t("workspace.creditsRemaining")}: {credits.balance}/{credits.monthlyLimit}</small> : null}
           </div>
 
           <div className="universe-mini-panel">
@@ -1916,7 +1942,7 @@ export default function WorkflowPage() {
 
           {activeStep === "chinese_script" ? (
             <label>
-              中文剧本范围
+              {t("workspace.chineseScriptRange")}
               <select value={project.chineseScriptRange} onChange={(event) => updateField("chineseScriptRange", event.target.value as DramaProject["chineseScriptRange"])}>
                 {CHINESE_SCRIPT_RANGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -1926,7 +1952,7 @@ export default function WorkflowPage() {
 
           {activeStep === "translation" ? (
             <label>
-              翻译语言
+              {t("workspace.translationLanguage")}
               <select value={project.targetLanguage} onChange={(event) => updateField("targetLanguage", event.target.value)}>
                 {LANGUAGE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
               </select>
@@ -1935,7 +1961,7 @@ export default function WorkflowPage() {
 
           {activeStep === "localization" ? (
             <label>
-              本土化输出方式
+              {t("workspace.localizationMode")}
               <select value={project.localizationMode} onChange={(event) => updateField("localizationMode", event.target.value as DramaProject["localizationMode"])}>
                 {LOCALIZATION_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -1945,7 +1971,7 @@ export default function WorkflowPage() {
 
           {activeStep === "final_script" ? (
             <label>
-              最终剧本版本
+              {t("workspace.finalScriptVersion")}
               <select value={project.finalScriptVersion} onChange={(event) => updateField("finalScriptVersion", event.target.value as DramaProject["finalScriptVersion"])}>
                 {FINAL_SCRIPT_VERSION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -1954,13 +1980,13 @@ export default function WorkflowPage() {
 
           {activeStep === "characters" ? (
             <button className="secondary-button full" onClick={addManualCharacter}>
-              <UserPlus size={18} /> 手动添加角色
+              <UserPlus size={18} /> {t("workspace.manualAddCharacter")}
             </button>
           ) : null}
 
           {activeStep === "storyboard_script" ? (
             <button className="secondary-button full" onClick={addStoryboardEpisode}>
-              <Plus size={18} /> 添加分集模块
+              <Plus size={18} /> {t("workspace.addEpisodeBlock")}
             </button>
           ) : null}
 
@@ -1981,13 +2007,13 @@ export default function WorkflowPage() {
               ) : (
                 <div className="download-actions">
                   <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("word", downloadTitle, downloadContent, downloadLandscape)}>
-                    <FileText size={17} /> 下载 Word
+                    <FileText size={17} /> {t("workspace.downloadWord")}
                   </button>
                   <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("md", downloadTitle, downloadContent, downloadLandscape)}>
-                    <Download size={17} /> 下载 MD
+                    <Download size={17} /> {t("workspace.downloadMd")}
                   </button>
                   <button className="secondary-button full" disabled={!downloadContent.trim()} onClick={() => downloadSection("pdf", downloadTitle, downloadContent, downloadLandscape)}>
-                    <Download size={17} /> 下载 PDF
+                    <Download size={17} /> {t("workspace.downloadPdf")}
                   </button>
                 </div>
               )}
@@ -1997,15 +2023,15 @@ export default function WorkflowPage() {
           {activeStep !== "final_delivery" ? (
             <div className="history-tools">
               <button className="secondary-button full" onClick={() => recordStepVersion(activeStep, activeContent, "manual")} disabled={!activeContent.trim()}>
-                <Save size={17} /> 保存当前版本
+                <Save size={17} /> {t("workspace.saveVersion")}
               </button>
               <button className="secondary-button full" onClick={() => setHistoryOpen((open) => !open)}>
-                <History size={17} /> 查看历史记录
+                <History size={17} /> {t("workspace.history")}
               </button>
               {historyOpen ? (
                 <div className="history-panel">
                   {activeVersions.length === 0 ? (
-                    <p>暂无历史版本</p>
+                    <p>{t("workspace.noHistory")}</p>
                   ) : (
                     activeVersions.map((version) => (
                       <button className="history-item" key={version.id} onClick={() => restoreVersion(version.content)}>
@@ -2022,8 +2048,8 @@ export default function WorkflowPage() {
           {activeTaskRecords.length ? (
             <div className="task-status-panel">
               <div className="task-status-head">
-                <strong>AI 任务状态</strong>
-                <button onClick={() => void refreshGenerationTasks()}>刷新</button>
+                <strong>{t("workspace.taskStatus")}</strong>
+                <button onClick={() => void refreshGenerationTasks()}>{t("workspace.refresh")}</button>
               </div>
               {activeTaskRecords.map((task) => (
                 <article className={`task-status-card ${task.status}`} key={task.id}>
@@ -2033,10 +2059,10 @@ export default function WorkflowPage() {
                   </div>
                   {task.error_message ? <p>{task.error_message}</p> : null}
                   <div className="task-actions">
-                    {task.status === "failed" ? <button onClick={() => generateForStep(task.step_key)}>重试</button> : null}
-                    {task.output_snapshot ? <button onClick={() => applyTaskOutput(task)}>应用结果</button> : null}
-                    {task.output_snapshot ? <button onClick={() => recordStepVersion(task.step_key, task.output_snapshot || "", "restore", "任务结果版本")}>保存版本</button> : null}
-                    {["queued", "running", "streaming", "retrying"].includes(task.status) ? <button onClick={() => cancelTask(task.id)}>取消</button> : null}
+                    {task.status === "failed" ? <button onClick={() => generateForStep(task.step_key)}>{t("workspace.retry")}</button> : null}
+                    {task.output_snapshot ? <button onClick={() => applyTaskOutput(task)}>{t("workspace.applyResult")}</button> : null}
+                    {task.output_snapshot ? <button onClick={() => recordStepVersion(task.step_key, task.output_snapshot || "", "restore", "任务结果版本")}>{t("workspace.saveVersion")}</button> : null}
+                    {["queued", "running", "streaming", "retrying"].includes(task.status) ? <button onClick={() => cancelTask(task.id)}>{t("workspace.cancel")}</button> : null}
                   </div>
                 </article>
               ))}
@@ -2045,7 +2071,7 @@ export default function WorkflowPage() {
 
           {requirement ? <div className="notice warning"><AlertCircle size={17} /> {requirement}</div> : null}
           {!session ? (
-            <div className="notice warning"><AlertCircle size={17} /> 登录后才可以调用 AI 生成；当前内容仍会保存为本地草稿。</div>
+            <div className="notice warning"><AlertCircle size={17} /> {t("workspace.loginRequired")}</div>
           ) : null}
           {false && aiConfigured === false ? (
             <div className="notice warning">
@@ -2056,18 +2082,18 @@ export default function WorkflowPage() {
           {statusText ? <div className="notice success"><CheckCircle2 size={17} /> {statusText}</div> : null}
 
           {activeStep === "final_delivery" ? (
-            <div className="notice success"><CheckCircle2 size={17} /> 交付文件已整理为下载清单。</div>
+            <div className="notice success"><CheckCircle2 size={17} /> {t("workspace.finalDeliveryReady")}</div>
           ) : (
             <>
               <button className="primary-button full" onClick={() => generateForStep(activeStep)} disabled={loading || !session || credits?.balance === 0}>
                 {loading ? <Loader2 className="spin" size={18} /> : <RefreshCw size={18} />}
-                内容生成
+                {t("workspace.generateContent")}
               </button>
               <button className="secondary-button full" onClick={() => setOptimizeOpen(true)} disabled={loading || !activeContent.trim() || !session || credits?.balance === 0}>
-                优化内容
+                {t("workspace.optimizeContent")}
               </button>
               <button className="secondary-button full" onClick={continueNextStep} disabled={loading || !session || credits?.balance === 0}>
-                继续下一步并生成
+                {t("workspace.continueNext")}
               </button>
               <button className="secondary-button full demo-control" onClick={loadDemoStep}>
                 <WandSparkles size={18} /> 加载当前步骤示例内容
@@ -2122,16 +2148,16 @@ export default function WorkflowPage() {
       {optimizeOpen ? (
         <div className="modal-backdrop">
           <div className="modal">
-            <h2>优化内容</h2>
-            <p>输入本页内容的优化要求，确认后会重新生成当前阶段内容。</p>
+            <h2>{t("workspace.optimizeTitle")}</h2>
+            <p>{t("workspace.optimizeBody")}</p>
             <textarea
               value={optimizeInstruction}
               onChange={(event) => setOptimizeInstruction(event.target.value)}
-              placeholder="例如：加强第 1 集结尾钩子，删掉解释性对白，让女主更克制但更有压迫感。"
+              placeholder={t("workspace.optimizePlaceholder")}
             />
             <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setOptimizeOpen(false)}>取消</button>
-              <button className="primary-button" onClick={confirmOptimize} disabled={!optimizeInstruction.trim() || loading}>确认优化</button>
+              <button className="secondary-button" onClick={() => setOptimizeOpen(false)}>{t("auth.cancel")}</button>
+              <button className="primary-button" onClick={confirmOptimize} disabled={!optimizeInstruction.trim() || loading}>{t("workspace.confirmOptimize")}</button>
             </div>
           </div>
         </div>

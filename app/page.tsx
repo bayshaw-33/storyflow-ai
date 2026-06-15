@@ -32,9 +32,11 @@ import { WorkflowList } from "@/components/home/WorkflowList";
 import { WritersPanel } from "@/components/home/WritersPanel";
 import { TopNav } from "@/components/layout/TopNav";
 import { BRAND_NAME } from "@/lib/brand";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 export default function ProjectListPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_PROJECT_GROUP]);
   const [loaded, setLoaded] = useState(false);
@@ -116,7 +118,7 @@ export default function ProjectListPage() {
   function submitWizard() {
     const title = wizardData.title.trim();
     if (!title) {
-      setWizardError("请先填写项目标题。");
+      setWizardError(t("wizard.titleRequired"));
       return;
     }
 
@@ -234,24 +236,24 @@ export default function ProjectListPage() {
         <div className="modal-backdrop">
           <div className="modal">
             <h2>{BRAND_NAME}</h2>
-            <p>登录后项目会保存到云端，本地草稿会自动合并导入。</p>
+            <p>{t("auth.cloudSaveHint")}</p>
             <input
               value={authEmail}
               onChange={(event) => setAuthEmail(event.target.value)}
-              placeholder="邮箱"
+              placeholder={t("auth.email")}
               type="email"
             />
             <input
               value={authPassword}
               onChange={(event) => setAuthPassword(event.target.value)}
-              placeholder="密码"
+              placeholder={t("auth.password")}
               type="password"
             />
             {authError ? <div className="notice error">{authError}</div> : null}
             <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setAuthOpen(false)}>取消</button>
+              <button className="secondary-button" onClick={() => setAuthOpen(false)}>{t("auth.cancel")}</button>
               <button className="primary-button" onClick={submitAuth}>
-                {authMode === "signup" ? "注册" : "登录"}
+                {authMode === "signup" ? t("auth.signUp") : t("auth.signIn")}
               </button>
             </div>
           </div>
@@ -261,54 +263,54 @@ export default function ProjectListPage() {
       {wizardOpen ? (
         <div className="modal-backdrop">
           <div className="modal wizard-modal">
-            <h2>{wizardData.workflowType === "continuation" ? "创建剧本续写项目" : "创建原创项目"}</h2>
-            <p>先完成基础设定，再进入 StoryFlow 2.0 工作台。</p>
+            <h2>{wizardData.workflowType === "continuation" ? t("wizard.createContinuation") : t("wizard.createOriginal")}</h2>
+            <p>{t("wizard.description")}</p>
             <label>
-              项目标题
+              {t("wizard.projectTitle")}
               <input
                 value={wizardData.title}
                 onChange={(event) => setWizardData((current) => ({ ...current, title: event.target.value }))}
-                placeholder="例如：午夜继承人"
+                placeholder={t("wizard.titlePlaceholder")}
                 autoFocus
               />
             </label>
             <div className="wizard-grid">
               <label>
-                创作模式
+                {t("wizard.workflowMode")}
                 <select
                   value={wizardData.workflowType}
                   onChange={(event) => setWizardData((current) => ({ ...current, workflowType: event.target.value as WorkflowType }))}
                 >
-                  <option value="creation">原创</option>
-                  <option value="continuation">续写</option>
+                  <option value="creation">{t("wizard.original")}</option>
+                  <option value="continuation">{t("wizard.continuation")}</option>
                 </select>
               </label>
               <label>
-                目标市场
+                {t("wizard.targetMarket")}
                 <select value={wizardData.market} onChange={(event) => setWizardData((current) => ({ ...current, market: event.target.value }))}>
                   {MARKET_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                题材类型
+                {t("wizard.genreType")}
                 <select value={wizardData.genre} onChange={(event) => setWizardData((current) => ({ ...current, genre: event.target.value }))}>
                   {GENRE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                输出语言
+                {t("wizard.outputLanguage")}
                 <select value={wizardData.targetLanguage} onChange={(event) => setWizardData((current) => ({ ...current, targetLanguage: event.target.value }))}>
                   {LANGUAGE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                集数
+                {t("wizard.episodeCount")}
                 <select value={wizardData.episodeCount} onChange={(event) => setWizardData((current) => ({ ...current, episodeCount: Number(event.target.value) }))}>
-                  {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} 集</option>)}
+                  {EPISODE_COUNT_OPTIONS.map((option) => <option key={option} value={option}>{option} {t("common.episodeUnit")}</option>)}
                 </select>
               </label>
               <label>
-                单集时长
+                {t("wizard.episodeDuration")}
                 <select value={wizardData.episodeDuration} onChange={(event) => setWizardData((current) => ({ ...current, episodeDuration: event.target.value }))}>
                   {EPISODE_DURATION_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
@@ -316,8 +318,8 @@ export default function ProjectListPage() {
             </div>
             {wizardError ? <div className="notice error">{wizardError}</div> : null}
             <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setWizardOpen(false)}>取消</button>
-              <button className="primary-button" onClick={submitWizard}>进入工作台</button>
+              <button className="secondary-button" onClick={() => setWizardOpen(false)}>{t("auth.cancel")}</button>
+              <button className="primary-button" onClick={submitWizard}>{t("wizard.enterWorkspace")}</button>
             </div>
           </div>
         </div>
