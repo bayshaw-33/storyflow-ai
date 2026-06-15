@@ -6,11 +6,7 @@ type CatMarkProps = {
 export function CatMark({ className = "", state = "idle" }: CatMarkProps) {
   return (
     <span className={`kiikis-cat-mark ${className}`} data-state={state} aria-hidden="true">
-      <span className="cat-head" />
-      <span className="cat-ear left" />
-      <span className="cat-ear right" />
-      <span className="cat-tail" />
-      <span className="cat-star" />
+      <img className="kiikis-mark-image" src="/brand/kiikis-cat-mark.png" alt="" />
     </span>
   );
 }
