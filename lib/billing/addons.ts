@@ -36,14 +36,14 @@ export const KK_CREDIT_PACKS: KkCreditPack[] = [
   },
   {
     id: "creator_pack",
-    name: "Creator Pack",
+    name: "Orbit Pack",
     kkCredits: 5000,
     priceUsd: 24.9,
     availableTo: ["pro", "universe", "team"],
   },
   {
     id: "studio_pack",
-    name: "Studio Pack",
+    name: "Nebula Pack",
     kkCredits: 15000,
     priceUsd: 69.9,
     availableTo: ["pro", "universe", "team"],

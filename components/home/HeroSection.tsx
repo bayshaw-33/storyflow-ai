@@ -7,13 +7,8 @@ type HeroSectionProps = {
 };
 
 export function HeroSection({ onStartCreating }: HeroSectionProps) {
-  const { t } = useI18n();
-  const title = t("landing.hero.title");
-  const titleParts = title.includes(" starts ")
-    ? ["Every great story", "starts in the dark."]
-    : title.includes("，")
-      ? title.split("，")
-      : [title];
+  const { t, locale } = useI18n();
+  const isZh = locale === "zh-CN";
 
   return (
     <section className="kiikis-hero" aria-labelledby="kiikis-hero-title">
@@ -24,10 +19,23 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
       <div className="hero-copy">
         <span className="hero-kicker">{t("landing.hero.kicker")}</span>
         <h1 id="kiikis-hero-title">
-          {titleParts[0]}
-          {titleParts[1] ? <span>{titleParts[1]}</span> : null}
+          {isZh ? (
+            <>
+              <span className="hero-line">每个伟大的故事</span>
+              <span className="hero-line">都从黑暗开始。</span>
+            </>
+          ) : (
+            <>
+              <span className="hero-line">Every great story</span>
+              <span className="hero-line">starts in the dark.</span>
+            </>
+          )}
         </h1>
-        <p>{t("landing.hero.subtitle")}</p>
+        <p>
+          {isZh
+            ? "从灵感到故事。从想法到宇宙。释放你的想象力。"
+            : "From spark to story. From idea to universe. Your imagination. Unlocked."}
+        </p>
         <div className="hero-actions">
           <button className="kk-primary-cta" type="button" onClick={onStartCreating}>
             {t("landing.hero.primary")}
