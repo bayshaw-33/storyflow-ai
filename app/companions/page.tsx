@@ -16,7 +16,7 @@ export default function CompanionsPage() {
       <header className="cosmic-page-header">
         <Link href="/"><KiikisLogo compact /></Link>
         <nav>
-          <Link href="/">Dashboard</Link>
+          <Link href="/dashboard">Dashboard</Link>
           <Link href="/universes">Universe</Link>
           <Link href="/templates">Templates</Link>
           <Link href="/subscription">Pricing</Link>

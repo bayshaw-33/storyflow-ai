@@ -8,6 +8,7 @@ import {
   getCompletedStepCount,
   getWorkflowSteps,
 } from "@/lib/projects";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 type ProjectListProps = {
   groupedProjects: Array<{
@@ -25,6 +26,14 @@ function getProjectStatus(project: DramaProject, completed: number, total: numbe
   if (project.finalScript?.trim()) return "Final Script";
   if (project.status === "generating" || completed > 0) return "In Progress";
   return "Draft";
+}
+
+function localizeStatus(status: string, isZh: boolean) {
+  if (!isZh) return status;
+  if (status === "Lit") return "已点亮";
+  if (status === "Final Script") return "最终剧本";
+  if (status === "In Progress") return "进行中";
+  return "草稿";
 }
 
 function getProgress(completed: number, total: number) {
@@ -51,30 +60,33 @@ export function ProjectList({
   onCreateProject,
   projectCount,
 }: ProjectListProps) {
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
+
   return (
     <section className="dashboard-panel project-worlds" id="projects" aria-labelledby="dashboard-projects-title">
       <div className="dashboard-panel-head">
         <div>
-          <span>PROJECT WORLDS</span>
-          <h2 id="dashboard-projects-title">Your story planets</h2>
+          <span>{isZh ? "项目世界" : "PROJECT WORLDS"}</span>
+          <h2 id="dashboard-projects-title">{isZh ? "你的故事星球" : "Your story planets"}</h2>
         </div>
         <button className="ghost-button" type="button" onClick={onAddGroup}>
-          New group
+          {isZh ? "新分组" : "New group"}
         </button>
       </div>
 
       <div className="planet-card-grid">
         <button className="project-planet-card new-world-card" type="button" onClick={onCreateProject}>
           <span className="new-world-plus">+</span>
-          <strong>New World</strong>
-          <small>Start a new story</small>
+          <strong>{isZh ? "新世界" : "New World"}</strong>
+          <small>{isZh ? "开始一个新故事" : "Start a new story"}</small>
         </button>
 
         {loaded && projectCount === 0 ? (
           <article className="project-planet-card empty-world-card">
             <span className="project-planet dim" />
-            <strong>No story planets yet</strong>
-            <small>Enter the Writer's Room to create the first one.</small>
+            <strong>{isZh ? "还没有故事星球" : "No story planets yet"}</strong>
+            <small>{isZh ? "进入编剧室创建第一个项目。" : "Enter the Writer's Room to create the first one."}</small>
           </article>
         ) : null}
 
@@ -95,11 +107,11 @@ export function ProjectList({
                 <span className={`project-planet planet-tone-${index % 4}`} />
                 <span className="planet-orbit" style={{ "--progress": `${progress}%` } as CSSProperties} />
                 <div>
-                  <strong>{project.title || "Untitled World"}</strong>
-                  <small>{project.genre || "Genre TBD"} · {project.workflowType === "continuation" ? "Continuation" : "Original"}</small>
+                  <strong>{project.title || (isZh ? "未命名世界" : "Untitled World")}</strong>
+                  <small>{project.genre || (isZh ? "题材待定" : "Genre TBD")} / {project.workflowType === "continuation" ? (isZh ? "续写" : "Continuation") : (isZh ? "原创" : "Original")}</small>
                 </div>
                 <div className="planet-meta">
-                  <span>{status}</span>
+                  <span>{localizeStatus(status, isZh)}</span>
                   <span>{progress}%</span>
                 </div>
                 <div className="planet-progress">

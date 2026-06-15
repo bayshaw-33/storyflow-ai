@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
-  applyDemoStep,
   buildStoryBibleSummary,
   buildDeliveryMarkdown,
   CharacterCard,
@@ -302,6 +301,7 @@ export default function WorkflowPage() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [project, setProject] = useState<DramaProject | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "missing">("loading");
   const [session, setSession] = useState<Session | null>(null);
   const [credits, setCredits] = useState<{ balance: number; monthlyLimit: number } | null>(null);
   const [activeStep, setActiveStep] = useState<TaskType>("market_analysis");
@@ -361,16 +361,22 @@ export default function WorkflowPage() {
     const projects = readProjectsFromStorage();
     const found = projects.find((item) => item.id === params.projectId);
     const requestedWorkflow = searchParams.get("mode") === "continuation" ? "continuation" : "creation";
-    const isDemo = false;
+    const template = searchParams.get("template");
+    const isDemo = params.projectId === "demo" || template === "demo";
+    const shouldCreateLocalDraft = isDemo || Boolean(template);
+
+    setLoadState("loading");
 
     if (found) {
       setProject(found);
+      setLoadState("ready");
       const steps = getWorkflowSteps(found);
       setActiveStep((current) => (steps.some((step) => step.key === current) ? current : steps[0].key));
       void readProjectFromSupabase(params.projectId, { accessToken }).then((cloudProject) => {
         if (cancelled || !cloudProject) return;
         if (cloudProject.updatedAt.localeCompare(found.updatedAt) >= 0) {
           setProject(cloudProject);
+          setLoadState("ready");
           saveProjectEverywhere(cloudProject);
           const cloudSteps = getWorkflowSteps(cloudProject);
           setActiveStep((current) => (cloudSteps.some((step) => step.key === current) ? current : cloudSteps[0].key));
@@ -381,25 +387,50 @@ export default function WorkflowPage() {
       };
     }
 
-    const created = isDemo
-      ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
-      : requestedWorkflow === "continuation"
-        ? createContinuationProject({ id: params.projectId })
-        : createProject({ id: params.projectId });
-
-    setProject(created);
-    setActiveStep(getWorkflowSteps(created)[0].key);
-    if (isDemo) saveProjectEverywhere(created);
-
-    if (!isDemo) {
-      void readProjectFromSupabase(params.projectId, { accessToken }).then((cloudProject) => {
-        if (cancelled || !cloudProject) return;
+    void readProjectFromSupabase(params.projectId, { accessToken }).then((cloudProject) => {
+      if (cancelled) return;
+      if (cloudProject) {
         setProject(cloudProject);
+        setLoadState("ready");
         const cloudSteps = getWorkflowSteps(cloudProject);
         setActiveStep(cloudSteps[0].key);
         saveProjectEverywhere(cloudProject);
-      });
-    }
+        return;
+      }
+
+      if (shouldCreateLocalDraft) {
+        const created = isDemo
+          ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
+          : requestedWorkflow === "continuation"
+            ? createContinuationProject({ id: params.projectId, title: `${template || "Continuation"} Draft`, idea: `Initialized from template: ${template}` })
+            : createProject({ id: params.projectId, title: `${template || "New"} Draft`, genre: template || "Short Drama", idea: `Initialized from template: ${template}` });
+
+        setProject(created);
+        setLoadState("ready");
+        setActiveStep(getWorkflowSteps(created)[0].key);
+        saveProjectEverywhere(created);
+        return;
+      }
+
+      setProject(null);
+      setLoadState("missing");
+    }).catch(() => {
+      if (cancelled) return;
+      if (shouldCreateLocalDraft) {
+        const created = createProject({
+          id: params.projectId,
+          title: `${template || "Recovered"} Draft`,
+          idea: `Initialized locally after load failure. Template: ${template || "none"}`,
+        });
+        setProject(created);
+        setLoadState("ready");
+        setActiveStep(getWorkflowSteps(created)[0].key);
+        saveProjectEverywhere(created);
+        return;
+      }
+      setProject(null);
+      setLoadState("missing");
+    });
 
     return () => {
       cancelled = true;
@@ -1069,25 +1100,6 @@ export default function WorkflowPage() {
     setStatusText("已应用任务结果，手动编辑内容已保留在历史记录中");
   }
 
-  function fillDemo() {
-    const demo = { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() };
-    setProject(demo);
-    saveProjectEverywhere(demo);
-    setActiveStep("market_analysis");
-    setStatusText("已填入演示案例");
-    setError("");
-  }
-
-  function loadDemoStep() {
-    if (!project) return;
-    const demoStep = applyDemoStep(project, activeStep);
-    const nextProject = saveStepVersion(demoStep, activeStep, getStepContent(demoStep, activeStep), "demo");
-    setProject(nextProject);
-    saveProjectEverywhere(nextProject);
-    setStatusText("已加载示例内容，仅用于现场演示");
-    setError("");
-  }
-
   async function continueNextStep() {
     if (!project) return;
     const steps = getWorkflowSteps(project);
@@ -1337,6 +1349,38 @@ export default function WorkflowPage() {
     }
   }
 
+  if (!project && loadState === "missing") {
+    return (
+      <main className="app-shell">
+        <section className="empty-state">
+          <AlertCircle size={30} />
+          <h1>Project not found</h1>
+          <p>This world does not exist locally or in cloud sync. You can return to the dashboard or create a local draft with this route.</p>
+          <div className="modal-actions">
+            <Link className="secondary-button" href="/dashboard">Back to dashboard</Link>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                const created = createProject({
+                  id: params.projectId,
+                  title: "Recovered Local Draft",
+                  idea: "Local draft created from a missing project route.",
+                });
+                setProject(created);
+                setLoadState("ready");
+                setActiveStep(getWorkflowSteps(created)[0].key);
+                saveProjectEverywhere(created);
+              }}
+            >
+              Create local draft
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   if (!project) {
     return (
       <main className="app-shell">
@@ -1344,7 +1388,7 @@ export default function WorkflowPage() {
           <Loader2 className="spin" size={30} />
           <h1>{t("workspace.loadingTitle")}</h1>
           <p>{t("workspace.loadingBody")}</p>
-          <Link className="primary-button" href="/">{t("workspace.backProjects")}</Link>
+          <Link className="primary-button" href="/dashboard">{t("workspace.backProjects")}</Link>
         </section>
       </main>
     );
@@ -1625,9 +1669,6 @@ export default function WorkflowPage() {
               <span>{activeMeta.label}</span>
               <h1>{activeMeta.short}</h1>
             </div>
-            <button className="secondary-button demo-control" onClick={fillDemo}>
-              <WandSparkles size={17} /> 演示案例
-            </button>
           </div>
 
           {activeStep === "characters" ? (
@@ -1936,7 +1977,7 @@ export default function WorkflowPage() {
                 >
                   Upgrade to Universe
                 </button>
-                {!universeEntitlement.canUse ? <div className="notice warning">Studio Annual / Enterprise required. Owned Universes stay read-only and exportable.</div> : null}
+                {!universeEntitlement.canUse ? <div className="notice warning">Universe plan required. Existing universes stay read-only and exportable.</div> : null}
               </>
             )}
           </div>
@@ -2095,9 +2136,6 @@ export default function WorkflowPage() {
               </button>
               <button className="secondary-button full" onClick={continueNextStep} disabled={loading || !session || credits?.balance === 0}>
                 {t("workspace.continueNext")}
-              </button>
-              <button className="secondary-button full demo-control" onClick={loadDemoStep}>
-                <WandSparkles size={18} /> 加载当前步骤示例内容
               </button>
             </>
           )}

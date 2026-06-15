@@ -9,7 +9,7 @@ import {
 export type Locale = "zh-CN" | "en-US";
 export type DictionaryKey = string;
 
-export const DEFAULT_LOCALE: Locale = "zh-CN";
+export const DEFAULT_LOCALE: Locale = "en-US";
 export const LOCALE_STORAGE_KEY = "kiiskiis_locale";
 
 export const dictionaries: Record<Locale, Record<DictionaryKey, string>> = {
@@ -426,6 +426,102 @@ export function normalizeLocale(value: string | null | undefined): Locale {
   return DEFAULT_LOCALE;
 }
 
+const cleanOverrides: Record<Locale, Record<DictionaryKey, string>> = {
+  "zh-CN": {
+    "brand.name": BRAND_NAME,
+    "brand.tagline": TAGLINE_ZH,
+    "brand.description": PRODUCT_DESCRIPTION_ZH,
+    "nav.product": "产品",
+    "nav.dashboard": "工作台",
+    "nav.projects": "项目",
+    "nav.workflows": "工作流",
+    "nav.universe": "宇宙",
+    "nav.companions": "伙伴",
+    "nav.pricing": "价格",
+    "nav.resources": "资源",
+    "nav.subscription": "订阅",
+    "nav.settings": "设置",
+    "action.enterWritersRoom": "进入编剧室",
+    "action.createProject": "创建项目",
+    "action.continueScript": "剧本续写",
+    "action.openUniverse": "打开宇宙",
+    "action.startCreating": "开始创作",
+    "common.loading": "加载中",
+    "common.saved": "已保存",
+    "common.saveFailed": "保存失败",
+    "common.generating": "生成中",
+    "common.retry": "重试",
+    "common.upgrade": "升级",
+    "language.zh": "中文",
+    "language.en": "English",
+    "auth.signIn": "登录",
+    "auth.signOut": "退出",
+    "auth.signUp": "注册",
+    "auth.email": "邮箱",
+    "auth.password": "密码",
+    "auth.cancel": "取消",
+    "auth.cloudSaveHint": "登录后项目会保存到云端，本地草稿会自动合并。",
+    "landing.hero.kicker": "AI 编剧室",
+    "landing.hero.title": "每个伟大的故事，都从黑暗开始。",
+    "landing.hero.subtitle": "从灵感到故事。从想法到宇宙。释放你的想象力。",
+    "landing.hero.primary": "进入编剧室",
+    "landing.hero.secondary": "观看短片",
+    "landing.metaphor.kicker": "核心隐喻",
+    "landing.metaphor.title": "每个故事都是一颗星球。",
+    "landing.metaphor.subtitle": "每个完成的剧本都可以被点亮。每位创作者都会建立自己的星云。",
+    "landing.metaphor.write": "书写",
+    "landing.metaphor.writeText": "从一个火花开始，塑造你的故事。",
+    "landing.metaphor.build": "构建",
+    "landing.metaphor.buildText": "创建角色、世界、时间线与 Canon。",
+    "landing.metaphor.light": "点亮",
+    "landing.metaphor.lightText": "完成剧本，并点亮它的星球。",
+    "wizard.createOriginal": "创建原创项目",
+    "wizard.createContinuation": "创建续写项目",
+    "wizard.description": "先完成基础设定，再进入 kiikis 工作台。",
+    "wizard.projectTitle": "项目标题",
+    "wizard.titlePlaceholder": "例如：Midnight Heir",
+    "wizard.workflowMode": "创作模式",
+    "wizard.original": "原创",
+    "wizard.continuation": "续写",
+    "wizard.targetMarket": "目标市场",
+    "wizard.genreType": "题材类型",
+    "wizard.outputLanguage": "输出语言",
+    "wizard.episodeCount": "集数",
+    "wizard.episodeDuration": "单集时长",
+    "wizard.enterWorkspace": "进入工作台",
+    "wizard.titleRequired": "请先填写项目标题。",
+    "workspace.loadingTitle": "正在加载项目",
+    "workspace.loadingBody": "如果这是模板项目，系统会自动创建本地草稿。",
+    "workspace.backProjects": "返回工作台",
+  },
+  "en-US": {
+    "nav.product": "Product",
+    "nav.universe": "Universe",
+    "nav.companions": "Companions",
+    "nav.pricing": "Pricing",
+    "nav.resources": "Resources",
+    "action.enterWritersRoom": "Enter the Writer's Room",
+    "landing.hero.kicker": "THE AI WRITER'S ROOM",
+    "landing.hero.title": "Every great story starts in the dark.",
+    "landing.hero.subtitle": "From spark to story. From idea to universe. Your imagination. Unlocked.",
+    "landing.hero.primary": "Enter the Writer's Room",
+    "landing.hero.secondary": "Watch the film",
+    "landing.metaphor.kicker": "THE CORE METAPHOR",
+    "landing.metaphor.title": "Every story is a planet.",
+    "landing.metaphor.subtitle": "Every finished script can be lit. Every creator builds a nebula.",
+    "landing.metaphor.write": "Write",
+    "landing.metaphor.writeText": "Start from a spark and shape your story.",
+    "landing.metaphor.build": "Build",
+    "landing.metaphor.buildText": "Create characters, worlds, timelines, and canon.",
+    "landing.metaphor.light": "Light",
+    "landing.metaphor.lightText": "Complete your script and light up its planet.",
+  },
+};
+
 export function translate(locale: Locale, key: DictionaryKey) {
-  return dictionaries[locale]?.[key] || dictionaries[DEFAULT_LOCALE][key] || key;
+  return cleanOverrides[locale]?.[key]
+    || dictionaries[locale]?.[key]
+    || cleanOverrides[DEFAULT_LOCALE]?.[key]
+    || dictionaries[DEFAULT_LOCALE]?.[key]
+    || key;
 }

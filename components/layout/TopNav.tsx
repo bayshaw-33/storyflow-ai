@@ -23,11 +23,11 @@ export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp }: 
       </Link>
 
       <nav className="kk-nav-links" aria-label="Primary">
-        <a href="#product">Product</a>
-        <Link href="/universes">Universe</Link>
-        <Link href="/companions">Companions</Link>
-        <Link href="/subscription">Pricing</Link>
-        <Link href="/templates">Resources</Link>
+        <a href="#product">{t("nav.product")}</a>
+        <Link href="/universes">{t("nav.universe")}</Link>
+        <Link href="/companions">{t("nav.companions")}</Link>
+        <Link href="/subscription">{t("nav.pricing")}</Link>
+        <Link href="/templates">{t("nav.resources")}</Link>
       </nav>
 
       <div className="kk-nav-actions">
@@ -68,7 +68,7 @@ export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp }: 
           </>
         )}
         <button className="kk-room-button" type="button" onClick={onEnterRoom || onSignIn}>
-          Enter the Writer's Room
+          {t("action.enterWritersRoom")}
         </button>
       </div>
     </header>

@@ -1,3 +1,5 @@
+import { useI18n } from "@/lib/i18n/useI18n";
+
 const companions = [
   { name: "Lyra", role: "Story Architect", status: "Active" },
   { name: "Arlo", role: "Worldbuilder", status: "Idle" },
@@ -7,12 +9,15 @@ const companions = [
 ];
 
 export function WritersPanel() {
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
+
   return (
     <aside className="dashboard-panel companion-strip" aria-labelledby="dashboard-companions-title">
       <div className="dashboard-panel-head">
         <div>
-          <span>COMPANIONS</span>
-          <h2 id="dashboard-companions-title">Writers Room</h2>
+          <span>{isZh ? "伙伴" : "COMPANIONS"}</span>
+          <h2 id="dashboard-companions-title">{isZh ? "AI 编剧室" : "Writers Room"}</h2>
         </div>
       </div>
 
@@ -24,7 +29,7 @@ export function WritersPanel() {
               <strong>{writer.name}</strong>
               <small>{writer.role}</small>
             </div>
-            <em data-state={writer.status.toLowerCase()}>{writer.status}</em>
+            <em data-state={writer.status.toLowerCase()}>{isZh ? (writer.status === "Active" ? "活跃" : "空闲") : writer.status}</em>
           </div>
         ))}
       </div>

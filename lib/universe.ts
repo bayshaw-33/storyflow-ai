@@ -250,7 +250,7 @@ export function canUseUniverseEngine(input?: { email?: string | null; plan?: str
     canUse,
     readOnly: !canUse,
     plan: plan || "free",
-    reason: canUse ? "Universe Engine enabled" : "Studio Annual / Enterprise required",
+    reason: canUse ? "Universe enabled" : "Universe plan required",
   };
 }
 

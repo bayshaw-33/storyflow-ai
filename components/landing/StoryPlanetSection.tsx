@@ -1,25 +1,30 @@
-const items = [
-  {
-    title: "Write",
-    text: "Start from a spark and shape your story.",
-  },
-  {
-    title: "Build",
-    text: "Create characters, worlds, timelines, and canon.",
-  },
-  {
-    title: "Light",
-    text: "Complete your script and light up its planet.",
-  },
-];
+"use client";
+
+import { useI18n } from "@/lib/i18n/useI18n";
 
 export function StoryPlanetSection() {
+  const { t } = useI18n();
+  const items = [
+    {
+      title: t("landing.metaphor.write"),
+      text: t("landing.metaphor.writeText"),
+    },
+    {
+      title: t("landing.metaphor.build"),
+      text: t("landing.metaphor.buildText"),
+    },
+    {
+      title: t("landing.metaphor.light"),
+      text: t("landing.metaphor.lightText"),
+    },
+  ];
+
   return (
     <section className="story-planet-section" id="product" aria-labelledby="story-planet-title">
       <div className="section-heading centered">
-        <span>THE CORE METAPHOR</span>
-        <h2 id="story-planet-title">Every story is a planet.</h2>
-        <p>Every finished script can be lit. Every creator builds a nebula.</p>
+        <span>{t("landing.metaphor.kicker")}</span>
+        <h2 id="story-planet-title">{t("landing.metaphor.title")}</h2>
+        <p>{t("landing.metaphor.subtitle")}</p>
       </div>
 
       <div className="story-planet-grid">

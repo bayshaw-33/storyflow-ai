@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BRAND_NAME, TAGLINE_EN } from "@/lib/brand";
+import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,8 +11,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh-CN">
-      <body>{children}</body>
+    <html lang="en">
+      <body><LanguageProvider>{children}</LanguageProvider></body>
     </html>
   );
 }
