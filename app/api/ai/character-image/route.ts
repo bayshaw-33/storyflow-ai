@@ -83,7 +83,7 @@ async function buildVisualPrompt(body: CharacterImageRequest) {
         {
           role: "system",
           content:
-            "你是 StoryFlow AI 的角色视觉提示词设计师。只输出一段可直接用于图片生成的提示词，不要解释，不要 Markdown。",
+            "你是 kiikis 的角色视觉提示词设计师。只输出一段可直接用于图片生成的提示词，不要解释，不要 Markdown。",
         },
         {
           role: "user",
@@ -91,7 +91,7 @@ async function buildVisualPrompt(body: CharacterImageRequest) {
             "请把以下角色卡整理成 MiniMax 图片生成提示词。",
             "要求：保留角色气质和戏剧功能；避免多人同框；输出单人角色概念图；画面适合海外漫剧/竖屏短剧；包含年龄、性别、发型、服装、表情、姿态、镜头、光线、色彩、背景。",
             "不要生成血腥、色情、过度暴力内容。",
-            `项目：${body.projectTitle || "StoryFlow 项目"}`,
+            `项目：${body.projectTitle || "kiikis project"}`,
             `市场：${body.market || "未选择"}`,
             `题材：${body.genre || "未选择"}`,
             body.context ? `项目上下文：${body.context.slice(0, 1200)}` : "",
@@ -158,7 +158,7 @@ function generateCharacterSvg(body: CharacterImageRequest, visualPrompt: string,
     <text x="384" y="162" text-anchor="middle" fill="${accent.light}" font-size="23" font-weight="800">${escapeXml(truncate(role, 18))}</text>
     <text x="384" y="835" text-anchor="middle" fill="#ffffff" font-size="24" font-weight="800">${escapeXml(truncate(line, 24))}</text>
     <text x="384" y="876" text-anchor="middle" fill="#9aa7b7" font-size="16">${escapeXml(truncate(visualPrompt, 44))}</text>
-    <text x="384" y="920" text-anchor="middle" fill="#647186" font-size="13">${escapeXml(truncate(note || "StoryFlow 角色图", 58))}</text>
+    <text x="384" y="920" text-anchor="middle" fill="#647186" font-size="13">${escapeXml(truncate(note || "kiikis character", 58))}</text>
   </svg>`;
 }
 

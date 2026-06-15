@@ -1,36 +1,35 @@
 "use client";
 
 import type { WorkflowType } from "@/lib/projects";
-import { useI18n } from "@/lib/i18n/useI18n";
 
-type WorkflowEntry = {
-  titleKey: string;
-  descriptionKey: string;
-  mode: WorkflowType;
-  beta?: boolean;
-};
-
-const workflowEntries: WorkflowEntry[] = [
+const workflowEntries = [
   {
-    titleKey: "home.workflow.shortDrama",
-    descriptionKey: "home.workflow.shortDrama.desc",
-    mode: "creation",
+    title: "Short Drama",
+    description: "Fast vertical episodes with hooks, cliffhangers, and delivery assets.",
+    steps: 9,
+    difficulty: "Focused",
+    mode: "creation" as WorkflowType,
   },
   {
-    titleKey: "home.workflow.novel",
-    descriptionKey: "home.workflow.novel.desc",
-    mode: "creation",
+    title: "Novel",
+    description: "Long-form arcs, chapter engines, canon, and serialized pacing.",
+    steps: 12,
+    difficulty: "Deep",
+    mode: "creation" as WorkflowType,
   },
   {
-    titleKey: "home.workflow.film",
-    descriptionKey: "home.workflow.film.desc",
-    mode: "creation",
+    title: "Film Script",
+    description: "Feature treatments, scenes, rewrites, and final draft support.",
+    steps: 10,
+    difficulty: "Pro",
+    mode: "creation" as WorkflowType,
   },
   {
-    titleKey: "home.workflow.mv",
-    descriptionKey: "home.workflow.mv.desc",
-    mode: "creation",
-    beta: true,
+    title: "MV Concept",
+    description: "Visual story frames, mood, symbolic sequences, and direction.",
+    steps: 6,
+    difficulty: "Beta",
+    mode: "creation" as WorkflowType,
   },
 ];
 
@@ -39,28 +38,30 @@ type WorkflowListProps = {
 };
 
 export function WorkflowList({ onSelectWorkflow }: WorkflowListProps) {
-  const { t } = useI18n();
-
   return (
-    <section className="kk-section" id="workflows" aria-labelledby="kk-workflows-title">
-      <div className="kk-section-head">
-        <span>{t("home.workflows.kicker")}</span>
-        <h2 id="kk-workflows-title">{t("home.workflows.title")}</h2>
+    <section className="dashboard-panel workflow-worlds" id="workflows" aria-labelledby="dashboard-workflows-title">
+      <div className="dashboard-panel-head">
+        <div>
+          <span>WORKFLOWS</span>
+          <h2 id="dashboard-workflows-title">Templates for the next world</h2>
+        </div>
       </div>
-      <div className="kk-workflow-list">
+      <div className="workflow-template-grid">
         {workflowEntries.map((entry) => (
-          <div className="kk-workflow-row" key={entry.titleKey}>
+          <article className="workflow-template-card" key={entry.title}>
+            <span className="workflow-thumb" />
             <div>
-              <h3>
-                {t(entry.titleKey)}
-                {entry.beta ? <span>{t("home.workflow.beta")}</span> : null}
-              </h3>
-              <p>{t(entry.descriptionKey)}</p>
+              <h3>{entry.title}</h3>
+              <p>{entry.description}</p>
+            </div>
+            <div className="workflow-template-meta">
+              <span>{entry.steps} steps</span>
+              <span>{entry.difficulty}</span>
             </div>
             <button type="button" onClick={() => onSelectWorkflow(entry.mode)}>
-              {t("home.workflow.start")}
+              Start
             </button>
-          </div>
+          </article>
         ))}
       </div>
     </section>

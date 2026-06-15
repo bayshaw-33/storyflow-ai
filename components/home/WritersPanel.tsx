@@ -1,35 +1,30 @@
-"use client";
-
-import { useI18n } from "@/lib/i18n/useI18n";
-
-type WriterStatus = "active" | "idle";
-
-const writers: Array<{ nameKey: string; status: WriterStatus }> = [
-  { nameKey: "home.writers.storyArchitect", status: "active" },
-  { nameKey: "home.writers.characterDesigner", status: "idle" },
-  { nameKey: "home.writers.scriptDoctor", status: "idle" },
-  { nameKey: "home.writers.marketAnalyst", status: "active" },
-  { nameKey: "home.writers.visualDirector", status: "idle" },
+const companions = [
+  { name: "Lyra", role: "Story Architect", status: "Active" },
+  { name: "Arlo", role: "Worldbuilder", status: "Idle" },
+  { name: "Vale", role: "Dialogue Expert", status: "Idle" },
+  { name: "Muse", role: "Mood & Tone", status: "Active" },
+  { name: "KK", role: "Creative Companion", status: "Idle" },
 ];
 
 export function WritersPanel() {
-  const { t } = useI18n();
-
   return (
-    <aside className="kk-writers-panel" aria-labelledby="kk-writers-title">
-      <div className="kk-panel-head">
-        <span>{t("home.writers.kicker")}</span>
-        <h2 id="kk-writers-title">{t("home.writers.title")}</h2>
+    <aside className="dashboard-panel companion-strip" aria-labelledby="dashboard-companions-title">
+      <div className="dashboard-panel-head">
+        <div>
+          <span>COMPANIONS</span>
+          <h2 id="dashboard-companions-title">Writers Room</h2>
+        </div>
       </div>
 
-      <div className="kk-writer-list">
-        {writers.map((writer) => (
-          <div className="kk-writer-row" key={writer.nameKey}>
-            <span>{t(writer.nameKey)}</span>
-            <small data-state={writer.status}>
-              <i aria-hidden="true" />
-              {writer.status === "active" ? t("home.writers.active") : t("home.writers.idle")}
-            </small>
+      <div className="companion-list">
+        {companions.map((writer) => (
+          <div className="companion-row" key={writer.name}>
+            <span className="companion-portrait">{writer.name.slice(0, 1)}</span>
+            <div>
+              <strong>{writer.name}</strong>
+              <small>{writer.role}</small>
+            </div>
+            <em data-state={writer.status.toLowerCase()}>{writer.status}</em>
           </div>
         ))}
       </div>

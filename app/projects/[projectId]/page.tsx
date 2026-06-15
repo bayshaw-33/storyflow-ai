@@ -65,6 +65,7 @@ import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { localizeWorkflowPhase, localizeWorkflowStep } from "@/lib/i18n/workflow";
+import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import {
   canUseUniverseEngine,
   createUniverseFromProject,
@@ -217,7 +218,7 @@ function extractGeneratedTitle(output: string) {
 }
 
 function safeFileName(value: string) {
-  return value.replace(/[\\/:*?"<>|]/g, "").trim() || "StoryFlow项目";
+  return value.replace(/[\\/:*?"<>|]/g, "").trim() || "kiikis-project";
 }
 
 function escapeHtml(value: string) {
@@ -1377,7 +1378,7 @@ export default function WorkflowPage() {
           <Link className="icon-button" href="/" title={t("workspace.backProjects")}>
             <ArrowLeft size={18} />
           </Link>
-          <img className="brand-logo compact" src="/storyflow-logo-white.png" alt="StoryFlow" />
+          <KiikisLogo compact />
         </div>
         <input
           className="title-input"

@@ -30,6 +30,7 @@ import { KKFloatingOrb } from "@/components/home/KKFloatingOrb";
 import { ProjectList } from "@/components/home/ProjectList";
 import { WorkflowList } from "@/components/home/WorkflowList";
 import { WritersPanel } from "@/components/home/WritersPanel";
+import { StoryPlanetSection } from "@/components/landing/StoryPlanetSection";
 import { TopNav } from "@/components/layout/TopNav";
 import { BRAND_NAME } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -201,9 +202,10 @@ export default function ProjectListPage() {
   }
 
   return (
-    <main className="kk-home-shell">
+    <main className="kiikis-site">
       <TopNav
         session={session}
+        onEnterRoom={() => openWizard("creation")}
         onSignIn={() => {
           setAuthMode("signin");
           setAuthOpen(true);
@@ -216,19 +218,61 @@ export default function ProjectListPage() {
       />
 
       <HeroSection onStartCreating={() => openWizard("creation")} />
+      <StoryPlanetSection />
 
-      <div className="kk-home-grid">
-        <div className="kk-home-primary">
+      <section className="kiikis-dashboard-shell" id="dashboard">
+        <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
+          {["Overview", "Projects", "Universe", "Companions", "Workflows", "Templates", "Analytics", "Settings"].map((item) => (
+            <a className={item === "Overview" ? "active" : ""} href={item === "Settings" ? "/settings" : `#${item.toLowerCase()}`} key={item}>
+              {item}
+            </a>
+          ))}
+        </aside>
+
+        <div className="dashboard-main">
+          <header className="dashboard-welcome">
+            <div>
+              <span>CREATOR COMMAND CENTER</span>
+              <h2>Welcome back, {session?.user.email?.split("@")[0] || "Creator"}.</h2>
+              <p>Let's build something unforgettable.</p>
+            </div>
+            <div className="dashboard-search" role="search">
+              <span>Search projects, worlds, scenes...</span>
+            </div>
+          </header>
+
           <WorkflowList onSelectWorkflow={openWizard} />
           <ProjectList
             groupedProjects={groupedProjects}
             loaded={loaded}
             projectCount={projects.length}
             onAddGroup={addGroup}
+            onCreateProject={() => openWizard("creation")}
           />
         </div>
-        <WritersPanel />
-      </div>
+
+        <aside className="dashboard-right-rail">
+          <section className="dashboard-panel nebula-preview">
+            <div className="dashboard-panel-head">
+              <div>
+                <span>YOUR NEBULA</span>
+                <h2>Universe signal</h2>
+              </div>
+            </div>
+            <div className="nebula-stat-grid">
+              <strong>{projects.length}<span>stories</span></strong>
+              <strong>{groups.length}<span>worlds</span></strong>
+              <strong>{projects.filter((project) => project.finalScript?.trim()).length}<span>lit planets</span></strong>
+            </div>
+            <a className="kk-primary-cta compact" href="/universes">View Universe</a>
+          </section>
+          <section className="dashboard-panel today-spark">
+            <span>TODAY'S SPARK</span>
+            <p>A secret becomes visible only when the character stops explaining and starts choosing.</p>
+          </section>
+          <WritersPanel />
+        </aside>
+      </section>
 
       <KKFloatingOrb />
 

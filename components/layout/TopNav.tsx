@@ -2,30 +2,32 @@
 
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
-import { BRAND_NAME } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { KiikisLogo } from "@/components/brand/KiikisLogo";
 
 type TopNavProps = {
   session: Session | null;
   onSignIn: () => void;
   onSignUp: () => void;
   onSignOut: () => void;
+  onEnterRoom?: () => void;
 };
 
-export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) {
+export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp }: TopNavProps) {
   const { locale, setLocale, t } = useI18n();
 
   return (
     <header className="kk-top-nav">
       <Link className="kk-nav-brand" href="/">
-        {BRAND_NAME}
+        <KiikisLogo compact />
       </Link>
 
       <nav className="kk-nav-links" aria-label="Primary">
-        <a href="#projects">{t("nav.projects")}</a>
-        <a href="#workflows">{t("nav.workflows")}</a>
-        <Link href="/universes">{t("nav.universe")}</Link>
-        <Link href="/settings">{t("nav.settings")}</Link>
+        <a href="#product">Product</a>
+        <Link href="/universes">Universe</Link>
+        <Link href="/companions">Companions</Link>
+        <Link href="/subscription">Pricing</Link>
+        <Link href="/templates">Resources</Link>
       </nav>
 
       <div className="kk-nav-actions">
@@ -65,6 +67,9 @@ export function TopNav({ session, onSignIn, onSignOut, onSignUp }: TopNavProps) 
             </button>
           </>
         )}
+        <button className="kk-room-button" type="button" onClick={onEnterRoom || onSignIn}>
+          Enter the Writer's Room
+        </button>
       </div>
     </header>
   );

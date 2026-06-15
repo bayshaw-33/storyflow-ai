@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   }
 }
 
-function buildRelationshipPrompt(projectTitle = "StoryFlow 项目", characters: CharacterInput[], relationshipDiagram: string) {
+function buildRelationshipPrompt(projectTitle = "kiikis project", characters: CharacterInput[], relationshipDiagram: string) {
   const characterText = characters
     .map((card, index) =>
       [
@@ -93,7 +93,7 @@ function buildRelationshipPrompt(projectTitle = "StoryFlow 项目", characters: 
   ].join("\n");
 }
 
-function generateRelationshipSvg(projectTitle = "StoryFlow 项目", characters: CharacterInput[], relationshipDiagram: string, note = "") {
+function generateRelationshipSvg(projectTitle = "kiikis project", characters: CharacterInput[], relationshipDiagram: string, note = "") {
   const cards = (characters.length ? characters : [{ name: "核心角色", role: "主角", goal: relationshipDiagram || "推动主线冲突" }]).slice(0, 8);
   const positions = cards.map((_, index) => {
     const columns = Math.min(4, Math.max(1, cards.length));
@@ -154,7 +154,7 @@ function generateRelationshipSvg(projectTitle = "StoryFlow 项目", characters: 
     <rect width="1280" height="720" fill="url(#bg)"/>
     <circle cx="1090" cy="110" r="180" fill="#59d6a6" opacity="0.08"/>
     <text x="70" y="78" fill="#ffffff" font-size="34" font-weight="900">${escapeXml(truncate(projectTitle, 24))}</text>
-    <text x="70" y="114" fill="#8fa29b" font-size="17">人物关系图 · StoryFlow</text>
+    <text x="70" y="114" fill="#8fa29b" font-size="17">Relationship Map · kiikis</text>
     ${lineMarkup}
     ${nodeMarkup}
     <text x="70" y="660" fill="#7f8b99" font-size="14">${escapeXml(truncate(note || relationLines.join(" / ") || "由角色卡生成", 72))}</text>

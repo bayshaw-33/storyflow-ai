@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Cloud, Coins, Database, KeyRound, ShieldCheck } from "lucide-react";
+import { KiikisLogo } from "@/components/brand/KiikisLogo";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { STORAGE_KEY } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -13,18 +14,29 @@ type CreditState = {
   periodEnd: string;
 };
 
+const sections = [
+  ["Account", "Signed-in identity and cloud sync state."],
+  ["Profile", "Creator name, studio identity, and public workspace label."],
+  ["Language", "Global interface language for all product surfaces."],
+  ["Appearance", "Cosmic dark mode and focus-density controls."],
+  ["AI Provider", "Platform default, user API key, and provider selection."],
+  ["API Key settings", "Secrets are never exposed in the browser UI."],
+  ["Billing", "Plan, usage, invoices, and upgrade state."],
+  ["Team", "Studio seats, roles, and shared universe permissions."],
+  ["Security", "Session, authentication, and protected workspace state."],
+  ["Integrations", "Future export, storage, and production connectors."],
+];
+
 export default function SettingsPage() {
   const [projectCount, setProjectCount] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
   const [credits, setCredits] = useState<CreditState | null>(null);
-  const [syncStatus, setSyncStatus] = useState("本地草稿可用");
 
   useEffect(() => {
     setProjectCount(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").length);
     const supabase = getSupabaseBrowserClient();
     void supabase?.auth.getSession().then(({ data }) => {
       setSession(data.session || null);
-      setSyncStatus(data.session ? "云端同步已启用" : "未登录，仅保存本地草稿");
       if (data.session) void loadCredits(data.session);
     });
   }, []);
@@ -48,63 +60,42 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="app-shell narrow">
-      <header className="app-header">
-        <div className="brand-lockup">
-          <img className="brand-logo" src="/storyflow-logo-white.png" alt="StoryFlow" />
-          <div>
-            <span className="kicker">StoryFlow 2.0</span>
-            <h1>设置</h1>
-          </div>
-        </div>
-        <Link className="icon-button" href="/" title="返回项目列表">
-          <ArrowLeft size={18} />
-        </Link>
+    <main className="cosmic-page settings-page">
+      <header className="cosmic-page-header">
+        <Link href="/"><KiikisLogo compact /></Link>
+        <nav>
+          <Link href="/">Dashboard</Link>
+          <Link href="/universes">Universe</Link>
+          <Link href="/companions">Companions</Link>
+          <Link href="/templates">Templates</Link>
+          <Link href="/subscription">Pricing</Link>
+        </nav>
       </header>
 
-      <section className="settings-list">
-        <article>
-          <Cloud size={22} />
-          <div>
-            <h2>云端同步</h2>
-            <p>{syncStatus}</p>
-            <strong>{session?.user.email || "未登录"}</strong>
-          </div>
-        </article>
+      <section className="cosmic-title-band">
+        <span>SETTINGS</span>
+        <h1>Control the room without breaking the spell.</h1>
+        <p>{session?.user.email || "Local draft mode"} · {projectCount} local projects</p>
+      </section>
 
-        <article>
-          <Coins size={22} />
-          <div>
-            <h2>AI 额度</h2>
-            <p>{credits ? `本月剩余 ${credits.balance} / ${credits.monthlyLimit}` : "登录后显示本月额度。"}</p>
-            {credits?.periodEnd ? <strong>重置时间：{new Date(credits.periodEnd).toLocaleDateString("zh-CN")}</strong> : null}
-          </div>
-        </article>
-
-        <article>
-          <Database size={22} />
-          <div>
-            <h2>本地草稿</h2>
-            <p>未登录时仍可创建和编辑草稿；登录后会与云端项目合并同步。</p>
-            <strong>{projectCount} 个本地项目</strong>
-          </div>
-        </article>
-
-        <article>
-          <KeyRound size={22} />
-          <div>
-            <h2>AI Provider</h2>
-            <p>DeepSeek 负责本土化与文本深加工，MiniMax 用于多模态图片能力；密钥只在服务端读取。</p>
-          </div>
-        </article>
-
-        <article>
-          <ShieldCheck size={22} />
-          <div>
-            <h2>安全边界</h2>
-            <p>前端只持有 Supabase anon key 和用户会话；AI Key、Service Role Key、额度扣减都在服务端处理。</p>
-          </div>
-        </article>
+      <section className="settings-grid">
+        {sections.map(([title, description]) => (
+          <article className="settings-card" key={title}>
+            <span>{title}</span>
+            <p>{description}</p>
+            {title === "Language" ? <LanguageToggle /> : null}
+            {title === "AI Provider" ? (
+              <div className="settings-control-row">
+                <button>Platform default</button>
+                <button>User API Key</button>
+                <button>Provider select</button>
+              </div>
+            ) : null}
+            {title === "Billing" && credits ? (
+              <strong>{credits.balance}/{credits.monthlyLimit} generations left</strong>
+            ) : null}
+          </article>
+        ))}
       </section>
     </main>
   );

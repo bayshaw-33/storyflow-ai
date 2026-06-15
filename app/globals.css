@@ -20,6 +20,7 @@
 
 body {
   margin: 0;
+  background: #050914;
 }
 
 a {
@@ -41,6 +42,1014 @@ button {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+/* kiikis locked cosmic UI system */
+:root {
+  --cosmos-0: #050914;
+  --cosmos-1: #07111D;
+  --cosmos-2: #0A1422;
+  --cosmos-surface: rgba(12, 22, 36, 0.78);
+  --cosmos-surface-2: rgba(15, 28, 45, 0.72);
+  --cosmos-card: rgba(18, 32, 52, 0.68);
+  --cosmos-border: rgba(180, 210, 255, 0.12);
+  --cosmos-text: #EEF5FF;
+  --cosmos-secondary: #AAB8CC;
+  --cosmos-muted: #6E7B8F;
+  --cosmos-accent: #BFEFFF;
+  --cosmos-tiffany: #8ADFDA;
+  --cosmos-glow: rgba(138, 223, 218, 0.35);
+}
+
+.kiikis-site,
+.cosmic-page,
+.workflow-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(138, 223, 218, 0.1), transparent 34rem),
+    radial-gradient(circle at 82% 22%, rgba(191, 239, 255, 0.08), transparent 24rem),
+    linear-gradient(180deg, var(--cosmos-0), var(--cosmos-1) 46%, var(--cosmos-2));
+  color: var(--cosmos-text);
+}
+
+.kiikis-site {
+  overflow-x: hidden;
+  padding: 24px 36px 72px;
+}
+
+.kiikis-logo,
+.kiikis-cat-mark,
+.kk-nav-brand,
+.kk-nav-links,
+.kk-nav-actions,
+.hero-actions,
+.dashboard-panel-head,
+.planet-meta,
+.cosmic-page-header,
+.cosmic-page-header nav,
+.universe-tabs,
+.settings-control-row {
+  display: flex;
+  align-items: center;
+}
+
+.kiikis-logo {
+  gap: 12px;
+  color: var(--cosmos-text);
+}
+
+.kiikis-logo.compact {
+  gap: 9px;
+}
+
+.kiikis-wordmark {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  background: linear-gradient(180deg, #fff, #9fb1c9 80%);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.kiikis-logo.compact .kiikis-wordmark {
+  font-size: 20px;
+}
+
+.kiikis-tagline {
+  color: var(--cosmos-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.kiikis-cat-mark {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+.kiikis-cat-mark .cat-head {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(238, 245, 255, 0.86);
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 36%, rgba(255, 255, 255, 0.16), rgba(191, 239, 255, 0.05));
+  box-shadow: 0 0 22px rgba(191, 239, 255, 0.14);
+}
+
+.kiikis-cat-mark .cat-ear {
+  position: absolute;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-top: 1px solid rgba(238, 245, 255, 0.9);
+  border-left: 1px solid rgba(238, 245, 255, 0.9);
+  transform: rotate(45deg);
+}
+
+.kiikis-cat-mark .cat-ear.left { left: 10px; }
+.kiikis-cat-mark .cat-ear.right { right: 10px; }
+
+.kiikis-cat-mark .cat-tail {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  width: 18px;
+  height: 18px;
+  border-right: 2px solid rgba(191, 239, 255, 0.88);
+  border-bottom: 2px solid rgba(191, 239, 255, 0.88);
+  border-radius: 0 0 18px 0;
+}
+
+.kiikis-cat-mark .cat-star {
+  position: absolute;
+  right: 5px;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  background: var(--cosmos-tiffany);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  box-shadow: 0 0 12px var(--cosmos-glow);
+}
+
+.kk-top-nav {
+  max-width: 1360px;
+  margin: 0 auto 28px;
+  border-color: var(--cosmos-border);
+  background: rgba(5, 9, 20, 0.68);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+}
+
+.kk-nav-brand {
+  padding-left: 8px;
+}
+
+.kk-nav-links a {
+  color: var(--cosmos-secondary);
+}
+
+.kk-nav-links a:hover,
+.kk-nav-links a:focus-visible {
+  color: var(--cosmos-accent);
+  background: rgba(191, 239, 255, 0.06);
+}
+
+.kk-text-button,
+.kk-room-button,
+.kk-primary-cta,
+.kk-secondary-cta,
+.ghost-button,
+.template-page-card a,
+.plan-card button,
+.companion-card-page button,
+.settings-control-row button {
+  border-radius: 999px;
+  border: 1px solid var(--cosmos-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--cosmos-text);
+  min-height: 38px;
+  padding: 0 15px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.kk-text-button.primary,
+.kk-room-button,
+.kk-primary-cta,
+.template-page-card a,
+.plan-card.featured button {
+  border-color: rgba(138, 223, 218, 0.45);
+  background: linear-gradient(180deg, rgba(191, 239, 255, 0.2), rgba(138, 223, 218, 0.12));
+  color: var(--cosmos-accent);
+  box-shadow: 0 0 26px rgba(138, 223, 218, 0.16);
+}
+
+.kk-primary-cta.compact,
+.kk-primary-cta.full,
+.kk-secondary-cta.full {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.kk-secondary-cta {
+  background: transparent;
+}
+
+.kiikis-hero {
+  position: relative;
+  max-width: 1360px;
+  min-height: min(760px, calc(100vh - 120px));
+  margin: 0 auto;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 34px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(191, 239, 255, 0.1), transparent 18rem),
+    linear-gradient(180deg, rgba(7, 17, 29, 0.66), rgba(5, 9, 20, 0.92));
+}
+
+.hero-cosmos {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.story-dome {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  width: min(920px, 82vw);
+  height: min(540px, 48vw);
+  transform: translateX(-50%);
+  border: 1px solid rgba(191, 239, 255, 0.2);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  background: radial-gradient(circle at 50% 34%, rgba(191, 239, 255, 0.08), transparent 44%);
+  box-shadow: inset 0 18px 90px rgba(191, 239, 255, 0.05), 0 0 100px rgba(138, 223, 218, 0.08);
+}
+
+.galaxy-ring {
+  position: absolute;
+  left: 50%;
+  top: 31%;
+  border: 1px solid rgba(180, 210, 255, 0.14);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotate(-11deg);
+}
+
+.ring-one { width: 560px; height: 170px; }
+.ring-two { width: 760px; height: 230px; opacity: 0.7; }
+
+.planet,
+.mini-planet,
+.project-planet,
+.workflow-thumb,
+.template-cosmic-thumb {
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #eaf8ff, #8adfda 24%, #1b6174 58%, #07111d 100%);
+  box-shadow: 0 0 28px rgba(138, 223, 218, 0.18);
+}
+
+.planet {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+}
+
+.planet-a { left: 22%; top: 28%; width: 44px; height: 44px; opacity: 0.72; }
+.planet-b { right: 23%; top: 24%; width: 58px; height: 58px; opacity: 0.82; }
+.planet-c { left: 58%; top: 18%; width: 32px; height: 32px; }
+.planet.lit { box-shadow: 0 0 44px rgba(191, 239, 255, 0.42); }
+
+.creator-silhouette {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 180px;
+  height: 320px;
+  transform: translateX(-50%);
+}
+
+.creator-head {
+  position: absolute;
+  top: 38px;
+  left: 68px;
+  width: 46px;
+  height: 56px;
+  border-radius: 44% 44% 48% 48%;
+  background: linear-gradient(180deg, #111d2e, #050914);
+}
+
+.creator-body {
+  position: absolute;
+  top: 92px;
+  left: 38px;
+  width: 108px;
+  height: 240px;
+  border-radius: 52px 52px 0 0;
+  background: linear-gradient(180deg, #132033, #03060d);
+  box-shadow: 0 -20px 80px rgba(191, 239, 255, 0.08);
+}
+
+.shoulder-cat {
+  position: absolute;
+  right: 28px;
+  top: 88px;
+  width: 30px;
+  height: 34px;
+  border: 1px solid rgba(238, 245, 255, 0.66);
+  border-radius: 50%;
+  background: rgba(191, 239, 255, 0.08);
+  box-shadow: 0 0 18px rgba(191, 239, 255, 0.16);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 680px;
+  padding: 88px 0 0 72px;
+}
+
+.hero-copy h1 {
+  margin: 54px 0 18px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(54px, 8vw, 114px);
+  font-weight: 500;
+  line-height: 0.92;
+  letter-spacing: 0;
+}
+
+.hero-copy h1 span {
+  display: block;
+  color: rgba(238, 245, 255, 0.72);
+}
+
+.hero-copy p {
+  max-width: 520px;
+  margin: 0 0 28px;
+  color: var(--cosmos-secondary);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.hero-actions {
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.story-planet-section,
+.kiikis-dashboard-shell,
+.cosmic-page {
+  max-width: 1360px;
+  margin: 28px auto 0;
+}
+
+.section-heading.centered {
+  text-align: center;
+  margin: 70px auto 28px;
+}
+
+.section-heading span,
+.dashboard-panel-head span,
+.dashboard-welcome span,
+.cosmic-title-band span,
+.today-spark span,
+.planet-detail-panel > span,
+.settings-card span {
+  color: var(--cosmos-tiffany);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.section-heading h2,
+.cosmic-title-band h1 {
+  margin: 10px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(34px, 5vw, 68px);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.section-heading p,
+.cosmic-title-band p {
+  color: var(--cosmos-secondary);
+}
+
+.story-planet-grid,
+.planet-card-grid,
+.workflow-template-grid,
+.companion-grid-page,
+.template-page-grid,
+.pricing-table,
+.settings-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.story-planet-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.story-planet-card,
+.dashboard-panel,
+.project-planet-card,
+.workflow-template-card,
+.companion-card-page,
+.template-page-card,
+.plan-card,
+.settings-card,
+.planet-detail-panel,
+.galaxy-map-panel {
+  border: 1px solid var(--cosmos-border);
+  background: var(--cosmos-card);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+}
+
+.story-planet-card {
+  min-height: 210px;
+  border-radius: 24px;
+  padding: 26px;
+}
+
+.story-planet-card h3,
+.dashboard-panel h2,
+.workflow-template-card h3,
+.project-planet-card strong,
+.companion-card-page h2,
+.template-page-card h2,
+.plan-card h2,
+.settings-card p,
+.planet-detail-panel h1 {
+  margin: 0;
+}
+
+.story-planet-card p,
+.workflow-template-card p,
+.project-planet-card small,
+.companion-card-page p,
+.template-page-card p,
+.plan-card li,
+.settings-card p,
+.planet-detail-panel p,
+.dashboard-welcome p {
+  color: var(--cosmos-secondary);
+  line-height: 1.55;
+}
+
+.mini-planet {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 28px;
+}
+
+.kiikis-dashboard-shell,
+.universe-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) 330px;
+  gap: 18px;
+  align-items: start;
+}
+
+.dashboard-sidebar {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 24px;
+  background: rgba(5, 9, 20, 0.58);
+  padding: 12px;
+}
+
+.dashboard-sidebar a {
+  border-radius: 16px;
+  color: var(--cosmos-secondary);
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dashboard-sidebar a.active,
+.dashboard-sidebar a:hover {
+  background: rgba(191, 239, 255, 0.08);
+  color: var(--cosmos-accent);
+}
+
+.dashboard-main,
+.dashboard-right-rail {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-welcome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+  gap: 20px;
+  align-items: center;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 28px;
+  background: var(--cosmos-surface);
+  padding: 24px;
+}
+
+.dashboard-welcome h2 {
+  margin: 6px 0;
+  font-size: 30px;
+}
+
+.dashboard-search {
+  min-height: 48px;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 999px;
+  color: var(--cosmos-muted);
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+}
+
+.dashboard-panel {
+  border-radius: 28px;
+  padding: 22px;
+}
+
+.dashboard-panel-head {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.planet-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.project-planet-card {
+  position: relative;
+  min-height: 240px;
+  border-radius: 24px;
+  overflow: hidden;
+  padding: 20px;
+  color: var(--cosmos-text);
+}
+
+button.project-planet-card {
+  text-align: left;
+}
+
+.project-planet {
+  width: 86px;
+  height: 86px;
+  margin: 4px 0 26px;
+}
+
+.project-planet.dim {
+  opacity: 0.45;
+}
+
+.project-planet-card[data-status="lit"] .project-planet,
+.project-planet-card[data-status="final-script"] .project-planet {
+  box-shadow: 0 0 50px rgba(191, 239, 255, 0.42);
+}
+
+.new-world-plus {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(191, 239, 255, 0.34);
+  border-radius: 50%;
+  color: var(--cosmos-accent);
+  font-size: 38px;
+  margin-bottom: 28px;
+}
+
+.planet-meta {
+  justify-content: space-between;
+  color: var(--cosmos-accent);
+  margin: 18px 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.planet-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.planet-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cosmos-tiffany);
+}
+
+.workflow-template-grid,
+.template-page-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.workflow-template-card,
+.template-page-card {
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.workflow-thumb,
+.template-cosmic-thumb {
+  width: 42px;
+  height: 42px;
+  margin-bottom: 18px;
+}
+
+.workflow-template-meta,
+.template-page-card div {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.workflow-template-meta span,
+.template-page-card span,
+.universe-tabs button {
+  border: 1px solid var(--cosmos-border);
+  border-radius: 999px;
+  color: var(--cosmos-secondary);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.workflow-template-card button,
+.ghost-button {
+  width: 100%;
+}
+
+.companion-list {
+  display: grid;
+  gap: 10px;
+}
+
+.companion-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.companion-portrait,
+.companion-card-portrait {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 50%;
+  background: rgba(191, 239, 255, 0.08);
+  color: var(--cosmos-accent);
+  font-weight: 900;
+}
+
+.companion-portrait {
+  width: 42px;
+  height: 42px;
+}
+
+.companion-row small,
+.companion-row em {
+  color: var(--cosmos-secondary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.nebula-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.nebula-stat-grid strong {
+  border: 1px solid var(--cosmos-border);
+  border-radius: 18px;
+  padding: 14px;
+  font-size: 24px;
+}
+
+.nebula-stat-grid span {
+  display: block;
+  color: var(--cosmos-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.cosmic-page {
+  padding: 24px 36px 72px;
+}
+
+.cosmic-page-header {
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.cosmic-page-header nav {
+  gap: 14px;
+  color: var(--cosmos-secondary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cosmic-title-band {
+  max-width: 1360px;
+  margin: 54px auto 26px;
+}
+
+.companion-grid-page,
+.template-page-grid,
+.pricing-table,
+.settings-grid {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.companion-grid-page {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.companion-card-page,
+.template-page-card,
+.plan-card,
+.settings-card {
+  border-radius: 24px;
+  padding: 24px;
+}
+
+.companion-card-portrait {
+  width: 78px;
+  height: 78px;
+  margin-bottom: 24px;
+  font-size: 24px;
+}
+
+.companion-card-page > span {
+  color: var(--cosmos-tiffany);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.template-page-card a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.pricing-page {
+  background:
+    linear-gradient(180deg, var(--cosmos-0) 0 42%, #dfe8f2 42% 100%);
+}
+
+.pricing-table {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.plan-card {
+  background: rgba(238, 245, 255, 0.92);
+  color: #07111d;
+}
+
+.plan-card span,
+.plan-card li {
+  color: #445066;
+}
+
+.plan-card.featured {
+  background: #07111d;
+  color: var(--cosmos-text);
+  box-shadow: 0 0 40px rgba(138, 223, 218, 0.22);
+}
+
+.plan-card.featured li {
+  color: var(--cosmos-secondary);
+}
+
+.plan-card ul {
+  min-height: 150px;
+  padding-left: 18px;
+}
+
+.settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.settings-control-row {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.universe-layout {
+  max-width: 1360px;
+  margin: 34px auto 0;
+}
+
+.galaxy-map-panel {
+  border-radius: 30px;
+  padding: 18px;
+}
+
+.universe-tabs {
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.universe-tabs button.active {
+  color: var(--cosmos-accent);
+  border-color: rgba(138, 223, 218, 0.44);
+  background: rgba(138, 223, 218, 0.08);
+}
+
+.galaxy-map {
+  position: relative;
+  min-height: 620px;
+  border: 1px solid var(--cosmos-border);
+  border-radius: 26px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 52% 44%, rgba(138, 223, 218, 0.1), transparent 18rem),
+    radial-gradient(circle at 30% 25%, rgba(191, 239, 255, 0.08), transparent 11rem),
+    rgba(5, 9, 20, 0.7);
+}
+
+.nebula-cloud {
+  position: absolute;
+  inset: 18% 12%;
+  border: 1px solid rgba(191, 239, 255, 0.08);
+  border-radius: 50%;
+  transform: rotate(-14deg);
+}
+
+.galaxy-planet-node {
+  position: absolute;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--cosmos-secondary);
+}
+
+.galaxy-planet-node span {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #effaff, #8adfda 22%, #245b70 58%, #050914 100%);
+  box-shadow: 0 0 30px rgba(138, 223, 218, 0.18);
+}
+
+.galaxy-planet-node[data-status="lit-planet"] span,
+.galaxy-planet-node[data-status="final-script-planet"] span {
+  box-shadow: 0 0 60px rgba(191, 239, 255, 0.58);
+}
+
+.planet-detail-panel {
+  border-radius: 28px;
+  padding: 24px;
+}
+
+.planet-detail-panel dl {
+  display: grid;
+  gap: 10px;
+}
+
+.planet-detail-panel dl div {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--cosmos-border);
+  padding-bottom: 8px;
+}
+
+.planet-detail-panel dt {
+  color: var(--cosmos-muted);
+}
+
+.planet-lit-message {
+  color: var(--cosmos-accent);
+  font-weight: 800;
+}
+
+.empty-galaxy {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.workflow-shell {
+  background:
+    radial-gradient(circle at 52% 0%, rgba(138, 223, 218, 0.08), transparent 28rem),
+    linear-gradient(180deg, var(--cosmos-0), var(--cosmos-1));
+}
+
+.workflow-header,
+.steps-panel,
+.editor-panel,
+.ai-panel,
+.project-fields,
+.story-bible-panel,
+.script-editor,
+.modal {
+  border-color: var(--cosmos-border) !important;
+  background-color: rgba(12, 22, 36, 0.78) !important;
+  color: var(--cosmos-text);
+}
+
+.script-editor,
+.title-input,
+.idea-input,
+.modal input,
+.modal textarea,
+.modal select,
+.project-fields input,
+.project-fields textarea,
+.project-fields select,
+.ai-panel select {
+  background: rgba(5, 9, 20, 0.62) !important;
+  color: var(--cosmos-text) !important;
+  border-color: var(--cosmos-border) !important;
+}
+
+.step-item.active,
+.phase-header.active,
+.primary-button,
+.secondary-button:hover {
+  border-color: rgba(138, 223, 218, 0.44) !important;
+}
+
+.kk-floating-module {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(191, 239, 255, 0.24);
+  border-radius: 50%;
+  background: rgba(7, 17, 29, 0.68);
+  opacity: 0.72;
+  box-shadow: 0 0 24px rgba(138, 223, 218, 0.12);
+  animation: kk-breathe 3.4s ease-in-out infinite;
+}
+
+.kk-floating-module .kiikis-cat-mark {
+  transform: scale(0.76);
+}
+
+@keyframes kk-breathe {
+  0%, 100% { opacity: 0.58; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+
+@media (max-width: 980px) {
+  .kiikis-site,
+  .cosmic-page {
+    padding: 16px;
+  }
+
+  .kk-top-nav,
+  .cosmic-page-header {
+    grid-template-columns: 1fr;
+    border-radius: 22px;
+  }
+
+  .kk-nav-links,
+  .cosmic-page-header nav {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .kiikis-hero {
+    min-height: 720px;
+    border-radius: 26px;
+  }
+
+  .hero-copy {
+    padding: 46px 24px 0;
+  }
+
+  .creator-silhouette {
+    transform: translateX(-50%) scale(0.82);
+  }
+
+  .story-planet-grid,
+  .kiikis-dashboard-shell,
+  .universe-layout,
+  .dashboard-welcome {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-sidebar {
+    position: static;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+  }
+
+  .galaxy-map {
+    min-height: 520px;
+  }
 }
 
 .demo-control,
@@ -708,7 +1717,7 @@ a[href="/projects/demo?template=demo"] {
   }
 }
 
-/* KiisKiis homepage final UI */
+/* kiikis homepage final UI */
 .kk-home-shell {
   min-height: 100vh;
   overflow-x: hidden;
