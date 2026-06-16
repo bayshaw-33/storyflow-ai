@@ -13,7 +13,17 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
   return (
     <section className="kiikis-hero" aria-labelledby="kiikis-hero-title">
       <div className="hero-cosmos" aria-hidden="true">
-        <img src="/brand/kiikis-hero-clean.jpg" alt="" />
+        <div className="story-dome" />
+        <div className="galaxy-ring ring-one" />
+        <div className="galaxy-ring ring-two" />
+        <span className="planet planet-a" />
+        <span className="planet planet-b lit" />
+        <span className="planet planet-c" />
+        <div className="creator-silhouette">
+          <div className="creator-head" />
+          <div className="creator-body" />
+          <div className="shoulder-cat" />
+        </div>
       </div>
 
       <div className="hero-copy">

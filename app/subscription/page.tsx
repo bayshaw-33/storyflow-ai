@@ -44,9 +44,9 @@ export default function SubscriptionPage() {
       </section>
 
       <section className="kk-plans-grid" aria-label="Pricing plans">
-        {PLAN_ENTITLEMENTS.map((plan) => {
+        {PLAN_ENTITLEMENTS.filter((p) => p.id !== "enterprise").map((plan) => {
           const isUniverse = plan.id === "universe";
-          const isSecondary = plan.id === "team" || plan.id === "enterprise";
+          const isSecondary = plan.id === "team";
           const hasPrice = plan.launchMonthlyPrice !== null;
           const highlights = [
             plan.model,
@@ -99,7 +99,7 @@ export default function SubscriptionPage() {
               </ul>
 
               <button className="kk-plan-cta" type="button">
-                {plan.id === "team" || plan.id === "enterprise"
+                {plan.id === "team"
                   ? "Contact Us"
                   : plan.launchMonthlyPrice === 0
                     ? "Start Free"

@@ -5494,8 +5494,8 @@ textarea::placeholder {
 }
 
 .kiikis-logo {
-  width: 158px;
-  height: 38px;
+  width: 124px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   overflow: hidden;
@@ -5505,8 +5505,8 @@ textarea::placeholder {
 }
 
 .kiikis-logo.compact {
-  width: 132px;
-  height: 34px;
+  width: 104px;
+  height: 26px;
 }
 
 .kiikis-landing-page .kiikis-logo-image,
@@ -5518,8 +5518,8 @@ textarea::placeholder {
   object-fit: contain;
   object-position: left center;
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 12px rgba(238, 245, 255, 0.18));
-  transform: scale(1.08);
+  filter: drop-shadow(0 0 8px rgba(238, 245, 255, 0.14));
+  transform: none;
   transform-origin: left center;
 }
 
@@ -5591,34 +5591,38 @@ textarea::placeholder {
   border: 0;
   border-radius: 30px;
   overflow: hidden;
-  background: #050914;
+  background:
+    radial-gradient(ellipse at 64% 42%, rgba(138, 223, 218, 0.08), transparent 38rem),
+    radial-gradient(ellipse at 36% 82%, rgba(111, 168, 255, 0.05), transparent 22rem),
+    radial-gradient(ellipse at 50% 0%, rgba(191, 239, 255, 0.06), transparent 18rem),
+    #050914;
   box-shadow:
     inset 0 0 0 1px rgba(180, 210, 255, 0.08),
     0 36px 120px rgba(0, 0, 0, 0.38);
 }
 
-.kiikis-landing-page .hero-cosmos img {
-  object-position: 58% 50%;
-  transform: scale(1.035);
+.kiikis-landing-page .creator-silhouette {
+  left: 62%;
 }
 
 .kiikis-landing-page .hero-cosmos::before {
   background:
-    linear-gradient(90deg, rgba(2, 7, 19, 0.96) 0%, rgba(5, 9, 20, 0.82) 29%, rgba(5, 9, 20, 0.30) 55%, rgba(5, 9, 20, 0.04) 76%),
-    linear-gradient(0deg, rgba(2, 7, 19, 0.54) 0%, transparent 34%, rgba(2, 7, 19, 0.30) 100%);
+    radial-gradient(ellipse at 64% 54%, rgba(138, 223, 218, 0.09), transparent 40rem),
+    linear-gradient(90deg, rgba(2, 7, 19, 0.68) 0%, rgba(2, 7, 19, 0.22) 42%, transparent 68%),
+    linear-gradient(0deg, rgba(2, 7, 19, 0.82) 0%, transparent 26%, rgba(2, 7, 19, 0.16) 100%);
 }
 
 .kiikis-landing-page .hero-cosmos::after {
   background:
-    radial-gradient(circle at 50% 12%, rgba(238, 245, 255, 0.32), transparent 24rem),
-    radial-gradient(circle, rgba(238, 245, 255, 0.7) 0 1px, transparent 1.5px);
-  background-size: auto, 150px 150px;
-  opacity: 0.12;
+    radial-gradient(circle at 50% 18%, rgba(238, 245, 255, 0.28), transparent 26rem),
+    radial-gradient(circle, rgba(238, 245, 255, 0.72) 0 1px, transparent 1.5px);
+  background-size: auto, 140px 140px;
+  opacity: 0.18;
 }
 
 .kiikis-landing-page .hero-copy {
-  max-width: 620px;
-  padding: clamp(138px, 18vh, 190px) 0 84px clamp(44px, 7vw, 92px);
+  max-width: 560px;
+  padding: clamp(96px, 11vh, 130px) 0 72px clamp(44px, 6vw, 80px);
 }
 
 .kiikis-landing-page .hero-kicker {
@@ -5628,11 +5632,11 @@ textarea::placeholder {
 }
 
 .kiikis-landing-page .hero-copy h1 {
-  max-width: 720px;
-  margin: 24px 0 22px;
-  font-size: clamp(44px, 5.4vw, 72px);
-  line-height: 1.05;
-  letter-spacing: 0;
+  max-width: 580px;
+  margin: 28px 0 24px;
+  font-size: clamp(48px, 6vw, 80px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
@@ -5675,8 +5679,9 @@ textarea::placeholder {
 .kk-pricing-page {
   padding: 18px 22px 88px;
   background:
-    radial-gradient(circle at 50% -8%, rgba(191, 239, 255, 0.18), transparent 36rem),
-    linear-gradient(180deg, #030813 0%, #07111d 44%, #e9eef5 44.1%, #f5f7fa 100%);
+    radial-gradient(circle at 50% 0%, rgba(191, 239, 255, 0.13), transparent 44rem),
+    radial-gradient(circle at 22% 68%, rgba(138, 223, 218, 0.05), transparent 32rem),
+    linear-gradient(180deg, #030813 0%, #07111d 42%, #0c1828 100%);
 }
 
 .kk-pricing-header {
@@ -5699,35 +5704,38 @@ textarea::placeholder {
 
 .kk-plans-grid {
   max-width: 1340px;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   align-items: stretch;
 }
 
 .kk-plan-card {
   grid-column: span 1;
-  min-height: 500px;
-  border-color: rgba(12, 22, 36, 0.10);
-  background: rgba(255, 255, 255, 0.82);
-  color: #07111d;
+  min-height: auto;
+  border-color: rgba(180, 210, 255, 0.10);
+  background: rgba(14, 22, 42, 0.74);
+  color: #eef5ff;
   border-radius: 24px;
-  padding: 23px;
-  box-shadow: 0 24px 70px rgba(5, 9, 20, 0.10);
-  backdrop-filter: blur(18px);
+  padding: 24px 22px;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
 }
 
 .kk-plan-card.featured {
-  border-color: rgba(138, 223, 218, 0.55);
+  border-color: rgba(138, 223, 218, 0.28);
   background:
-    radial-gradient(circle at 50% 0%, rgba(138, 223, 218, 0.26), transparent 16rem),
-    rgba(242, 251, 252, 0.94);
-  box-shadow: 0 26px 90px rgba(88, 199, 194, 0.24);
+    radial-gradient(circle at 50% 0%, rgba(138, 223, 218, 0.10), transparent 14rem),
+    rgba(8, 18, 36, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(138, 223, 218, 0.16),
+    0 28px 80px rgba(88, 199, 194, 0.14);
 }
 
 .kk-plan-card.secondary {
   grid-column: span 1;
-  min-height: 500px;
-  background: rgba(255, 255, 255, 0.70);
+  min-height: auto;
+  background: rgba(10, 16, 30, 0.56);
+  border-color: rgba(180, 210, 255, 0.07);
 }
 
 .kk-plan-topline {
@@ -5738,9 +5746,9 @@ textarea::placeholder {
 }
 
 .kk-plan-topline em {
-  border: 1px solid rgba(88, 199, 194, 0.35);
+  border: 1px solid rgba(138, 223, 218, 0.30);
   border-radius: 999px;
-  color: #226a67;
+  color: #8adfda;
   padding: 5px 10px;
   font-size: 11px;
   font-style: normal;
@@ -5748,37 +5756,37 @@ textarea::placeholder {
 }
 
 .kk-plan-tier {
-  color: #1c3348;
+  color: #8adfda;
 }
 
 .kk-plan-card.featured .kk-plan-tier {
-  color: #0a6b68;
+  color: #6fa8ff;
 }
 
 .kk-plan-positioning,
 .kk-plan-includes li,
 .kk-plan-highlights li {
-  color: #5f6d7f;
+  color: #aab8cc;
 }
 
 .kk-plan-price-block {
-  border: 0;
-  background: transparent;
-  padding: 4px 0 8px;
+  border: 1px solid rgba(180, 210, 255, 0.08);
+  background: rgba(5, 9, 20, 0.42);
+  padding: 12px 16px;
 }
 
 .kk-plan-price-block small,
 .kk-annual {
-  color: #7a8797;
+  color: #4e5a70;
 }
 
 .kk-price {
-  color: #07111d;
-  font-size: clamp(32px, 3vw, 42px);
+  color: #6fa8ff;
+  font-size: clamp(32px, 3vw, 40px);
 }
 
 .kk-plan-card.featured .kk-price {
-  color: #0a6b68;
+  color: #8adfda;
 }
 
 .kk-plan-highlights {
@@ -5809,20 +5817,21 @@ textarea::placeholder {
 
 .kk-plan-cta {
   align-self: end;
-  border-color: rgba(12, 22, 36, 0.12);
-  background: #0a1422;
-  color: #eef5ff;
+  border-color: rgba(180, 210, 255, 0.14);
+  background: rgba(22, 29, 48, 0.60);
+  color: #aab8cc;
 }
 
 .kk-plan-card.featured .kk-plan-cta {
-  border-color: rgba(88, 199, 194, 0.55);
-  background: #8adfda;
+  border-color: rgba(111, 168, 255, 0.55);
+  background: #6fa8ff;
   color: #050914;
 }
 
 .kk-plan-card.secondary .kk-plan-cta {
   background: transparent;
-  color: #1c3348;
+  border-color: rgba(180, 210, 255, 0.12);
+  color: #7a8ea8;
 }
 
 .kk-addons-section {
@@ -5831,29 +5840,32 @@ textarea::placeholder {
 }
 
 .kk-addons-label {
-  color: #5f6d7f;
+  color: #4e5a70;
 }
 
 .kk-addon-card {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: rgba(12, 22, 36, 0.10);
-  color: #07111d;
-  box-shadow: 0 18px 50px rgba(5, 9, 20, 0.08);
+  background: rgba(18, 29, 50, 0.60);
+  border-color: rgba(180, 210, 255, 0.09);
+  color: #eef5ff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.20);
 }
 
 .kk-addon-card p,
 .kk-addon-card span {
-  color: #5f6d7f;
+  color: #6a778c;
 }
 
 .kk-addon-price {
-  color: #0a6b68 !important;
+  color: #6fa8ff !important;
 }
 
 @media (max-width: 1180px) {
+  .kk-plans-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .kk-plan-card,
   .kk-plan-card.secondary {
-    grid-column: span 3;
+    grid-column: span 1;
   }
 }
 

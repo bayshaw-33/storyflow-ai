@@ -1,5 +1,5 @@
 export const BRAND_NAME = "kiikis";
-export const LEGACY_ENGINE_NAME = "StoryFlow Engine";
+export const LEGACY_ENGINE_NAME = "kiikis";
 export const TAGLINE_EN = "THE AI WRITERS' ROOM FOR EVERYONE";
 export const TAGLINE_ZH = "每个人的 AI 编剧室";
 export const PRODUCT_DESCRIPTION_EN =
