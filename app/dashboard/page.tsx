@@ -25,16 +25,21 @@ import {
   upsertProjectToSupabase,
 } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { KKFloatingOrb } from "@/components/home/KKFloatingOrb";
 import { ProjectList } from "@/components/home/ProjectList";
 import { WorkflowList } from "@/components/home/WorkflowList";
 import { WritersPanel } from "@/components/home/WritersPanel";
+import { WorkspaceModuleGrid } from "@/components/workspace/WorkspaceModuleGrid";
+import { useKK } from "@/components/kk/KKProvider";
+import { useOS } from "@/lib/os/uiState";
+import type { WorkspaceModuleId } from "@/lib/design/manifest";
 import { TopNav } from "@/components/layout/TopNav";
 import { BRAND_NAME } from "@/lib/brand";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 export default function ProjectListPage() {
   const router = useRouter();
+  const kk = useKK();
+  const os = useOS();
   const { locale, t } = useI18n();
   const isZh = locale === "zh-CN";
   const [projects, setProjects] = useState<DramaProject[]>([]);
@@ -109,6 +114,23 @@ export default function ProjectListPage() {
     [groups, sortedProjects],
   );
 
+  function openModule(id: WorkspaceModuleId) {
+    os.setSelectedWorkspaceModule(id);
+    if (id === "settings") {
+      router.push("/settings");
+      return;
+    }
+    // Cross-system link: Story Bible / Storyboard open the Universe graph.
+    if (id === "story-bible" || id === "storyboard") {
+      router.push("/universes");
+      return;
+    }
+    // Project-scoped modules: surface the project list to pick a context.
+    if (typeof window !== "undefined") {
+      window.location.hash = "projects";
+    }
+  }
+
   function openWizard(type: WorkflowType) {
     setWizardError("");
     setWizardData((current) => ({ ...current, workflowType: type, title: "" }));
@@ -121,6 +143,8 @@ export default function ProjectListPage() {
       setWizardError(t("wizard.titleRequired"));
       return;
     }
+
+    kk.think(); // user committed a request -> THINKING
 
     const base = {
       title,
@@ -150,6 +174,7 @@ export default function ProjectListPage() {
     upsertProject(project);
     void upsertProjectToSupabase(project, { accessToken: session?.access_token });
     setWizardOpen(false);
+    kk.celebrate(); // project created -> HAPPY
     router.push(`/projects/${project.id}?mode=${wizardData.workflowType}`);
   }
 
@@ -240,6 +265,7 @@ export default function ProjectListPage() {
             </div>
           </header>
 
+          <WorkspaceModuleGrid onSelectModule={openModule} />
           <WorkflowList onSelectWorkflow={openWizard} />
           <ProjectList
             groupedProjects={groupedProjects}
@@ -272,8 +298,6 @@ export default function ProjectListPage() {
           <WritersPanel />
         </aside>
       </section>
-
-      <KKFloatingOrb />
 
       {authOpen ? (
         <div className="modal-backdrop">

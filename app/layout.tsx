@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { BRAND_NAME, TAGLINE_EN } from "@/lib/brand";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
+import { OSProvider } from "@/lib/os/uiState";
+import { KKProvider } from "@/components/kk/KKProvider";
+import { SystemSwitcher } from "@/components/os/SystemSwitcher";
+import { DevBridge } from "@/components/dev/DevBridge";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,7 +16,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body><LanguageProvider>{children}</LanguageProvider></body>
+      <body>
+        <LanguageProvider>
+          <OSProvider>
+            <KKProvider>
+              {children}
+              <SystemSwitcher />
+              <DevBridge />
+            </KKProvider>
+          </OSProvider>
+        </LanguageProvider>
+      </body>
     </html>
   );
 }

@@ -5736,6 +5736,7 @@ textarea::placeholder {
   min-height: auto;
   background: rgba(10, 16, 30, 0.56);
   border-color: rgba(180, 210, 255, 0.07);
+  align-self: start;
 }
 
 .kk-plan-topline {
@@ -5902,3 +5903,2241 @@ textarea::placeholder {
     min-height: auto;
   }
 }
+
+/* Landing hero: remove the old right-side screenshot reveal treatment. */
+.kiikis-landing-page .kiikis-hero {
+  max-width: min(1520px, calc(100vw - 44px));
+  min-height: min(820px, calc(100vh - 88px));
+  border: 1px solid rgba(180, 210, 255, 0.06);
+  border-radius: 24px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 64% 42%, rgba(191, 239, 255, 0.16), transparent 30rem),
+    radial-gradient(ellipse at 58% 62%, rgba(138, 223, 218, 0.10), transparent 38rem),
+    radial-gradient(ellipse at 22% 28%, rgba(54, 82, 128, 0.28), transparent 32rem),
+    radial-gradient(ellipse at 50% 104%, rgba(6, 14, 28, 0.92), transparent 28rem),
+    linear-gradient(180deg, #020713 0%, #07111d 52%, #030813 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(238, 245, 255, 0.015),
+    inset 0 -120px 160px rgba(0, 0, 0, 0.34),
+    0 38px 130px rgba(0, 0, 0, 0.34);
+}
+
+.kiikis-landing-page .hero-cosmos {
+  background:
+    radial-gradient(ellipse at 66% 44%, rgba(191, 239, 255, 0.12), transparent 25rem),
+    radial-gradient(ellipse at 56% 68%, rgba(138, 223, 218, 0.08), transparent 28rem);
+}
+
+.kiikis-landing-page .hero-cosmos img {
+  display: none;
+}
+
+.kiikis-landing-page .hero-cosmos::before {
+  background:
+    radial-gradient(circle at 62% 42%, rgba(238, 245, 255, 0.14), transparent 22rem),
+    radial-gradient(circle at 66% 58%, rgba(138, 223, 218, 0.12), transparent 30rem),
+    radial-gradient(ellipse at 50% 48%, transparent 40%, rgba(2, 7, 19, 0.48) 100%),
+    linear-gradient(180deg, rgba(2, 7, 19, 0.18) 0%, rgba(2, 7, 19, 0.04) 44%, rgba(2, 7, 19, 0.70) 100%);
+}
+
+.kiikis-landing-page .hero-cosmos::after {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(238, 245, 255, 0.30), transparent 24rem),
+    radial-gradient(circle, rgba(238, 245, 255, 0.76) 0 1px, transparent 1.8px),
+    radial-gradient(circle, rgba(138, 223, 218, 0.40) 0 1px, transparent 2px);
+  background-size: auto, 118px 118px, 210px 210px;
+  opacity: 0.48;
+}
+
+.kiikis-landing-page .story-dome {
+  left: 58%;
+  top: 6%;
+  width: min(1060px, 78vw);
+  height: min(620px, 46vw);
+  border-color: rgba(191, 239, 255, 0.18);
+  background:
+    radial-gradient(circle at 50% 32%, rgba(191, 239, 255, 0.10), transparent 42%),
+    linear-gradient(180deg, rgba(191, 239, 255, 0.035), transparent 70%);
+  box-shadow:
+    inset 0 18px 100px rgba(191, 239, 255, 0.045),
+    0 0 120px rgba(138, 223, 218, 0.08);
+}
+
+.kiikis-landing-page .galaxy-ring {
+  left: 59%;
+  border-color: rgba(180, 210, 255, 0.13);
+}
+
+.kiikis-landing-page .ring-one {
+  width: 610px;
+  height: 178px;
+}
+
+.kiikis-landing-page .ring-two {
+  width: 850px;
+  height: 250px;
+}
+
+.kiikis-landing-page .creator-silhouette {
+  left: 58%;
+  bottom: -4px;
+  opacity: 0.92;
+  filter: drop-shadow(0 -12px 52px rgba(191, 239, 255, 0.10));
+}
+
+.kiikis-landing-page .hero-copy {
+  position: relative;
+  z-index: 3;
+  max-width: min(700px, 62vw);
+  margin-left: clamp(8px, 2.4vw, 32px);
+  padding: clamp(120px, 16vh, 170px) 0 76px clamp(36px, 5.6vw, 86px);
+}
+
+.kiikis-landing-page .hero-copy::before {
+  content: "";
+  position: absolute;
+  inset: -96px -190px -96px -70px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 30% 44%, rgba(2, 7, 19, 0.78), transparent 68%);
+  pointer-events: none;
+}
+
+.kiikis-landing-page .hero-copy h1 {
+  max-width: 680px;
+  margin: 30px 0 26px;
+  font-size: clamp(50px, 5.8vw, 84px);
+  line-height: 1.04;
+}
+
+.kiikis-landing-page .hero-copy h1 .hero-line {
+  text-shadow: 0 20px 70px rgba(0, 0, 0, 0.62);
+}
+
+.kiikis-landing-page .hero-copy > p {
+  max-width: 510px;
+  color: rgba(238, 245, 255, 0.70);
+  text-shadow: 0 12px 36px rgba(0, 0, 0, 0.54);
+}
+
+@media (max-width: 760px) {
+  .kiikis-landing-page .kiikis-hero {
+    max-width: 100%;
+    min-height: 760px;
+    border-radius: 22px;
+  }
+
+  .kiikis-landing-page .hero-copy {
+    max-width: none;
+    margin-left: 0;
+    padding: 118px 26px 58px;
+  }
+
+  .kiikis-landing-page .story-dome,
+  .kiikis-landing-page .galaxy-ring {
+    left: 56%;
+  }
+}
+
+.kiikis-landing-page .planet-a {
+  left: 72%;
+  top: 22%;
+}
+
+/* Pricing grid: 5 visible cards on desktop, 3 on medium, 1 on mobile. */
+.kk-plans-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1380px) {
+  .kk-plans-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .kk-plans-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .kk-plan-card.secondary {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .kk-plans-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kk-plan-card,
+  .kk-plan-card.secondary {
+    grid-column: span 1;
+  }
+}
+
+/* KIIKIS hero asset stack: force real image layers, no CSS fallback stage. */
+.hero-root {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 720px;
+  overflow: hidden;
+  background: transparent !important;
+}
+
+.hero-root img,
+.hero-root .hero-asset-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+
+.layer-backdrop {
+  z-index: 0;
+}
+
+.layer-env {
+  z-index: 10;
+}
+
+.layer-starfield,
+.layer-nebula,
+.layer-atmo {
+  z-index: 20;
+}
+
+.layer-main {
+  z-index: 30;
+}
+
+.layer-ui {
+  position: relative;
+  z-index: 40;
+}
+
+.hero-gradient,
+.story-dome,
+.galaxy-ring,
+.hero-cosmos {
+  display: none !important;
+}
+
+/* ================================================================
+   KIIKIS — CINEMATIC PRODUCTION UI  ·  Final override layer
+   All rules here have highest cascade priority (last in file).
+   ================================================================ */
+
+/* ── Hero: full-bleed cinematic stage ───────────────────────── */
+
+.kiikis-landing-page .kiikis-hero {
+  position: relative;
+  /* bleed past .kiikis-site 22px side padding */
+  width: calc(100% + 44px);
+  margin-left: -22px;
+  margin-right: -22px;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0;
+  border: none;
+  max-width: none;
+  box-shadow: none;
+  background:
+    radial-gradient(ellipse at 50% 0%,   rgba(126, 249, 255, 0.07) 0%, transparent 52%),
+    radial-gradient(ellipse at 18% 58%,  rgba(138, 223, 218, 0.04) 0%, transparent 36%),
+    radial-gradient(ellipse at 82% 38%,  rgba(111, 168, 255, 0.04) 0%, transparent 36%),
+    linear-gradient(180deg, #01040d 0%, #040c1a 48%, #020712 100%);
+}
+
+/* Star-dot field — CSS-only, two tiling layers */
+.kk-hero-stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.82) 0px, transparent 1px),
+    radial-gradient(circle, rgba(138, 223, 218, 0.52) 0px, transparent 1px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.60) 0px, transparent 1px);
+  background-size: 140px 140px, 220px 220px, 310px 310px;
+  background-position: 12px 20px, 70px 110px, 180px 50px;
+  opacity: 0.50;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Cyan horizon glow at bottom-center */
+.kk-hero-glow {
+  position: absolute;
+  left: 50%;
+  bottom: -60px;
+  transform: translateX(-50%);
+  width: min(900px, 80vw);
+  height: 420px;
+  background: radial-gradient(ellipse at 50% 82%, rgba(126, 249, 255, 0.09), transparent 62%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Cosmos layer — fills hero, z below copy */
+.kiikis-landing-page .hero-cosmos {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: none;
+}
+
+/* Edge vignette over all cosmos elements */
+.kiikis-landing-page .hero-cosmos::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 108%, rgba(1, 4, 14, 0.88), transparent 52%),
+    radial-gradient(ellipse at 0%   50%, rgba(1, 4, 14, 0.44), transparent 36%),
+    radial-gradient(ellipse at 100% 50%, rgba(1, 4, 14, 0.44), transparent 36%);
+  pointer-events: none;
+  z-index: 9;
+}
+
+/* Additional fine star layer via ::after */
+.kiikis-landing-page .hero-cosmos::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.78) 0 1px, transparent 1.5px),
+    radial-gradient(circle, rgba(126, 249, 255, 0.48) 0 1px, transparent 1.5px);
+  background-size: 110px 110px, 186px 186px;
+  background-position: 8px 8px, 52px 84px;
+  opacity: 0.48;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Story dome — large ellipse, centered */
+.kiikis-landing-page .story-dome {
+  position: absolute;
+  left: 50%;
+  top: 5%;
+  transform: translateX(-50%);
+  width: min(1100px, 88vw);
+  height: min(640px, 52vw);
+  border: 1px solid rgba(126, 249, 255, 0.08);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 30%, rgba(126, 249, 255, 0.04), transparent 52%);
+  box-shadow:
+    inset 0 16px 100px rgba(126, 249, 255, 0.025),
+    0 0 180px rgba(126, 249, 255, 0.03);
+  z-index: 2;
+}
+
+/* Galaxy rings — horizontal ellipses creating orbital depth */
+.kiikis-landing-page .galaxy-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotateX(74deg);
+  border-radius: 50%;
+  z-index: 3;
+}
+
+.kiikis-landing-page .ring-one {
+  width: 640px;
+  height: 186px;
+  border: 1px solid rgba(180, 210, 255, 0.10);
+}
+
+.kiikis-landing-page .ring-two {
+  width: 920px;
+  height: 268px;
+  border: 1px solid rgba(180, 210, 255, 0.05);
+}
+
+/* Planets */
+.kiikis-landing-page .planet-a {
+  position: absolute;
+  left: 72%;
+  top: 22%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 34%, #bfefff, #1a5a7a);
+  box-shadow: 0 0 14px rgba(191, 239, 255, 0.55);
+  opacity: 0.88;
+  z-index: 4;
+}
+
+.kiikis-landing-page .planet-b {
+  position: absolute;
+  right: 16%;
+  top: 28%;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%, #eaf8ff, #8adfda 30%, #1b6174 64%, #07111d);
+  box-shadow: 0 0 26px rgba(138, 223, 218, 0.50);
+  z-index: 4;
+}
+
+.kiikis-landing-page .planet-c {
+  position: absolute;
+  left: 66%;
+  top: 15%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, rgba(180, 210, 255, 0.90), #354870);
+  opacity: 0.65;
+  z-index: 4;
+}
+
+/* Creator silhouette — centered, ethereal ghost */
+.kiikis-landing-page .creator-silhouette {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 280px;
+  opacity: 0.28;
+  filter: blur(0.4px) drop-shadow(0 -6px 36px rgba(126, 249, 255, 0.14));
+  z-index: 5;
+}
+
+/* ── Hero copy — centered on stage ──────────────────────────── */
+
+.kiikis-landing-page .hero-copy {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: clamp(100px, 18vh, 164px) clamp(24px, 6vw, 80px) clamp(80px, 12vh, 128px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Dark radial backdrop behind text for legibility */
+.kiikis-landing-page .hero-copy::before {
+  content: "";
+  position: absolute;
+  inset: -20px -100px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 50% 44%, rgba(1, 4, 14, 0.78), transparent 62%);
+  pointer-events: none;
+}
+
+.kiikis-landing-page .hero-kicker {
+  display: block;
+  color: #7EF9FF;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  margin-bottom: 26px;
+  opacity: 0.88;
+}
+
+.kiikis-landing-page #kiikis-hero-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(50px, 6.4vw, 94px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: #eef5ff;
+  margin: 0 0 28px;
+  text-shadow: 0 4px 48px rgba(0, 0, 0, 0.62);
+}
+
+.kiikis-landing-page .hero-line {
+  display: block;
+}
+
+.kiikis-landing-page .hero-copy > p {
+  font-size: clamp(15px, 1.4vw, 18px);
+  line-height: 1.72;
+  color: rgba(238, 245, 255, 0.60);
+  max-width: 540px;
+  margin: 0 0 42px;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.52);
+}
+
+.kiikis-landing-page .hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Primary CTA — glassy cyan */
+.kiikis-landing-page .kk-primary-cta {
+  height: 50px;
+  padding: 0 30px;
+  border-radius: 999px;
+  background: rgba(126, 249, 255, 0.11);
+  border: 1px solid rgba(126, 249, 255, 0.42);
+  color: #7EF9FF;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 0 24px rgba(126, 249, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  white-space: nowrap;
+}
+
+.kiikis-landing-page .kk-primary-cta:hover {
+  background: rgba(126, 249, 255, 0.20);
+  border-color: rgba(126, 249, 255, 0.68);
+  box-shadow:
+    0 0 44px rgba(126, 249, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+/* Ghost / secondary CTA */
+.kiikis-landing-page .kk-secondary-cta {
+  height: 50px;
+  padding: 0 26px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid rgba(238, 245, 255, 0.16);
+  color: rgba(238, 245, 255, 0.58);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+  white-space: nowrap;
+}
+
+.kiikis-landing-page .kk-secondary-cta:hover {
+  color: #eef5ff;
+  border-color: rgba(238, 245, 255, 0.34);
+  background: rgba(238, 245, 255, 0.04);
+}
+
+/* ── Hero responsive ─────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .kiikis-landing-page .kiikis-hero {
+    min-height: 92vh;
+  }
+
+  .kiikis-landing-page .hero-copy {
+    max-width: 660px;
+    padding: clamp(80px, 14vh, 128px) 36px clamp(60px, 10vh, 100px);
+  }
+
+  .kiikis-landing-page #kiikis-hero-title {
+    font-size: clamp(44px, 7.8vw, 72px);
+  }
+
+  .kiikis-landing-page .ring-one { width: 500px; height: 145px; }
+  .kiikis-landing-page .ring-two { width: 720px; height: 210px; }
+}
+
+@media (max-width: 640px) {
+  .kiikis-landing-page .kiikis-hero {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    min-height: 100svh;
+    border-radius: 0;
+  }
+
+  .kiikis-landing-page .hero-copy {
+    max-width: 100%;
+    padding: 96px 28px 80px;
+  }
+
+  .kiikis-landing-page #kiikis-hero-title {
+    font-size: clamp(38px, 10.5vw, 56px);
+  }
+
+  .kiikis-landing-page .hero-copy > p {
+    font-size: 15px;
+  }
+
+  .kiikis-landing-page .hero-actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .kiikis-landing-page .kk-primary-cta,
+  .kiikis-landing-page .kk-secondary-cta {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .kiikis-landing-page .ring-one { width: 340px; height: 100px; }
+  .kiikis-landing-page .ring-two { width: 500px; height: 148px; }
+}
+
+/* ── Pricing page ────────────────────────────────────────────── */
+
+.kk-pricing-page {
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 22px 36px 100px;
+  background:
+    radial-gradient(ellipse at 50% 0%,  rgba(126, 249, 255, 0.06), transparent 46rem),
+    radial-gradient(ellipse at 16% 72%, rgba(138, 223, 218, 0.04), transparent 28rem),
+    radial-gradient(ellipse at 84% 32%, rgba(111, 168, 255, 0.04), transparent 28rem),
+    linear-gradient(180deg, #01040d 0%, #050c1a 40%, #080f1c 100%);
+  color: #eef5ff;
+}
+
+/* Nav pill */
+.kk-pricing-nav {
+  max-width: 1280px;
+  margin: 0 auto 68px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 20px;
+  min-height: 56px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  background: rgba(6, 10, 22, 0.84);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  padding: 6px 12px;
+  box-shadow: 0 14px 52px rgba(0, 0, 0, 0.38);
+}
+
+.kk-pricing-nav-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.kk-pricing-nav-links a {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(170, 184, 204, 0.78);
+  transition: color 160ms, background 160ms;
+}
+
+.kk-pricing-nav-links a:hover {
+  color: #eef5ff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.kk-pricing-nav-brand {
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+}
+
+.kk-pricing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+}
+
+.kk-pricing-page .kk-text-button {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(170, 184, 204, 0.78);
+  background: transparent;
+  border: none;
+  transition: color 160ms, background 160ms;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.kk-pricing-page .kk-text-button:hover {
+  color: #eef5ff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.kk-pricing-page .kk-room-button {
+  height: 34px;
+  padding: 0 18px;
+  background: rgba(126, 249, 255, 0.09);
+  border: 1px solid rgba(126, 249, 255, 0.28);
+  border-radius: 999px;
+  color: #7EF9FF;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  transition: background 180ms, border-color 180ms;
+}
+
+.kk-pricing-page .kk-room-button:hover {
+  background: rgba(126, 249, 255, 0.17);
+  border-color: rgba(126, 249, 255, 0.52);
+}
+
+/* Section header */
+.kk-pricing-header {
+  max-width: 740px;
+  margin: 0 auto 56px;
+  text-align: center;
+  display: grid;
+  gap: 16px;
+}
+
+.kk-pricing-header > span {
+  display: block;
+  color: #7EF9FF;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+
+.kk-pricing-header h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(32px, 4vw, 56px);
+  font-weight: 400;
+  color: #eef5ff;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.kk-pricing-header p {
+  font-size: 14.5px;
+  line-height: 1.70;
+  color: rgba(238, 245, 255, 0.52);
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+/* Plans grid */
+.kk-plans-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 13px;
+  align-items: start;
+}
+
+/* Base card */
+.kk-plan-card {
+  position: relative;
+  border: 1px solid rgba(180, 210, 255, 0.09);
+  border-radius: 20px;
+  background: rgba(9, 16, 32, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 22px 20px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  color: #eef5ff;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.kk-plan-card:hover {
+  border-color: rgba(180, 210, 255, 0.18);
+  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.26);
+}
+
+/* Universe flagship */
+.kk-plan-card.featured {
+  border-color: rgba(126, 249, 255, 0.26);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(126, 249, 255, 0.08), transparent 58%),
+    rgba(5, 10, 24, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(126, 249, 255, 0.10),
+    0 22px 78px rgba(126, 249, 255, 0.10);
+}
+
+.kk-plan-card.featured:hover {
+  border-color: rgba(126, 249, 255, 0.44);
+  box-shadow:
+    0 0 0 1px rgba(126, 249, 255, 0.16),
+    0 28px 90px rgba(126, 249, 255, 0.16);
+}
+
+/* Team card — intentional, dashed border signals "reserved" */
+.kk-plan-card.secondary {
+  align-self: start;
+  background: rgba(7, 12, 24, 0.58);
+  border-color: rgba(180, 210, 255, 0.08);
+  border-style: dashed;
+}
+
+.kk-plan-card.secondary:hover {
+  border-color: rgba(180, 210, 255, 0.16);
+  box-shadow: none;
+}
+
+/* Plan name row */
+.kk-plan-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.kk-plan-tier {
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: rgba(180, 210, 255, 0.65);
+}
+
+.kk-plan-card.featured .kk-plan-tier {
+  color: #7EF9FF;
+}
+
+.kk-plan-card.secondary .kk-plan-tier {
+  color: rgba(180, 210, 255, 0.40);
+}
+
+/* Flagship badge */
+.kk-flagship-badge {
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #7EF9FF;
+  border: 1px solid rgba(126, 249, 255, 0.30);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Pre-launch badge for Team */
+.kk-soon-badge {
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(180, 210, 255, 0.48);
+  border: 1px dashed rgba(180, 210, 255, 0.20);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Positioning line */
+.kk-plan-positioning {
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(170, 184, 204, 0.65);
+  margin: 0;
+  min-height: 34px;
+}
+
+.kk-plan-card.secondary .kk-plan-positioning {
+  color: rgba(170, 184, 204, 0.40);
+}
+
+/* Price block */
+.kk-plan-price-block {
+  border: 1px solid rgba(180, 210, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(3, 6, 16, 0.48);
+  padding: 12px 14px;
+  display: grid;
+  gap: 3px;
+}
+
+.kk-plan-price-block small {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: rgba(110, 122, 147, 0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.kk-price {
+  display: block;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  font-weight: 400;
+  color: #7EF9FF;
+  line-height: 1;
+  margin: 4px 0 2px;
+}
+
+.kk-plan-card.featured .kk-price {
+  text-shadow: 0 0 28px rgba(126, 249, 255, 0.32);
+}
+
+.kk-plan-card.secondary .kk-price {
+  font-size: 26px;
+  color: rgba(180, 210, 255, 0.36);
+}
+
+.kk-annual {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(110, 122, 147, 0.65);
+}
+
+/* Highlights */
+.kk-plan-highlights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.kk-plan-highlights li {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgba(170, 184, 204, 0.72);
+  padding-left: 14px;
+  position: relative;
+}
+
+.kk-plan-highlights li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  font-size: 10px;
+  color: rgba(126, 249, 255, 0.32);
+}
+
+.kk-plan-card.featured .kk-plan-highlights li {
+  color: rgba(210, 235, 255, 0.80);
+}
+
+.kk-plan-card.featured .kk-plan-highlights li::before {
+  color: rgba(126, 249, 255, 0.60);
+}
+
+.kk-plan-card.secondary .kk-plan-highlights li {
+  color: rgba(170, 184, 204, 0.40);
+}
+
+.kk-plan-card.secondary .kk-plan-highlights li::before {
+  content: "·";
+  font-size: 16px;
+  top: -2px;
+  color: rgba(180, 210, 255, 0.22);
+}
+
+/* CTA button */
+.kk-plan-cta {
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(180, 210, 255, 0.13);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(210, 235, 255, 0.70);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: border-color 180ms, background 180ms, color 180ms;
+}
+
+.kk-plan-cta:hover {
+  border-color: rgba(180, 210, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+  color: #eef5ff;
+}
+
+.kk-plan-card.featured .kk-plan-cta {
+  background: rgba(126, 249, 255, 0.11);
+  border-color: rgba(126, 249, 255, 0.34);
+  color: #7EF9FF;
+}
+
+.kk-plan-card.featured .kk-plan-cta:hover {
+  background: rgba(126, 249, 255, 0.22);
+  border-color: rgba(126, 249, 255, 0.55);
+  color: #fff;
+}
+
+.kk-plan-card.secondary .kk-plan-cta {
+  background: transparent;
+  border: 1px dashed rgba(180, 210, 255, 0.12);
+  color: rgba(170, 184, 204, 0.40);
+}
+
+.kk-plan-card.secondary .kk-plan-cta:hover {
+  border-color: rgba(180, 210, 255, 0.26);
+  color: rgba(210, 235, 255, 0.65);
+  background: transparent;
+}
+
+/* Add-ons */
+.kk-addons-section {
+  max-width: 1280px;
+  margin: 56px auto 0;
+}
+
+.kk-addons-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(110, 122, 147, 0.65);
+  margin-bottom: 20px;
+}
+
+.kk-addons-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.kk-addon-card {
+  border: 1px solid rgba(180, 210, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(7, 12, 24, 0.60);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 20px;
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  transition: border-color 180ms;
+}
+
+.kk-addon-card:hover {
+  border-color: rgba(180, 210, 255, 0.16);
+}
+
+.kk-addon-card > span:first-child {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(110, 122, 147, 0.60);
+}
+
+.kk-addon-card strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #eef5ff;
+}
+
+.kk-addon-card p {
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(110, 122, 147, 0.72);
+  margin: 0;
+}
+
+.kk-addon-price {
+  display: block;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 400;
+  color: #7EF9FF !important;
+  margin-top: 4px;
+}
+
+/* ── Pricing responsive ──────────────────────────────────────── */
+
+@media (max-width: 1380px) {
+  .kk-plans-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .kk-plans-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .kk-plan-card.secondary {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px 24px;
+    align-items: start;
+  }
+
+  .kk-plan-card.secondary .kk-plan-topline {
+    grid-column: 1 / -1;
+  }
+
+  .kk-plan-card.secondary .kk-plan-cta {
+    grid-column: 1 / -1;
+  }
+
+  .kk-addons-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .kk-pricing-page {
+    padding: 16px 18px 72px;
+  }
+
+  .kk-pricing-nav {
+    grid-template-columns: auto auto;
+    border-radius: 20px;
+    margin-bottom: 40px;
+  }
+
+  .kk-pricing-nav-links {
+    display: none;
+  }
+
+  .kk-plans-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kk-plan-card.secondary {
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .kk-plan-card.secondary .kk-plan-topline {
+    grid-column: auto;
+  }
+
+  .kk-plan-card.secondary .kk-plan-cta {
+    grid-column: auto;
+  }
+
+  .kk-plan-card.featured {
+    order: -1;
+  }
+
+  .kk-addons-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .kk-pricing-header h1 {
+    font-size: clamp(28px, 8.5vw, 40px);
+  }
+}
+
+/* ================================================================
+   KIIKIS — LANDING PAGE  ·  Cinematic cold-blue system (FINAL)
+   Scope: .kiikis-landing-page only. Last in file → wins cascade.
+   Accent is cold blue (--accent-blue); no teal on the landing page.
+   ================================================================ */
+
+/* ── 1. Shared design tokens (additive · global · reusable) ──── */
+:root {
+  --accent-blue: #6FA8FF;
+  --accent-blue-soft: rgba(111, 168, 255, 0.18);
+  --glass-fill-hover: rgba(255, 255, 255, 0.07);
+  --glass-border-hover: rgba(255, 255, 255, 0.14);
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.40);
+  --glow-blue: 0 0 24px rgba(111, 168, 255, 0.18);
+}
+
+/* Landing-scoped glass + accent retints. Kept off global :root so
+   dashboard / pricing / other pages keep their existing tokens. */
+.kiikis-landing-page {
+  --glass-fill: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --divider: rgba(255, 255, 255, 0.06);
+  /* flip any var-driven teal on the landing page to cold blue */
+  --cosmos-tiffany: #6FA8FF;
+  --cosmos-accent: #BFD4FF;
+  --cosmos-glow: rgba(111, 168, 255, 0.32);
+  --kk-tiffany: #6FA8FF;
+  --kk-tiffany-deep: #5A8AE0;
+}
+
+/* ── 2. Multi-layer cosmic background (fixed · CSS only) ─────── */
+.kiikis-landing-page {
+  position: relative;
+  background: transparent !important;
+}
+
+.kiikis-landing-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 70% 16%, rgba(111, 168, 255, 0.10), transparent 46%),
+    radial-gradient(ellipse at 24% 64%, rgba(111, 168, 255, 0.07), transparent 42%),
+    radial-gradient(ellipse at 50% 30%, #131A2E 0%, #0A0E1A 70%);
+}
+
+.kiikis-landing-page::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle, rgba(244, 246, 250, 0.9) 0 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(184, 194, 214, 0.7) 0 1px, transparent 1.4px);
+  background-size: 150px 150px, 230px 230px;
+  background-position: 20px 30px, 110px 90px;
+  opacity: 0.05;
+}
+
+/* ── 3. Inline logo (clean SVG wordmark, no white box) ───────── */
+.kiikis-landing-page .kiikis-logo.kiikis-logo-inline {
+  width: auto;
+  height: auto;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.kiikis-landing-page .kiikis-logo-glyph {
+  width: 22px;
+  height: 22px;
+  display: block;
+  color: var(--accent-blue);
+  filter: drop-shadow(0 0 10px rgba(111, 168, 255, 0.35));
+}
+
+.kiikis-landing-page .kiikis-logo-word {
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--ink-primary);
+}
+
+/* ── 4. Navigation — glass capsule ──────────────────────────── */
+.kiikis-landing-page .kk-top-nav {
+  max-width: 1280px;
+  margin: 0 auto 40px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+  padding: 8px 10px 8px 16px;
+}
+
+.kiikis-landing-page .kk-nav-links a {
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 180ms ease;
+}
+
+.kiikis-landing-page .kk-nav-links a:hover {
+  color: var(--ink-primary);
+  background: transparent;
+}
+
+.kiikis-landing-page .kk-language-switch {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.kiikis-landing-page .kk-language-switch button {
+  color: var(--ink-muted);
+}
+
+.kiikis-landing-page .kk-language-switch button.active {
+  color: #0A0E1A;
+  background: var(--accent-blue);
+}
+
+.kiikis-landing-page .kk-text-button {
+  color: var(--ink-secondary);
+  font-weight: 500;
+  background: transparent;
+  border-color: transparent;
+}
+
+.kiikis-landing-page .kk-text-button:hover {
+  color: var(--ink-primary);
+}
+
+.kiikis-landing-page .kk-nav-email {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+/* Nav primary CTA → blue button */
+.kiikis-landing-page .kk-room-button {
+  min-height: 38px;
+  padding: 0 20px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  color: #0A0E1A;
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: box-shadow 200ms ease, background 200ms ease;
+}
+
+.kiikis-landing-page .kk-room-button:hover {
+  background: #82B4FF;
+  box-shadow: 0 0 20px rgba(111, 168, 255, 0.30);
+}
+
+/* ── 5. Hero — single unified cinematic stage ───────────────── */
+.kiikis-landing-page .kiikis-hero {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: min(86vh, 860px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.kiikis-landing-page .hero-cosmos {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: none;
+}
+
+/* hero-local soft blue glow bloom behind the headline */
+.kk-hero-glow {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(900px, 84vw);
+  height: 540px;
+  background: radial-gradient(ellipse at 50% 50%, var(--accent-blue-soft), transparent 64%);
+  filter: blur(36px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kk-hero-stars { display: none; }
+
+/* vignette for text legibility, on top of orbital elements */
+.kiikis-landing-page .hero-cosmos::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background:
+    radial-gradient(ellipse at 50% 44%, transparent 38%, rgba(10, 14, 26, 0.55) 100%),
+    radial-gradient(ellipse at 50% 110%, rgba(10, 14, 26, 0.85), transparent 50%);
+  pointer-events: none;
+}
+
+.kiikis-landing-page .hero-cosmos::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image:
+    radial-gradient(circle, rgba(244, 246, 250, 0.85) 0 1px, transparent 1.4px);
+  background-size: 130px 130px;
+  background-position: 12px 10px;
+  opacity: 0.06;
+  pointer-events: none;
+}
+
+/* Orbital rings — icy silver/blue, centered */
+.kiikis-landing-page .story-dome {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  transform: translateX(-50%);
+  width: min(1080px, 86vw);
+  height: min(620px, 50vw);
+  border: 1px solid rgba(184, 194, 214, 0.10);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 30%, rgba(111, 168, 255, 0.05), transparent 52%);
+  box-shadow: inset 0 16px 90px rgba(111, 168, 255, 0.04);
+  z-index: 2;
+}
+
+.kiikis-landing-page .galaxy-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotateX(74deg);
+  border-radius: 50%;
+  z-index: 3;
+}
+
+.kiikis-landing-page .ring-one {
+  width: 640px;
+  height: 186px;
+  border: 1px solid rgba(184, 194, 214, 0.12);
+}
+
+.kiikis-landing-page .ring-two {
+  width: 920px;
+  height: 268px;
+  border: 1px solid rgba(184, 194, 214, 0.06);
+}
+
+/* Planets / orbs → cold blue + icy silver (no teal) */
+.kiikis-landing-page .planet-a {
+  position: absolute;
+  left: 72%;
+  top: 22%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 34%, #DCE8FF, #6FA8FF 46%, #1B3A6E);
+  box-shadow: 0 0 16px rgba(111, 168, 255, 0.55);
+  z-index: 4;
+}
+
+.kiikis-landing-page .planet-b {
+  position: absolute;
+  right: 16%;
+  top: 28%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%, #F4F6FA, #B8C2D6 36%, #6FA8FF 70%, #16233A);
+  box-shadow: 0 0 24px rgba(111, 168, 255, 0.45);
+  z-index: 4;
+}
+
+.kiikis-landing-page .planet-c {
+  position: absolute;
+  left: 66%;
+  top: 15%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, rgba(220, 232, 255, 0.92), #354870);
+  opacity: 0.7;
+  z-index: 4;
+}
+
+.kiikis-landing-page .creator-silhouette {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 280px;
+  opacity: 0.22;
+  filter: blur(0.4px) drop-shadow(0 -6px 34px rgba(111, 168, 255, 0.16));
+  z-index: 5;
+}
+
+/* ── 6. Hero copy — centered, generous breathing room ───────── */
+.kiikis-landing-page .hero-copy {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: clamp(96px, 16vh, 160px) clamp(24px, 6vw, 72px) clamp(80px, 12vh, 120px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.kiikis-landing-page .hero-kicker {
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  display: block;
+  color: var(--accent-blue);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+
+.kiikis-landing-page .hero-kicker::before { display: none; }
+
+.kiikis-landing-page .hero-copy h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink-primary);
+  max-width: 14ch;
+  margin: 0 0 28px;
+  text-wrap: balance;
+  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.5);
+}
+
+.kiikis-landing-page .hero-copy h1 .hero-line {
+  display: block;
+  white-space: normal;
+  color: var(--ink-primary);
+}
+
+.kiikis-landing-page .hero-copy > p {
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  font-size: clamp(15px, 1.3vw, 17px);
+  line-height: 1.6;
+  color: var(--ink-secondary);
+  max-width: 520px;
+  margin: 0 0 40px;
+}
+
+.kiikis-landing-page .hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── 7. Buttons ─────────────────────────────────────────────── */
+.kiikis-landing-page .kk-primary-cta {
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  min-height: 46px;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  color: #0A0E1A;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: box-shadow 200ms ease, background 200ms ease;
+}
+
+.kiikis-landing-page .kk-primary-cta:hover {
+  background: #82B4FF;
+  box-shadow: 0 0 20px rgba(111, 168, 255, 0.25);
+}
+
+.kiikis-landing-page .kk-secondary-cta {
+  font-family: Inter, "PingFang SC", system-ui, sans-serif;
+  min-height: 46px;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--ink-primary);
+  font-size: 15px;
+  font-weight: 500;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.kiikis-landing-page .kk-secondary-cta:hover {
+  background: var(--glass-fill);
+  border-color: var(--glass-border-hover);
+}
+
+/* ── 8. Stats — glassmorphism cards ─────────────────────────── */
+.kiikis-landing-page .kk-landing-stats {
+  max-width: 1080px;
+  margin: 8px auto 0;
+  position: relative;
+  z-index: 4;
+  opacity: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.kiikis-landing-page .kk-stat-glass-card {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.kiikis-landing-page .kk-stat-glass-card:hover {
+  border-color: var(--glass-border-hover);
+  box-shadow: var(--shadow-card), var(--glow-blue);
+}
+
+.kiikis-landing-page .kk-stat-glass-card strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 46px;
+  font-weight: 400;
+  color: var(--ink-primary);
+  line-height: 1;
+}
+
+.kiikis-landing-page .kk-stat-glass-card span {
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+}
+
+/* ── 9. Story-planet section — drop teal, use blue/silver ───── */
+.kiikis-landing-page .section-heading span {
+  color: var(--accent-blue);
+}
+
+.kiikis-landing-page .story-planet-card {
+  background: var(--glass-fill);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-card);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.kiikis-landing-page .story-planet-card:hover {
+  border-color: var(--glass-border-hover);
+  box-shadow: var(--shadow-card), var(--glow-blue);
+}
+
+.kiikis-landing-page .mini-planet-1 {
+  background: radial-gradient(circle at 32% 28%, #DCE8FF, #6FA8FF 24%, #1B3A6E 60%, #07111d 100%);
+  box-shadow: 0 0 28px rgba(111, 168, 255, 0.26);
+}
+
+.kiikis-landing-page .mini-planet-2 {
+  background: radial-gradient(circle at 32% 28%, #F4F6FA, #B8C2D6 26%, #4A6699 62%, #0b1020 100%);
+  box-shadow: 0 0 28px rgba(184, 194, 214, 0.22);
+}
+
+.kiikis-landing-page .mini-planet-3 {
+  background: radial-gradient(circle at 32% 28%, #EAF0FF, #8FB0E8 24%, #2A467E 60%, #0a0e1a 100%);
+  box-shadow: 0 0 28px rgba(143, 176, 232, 0.22);
+}
+
+/* ── 10. Landing responsive ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .kiikis-landing-page .kiikis-hero {
+    min-height: 78vh;
+  }
+  .kiikis-landing-page .hero-copy {
+    padding: clamp(72px, 12vh, 120px) 32px clamp(56px, 9vh, 96px);
+  }
+  .kiikis-landing-page .ring-one { width: 500px; height: 145px; }
+  .kiikis-landing-page .ring-two { width: 720px; height: 210px; }
+}
+
+@media (max-width: 640px) {
+  .kiikis-landing-page .kk-nav-links { display: none; }
+  .kiikis-landing-page .kk-landing-stats {
+    grid-template-columns: 1fr;
+    margin-top: 20px;
+  }
+  .kiikis-landing-page .hero-copy {
+    max-width: 100%;
+    padding: 84px 24px 72px;
+  }
+  .kiikis-landing-page .hero-actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 320px;
+  }
+  .kiikis-landing-page .kk-primary-cta,
+  .kiikis-landing-page .kk-secondary-cta {
+    width: 100%;
+    justify-content: center;
+  }
+  .kiikis-landing-page .ring-one { width: 340px; height: 100px; }
+  .kiikis-landing-page .ring-two { width: 500px; height: 148px; }
+}
+
+/* ═════════════════════════════════════════════════════════════
+   KIIKIS UI OS — Layer System Tokens (STRICT ORDER ONLY).
+   The only permitted z-index values. No custom z-index anywhere.
+   ═════════════════════════════════════════════════════════════ */
+:root {
+  --z-background: 0;
+  --z-depth: 10;
+  --z-overlay: 20;
+  --z-foreground: 30;
+  --z-ui: 40;
+}
+
+.layer-background { z-index: var(--z-background); }
+.layer-depth      { z-index: var(--z-depth); }
+.layer-overlay    { z-index: var(--z-overlay); }
+.layer-foreground { z-index: var(--z-foreground); }
+.layer-ui         { z-index: var(--z-ui); }
+
+/* ─────────────────────────────────────────────────────────────
+   HERO SYSTEM — deterministic layered asset renderer.
+   Real PNG layers from /public/design/hero/ via the manifest.
+   Overlay textures are opacity/compositing layers only — no
+   CSS-generated visuals, no gradients, no fallback shapes.
+   ───────────────────────────────────────────────────────────── */
+.kiikis-landing-page .hero-cosmos .hero-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* overlay textures composite over depth/background (DOM order resolves
+   starfield → nebula → glow within the shared overlay layer) */
+.kiikis-landing-page .hero-layer[data-token="HERO_AUX_STARFIELD"] { opacity: 0.55; mix-blend-mode: screen; }
+.kiikis-landing-page .hero-layer[data-token="OVERLAY_NEBULA"]     { opacity: 0.5;  mix-blend-mode: screen; }
+.kiikis-landing-page .hero-layer[data-token="OVERLAY_GLOW"]       { opacity: 0.7;  mix-blend-mode: screen; }
+
+/* focal art sits in the foreground layer, contained */
+.kiikis-landing-page .hero-layer[data-token="HERO_MAIN"] {
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+/* hero copy is the UI layer (above the focal art) */
+.kiikis-landing-page .hero-copy { z-index: var(--z-ui); }
+
+/* Remove ALL CSS-generated hero visuals — legacy + decorative.
+   The asset stack is the only source of truth. */
+.kiikis-landing-page .kk-hero-glow,
+.kiikis-landing-page .kk-hero-stars,
+.kiikis-landing-page .hero-cosmos::before,
+.kiikis-landing-page .hero-cosmos::after,
+.kiikis-landing-page .story-dome,
+.kiikis-landing-page .galaxy-ring,
+.kiikis-landing-page .planet,
+.kiikis-landing-page .planet-a,
+.kiikis-landing-page .planet-b,
+.kiikis-landing-page .planet-c,
+.kiikis-landing-page .creator-silhouette { display: none !important; }
+
+/* ═════════════════════════════════════════════════════════════
+   WORKSPACE SYSTEM — pure asset-driven module grid.
+   7 module cards, each = 1 image asset (manifest tokens).
+   3 columns desktop, responsive. No div cards, no CSS visuals,
+   no gradients, no fallback UI. Spacing inherited from UI tokens.
+   ═════════════════════════════════════════════════════════════ */
+.workspace-module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+  width: 100%;
+  margin: var(--space-8) 0;
+}
+
+/* clickable wrapper carries no visual style — the image IS the card */
+.workspace-module-card {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.workspace-module-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* hover = basic opacity only (no other effects permitted) */
+.workspace-module-card:hover img { opacity: 0.92; }
+.workspace-module-card:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 4px; }
+
+@media (max-width: 980px) {
+  .workspace-module-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+}
+@media (max-width: 640px) {
+  .workspace-module-grid { grid-template-columns: 1fr; }
+}
+
+/* ═════════════════════════════════════════════════════════════
+   KIIKIS UI OS v3 — SPATIAL LAYER SYSTEM (page composition).
+   Navbar (floating) → Hero (fixed full-viewport) → scroll
+   transition → content systems. These are the only page-level
+   z-index values. Scoped to the landing page so other routes
+   (dashboard, etc.) keep their in-flow nav. Last-wins block.
+   ═════════════════════════════════════════════════════════════ */
+:root {
+  --z-navbar: 1000;
+  --z-hero: 0;
+  --z-transition: 10;
+  --z-content: 20;
+}
+
+/* STEP 1 — floating glass navbar */
+.kiikis-landing-page .navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: var(--z-navbar);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(10, 15, 25, 0.4);
+}
+
+/* STEP 2 — hero is a fixed full-viewport immersion layer (out of flow,
+   adds no document height). Overrides the legacy in-flow hero rules. */
+.kiikis-landing-page .hero-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  margin: 0;
+  max-width: none;
+  z-index: var(--z-hero);
+  overflow: hidden;
+  background: transparent;
+}
+
+/* STEP 3 — scroll transition bridge: smooth fade Hero → Content.
+   In flow, sits above the fixed hero; transparent top reveals the
+   hero, darkening into the solid content backdrop. */
+.kiikis-landing-page .scroll-transition {
+  position: relative;
+  z-index: var(--z-transition);
+  height: 120vh;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(5, 10, 20, 0.6),
+    #050a14
+  );
+  pointer-events: none;
+}
+
+/* STEP 4 — content systems start below the hero viewport and never
+   overlap it; solid backdrop covers the fixed hero behind. */
+.kiikis-landing-page .container {
+  position: relative;
+  z-index: var(--z-content);
+  background: #050a14;
+}
+
+/* ═════════════════════════════════════════════════════════════
+   KIIKIS UNIVERSE — GRAPH ENGINE (spatial node system).
+   Full-viewport space: deep-space map + texture, SVG edges,
+   absolutely-positioned floating asset nodes, asset-only filter
+   overlays. No grids, no flex, no flat panels.
+   ═════════════════════════════════════════════════════════════ */
+.universe-engine {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #02060f;
+}
+
+.universe-brand {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 40;
+}
+
+.universe-graph {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+}
+
+/* deep-space map + layered texture (universe assets) */
+.universe-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+.universe-bg-map { z-index: 0; }
+.universe-bg-texture { z-index: 1; opacity: 0.45; mix-blend-mode: screen; }
+
+/* edges — visual only */
+.universe-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+.universe-edge {
+  stroke: rgba(111, 168, 255, 0.32);
+  stroke-width: 0.18;
+  vector-effect: non-scaling-stroke;
+}
+.universe-edge.edge-unlock { stroke: rgba(126, 220, 255, 0.30); stroke-dasharray: 1.4 1.4; }
+.universe-edge.edge-dependency { stroke: rgba(184, 194, 214, 0.22); }
+
+/* floating nodes — absolute, image-only, hover/click */
+.universe-node {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -50%) scale(var(--node-scale, 1));
+  width: clamp(96px, 12vw, 168px);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+.universe-node img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.universe-node.node-flagship { z-index: 4; }
+.universe-node:hover,
+.universe-node:focus-visible,
+.universe-node.is-active {
+  outline: none;
+  transform: translate(-50%, -50%) scale(calc(var(--node-scale, 1) * 1.06));
+  filter: drop-shadow(0 0 26px rgba(111, 168, 255, 0.45));
+}
+
+/* filter system — asset overlays only (no dropdowns) */
+.universe-filter-tabs {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: clamp(280px, 42vw, 540px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+.universe-badges {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: clamp(220px, 30vw, 380px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* KIIKIS hero fullscreen fix: final viewport-bleed override. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+.hero-root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  max-width: none !important;
+  overflow: hidden;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin-top: calc(-1 * var(--layout-padding-y, 0px));
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+
+.kiikis-landing-page {
+  --layout-padding-y: 18px;
+}
+
+.kiikis-landing-page .hero-root {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  max-width: none !important;
+  margin-top: calc(-1 * var(--layout-padding-y, 0px));
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+
+.hero-root img,
+.hero-root .hero-asset-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.hero-root .layer-backdrop {
+  z-index: 0;
+}
+
+.hero-root .layer-env {
+  z-index: 10;
+}
+
+.hero-root .layer-starfield,
+.hero-root .layer-nebula,
+.hero-root .layer-atmo {
+  z-index: 20;
+}
+
+.hero-root .layer-main {
+  z-index: 30;
+}
+
+.hero-root .layer-ui {
+  position: relative;
+  z-index: 40;
+}
+
+.hero-root .hero-content {
+  height: 100%;
+}
+
+.hero-gradient,
+.story-dome,
+.galaxy-ring,
+.hero-cosmos,
+.planet,
+.creator-silhouette {
+  display: none !important;
+}
+
+/* ═════════════════════════════════════════════════════════════
+   KIIKIS KK — COMPANION PRESENCE LAYER (single, cross-page).
+   One image asset per state; only one visible at a time. No CSS
+   avatar drawing, no sprite/animation, no state-transition tweens.
+   ═════════════════════════════════════════════════════════════ */
+.kk-companion {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1100; /* above floating navbar (1000), below guide layer */
+  width: clamp(72px, 7vw, 104px);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+}
+.kk-companion img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* GUIDE: dim backdrop disables unrelated UI; guide overlay asset centred. */
+.kk-guide-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 18, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+.kk-guide-overlay {
+  width: clamp(280px, 42vw, 560px);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ═════════════════════════════════════════════════════════════
+   KIIKIS PRICING — MONETIZATION OS LAYER.
+   Centered vertical tier stack. Each tier surface is a glass /
+   flagship card asset; badge + icon are overlays only; the sole
+   control is SELECT TIER. No tables, no feature columns.
+   ═════════════════════════════════════════════════════════════ */
+.kk-monetization-os {
+  position: relative;
+  min-height: 100vh;
+  background: #02060f;
+  padding: 96px 24px 120px;
+}
+.kk-monetization-brand {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 40;
+}
+
+/* centered vertical stack */
+.kk-monetization {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* a tier = stacked asset surface + overlays, not a composited card */
+.kk-tier {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  isolation: isolate;
+}
+.kk-tier.is-flagship { width: 100%; max-width: 560px; transform: scale(1.04); }
+.kk-tier.is-selected { filter: drop-shadow(0 0 28px rgba(111, 168, 255, 0.5)); }
+
+.kk-tier-glass {
+  display: block;
+  width: 100%;
+  height: auto;
+  z-index: 0;
+}
+
+/* badge overlay — top-right corner, overlay only */
+.kk-tier-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: clamp(56px, 12%, 88px);
+  height: auto;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* tier icon overlay */
+.kk-tier-icon {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(64px, 22%, 120px);
+  height: auto;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+}
+
+.kk-tier-name {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  letter-spacing: 0.22em;
+  font-size: 13px;
+  font-weight: 600;
+  color: #dce8ff;
+}
+
+/* the only permitted button inside a tier */
+.kk-tier-select {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 10px 26px;
+  border: 1px solid rgba(111, 168, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(10, 15, 25, 0.55);
+  color: #eaf1ff;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kk-tier-select:hover { background: rgba(111, 168, 255, 0.22); }
+
+/* ═════════════════════════════════════════════════════════════
+   KIIKIS OS — SYSTEM SWITCHER (asset-driven navigation).
+   Fixed rail of system-switching triggers; replaces navbar nav.
+   Shares the global spacing + z-index token systems.
+   ═════════════════════════════════════════════════════════════ */
+.kk-system-switcher {
+  position: fixed;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1100; /* peer of the KK presence layer */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.kk-system-trigger {
+  width: 40px;
+  height: 40px;
+  padding: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(10, 15, 25, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  opacity: 0.55;
+  appearance: none;
+}
+.kk-system-trigger img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.kk-system-trigger:hover { opacity: 0.85; }
+.kk-system-trigger.is-active {
+  opacity: 1;
+  outline: 1px solid rgba(111, 168, 255, 0.6);
+  box-shadow: 0 0 18px rgba(111, 168, 255, 0.35);
+}
+.kk-system-trigger.is-locked { opacity: 0.3; }

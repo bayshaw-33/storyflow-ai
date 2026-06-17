@@ -3,8 +3,13 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
+    "prebuild": "node scripts/validate-assets.mjs",
     "build": "next build",
-    "start": "next start -H 127.0.0.1"
+    "start": "next start -H 127.0.0.1",
+    "clean-cache": "node scripts/clean-cache.mjs",
+    "rebuild-assets": "node scripts/rebuild-assets.mjs",
+    "validate-assets": "node scripts/validate-assets.mjs",
+    "check-orphans": "node scripts/check-orphans.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",

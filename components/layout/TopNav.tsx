@@ -11,15 +11,16 @@ type TopNavProps = {
   onSignUp: () => void;
   onSignOut: () => void;
   onEnterRoom?: () => void;
+  brandInline?: boolean;
 };
 
-export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp }: TopNavProps) {
+export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp, brandInline = false }: TopNavProps) {
   const { locale, setLocale, t } = useI18n();
 
   return (
-    <header className="kk-top-nav">
+    <header className="kk-top-nav navbar">
       <Link className="kk-nav-brand" href="/">
-        <KiikisLogo compact />
+        <KiikisLogo compact inline={brandInline} />
       </Link>
 
       <nav className="kk-nav-links" aria-label="Primary">

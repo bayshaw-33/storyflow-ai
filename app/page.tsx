@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { KKFloatingOrb } from "@/components/home/KKFloatingOrb";
 import { HeroSection } from "@/components/home/HeroSection";
 import { StoryPlanetSection } from "@/components/landing/StoryPlanetSection";
 import { TopNav } from "@/components/layout/TopNav";
@@ -36,6 +35,7 @@ export default function LandingPage() {
   return (
     <main className="kiikis-site kiikis-landing-page">
       <TopNav
+        brandInline
         session={session}
         onEnterRoom={enterWriterRoom}
         onSignIn={enterWriterRoom}
@@ -43,22 +43,24 @@ export default function LandingPage() {
         onSignOut={signOut}
       />
       <HeroSection onStartCreating={enterWriterRoom} />
-      <section className="kk-landing-stats" aria-label="Platform capabilities">
-        <div className="kk-stat-glass-card">
-          <strong>60-80</strong>
-          <span>Episodes per complete draft</span>
-        </div>
-        <div className="kk-stat-glass-card">
-          <strong>5</strong>
-          <span>Specialized AI writer roles</span>
-        </div>
-        <div className="kk-stat-glass-card">
-          <strong>6</strong>
-          <span>Story formats supported</span>
-        </div>
-      </section>
-      <StoryPlanetSection />
-      <KKFloatingOrb />
+      <section className="scroll-transition" aria-hidden="true" />
+      <div className="container">
+        <section className="kk-landing-stats" aria-label="Platform capabilities">
+          <div className="kk-stat-glass-card">
+            <strong>60-80</strong>
+            <span>Episodes per complete draft</span>
+          </div>
+          <div className="kk-stat-glass-card">
+            <strong>5</strong>
+            <span>Specialized AI writer roles</span>
+          </div>
+          <div className="kk-stat-glass-card">
+            <strong>6</strong>
+            <span>Story formats supported</span>
+          </div>
+        </section>
+        <StoryPlanetSection />
+      </div>
     </main>
   );
 }

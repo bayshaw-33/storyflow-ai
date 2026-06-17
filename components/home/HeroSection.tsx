@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n/useI18n";
+import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
 type HeroSectionProps = {
   onStartCreating: () => void;
@@ -11,22 +12,53 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
   const isZh = locale === "zh-CN";
 
   return (
-    <section className="kiikis-hero" aria-labelledby="kiikis-hero-title">
-      <div className="hero-cosmos" aria-hidden="true">
-        <div className="story-dome" />
-        <div className="galaxy-ring ring-one" />
-        <div className="galaxy-ring ring-two" />
-        <span className="planet planet-a" />
-        <span className="planet planet-b lit" />
-        <span className="planet planet-c" />
-        <div className="creator-silhouette">
-          <div className="creator-head" />
-          <div className="creator-body" />
-          <div className="shoulder-cat" />
-        </div>
-      </div>
+    <div className="hero-root" aria-labelledby="kiikis-hero-title">
+      <DesignAssetImage
+        token="HERO_BACKDROP"
+        className="hero-asset-layer layer-backdrop"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        priority
+      />
+      <DesignAssetImage
+        token="HERO_ENVIRONMENT"
+        className="hero-asset-layer layer-env"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+      <DesignAssetImage
+        token="HERO_STARFIELD"
+        className="hero-asset-layer layer-starfield"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+      <DesignAssetImage
+        token="HERO_NEBULA"
+        className="hero-asset-layer layer-nebula"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+      <DesignAssetImage
+        token="HERO_ATMOSPHERE"
+        className="hero-asset-layer layer-atmo"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+      <DesignAssetImage
+        token="HERO_MAIN"
+        className="hero-asset-layer layer-main"
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        priority
+      />
 
-      <div className="hero-copy">
+      <div className="hero-content hero-copy layer-ui">
         <span className="hero-kicker">{t("landing.hero.kicker")}</span>
         <h1 id="kiikis-hero-title">
           {isZh ? (
@@ -55,6 +87,6 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
           </button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
