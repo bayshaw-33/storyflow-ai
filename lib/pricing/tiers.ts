@@ -33,10 +33,14 @@ export const TIERS: TierDef[] = [
   { id: "TEAM", planId: "team", icon: "UNIVERSE_TIER_ICONS", badge: "pre-launch" },
 ];
 
-// Flagship tier renders on the Universe flagship card; all others on the
-// shared pricing glass card texture.
-export function glassAssetFor(tier: TierDef): AssetToken {
-  return tier.id === FLAGSHIP_TIER ? "UNIVERSE_FLAGSHIP" : "UNIVERSE_PRICING_GLASS";
+// All four tiers share the same clean glass texture — the dedicated
+// "flagship" art asset has stale branding text baked into its pixels from
+// an earlier design pass and must not be used to represent a real tier
+// card (it would show mismatched text next to the actual tier name).
+// The flagship tier is still visually distinguished via the .is-flagship
+// border-glow treatment in CSS, no separate image needed.
+export function glassAssetFor(_tier: TierDef): AssetToken {
+  return "UNIVERSE_PRICING_GLASS";
 }
 
 export function isFlagship(tier: TierDef): boolean {

@@ -35,7 +35,6 @@ export default function LandingPage() {
   return (
     <main className="kiikis-site kiikis-landing-page">
       <TopNav
-        brandInline
         session={session}
         onEnterRoom={enterWriterRoom}
         onSignIn={enterWriterRoom}

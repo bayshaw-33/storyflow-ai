@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
@@ -11,25 +12,36 @@ type TopNavProps = {
   onSignUp: () => void;
   onSignOut: () => void;
   onEnterRoom?: () => void;
-  brandInline?: boolean;
 };
 
-export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp, brandInline = false }: TopNavProps) {
+export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp }: TopNavProps) {
   const { locale, setLocale, t } = useI18n();
+  const [hidden, setHidden] = useState(false);
+  const lastY = useRef(0);
+
+  useEffect(() => {
+    lastY.current = window.scrollY;
+    function onScroll() {
+      const y = window.scrollY;
+      const delta = y - lastY.current;
+      if (y < 80) {
+        setHidden(false);
+      } else if (delta > 4) {
+        setHidden(true);
+      } else if (delta < -4) {
+        setHidden(false);
+      }
+      lastY.current = y;
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <header className="kk-top-nav navbar">
+    <header className={`kk-top-nav navbar${hidden ? " is-nav-hidden" : ""}`}>
       <Link className="kk-nav-brand" href="/">
-        <KiikisLogo compact inline={brandInline} />
+        <KiikisLogo compact />
       </Link>
-
-      <nav className="kk-nav-links" aria-label="Primary">
-        <a href="#product">{t("nav.product")}</a>
-        <Link href="/universes">{t("nav.universe")}</Link>
-        <Link href="/companions">{t("nav.companions")}</Link>
-        <Link href="/subscription">{t("nav.pricing")}</Link>
-        <Link href="/templates">{t("nav.resources")}</Link>
-      </nav>
 
       <div className="kk-nav-actions">
         <div className="kk-language-switch" aria-label="Interface language">
@@ -59,18 +71,15 @@ export function TopNav({ session, onEnterRoom, onSignIn, onSignOut, onSignUp, br
             </button>
           </>
         ) : (
-          <>
+          <div className="kk-auth-buttons">
             <button className="kk-text-button" type="button" onClick={onSignUp}>
               {t("auth.signUp")}
             </button>
             <button className="kk-text-button primary" type="button" onClick={onSignIn}>
               {t("auth.signIn")}
             </button>
-          </>
+          </div>
         )}
-        <button className="kk-room-button" type="button" onClick={onEnterRoom || onSignIn}>
-          {t("action.enterWritersRoom")}
-        </button>
       </div>
     </header>
   );

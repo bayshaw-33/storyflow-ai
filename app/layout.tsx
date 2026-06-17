@@ -3,7 +3,7 @@ import { BRAND_NAME, TAGLINE_EN } from "@/lib/brand";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 import { OSProvider } from "@/lib/os/uiState";
 import { KKProvider } from "@/components/kk/KKProvider";
-import { SystemSwitcher } from "@/components/os/SystemSwitcher";
+import { GlobalSideNav } from "@/components/layout/GlobalSideNav";
 import { DevBridge } from "@/components/dev/DevBridge";
 import "./globals.css";
 
@@ -21,7 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <OSProvider>
             <KKProvider>
               {children}
-              <SystemSwitcher />
+              <GlobalSideNav />
               <DevBridge />
             </KKProvider>
           </OSProvider>

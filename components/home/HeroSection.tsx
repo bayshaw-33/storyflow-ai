@@ -59,7 +59,6 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
       />
 
       <div className="hero-content hero-copy layer-ui">
-        <span className="hero-kicker">{t("landing.hero.kicker")}</span>
         <h1 id="kiikis-hero-title">
           {isZh ? (
             <>
@@ -81,9 +80,6 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
         <div className="hero-actions">
           <button className="kk-primary-cta" type="button" onClick={onStartCreating}>
             {t("landing.hero.primary")}
-          </button>
-          <button className="kk-secondary-cta" type="button">
-            {t("landing.hero.secondary")}
           </button>
         </div>
       </div>

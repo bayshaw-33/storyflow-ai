@@ -52,13 +52,6 @@ export default function SettingsPage() {
     <main className="cosmic-page settings-page">
       <header className="cosmic-page-header">
         <Link href="/"><KiikisLogo compact /></Link>
-        <nav>
-          <Link href="/dashboard">{isZh ? "工作台" : "Dashboard"}</Link>
-          <Link href="/universes">{isZh ? "宇宙" : "Universe"}</Link>
-          <Link href="/companions">{isZh ? "伙伴" : "Companions"}</Link>
-          <Link href="/templates">{isZh ? "模板" : "Templates"}</Link>
-          <Link href="/subscription">{isZh ? "订阅" : "Pricing"}</Link>
-        </nav>
       </header>
 
       <section className="cosmic-title-band">

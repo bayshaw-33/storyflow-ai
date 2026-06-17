@@ -93,13 +93,6 @@ export default function TemplatesPage() {
     <main className="cosmic-page">
       <header className="cosmic-page-header">
         <Link href="/"><KiikisLogo compact /></Link>
-        <nav>
-          <Link href="/dashboard">{isZh ? "工作台" : "Dashboard"}</Link>
-          <Link href="/universes">{isZh ? "宇宙" : "Universe"}</Link>
-          <Link href="/companions">{isZh ? "伙伴" : "Companions"}</Link>
-          <Link href="/subscription">{isZh ? "订阅" : "Pricing"}</Link>
-          <Link href="/settings">{isZh ? "设置" : "Settings"}</Link>
-        </nav>
       </header>
 
       <section className="cosmic-title-band">

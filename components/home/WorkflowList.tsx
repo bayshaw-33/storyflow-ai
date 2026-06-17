@@ -9,10 +9,11 @@ const workflowEntries = [
     titleZh: "短剧",
     description: "Fast vertical episodes with hooks, cliffhangers, and delivery assets.",
     descriptionZh: "高密度竖屏短剧，包含钩子、反转和交付内容。",
-    steps: 9,
+    steps: 14,
     difficulty: "Focused",
     difficultyZh: "聚焦",
     mode: "creation" as WorkflowType,
+    comingSoon: false,
   },
   {
     title: "Novel",
@@ -23,6 +24,7 @@ const workflowEntries = [
     difficulty: "Deep",
     difficultyZh: "深入",
     mode: "creation" as WorkflowType,
+    comingSoon: true,
   },
   {
     title: "Film Script",
@@ -33,6 +35,7 @@ const workflowEntries = [
     difficulty: "Pro",
     difficultyZh: "专业",
     mode: "creation" as WorkflowType,
+    comingSoon: true,
   },
   {
     title: "MV Concept",
@@ -43,6 +46,7 @@ const workflowEntries = [
     difficulty: "Beta",
     difficultyZh: "测试",
     mode: "creation" as WorkflowType,
+    comingSoon: true,
   },
 ];
 
@@ -64,7 +68,13 @@ export function WorkflowList({ onSelectWorkflow }: WorkflowListProps) {
       </div>
       <div className="workflow-template-grid">
         {workflowEntries.map((entry) => (
-          <article className="workflow-template-card" key={entry.title}>
+          <article
+            className={entry.comingSoon ? "workflow-template-card is-coming-soon" : "workflow-template-card"}
+            key={entry.title}
+          >
+            {entry.comingSoon ? (
+              <span className="coming-soon-badge">{isZh ? "即将开放" : "Coming Soon"}</span>
+            ) : null}
             <span className="workflow-thumb" />
             <div>
               <h3>{isZh ? entry.titleZh : entry.title}</h3>
@@ -74,8 +84,15 @@ export function WorkflowList({ onSelectWorkflow }: WorkflowListProps) {
               <span>{entry.steps} {isZh ? "步" : "steps"}</span>
               <span>{isZh ? entry.difficultyZh : entry.difficulty}</span>
             </div>
-            <button type="button" onClick={() => onSelectWorkflow(entry.mode)}>
-              {isZh ? "开始" : "Start"}
+            <button
+              type="button"
+              disabled={entry.comingSoon}
+              onClick={() => {
+                if (entry.comingSoon) return;
+                onSelectWorkflow(entry.mode);
+              }}
+            >
+              {entry.comingSoon ? (isZh ? "敬请期待" : "Coming Soon") : (isZh ? "开始" : "Start")}
             </button>
           </article>
         ))}

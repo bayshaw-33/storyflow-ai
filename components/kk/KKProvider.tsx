@@ -116,7 +116,7 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
     if (os.access.fullKK) {
       setGuide(true);
     } else {
-      router.push("/subscription");
+      router.push("/dashboard");
     }
   }, [os.access.fullKK, setGuide, router]);
 
