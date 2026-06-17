@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { HeroSection } from "@/components/home/HeroSection";
-import { StoryPlanetSection } from "@/components/landing/StoryPlanetSection";
+import { SignatureSections } from "@/components/landing/SignatureSections";
 import { TopNav } from "@/components/layout/TopNav";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -58,7 +58,7 @@ export default function LandingPage() {
             <span>Story formats supported</span>
           </div>
         </section>
-        <StoryPlanetSection />
+        <SignatureSections />
       </div>
     </main>
   );

@@ -1,42 +1,54 @@
 /* ============================================================================
-   KIIKIS — globals.css  (clean rewrite)
-   One unified dark "cosmic" design system. No conflicting :root blocks,
-   no duplicate component rules. Built from the 233 classes actually used
-   by the components. Hero (homepage) styling preserved & tuned.
+   KIIKIS — globals.css
+   Two visual languages, one file: the homepage HERO keeps its original
+   cosmic starfield treatment untouched; every other surface in the product
+   (dashboard, pricing, companions, settings, project workspace, modals, the
+   rest of the homepage below the hero) uses a Linear-inspired system —
+   near-black neutral surfaces, hairline borders, soft non-glowing shadows,
+   Inter at restrained weights, and the brand's cyan→blue identity expressed
+   as a single rationed gradient rather than scattered glow effects.
    ============================================================================ */
 
 /* ── Design tokens (single source of truth) ─────────────────────────────── */
 :root {
-  /* surfaces */
-  --bg-void: #0A0E1A;
-  --bg-deep: #0F1626;
-  --bg-elevated: #161D30;
+  /* surfaces — neutral near-black, not navy-tinted. Safe to change globally:
+     the hero's own starfield image layers fully cover its box regardless of
+     what the underlying page background is, so this never reaches the eye
+     behind the hero. */
+  --bg-void: #0A0A0B;
+  --bg-deep: #111113;
+  --bg-elevated: #18181B;
 
-  /* glass */
-  --glass-fill: rgba(22, 29, 48, 0.72);
-  --glass-fill-strong: rgba(26, 35, 58, 0.85);
-  --glass-border: rgba(180, 210, 255, 0.12);
-  --glass-border-hover: rgba(180, 210, 255, 0.28);
+  /* surface panels — flat, no blur. "glass" naming kept for backward
+     compatibility with existing selectors; the values are now solid fills
+     with a hairline border instead of frosted glass. */
+  --glass-fill: #141416;
+  --glass-fill-strong: #1C1C1F;
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-border-hover: rgba(255, 255, 255, 0.20);
 
   /* ink */
-  --ink-primary: #F4F6FA;
-  --ink-secondary: #B8C2D6;
-  --ink-muted: #6E7A93;
+  --ink-primary: #F2F2F3;
+  --ink-secondary: #9A9AA4;
+  --ink-muted: #6B6B72;
 
-  /* accent */
-  --accent-blue: #6FA8FF;
-  --accent-blue-bright: #82B4FF;
-  --accent-cyan: #8FE3E8;
+  /* accent — KiiKis brand cyan→blue, kept (not swapped for Linear's own
+     lime). Expressed as a single rationed gradient, the one signature
+     accent move of this system. */
+  --accent-blue: #5B8CFF;
+  --accent-blue-bright: #6FA0FF;
+  --accent-cyan: #6FE8DC;
   --accent-tiffany: #8ADFDA;
+  --accent-gradient: linear-gradient(128deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
   --divider: rgba(255, 255, 255, 0.08);
   --success: #4CEFA8;
   --warning: #F5C842;
   --danger: #FF6B6B;
 
-  /* radius */
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
+  /* radius — tighter, more engineered. Full-pill kept only for chips/badges. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-full: 999px;
 
   /* spacing */
@@ -49,11 +61,12 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* effects */
-  --blur-glass: blur(16px);
-  --shadow-card: 0 24px 80px rgba(0, 0, 0, 0.32);
-  --glow-blue: 0 0 40px rgba(111, 168, 255, 0.18);
-  --glow-cyan: 0 0 32px rgba(143, 227, 232, 0.22);
+  /* effects — blur retired (Linear's redesign moved away from
+     glassmorphism); shadows are soft and neutral, never a colored glow. */
+  --blur-glass: none;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.30);
+  --glow-blue: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.32);
+  --glow-cyan: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.32);
   --transition-base: 150ms ease;
 
   /* z-index scale */
@@ -71,8 +84,19 @@
   --nav-height: 132px;
 
   /* type */
+  /* --font-display is the hero's serif headline face — used nowhere else,
+     kept exactly as-is so the hero is untouched by this redesign. */
   --font-display: Georgia, "Times New Roman", "PingFang SC", "Microsoft YaHei", serif;
-  --font-body: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: var(--font-inter), "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  /* --font-heading: every OTHER headline in the product (dashboard, modals,
+     page titles). Same Inter family as body — Linear's "razor-thin type"
+     comes from weight (300) and tracking, not from a separate display face. */
+  --font-heading: var(--font-inter), "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  /* --font-mono: the one signature touch of this redesign — every raw
+     number (stats, scores, step indices, prices) renders in monospace at
+     a restrained weight, the "instrument panel" precision read that sets
+     data apart from prose without resorting to bold or color alone. */
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
 }
 
 /* ── Global reset / base ─────────────────────────────────────────────────── */
@@ -137,17 +161,17 @@ img { max-width: 100%; display: block; }
   min-height: 44px;
   padding: 11px 22px;
   border-radius: var(--radius-sm);
-  background: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
-  color: #0A0E1A;
+  background: var(--accent-gradient);
+  border: 1px solid transparent;
+  color: var(--bg-void);
   font-size: 15px;
   font-weight: 600;
-  transition: background var(--transition-base), box-shadow var(--transition-base);
+  transition: filter var(--transition-base), box-shadow var(--transition-base);
 }
 .primary-button:hover,
 .kk-primary-cta:hover,
 .kk-room-button:hover {
-  background: var(--accent-blue-bright);
+  filter: brightness(1.08);
   box-shadow: var(--glow-blue);
 }
 
@@ -277,13 +301,15 @@ input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="search"],
+input[type="number"],
+input:not([type]),
 textarea,
 select {
   width: 100%;
   padding: 11px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--glass-border);
-  background: rgba(10, 14, 26, 0.6);
+  background: rgba(0, 0, 0, 0.35);
   color: var(--ink-primary);
   font-size: 14px;
   transition: border-color var(--transition-base);
@@ -325,7 +351,7 @@ input:focus, textarea:focus, select:focus {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 18px;
   color: var(--ink-primary);
 }
@@ -540,12 +566,34 @@ input:focus, textarea:focus, select:focus {
   text-align: center;
 }
 .kk-stat-glass-card strong {
-  font-size: 32px; font-weight: 700; color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 32px; font-weight: 600; color: var(--accent-cyan); letter-spacing: -0.02em;
 }
 .kk-stat-glass-card span { font-size: 13px; color: var(--ink-secondary); }
 
 /* story planet section (landing) */
 .story-planet-section { max-width: 1080px; margin: 64px auto; }
+
+/* signature image sequence — 7 fully-designed marketing slides, presented
+   full-width in order. The artwork carries the content; layout stays out
+   of the way. */
+.signature-sections {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(28px, 5vw, 56px);
+  padding: clamp(24px, 5vw, 48px) 0 var(--space-16);
+}
+.signature-slide {
+  margin: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.signature-slide img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 .story-planet-grid,
 .planet-card-grid {
   display: grid;
@@ -664,9 +712,10 @@ input:focus, textarea:focus, select:focus {
   border: 1px solid var(--glass-border);
 }
 .dashboard-welcome h1, .dashboard-welcome h2 {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: clamp(1.6rem, 3vw, 2.2rem);
-  font-weight: 400;
+  font-weight: 300;
+  letter-spacing: -0.01em;
 }
 .dashboard-welcome p { color: var(--ink-secondary); margin-top: 6px; }
 
@@ -681,7 +730,7 @@ input:focus, textarea:focus, select:focus {
   margin-bottom: var(--space-4);
 }
 .nebula-stat-grid > div { text-align: center; }
-.nebula-stat-grid strong { display: block; font-size: 28px; font-weight: 700; color: var(--accent-cyan); }
+.nebula-stat-grid strong { display: block; font-family: var(--font-mono); font-size: 28px; font-weight: 600; color: var(--accent-cyan); letter-spacing: -0.02em; }
 .nebula-stat-grid span { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .today-spark p { color: var(--ink-secondary); font-size: 14px; }
 .compact { min-height: 38px; padding: 8px 16px; font-size: 14px; }
@@ -697,7 +746,7 @@ input:focus, textarea:focus, select:focus {
   width: 36px; height: 36px; border-radius: 50%;
   background: var(--glass-fill-strong); flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; color: var(--accent-cyan);
+  font-weight: 600; color: var(--accent-cyan);
 }
 
 /* ── WORKSPACE MODULE CARDS  (fix: dark container, no white/checkerboard) ── */
@@ -754,7 +803,7 @@ input:focus, textarea:focus, select:focus {
   box-shadow: var(--shadow-card);
 }
 .wizard-modal { max-width: 720px; }
-.modal h2, .modal h3 { font-family: var(--font-display); font-weight: 400; margin-bottom: var(--space-4); }
+.modal h2, .modal h3 { font-family: var(--font-heading); font-weight: 300; letter-spacing: -0.01em; margin-bottom: var(--space-4); }
 .modal-actions {
   display: flex; justify-content: flex-end; gap: var(--space-3);
   margin-top: var(--space-6);
@@ -815,7 +864,7 @@ input:focus, textarea:focus, select:focus {
 .kk-tier-icon { position: relative; z-index: 2; width: 48px; height: 48px; }
 .kk-tier-name {
   position: relative; z-index: 2;
-  font-size: 15px; font-weight: 700; letter-spacing: 0.12em;
+  font-size: 15px; font-weight: 600; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--ink-primary);
 }
 .kk-tier-select {
@@ -829,7 +878,7 @@ input:focus, textarea:focus, select:focus {
   backdrop-filter: var(--blur-glass);
   transition: var(--transition-base);
 }
-.kk-tier-select:hover { background: var(--accent-blue); color: #0A0E1A; border-color: var(--accent-blue); }
+.kk-tier-select:hover { background: var(--accent-blue); color: var(--bg-void); border-color: var(--accent-blue); }
 
 /* ============================================================================
    COSMIC PAGE  (templates / generic content page)
@@ -841,9 +890,10 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-12) clamp(20px, 4vw, 40px) var(--space-8);
 }
 .cosmic-page-header h1, .cosmic-title-band h1 {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: clamp(2.2rem, 5vw, 3.6rem);
-  font-weight: 400;
+  font-weight: 300;
+  letter-spacing: -0.015em;
   line-height: 1.1;
 }
 .cosmic-page-header p { color: var(--ink-secondary); margin-top: var(--space-3); }
@@ -885,22 +935,22 @@ input:focus, textarea:focus, select:focus {
   background: rgba(245, 200, 66, 0.15);
   border: 1px solid rgba(245, 200, 66, 0.4);
   color: var(--warning);
-  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
 }
 .workflow-template-card button {
   align-self: flex-start;
   margin-top: var(--space-2);
   padding: 9px 20px;
   border-radius: var(--radius-sm);
-  background: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
-  color: #0A0E1A;
+  background: var(--accent-gradient);
+  border: 1px solid transparent;
+  color: var(--bg-void);
   font-size: 13px;
   font-weight: 600;
   transition: var(--transition-base);
 }
 .workflow-template-card button:hover:not(:disabled) {
-  background: var(--accent-blue-bright);
+  filter: brightness(1.08);
   box-shadow: var(--glow-blue);
 }
 .workflow-template-card button:disabled {
@@ -1096,6 +1146,18 @@ input:focus, textarea:focus, select:focus {
   gap: var(--space-3); flex-wrap: wrap;
 }
 
+/* Story Bible — collapsible so it never crowds out the actual step editor */
+.story-bible-toggle {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.story-bible-toggle .toggle-icon { margin-left: auto; flex-shrink: 0; }
+.story-bible-panel.is-collapsed {
+  padding-bottom: var(--space-4);
+}
+.story-bible-panel.is-collapsed .story-bible-head { margin-bottom: 0; }
+
 /* delivery / downloads */
 .download-matrix {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1108,7 +1170,7 @@ input:focus, textarea:focus, select:focus {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: var(--space-3);
 }
-.drama-score-total { font-size: 32px; font-weight: 700; color: var(--accent-cyan); }
+.drama-score-total { font-family: var(--font-mono); font-size: 32px; font-weight: 600; color: var(--accent-cyan); letter-spacing: -0.02em; }
 
 /* diffs */
 .localization-diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
@@ -1145,7 +1207,8 @@ input:focus, textarea:focus, select:focus {
 .phase-header:hover { border-color: var(--glass-border-hover); }
 .phase-header.active { background: var(--glass-fill-strong); border-color: var(--accent-blue); }
 .phase-header > span:first-child {
-  font-size: 11px; font-weight: 700; color: var(--ink-muted); flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 600; color: var(--ink-muted); flex-shrink: 0;
 }
 .phase-header > div { flex: 1; min-width: 0; }
 .phase-header strong { display: block; font-size: 13px; font-weight: 600; }
@@ -1390,8 +1453,10 @@ input:focus, textarea:focus, select:focus {
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  font-family: var(--font-mono);
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--accent-cyan);
   line-height: 1.1;
 }

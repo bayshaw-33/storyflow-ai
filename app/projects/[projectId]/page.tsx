@@ -1611,57 +1611,67 @@ export default function WorkflowPage() {
             ) : null}
           </div>
 
-          <div className="story-bible-panel">
-            <div className="story-bible-head">
+          <div className={storyBibleOpen ? "story-bible-panel" : "story-bible-panel is-collapsed"}>
+            <button
+              type="button"
+              className="story-bible-head story-bible-toggle"
+              onClick={() => setStoryBibleOpen((open) => !open)}
+              aria-expanded={storyBibleOpen}
+            >
               <div>
                 <span>Story Bible</span>
                 <strong>{t("workspace.storyBible.title")}</strong>
               </div>
               <small>{t("workspace.storyBible.note")}</small>
-            </div>
-            <div className="story-bible-grid">
-              <label>
-                {t("workspace.storyBible.logline")}
-                <textarea value={storyBible?.logline || ""} onChange={(event) => updateStoryBibleField("logline", event.target.value)} />
-              </label>
-              <label>
-                {t("workspace.storyBible.sellingPoint")}
-                <textarea value={storyBible?.sellingPoint || ""} onChange={(event) => updateStoryBibleField("sellingPoint", event.target.value)} />
-              </label>
-              <label>
-                {t("workspace.storyBible.mainConflict")}
-                <textarea value={storyBible?.mainConflict || ""} onChange={(event) => updateStoryBibleField("mainConflict", event.target.value)} />
-              </label>
-              <label>
-                {t("workspace.storyBible.lockedCanon")}
-                <textarea value={storyBible?.lockedCanon || ""} onChange={(event) => updateStoryBibleField("lockedCanon", event.target.value)} />
-              </label>
-            </div>
-            <details className="story-bible-more">
-              <summary>{t("workspace.storyBible.more")}</summary>
-              <div className="story-bible-grid">
-                <label>
-                  {t("workspace.storyBible.world")}
-                  <textarea value={storyBible?.world || ""} onChange={(event) => updateStoryBibleField("world", event.target.value)} />
-                </label>
-                <label>
-                  {t("workspace.storyBible.relationships")}
-                  <textarea value={storyBible?.characterRelationships || ""} onChange={(event) => updateStoryBibleField("characterRelationships", event.target.value)} />
-                </label>
-                <label>
-                  {t("workspace.storyBible.languageStyle")}
-                  <textarea value={storyBible?.languageStyle || ""} onChange={(event) => updateStoryBibleField("languageStyle", event.target.value)} />
-                </label>
-                <label>
-                  {t("workspace.storyBible.pacingRules")}
-                  <textarea value={storyBible?.pacingRules || ""} onChange={(event) => updateStoryBibleField("pacingRules", event.target.value)} />
-                </label>
-                <label>
-                  {t("workspace.storyBible.confirmedFacts")}
-                  <textarea value={storyBible?.confirmedFacts || ""} onChange={(event) => updateStoryBibleField("confirmedFacts", event.target.value)} />
-                </label>
-              </div>
-            </details>
+              <ChevronDown className={storyBibleOpen ? "toggle-icon open" : "toggle-icon"} size={18} />
+            </button>
+            {storyBibleOpen ? (
+              <>
+                <div className="story-bible-grid">
+                  <label>
+                    {t("workspace.storyBible.logline")}
+                    <textarea value={storyBible?.logline || ""} onChange={(event) => updateStoryBibleField("logline", event.target.value)} />
+                  </label>
+                  <label>
+                    {t("workspace.storyBible.sellingPoint")}
+                    <textarea value={storyBible?.sellingPoint || ""} onChange={(event) => updateStoryBibleField("sellingPoint", event.target.value)} />
+                  </label>
+                  <label>
+                    {t("workspace.storyBible.mainConflict")}
+                    <textarea value={storyBible?.mainConflict || ""} onChange={(event) => updateStoryBibleField("mainConflict", event.target.value)} />
+                  </label>
+                  <label>
+                    {t("workspace.storyBible.lockedCanon")}
+                    <textarea value={storyBible?.lockedCanon || ""} onChange={(event) => updateStoryBibleField("lockedCanon", event.target.value)} />
+                  </label>
+                </div>
+                <details className="story-bible-more">
+                  <summary>{t("workspace.storyBible.more")}</summary>
+                  <div className="story-bible-grid">
+                    <label>
+                      {t("workspace.storyBible.world")}
+                      <textarea value={storyBible?.world || ""} onChange={(event) => updateStoryBibleField("world", event.target.value)} />
+                    </label>
+                    <label>
+                      {t("workspace.storyBible.relationships")}
+                      <textarea value={storyBible?.characterRelationships || ""} onChange={(event) => updateStoryBibleField("characterRelationships", event.target.value)} />
+                    </label>
+                    <label>
+                      {t("workspace.storyBible.languageStyle")}
+                      <textarea value={storyBible?.languageStyle || ""} onChange={(event) => updateStoryBibleField("languageStyle", event.target.value)} />
+                    </label>
+                    <label>
+                      {t("workspace.storyBible.pacingRules")}
+                      <textarea value={storyBible?.pacingRules || ""} onChange={(event) => updateStoryBibleField("pacingRules", event.target.value)} />
+                    </label>
+                    <label>
+                      {t("workspace.storyBible.confirmedFacts")}
+                      <textarea value={storyBible?.confirmedFacts || ""} onChange={(event) => updateStoryBibleField("confirmedFacts", event.target.value)} />
+                    </label>
+                  </div>
+                </details>
+              </>
+            ) : null}
           </div>
 
           <div className="editor-head">
