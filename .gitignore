@@ -9,6 +9,7 @@ outputs/
 src/
 
 *.log
+tsconfig.tsbuildinfo
 *.pptx
 
 index.html
