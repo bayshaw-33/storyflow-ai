@@ -1687,6 +1687,61 @@ export default function WorkflowPage() {
                 <button className={characterView === "cards" ? "active" : ""} onClick={() => setCharacterView("cards")}>{t("workspace.characters")}</button>
                 <button className={characterView === "relationships" ? "active" : ""} onClick={() => setCharacterView("relationships")}>{t("workspace.relationships")}</button>
               </div>
+              <div className="universe-mini-panel">
+                <div className="universe-mini-head">
+                  <div>
+                    <span className="kicker">Universe Engine</span>
+                    <h2>{universeBundle?.universe.name || "No Universe linked"}</h2>
+                  </div>
+                  <BookOpen size={20} />
+                </div>
+                {universeBundle ? (
+                  <>
+                    <div className="universe-mini-stats">
+                      <span>{universeBundle.entities.filter((item) => item.type === "character").length} characters</span>
+                      <span>{universeBundle.relationships.length} relationships</span>
+                      <span>{universeBundle.canonFacts.length} facts</span>
+                      <span>{universeBundle.inbox.filter((item) => item.status === "pending").length} inbox</span>
+                    </div>
+                    <p className="universe-mini-fact">
+                      {universeBundle.canonFacts[0]?.fact_text || "Extract project updates into Inbox, then accept items to build canon."}
+                    </p>
+                    <div className="universe-mini-actions">
+                      <Link className="secondary-button full" href={`/universes/${universeBundle.universe.id}`}>View Universe</Link>
+                      <button className="secondary-button full" disabled={universeBusy || !universeEntitlement.canUse} onClick={extractProjectToUniverse}>
+                        {universeBusy ? <Loader2 className="spin" size={16} /> : null}
+                        Extract to Inbox
+                      </button>
+                      <button className="secondary-button full" disabled={universeBusy || !universeEntitlement.canUse} onClick={runProjectCanonCheck}>
+                        Run Canon Check
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p>Upgrade this project into a reusable IP Universe. AI suggestions go to Inbox first and never become canon without review.</p>
+                    <button
+                      className="primary-button full"
+                      disabled={!universeEntitlement.canUse}
+                      onClick={() => {
+                        setUniverseForm((current) => ({
+                          ...current,
+                          name: current.name || `${project.title} Universe`,
+                          description: current.description || project.storyBible?.logline || project.idea,
+                          genre: current.genre || project.genre,
+                          defaultLanguage: current.defaultLanguage || project.targetLanguage,
+                          targetMarkets: current.targetMarkets || project.market,
+                          tone: current.tone || project.storyBible?.languageStyle || "",
+                        }));
+                        setUniverseModalOpen(true);
+                      }}
+                    >
+                      Upgrade to Universe
+                    </button>
+                    {!universeEntitlement.canUse ? <div className="notice warning">Universe plan required. Existing universes stay read-only and exportable.</div> : null}
+                  </>
+                )}
+              </div>
               {characterView === "relationships" ? (
                 <div className="relationship-image-workspace">
                   <div className="relationship-toolbar">
@@ -1934,62 +1989,6 @@ export default function WorkflowPage() {
             <span className="kicker">{t("workspace.aiAssistant")}</span>
             <h2>{t("workspace.contentGeneration")}</h2>
             {credits ? <small className="field-note">{t("workspace.creditsRemaining")}: {credits.balance}/{credits.monthlyLimit}</small> : null}
-          </div>
-
-          <div className="universe-mini-panel">
-            <div className="universe-mini-head">
-              <div>
-                <span className="kicker">Universe Engine</span>
-                <h2>{universeBundle?.universe.name || "No Universe linked"}</h2>
-              </div>
-              <BookOpen size={20} />
-            </div>
-            {universeBundle ? (
-              <>
-                <div className="universe-mini-stats">
-                  <span>{universeBundle.entities.filter((item) => item.type === "character").length} characters</span>
-                  <span>{universeBundle.relationships.length} relationships</span>
-                  <span>{universeBundle.canonFacts.length} facts</span>
-                  <span>{universeBundle.inbox.filter((item) => item.status === "pending").length} inbox</span>
-                </div>
-                <p className="universe-mini-fact">
-                  {universeBundle.canonFacts[0]?.fact_text || "Extract project updates into Inbox, then accept items to build canon."}
-                </p>
-                <div className="universe-mini-actions">
-                  <Link className="secondary-button full" href={`/universes/${universeBundle.universe.id}`}>View Universe</Link>
-                  <button className="secondary-button full" disabled={universeBusy || !universeEntitlement.canUse} onClick={extractProjectToUniverse}>
-                    {universeBusy ? <Loader2 className="spin" size={16} /> : null}
-                    Extract to Inbox
-                  </button>
-                  <button className="secondary-button full" disabled={universeBusy || !universeEntitlement.canUse} onClick={runProjectCanonCheck}>
-                    Run Canon Check
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p>Upgrade this project into a reusable IP Universe. AI suggestions go to Inbox first and never become canon without review.</p>
-                <button
-                  className="primary-button full"
-                  disabled={!universeEntitlement.canUse}
-                  onClick={() => {
-                    setUniverseForm((current) => ({
-                      ...current,
-                      name: current.name || `${project.title} Universe`,
-                      description: current.description || project.storyBible?.logline || project.idea,
-                      genre: current.genre || project.genre,
-                      defaultLanguage: current.defaultLanguage || project.targetLanguage,
-                      targetMarkets: current.targetMarkets || project.market,
-                      tone: current.tone || project.storyBible?.languageStyle || "",
-                    }));
-                    setUniverseModalOpen(true);
-                  }}
-                >
-                  Upgrade to Universe
-                </button>
-                {!universeEntitlement.canUse ? <div className="notice warning">Universe plan required. Existing universes stay read-only and exportable.</div> : null}
-              </>
-            )}
           </div>
 
           {activeStep === "chinese_script" ? (
