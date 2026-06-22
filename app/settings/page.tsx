@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -11,42 +11,196 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const PLAN_STORAGE_KEY = "kiikis_plan_id";
+const PLAN_IDS: PlanId[] = ["free", "elite", "pro", "universe", "team", "enterprise"];
+
+type Profile = {
+  email: string | null;
+  display_name: string | null;
+  plan: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type Credits = {
+  balance: number;
+  monthlyLimit: number;
+  periodStart: string;
+  periodEnd: string;
+};
+
+const copy = {
+  "en-US": {
+    kicker: "Settings",
+    title: "Manage your profile.",
+    subtitle: "Account identity, current plan, registration date, and creation credits.",
+    signedOut: "Sign in to manage your profile.",
+    localProjects: "local projects",
+    profile: "Profile",
+    displayName: "Display name",
+    displayNamePlaceholder: "Name shown in your workspace",
+    email: "Email",
+    plan: "Current plan",
+    registered: "Registered",
+    updated: "Updated",
+    credits: "Credits",
+    creditsUnavailable: "Credits are not available yet.",
+    language: "Language",
+    save: "Save profile",
+    saving: "Saving",
+    saved: "Profile saved.",
+    saveFailed: "Could not save your profile.",
+    loadFailed: "Could not load your profile.",
+    noProfile: "No profile row was found for this account.",
+    upgrade: "Change plan",
+    notConnected: "Not connected",
+  },
+  "zh-CN": {
+    kicker: "设置",
+    title: "管理你的个人资料。",
+    subtitle: "账号身份、当前套餐、注册时间与创作积分。",
+    signedOut: "请先登录后再管理个人资料。",
+    localProjects: "个本地项目",
+    profile: "个人资料",
+    displayName: "显示名称",
+    displayNamePlaceholder: "工作区中显示的名称",
+    email: "邮箱",
+    plan: "当前套餐",
+    registered: "注册时间",
+    updated: "更新时间",
+    credits: "积分",
+    creditsUnavailable: "暂时无法读取积分。",
+    language: "语言",
+    save: "保存资料",
+    saving: "保存中",
+    saved: "个人资料已保存。",
+    saveFailed: "个人资料保存失败。",
+    loadFailed: "个人资料读取失败。",
+    noProfile: "当前账号未找到个人资料记录。",
+    upgrade: "更换套餐",
+    notConnected: "未连接",
+  },
+};
+
+function normalizePlan(value: string | null | undefined): PlanId {
+  return PLAN_IDS.includes(value as PlanId) ? (value as PlanId) : DEFAULT_PLAN_ID;
+}
+
+function formatDate(value: string | null | undefined, locale: string) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(value));
+}
 
 export default function SettingsPage() {
   const { locale } = useI18n();
-  const isZh = locale === "zh-CN";
+  const text = copy[locale];
   const [projectCount, setProjectCount] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
-  const [planId, setPlanId] = useState<PlanId>(DEFAULT_PLAN_ID);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [credits, setCredits] = useState<Credits | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    setProjectCount(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").length);
-    const storedPlan = localStorage.getItem(PLAN_STORAGE_KEY) as PlanId | null;
-    if (storedPlan) setPlanId(storedPlan);
+    let cancelled = false;
 
-    const supabase = getSupabaseBrowserClient();
-    void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
-  }, []);
+    async function loadProfile() {
+      setLoading(true);
+      setMessage(null);
+      setProjectCount(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").length);
 
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        setLoading(false);
+        setMessage({ tone: "error", text: text.loadFailed });
+        return;
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const nextSession = sessionData.session;
+      if (cancelled) return;
+      setSession(nextSession || null);
+
+      if (!nextSession?.user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("storyflow_profiles")
+        .select("email, display_name, plan, created_at, updated_at")
+        .eq("user_id", nextSession.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        setMessage({ tone: "error", text: text.loadFailed });
+      } else if (!data) {
+        setMessage({ tone: "error", text: text.noProfile });
+      } else {
+        const nextProfile = data as Profile;
+        setProfile(nextProfile);
+        setDisplayName(nextProfile.display_name || "");
+        localStorage.setItem(PLAN_STORAGE_KEY, normalizePlan(nextProfile.plan).toString());
+      }
+
+      try {
+        const response = await fetch("/api/account/credits", {
+          headers: { Authorization: `Bearer ${nextSession.access_token}` },
+        });
+        const payload = await response.json();
+        if (!cancelled && response.ok && payload?.success) setCredits(payload.credits);
+      } catch {
+        if (!cancelled) setCredits(null);
+      }
+
+      if (!cancelled) setLoading(false);
+    }
+
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [text.loadFailed, text.noProfile]);
+
+  const planId = normalizePlan(profile?.plan);
   const plan = useMemo(() => getPlanEntitlement(planId), [planId]);
-  const providerLocked = !plan.modelAccess.bringYourOwnApi;
+  const email = profile?.email || session?.user.email || "-";
+  const registeredAt = formatDate(profile?.created_at, locale);
+  const updatedAt = formatDate(profile?.updated_at, locale);
 
-  function updatePlan(nextPlan: PlanId) {
-    setPlanId(nextPlan);
-    localStorage.setItem(PLAN_STORAGE_KEY, nextPlan);
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase || !session?.user) throw new Error("missing-session");
+
+      const { data, error } = await supabase
+        .from("storyflow_profiles")
+        .update({
+          display_name: displayName.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", session.user.id)
+        .select("email, display_name, plan, created_at, updated_at")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) throw new Error("missing-profile");
+
+      setProfile(data as Profile);
+      setMessage({ tone: "success", text: text.saved });
+    } catch {
+      setMessage({ tone: "error", text: text.saveFailed });
+    } finally {
+      setSaving(false);
+    }
   }
-
-  const cards = [
-    ["Account", session?.user.email || "Local draft mode"],
-    ["Profile", isZh ? "作者名称、团队身份与公开工作区标签。" : "Writer name, team identity, and public workspace label."],
-    ["Language", isZh ? "全局界面语言。" : "Global interface language."],
-    ["Appearance", isZh ? "深色外观与编辑密度。" : "Dark appearance and editor density."],
-    ["Plan & Usage", isZh ? "当前套餐、初稿额度和 KK币。" : "Current plan, draft credits, and KK coins."],
-    ["AI Provider", isZh ? "根据套餐权益启用模型能力。" : "Provider capabilities follow plan entitlement."],
-    ["API Key Settings", isZh ? "密钥不会在浏览器界面暴露。" : "Secrets are never exposed in browser UI."],
-    ["Security", isZh ? "登录、会话与工作区保护。" : "Authentication, session, and workspace protection."],
-    ["Integrations", isZh ? "未来导出、存储和制作连接器。" : "Future export, storage, and production connectors."],
-  ];
 
   return (
     <main className="cosmic-page settings-page">
@@ -55,50 +209,59 @@ export default function SettingsPage() {
       </header>
 
       <section className="cosmic-title-band">
-        <span>{isZh ? "设置" : "SETTINGS"}</span>
-        <h1>{isZh ? "控制你的 kiikis 工作区。" : "Control your kiikis workspace."}</h1>
-        <p>{session?.user.email || "Local draft mode"} / {projectCount} {isZh ? "本地项目" : "local projects"}</p>
+        <span>{text.kicker}</span>
+        <h1>{text.title}</h1>
+        <p>{session?.user.email || text.signedOut} / {projectCount} {text.localProjects}</p>
       </section>
 
+      {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
+
       <section className="settings-grid">
-        {cards.map(([title, description]) => (
-          <article className="settings-card" key={title}>
-            <span>{title}</span>
-            <p>{description}</p>
+        <form className="settings-card" onSubmit={saveProfile}>
+          <span>{text.profile}</span>
 
-            {title === "Language" ? <LanguageToggle /> : null}
+          <label>
+            {text.displayName}
+            <input
+              type="text"
+              value={displayName}
+              placeholder={text.displayNamePlaceholder}
+              disabled={loading || !session}
+              onChange={(event) => setDisplayName(event.target.value)}
+            />
+          </label>
 
-            {title === "Plan & Usage" ? (
-              <div className="plan-usage-panel">
-                <label>
-                  {isZh ? "当前套餐" : "Current plan"}
-                  <select value={planId} onChange={(event) => updatePlan(event.target.value as PlanId)}>
-                    <option value="free">Free</option>
-                    <option value="elite">Elite</option>
-                    <option value="pro">Pro</option>
-                    <option value="universe">Universe</option>
-                  </select>
-                </label>
-                <dl className="plan-entitlements">
-                  <div><dt>{isZh ? "初稿额度" : "Draft Script Credits"}</dt><dd>{plan.draftScriptCreditsMonthly ?? 0}</dd></div>
-                  <div><dt>KK币</dt><dd>{plan.kkCreditsMonthly ?? 0}</dd></div>
-                  <div><dt>{isZh ? "媒体 KK币上限" : "Media KK limit"}</dt><dd>{plan.mediaKkLimitMonthly ?? "N/A"}</dd></div>
-                  <div><dt>{isZh ? "计费周期" : "Billing cycle"}</dt><dd>{isZh ? "未接入" : "Not connected"}</dd></div>
-                </dl>
-                <Link className="kk-primary-cta compact" href="/subscription">{isZh ? "升级" : "Upgrade"}</Link>
-              </div>
-            ) : null}
+          <dl className="plan-entitlements">
+            <div><dt>{text.email}</dt><dd>{email}</dd></div>
+            <div><dt>{text.plan}</dt><dd>{plan.name}</dd></div>
+            <div><dt>{text.registered}</dt><dd>{registeredAt}</dd></div>
+            <div><dt>{text.updated}</dt><dd>{updatedAt}</dd></div>
+          </dl>
 
-            {title === "AI Provider" ? (
-              <div className="settings-control-row">
-                <button>DeepSeek</button>
-                <button disabled={providerLocked}>Platform GPT</button>
-                <button disabled={providerLocked}>{isZh ? "自带 API" : "User API Key"}</button>
-                <p>{providerLocked ? "Free / Elite: DeepSeek only. BYO API disabled." : "Pro / Universe: platform default, provider select, and BYO API available."}</p>
-              </div>
-            ) : null}
-          </article>
-        ))}
+          <div className="settings-control-row">
+            <button className="primary-button" type="submit" disabled={loading || saving || !session}>
+              {saving ? text.saving : text.save}
+            </button>
+            <Link className="secondary-button" href="/subscription">{text.upgrade}</Link>
+          </div>
+        </form>
+
+        <article className="settings-card">
+          <span>{text.credits}</span>
+          <dl className="plan-entitlements">
+            <div>
+              <dt>{text.credits}</dt>
+              <dd>{credits ? `${credits.balance} / ${credits.monthlyLimit}` : text.creditsUnavailable}</dd>
+            </div>
+            <div><dt>{text.plan}</dt><dd>{plan.positioning}</dd></div>
+            <div><dt>{text.registered}</dt><dd>{registeredAt}</dd></div>
+          </dl>
+        </article>
+
+        <article className="settings-card">
+          <span>{text.language}</span>
+          <LanguageToggle />
+        </article>
       </section>
     </main>
   );
