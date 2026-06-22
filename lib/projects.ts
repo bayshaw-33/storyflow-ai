@@ -225,6 +225,7 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   format_check: "formatCheck",
   storyboard_script: "storyboardScript",
   final_delivery: "deliveryPackage",
+  song_workbench: "idea",
 };
 
 export type WorkflowStep = { key: TaskType; field: keyof DramaProject; label: string; short: string };
@@ -1195,4 +1196,6 @@ const demoStepContent: Record<TaskType, string> = {
     "## 第 1 集\n### 镜头 1\n- 景别：特写\n- 画面：婚戒滚进红酒杯，溅起暗红色液体。\n- 人物/动作：林晚的手停在半空，指尖发抖。\n- 台词/字幕：字幕：她来参加自己的订婚宴，却成了外人。\n- 音效/情绪：玻璃轻响，压抑。\n- 转场：切到宴会大屏。\n- AI 生成提示词：特写，婚戒落入红酒杯，暗红液体飞溅，雨夜豪门宴会，冷色电影光，强羞辱感，竖屏构图\n### 镜头 2\n- 景别：中景\n- 画面：大屏上是未婚夫和继妹的婚照。\n- 人物/动作：宾客转头看她，窃笑。\n- 台词/字幕：继妹：“姐姐，你来晚了。”\n- 音效/情绪：人群低笑，羞辱感拉满。\n- 转场：推近林晚眼神。\n- AI 生成提示词：豪门宴会大屏婚照，白裙女主被众人凝视，冷色调，高反差，竖屏漫画剧风格",
   final_delivery:
     "1. 故事概况：隐藏继承人林晚在订婚宴被背叛后，以董事身份回归复仇。\n2. 大纲交付范围：三幕结构、八段式 Treatment、分集大纲。\n3. 最终剧本版本清单：中文版本、英文版本、双语版本。\n4. 分镜交付范围：按集拆分，每集包含镜头、台词、音效和 AI 生成提示词。\n5. 现场演示建议：先展示附件导入，再一键推进到分镜和交付下载。",
+  song_workbench:
+    "---LYRICS---\n[Verse]\nA demo song draft belongs in the song workbench, not the drama workflow.\n---STYLE_PROMPT---\nindie pop, safe vocal descriptor, clean Suno-ready mix\n---COMPOSITION_PROMPT---\nStart with a small motif, build into a repeatable chorus, then end with a clean outro.",
 };

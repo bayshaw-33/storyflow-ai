@@ -1108,6 +1108,49 @@ input:focus, textarea:focus, select:focus {
   max-width: 1400px; margin: 0 auto;
   padding: var(--space-8) clamp(20px, 4vw, 40px) var(--space-16);
 }
+.song-workbench-shell {
+  max-width: 1580px;
+}
+.song-output-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(620px, 72vh, 900px);
+}
+.song-concept-textarea {
+  min-height: 160px;
+  resize: vertical;
+  line-height: 1.65;
+}
+.song-lyrics-textarea {
+  flex: 1;
+  min-height: clamp(500px, 58vh, 760px);
+  resize: vertical;
+  line-height: 1.7;
+  font-family: var(--font-body);
+}
+.song-prompt-grid {
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  align-items: stretch;
+}
+.song-prompt-card {
+  min-height: 420px;
+}
+.song-prompt-card textarea.song-prompt-textarea {
+  flex: 1;
+  min-height: 300px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.song-revision-textarea {
+  min-height: 180px;
+  resize: vertical;
+  line-height: 1.6;
+}
+@media (max-width: 860px) {
+  .song-prompt-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .app-header {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-4); margin-bottom: var(--space-4);

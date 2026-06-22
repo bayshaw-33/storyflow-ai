@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 type SongProjectType =
@@ -221,6 +223,7 @@ const i18n = {
     genres: "Target genres",
     singers: "Singer tags",
     generate: "Generate workbench text",
+    generating: "Generating",
     saveVersion: "Save version",
     copy: "Copy",
     copied: "Copied.",
@@ -232,6 +235,7 @@ const i18n = {
     referencePlaceholder: "Reference artist name, used internally only",
     add: "Add",
     required: "Please fill title, concept, at least one genre, and at least one singer tag.",
+    signInRequired: "Please sign in before using AI generation.",
     noVersions: "No versions yet.",
     auditPass: "Audit before copying lyrics.",
     revise: "Apply revision",
@@ -256,6 +260,7 @@ const i18n = {
     genres: "目标曲风",
     singers: "歌手标签",
     generate: "生成工作流文本",
+    generating: "生成中",
     saveVersion: "保存版本",
     copy: "复制",
     copied: "已复制。",
@@ -267,6 +272,7 @@ const i18n = {
     referencePlaceholder: "对标歌手名，仅内部理解使用",
     add: "添加",
     required: "请填写标题、歌曲概念，并至少选择一个曲风和一个歌手标签。",
+    signInRequired: "请先登录后再调用 AI 生成。",
     noVersions: "暂无版本。",
     auditPass: "复制歌词前建议先审查。",
     revise: "应用修改",
@@ -284,12 +290,23 @@ export default function SongWorkbenchPage() {
   const [compositionPrompt, setCompositionPrompt] = useState("");
   const [audit, setAudit] = useState<AuditResult | null>(null);
   const [versions, setVersions] = useState<SongVersion[]>([]);
+  const [session, setSession] = useState<Session | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [manualSinger, setManualSinger] = useState("");
   const [referenceArtist, setReferenceArtist] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
   const [revisionScope, setRevisionScope] = useState("Auto");
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
+    const { data: listener } =
+      supabase?.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession)) || {};
+
+    return () => listener?.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     try {
@@ -345,7 +362,7 @@ export default function SongWorkbenchPage() {
     return Boolean(form.title.trim() && form.concept.trim() && genres.length > 0 && selectedSingers.length > 0);
   }
 
-  function generateAll(event?: FormEvent<HTMLFormElement>) {
+  async function generateAll(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setError("");
     setNotice("");
@@ -353,17 +370,50 @@ export default function SongWorkbenchPage() {
       setError(text.required);
       return;
     }
+    if (!session?.access_token) {
+      setError(text.signInRequired);
+      return;
+    }
 
-    const nextLyrics = buildLyrics(form, selectedSingers);
-    const nextStylePrompt = buildStylePrompt(form, selectedSingers);
-    const nextCompositionPrompt = buildCompositionPrompt(form, selectedSingers);
-    const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers);
+    setGenerating(true);
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          taskType: "song_workbench",
+          projectTitle: form.title,
+          genre: normalizedGenres(form).join(", "),
+          input: buildSongGenerationInput(form, selectedSingers),
+          context: [
+            lyrics.trim() ? `Existing lyrics to improve or replace:\n${lyrics}` : "",
+            stylePrompt.trim() ? `Existing style prompt:\n${stylePrompt}` : "",
+            compositionPrompt.trim() ? `Existing composition prompt:\n${compositionPrompt}` : "",
+          ].filter(Boolean).join("\n\n"),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI generation failed.");
 
-    setLyrics(nextLyrics);
-    setStylePrompt(nextStylePrompt);
-    setCompositionPrompt(nextCompositionPrompt);
-    setAudit(nextAudit);
-    saveVersion("Initial generation", "Generated Suno lyrics and prompts.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+      const parsed = parseSongGeneration(payload.output || "");
+      const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || "", selectedSingers);
+      const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
+      const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
+      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers);
+
+      setLyrics(nextLyrics);
+      setStylePrompt(nextStylePrompt);
+      setCompositionPrompt(nextCompositionPrompt);
+      setAudit(nextAudit);
+      saveVersion("AI generation", "Generated Suno lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+    } catch (generationError) {
+      setError(generationError instanceof Error ? generationError.message : "AI generation failed.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function saveVersion(changeType = "Manual save", summary = "Saved current workbench state.", nextLyrics = lyrics, nextStyle = stylePrompt, nextComposition = compositionPrompt, nextStatus = audit?.status || "pass") {
@@ -448,7 +498,7 @@ export default function SongWorkbenchPage() {
         <p>{text.subtitle}</p>
       </section>
 
-      <section className="app-shell">
+      <section className="app-shell song-workbench-shell">
         {error ? <div className="notice error">{error}</div> : null}
         {notice ? <div className="notice success">{notice}</div> : null}
 
@@ -458,7 +508,9 @@ export default function SongWorkbenchPage() {
               <span>{text.setup}</span>
               <h2>{form.title || "Untitled song project"}</h2>
             </div>
-            <button className="primary-button" type="submit">{text.generate}</button>
+            <button className="primary-button" type="submit" disabled={generating}>
+              {generating ? text.generating : text.generate}
+            </button>
           </div>
 
           <div className="wizard-grid">
@@ -500,6 +552,7 @@ export default function SongWorkbenchPage() {
           <label>
             {text.concept}
             <textarea
+              className="song-concept-textarea"
               value={form.concept}
               onChange={(event) => updateForm("concept", event.target.value)}
               placeholder="A burned-out office worker fights another miserable Monday with sarcasm and dark humor."
@@ -583,7 +636,7 @@ export default function SongWorkbenchPage() {
           </div>
         </section>
 
-        <section className="dashboard-panel">
+        <section className="dashboard-panel song-output-panel">
           <div className="dashboard-panel-head">
             <div>
               <span>{text.advanced}</span>
@@ -651,20 +704,20 @@ export default function SongWorkbenchPage() {
               <button className="primary-button" type="button" disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>{text.copy}</button>
             </div>
           </div>
-          <textarea value={lyrics} onChange={(event) => setLyrics(event.target.value)} placeholder="[Intro - 3 seconds]..." />
+          <textarea className="song-lyrics-textarea" value={lyrics} onChange={(event) => setLyrics(event.target.value)} placeholder="[Intro - 3 seconds]..." />
         </section>
 
-        <section className="workflow-template-grid">
-          <article className="workflow-template-card">
+        <section className="workflow-template-grid song-prompt-grid">
+          <article className="workflow-template-card song-prompt-card">
             <h3>{text.stylePrompt}</h3>
             <p>{stylePrompt.length} characters</p>
-            <textarea value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
+            <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
             <button className="secondary-button" type="button" onClick={() => copyText(stylePrompt)}>{text.copy}</button>
           </article>
-          <article className="workflow-template-card">
+          <article className="workflow-template-card song-prompt-card">
             <h3>{text.compositionPrompt}</h3>
             <p>{compositionPrompt.length} characters</p>
-            <textarea value={compositionPrompt} onChange={(event) => setCompositionPrompt(event.target.value)} />
+            <textarea className="song-prompt-textarea" value={compositionPrompt} onChange={(event) => setCompositionPrompt(event.target.value)} />
             <button className="secondary-button" type="button" onClick={() => copyText(compositionPrompt)}>{text.copy}</button>
           </article>
         </section>
@@ -712,7 +765,7 @@ export default function SongWorkbenchPage() {
             </label>
             <label>
               Instruction
-              <textarea value={revisionInstruction} onChange={(event) => setRevisionInstruction(event.target.value)} placeholder={text.revisionPlaceholder} />
+              <textarea className="song-revision-textarea" value={revisionInstruction} onChange={(event) => setRevisionInstruction(event.target.value)} placeholder={text.revisionPlaceholder} />
             </label>
           </div>
         </section>
@@ -741,6 +794,51 @@ export default function SongWorkbenchPage() {
       </section>
     </main>
   );
+}
+
+function buildSongGenerationInput(form: SongForm, singers: SingerProfile[]) {
+  const projectType = projectTypes.find((item) => item.value === form.projectType);
+  const language = form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage;
+
+  return JSON.stringify(
+    {
+      title: form.title,
+      projectType: projectType ? `${projectType.label} / ${projectType.labelEn}` : form.projectType,
+      strategy: projectType?.strategy || "",
+      outputLanguage: language,
+      lyricsMode: form.lyricsMode,
+      concept: form.concept,
+      primaryEmotion: form.primaryEmotion,
+      secondaryEmotions: form.secondaryEmotions,
+      genres: normalizedGenres(form),
+      singers: singers.map((singer) => ({
+        displayName: singer.displayName,
+        safePromptTerms: singer.safePromptTerms,
+        forbiddenOutputTerms: singer.forbiddenOutputTerms,
+        voiceTexture: singer.voiceTexture,
+        delivery: singer.delivery,
+      })),
+      groove: form.groove,
+      key: form.key,
+      instruments: normalizedInstruments(form),
+      structure: form.structure,
+    },
+    null,
+    2,
+  );
+}
+
+function parseSongGeneration(output: string) {
+  const section = (name: string) => {
+    const pattern = new RegExp(`---${name}---\\s*([\\s\\S]*?)(?=\\n---[A-Z_]+---|$)`, "i");
+    return output.match(pattern)?.[1]?.trim() || "";
+  };
+
+  const lyrics = section("LYRICS") || output.match(/(?:^|\n)#+\s*(?:lyrics|suno lyrics|歌词)\s*\n([\s\S]*?)(?=\n#+\s*|$)/i)?.[1]?.trim() || "";
+  const stylePrompt = section("STYLE_PROMPT") || output.match(/(?:style prompt|风格提示词)\s*[:：]\s*([\s\S]*?)(?=\n(?:composition prompt|编曲提示词)\s*[:：]|$)/i)?.[1]?.trim() || "";
+  const compositionPrompt = section("COMPOSITION_PROMPT") || output.match(/(?:composition prompt|编曲提示词)\s*[:：]\s*([\s\S]*)$/i)?.[1]?.trim() || "";
+
+  return { lyrics, stylePrompt, compositionPrompt };
 }
 
 function normalizedGenres(form: SongForm) {

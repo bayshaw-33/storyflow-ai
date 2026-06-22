@@ -261,6 +261,7 @@ export async function cancelGenerationTask(params: { userId: string; taskId: str
 }
 
 export function resolvePhaseKey(taskType: TaskType) {
+  if (taskType === "song_workbench") return "development";
   if (taskType === "market_analysis" || taskType === "brief" || taskType === "script_import") return "development";
   if (taskType === "characters" || taskType === "structure_model" || taskType === "beat_cards" || taskType === "series_outline") return "story_bible";
   if (taskType === "chinese_script" || taskType === "continuation_script" || taskType === "translation" || taskType === "localization") return "script_production";

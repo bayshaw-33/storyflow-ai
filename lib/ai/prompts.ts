@@ -16,7 +16,8 @@ export type TaskType =
   | "final_script"
   | "format_check"
   | "storyboard_script"
-  | "final_delivery";
+  | "final_delivery"
+  | "song_workbench";
 
 export type ChineseScriptRange = "first3" | "first15" | "first_half" | "full";
 export type FinalScriptVersion = "chinese" | "foreign" | "bilingual";
@@ -71,6 +72,7 @@ export const taskNames: Record<TaskType, string> = {
   format_check: "格式检查",
   storyboard_script: "分镜",
   final_delivery: "最终交付",
+  song_workbench: "歌曲创作",
 };
 
 const commonRules = [
@@ -82,6 +84,16 @@ const commonRules = [
   "强调强画面感、强冲突、强情绪、短对白、连续钩子、集尾反转。",
   "输出格式要稳定，使用清晰标题、编号、短段落，便于前端展示和后续编辑。",
   "不要输出 Markdown 表格。",
+].join("\n");
+
+const songRules = [
+  "你是 Kiikis 的歌曲创作助手，专门生成可复制到 Suno 的歌词、Style Prompt 和 Composition Prompt。",
+  "只输出生成内容本身，不输出解释、教程、免责声明或 AI 回复套话。",
+  "必须严格使用用户要求的输出语言；如果是 Bilingual，歌词应提供清晰双语段落。",
+  "不得输出真实歌手、艺人、乐队、唱片公司或受版权保护作品名称；只能使用安全的声音、唱法、曲风、编曲描述。",
+  "歌词必须原创，避免照抄用户输入中的长句，避免套用知名歌词、影视台词或可识别的版权表达。",
+  "Suno 标签要清晰、短促、可复制；Style Prompt 控制在 250 字符左右，Composition Prompt 控制在 350 字符左右。",
+  "输出格式必须稳定，严格包含：---LYRICS---、---STYLE_PROMPT---、---COMPOSITION_PROMPT--- 三个分隔标题。",
 ].join("\n");
 
 const promptByTask: Record<TaskType, string> = {
@@ -370,11 +382,25 @@ const promptByTask: Record<TaskType, string> = {
     "5. 现场演示建议",
     "要求：这是交付包目录说明，不要重新生成剧本正文。",
   ].join("\n"),
+
+  song_workbench: [
+    "任务：根据歌曲项目设定，生成 Suno-ready 歌词、Style Prompt 和 Composition Prompt。",
+    "输出必须严格使用以下结构：",
+    "---LYRICS---",
+    "完整歌词。根据 lyricsMode 输出：suno_enhanced 使用 [Intro]、[Verse]、[Chorus] 等 Suno 段落标签和少量括号演唱/编曲提示；plain_lyrics 保留段落标签但减少括号提示；no_tags 不使用标签。",
+    "---STYLE_PROMPT---",
+    "一行可复制到 Suno 的风格提示词，包含曲风、情绪、声线、安全歌手描述、主要乐器、律动、调性和混音方向。",
+    "---COMPOSITION_PROMPT---",
+    "一段编曲提示词，说明 intro、verse、pre-chorus、chorus、bridge、final chorus、outro 的推进方式。",
+    "要求：歌词要有清晰 hook，副歌适合重复；不要使用真实艺人名字；不要输出解释。",
+  ].join("\n"),
 };
 
 export function buildPrompt(payload: GeneratePayload) {
+  const rules = payload.taskType === "song_workbench" ? songRules : commonRules;
+
   return [
-    commonRules,
+    rules,
     "",
     "【input】",
     payload.input || payload.idea || "未提供 input。",

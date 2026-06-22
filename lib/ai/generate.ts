@@ -20,6 +20,7 @@ const taskTypes: TaskType[] = [
   "format_check",
   "storyboard_script",
   "final_delivery",
+  "song_workbench",
 ];
 
 export type GenerateSuccess = {
