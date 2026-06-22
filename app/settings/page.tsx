@@ -36,6 +36,10 @@ const copy = {
     signedOut: "Sign in to manage your profile.",
     localProjects: "local projects",
     profile: "Profile",
+    avatar: "Avatar",
+    avatarUrl: "Avatar URL",
+    avatarUrlPlaceholder: "https://example.com/avatar.jpg",
+    avatarHint: "Paste an image URL. It is saved to your account metadata.",
     displayName: "Display name",
     displayNamePlaceholder: "Name shown in your workspace",
     email: "Email",
@@ -61,6 +65,10 @@ const copy = {
     signedOut: "请先登录后再管理个人资料。",
     localProjects: "个本地项目",
     profile: "个人资料",
+    avatar: "头像",
+    avatarUrl: "头像链接",
+    avatarUrlPlaceholder: "https://example.com/avatar.jpg",
+    avatarHint: "粘贴图片链接，保存到账号 metadata。",
     displayName: "显示名称",
     displayNamePlaceholder: "工作区中显示的名称",
     email: "邮箱",
@@ -90,6 +98,16 @@ function formatDate(value: string | null | undefined, locale: string) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(value));
 }
 
+function getAvatarUrl(session: Session | null) {
+  const value = session?.user.user_metadata?.avatar_url;
+  return typeof value === "string" ? value : "";
+}
+
+function getAvatarInitial(displayName: string, email: string) {
+  const source = displayName.trim() || email.trim();
+  return source ? source.slice(0, 1).toUpperCase() : "K";
+}
+
 export default function SettingsPage() {
   const { locale } = useI18n();
   const text = copy[locale];
@@ -97,6 +115,7 @@ export default function SettingsPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [credits, setCredits] = useState<Credits | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -121,6 +140,7 @@ export default function SettingsPage() {
       const nextSession = sessionData.session;
       if (cancelled) return;
       setSession(nextSession || null);
+      setAvatarUrl(getAvatarUrl(nextSession || null));
 
       if (!nextSession?.user) {
         setLoading(false);
@@ -170,6 +190,8 @@ export default function SettingsPage() {
   const email = profile?.email || session?.user.email || "-";
   const registeredAt = formatDate(profile?.created_at, locale);
   const updatedAt = formatDate(profile?.updated_at, locale);
+  const trimmedAvatarUrl = avatarUrl.trim();
+  const avatarInitial = getAvatarInitial(displayName, email);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -193,7 +215,17 @@ export default function SettingsPage() {
       if (error) throw error;
       if (!data) throw new Error("missing-profile");
 
+      const { data: authData, error: authError } = await supabase.auth.updateUser({
+        data: {
+          avatar_url: trimmedAvatarUrl || null,
+        },
+      });
+      if (authError) throw authError;
+
       setProfile(data as Profile);
+      if (authData.user) {
+        setSession((current) => (current ? { ...current, user: authData.user } : current));
+      }
       setMessage({ tone: "success", text: text.saved });
     } catch {
       setMessage({ tone: "error", text: text.saveFailed });
@@ -219,6 +251,27 @@ export default function SettingsPage() {
       <section className="settings-grid">
         <form className="settings-card" onSubmit={saveProfile}>
           <span>{text.profile}</span>
+
+          <div className="avatar-editor">
+            <div
+              className="avatar-preview"
+              style={trimmedAvatarUrl ? { backgroundImage: `url("${trimmedAvatarUrl}")` } : undefined}
+              aria-label={text.avatar}
+            >
+              {trimmedAvatarUrl ? null : avatarInitial}
+            </div>
+            <label>
+              {text.avatarUrl}
+              <input
+                type="url"
+                value={avatarUrl}
+                placeholder={text.avatarUrlPlaceholder}
+                disabled={loading || !session}
+                onChange={(event) => setAvatarUrl(event.target.value)}
+              />
+              <small className="field-note">{text.avatarHint}</small>
+            </label>
+          </div>
 
           <label>
             {text.displayName}
