@@ -32,14 +32,15 @@
   --ink-secondary: #9A9AA4;
   --ink-muted: #6B6B72;
 
-  /* accent — KiiKis brand cyan→blue, kept (not swapped for Linear's own
-     lime). Expressed as a single rationed gradient, the one signature
-     accent move of this system. */
-  --accent-blue: #5B8CFF;
-  --accent-blue-bright: #6FA0FF;
-  --accent-cyan: #6FE8DC;
-  --accent-tiffany: #8ADFDA;
-  --accent-gradient: linear-gradient(128deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+  /* accent — pure black/white Linear system: the brand cyan→blue is retired.
+     Emphasis is carried by near-white on near-black; the single "accent" is
+     white. Variable names are kept unchanged so every existing selector keeps
+     resolving — only the values move to grayscale. */
+  --accent-blue: #C9C9CE;
+  --accent-blue-bright: #E4E4E7;
+  --accent-cyan: #F2F2F3;
+  --accent-tiffany: #C9C9CE;
+  --accent-gradient: linear-gradient(180deg, #FFFFFF 0%, #ECECEE 100%);
   --divider: rgba(255, 255, 255, 0.08);
   --success: #4CEFA8;
   --warning: #F5C842;
@@ -126,7 +127,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; }
 
 img { max-width: 100%; display: block; }
 
-::selection { background: rgba(143, 227, 232, 0.25); }
+::selection { background: rgba(255, 255, 255, 0.16); }
 
 /* ── Shared page backgrounds (cosmic gradient) ───────────────────────────── */
 .kiikis-site,
@@ -136,10 +137,9 @@ img { max-width: 100%; display: block; }
 .kk-monetization-os,
 .kiikis-dashboard-shell {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(143, 227, 232, 0.08), transparent 34rem),
-    radial-gradient(circle at 82% 22%, rgba(111, 168, 255, 0.06), transparent 24rem),
-    linear-gradient(180deg, var(--bg-void), var(--bg-deep) 46%, var(--bg-elevated));
+  /* flat near-black — the cosmic starfield radials are retired for the
+     black/white Linear system; a faint void→deep step keeps subtle depth. */
+  background: linear-gradient(180deg, var(--bg-void), var(--bg-deep));
   color: var(--ink-primary);
 }
 
@@ -160,10 +160,10 @@ img { max-width: 100%; display: block; }
   gap: 8px;
   min-height: 44px;
   padding: 11px 22px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-gradient);
+  border-radius: var(--radius-full);   /* black/white pill */
+  background: var(--accent-gradient);  /* white fill */
   border: 1px solid transparent;
-  color: var(--bg-void);
+  color: var(--bg-void);               /* near-black text on white */
   font-size: 15px;
   font-weight: 600;
   transition: filter var(--transition-base), box-shadow var(--transition-base);
@@ -184,7 +184,7 @@ img { max-width: 100%; display: block; }
   gap: 8px;
   min-height: 44px;
   padding: 11px 20px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);   /* black/white pill — hairline outline */
   background: transparent;
   border: 1px solid var(--glass-border);
   color: var(--ink-primary);
@@ -507,7 +507,10 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   text-align: center;
 }
-.hero-kicker { color: var(--accent-blue); margin-bottom: 28px; }
+/* Hero is intentionally left on its original cosmic treatment. The accent
+   tokens above went grayscale for the rest of the product, so the hero kicker
+   is pinned to its previous brand blue here to keep the hero pixel-identical. */
+.hero-kicker { color: #5B8CFF; margin-bottom: 28px; }
 .hero-copy h1 {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 5.5vw, 4.75rem);
@@ -543,6 +546,15 @@ input:focus, textarea:focus, select:focus {
   background: #F0F0F0;
   border-color: #F0F0F0;
   box-shadow: 0 0 28px rgba(255, 255, 255, 0.35);
+}
+/* keep the hero's action buttons at their original radius — the global B/W
+   pill restyle must not change the hero's button shape. */
+.hero-actions .kk-primary-cta,
+.hero-actions .kk-secondary-cta,
+.hero-actions .ghost-button,
+.hero-actions .primary-button,
+.hero-actions .secondary-button {
+  border-radius: var(--radius-sm);
 }
 
 /* scroll spacer */
@@ -625,7 +637,7 @@ input:focus, textarea:focus, select:focus {
   flex-shrink: 0;
   background:
     radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.55), transparent 60%),
-    linear-gradient(135deg, var(--accent-cyan), #2d6e72 75%);
+    linear-gradient(135deg, #E4E4E7, #3A3A3E 75%);
 }
 .project-planet.planet-tone-1 {
   background:
@@ -852,7 +864,7 @@ input:focus, textarea:focus, select:focus {
   transition: transform var(--transition-base), border-color var(--transition-base);
 }
 .kk-tier:hover { transform: translateY(-4px); border-color: var(--glass-border-hover); }
-.kk-tier.is-flagship { border-color: rgba(143, 227, 232, 0.4); box-shadow: var(--glow-cyan); }
+.kk-tier.is-flagship { border-color: rgba(255, 255, 255, 0.30); box-shadow: var(--glow-cyan); }
 .kk-tier.is-selected { border-color: var(--accent-cyan); }
 /* glass texture fills the card background */
 .kk-tier-glass {
@@ -962,7 +974,7 @@ input:focus, textarea:focus, select:focus {
 .workflow-template-card button:disabled:hover { background: transparent; box-shadow: none; }
 .template-cosmic-thumb, .workflow-thumb {
   width: 44px; height: 44px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--accent-cyan), #2d6e72 70%);
+  background: radial-gradient(circle at 35% 30%, #E4E4E7, #3A3A3E 70%);
   box-shadow: var(--glow-cyan);
 }
 .workflow-template-meta { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1231,7 +1243,7 @@ input:focus, textarea:focus, select:focus {
   transition: var(--transition-base);
 }
 .step-item:hover { background: var(--glass-fill); }
-.step-item.active { background: rgba(111, 168, 255, 0.14); color: var(--ink-primary); }
+.step-item.active { background: rgba(255, 255, 255, 0.10); color: var(--ink-primary); }
 .step-item > span:first-child { display: none; }
 .step-item > div { flex: 1; min-width: 0; }
 .step-item strong { display: block; font-size: 13px; font-weight: 600; }
