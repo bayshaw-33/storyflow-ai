@@ -16,6 +16,17 @@ const workflowEntries = [
     comingSoon: false,
   },
   {
+    title: "Song Creation",
+    titleZh: "歌曲创作",
+    description: "Suno-ready lyrics, style prompts, composition prompts, singer tags, and versioned copy.",
+    descriptionZh: "生成可复制到 Suno 的歌词、风格提示词、编曲提示词、歌手标签和版本。",
+    steps: 10,
+    difficulty: "Suno Text",
+    difficultyZh: "Suno 文本",
+    mode: null,
+    comingSoon: false,
+  },
+  {
     title: "Novel",
     titleZh: "小说",
     description: "Long-form arcs, chapter engines, canon, and serialized pacing.",
@@ -52,9 +63,10 @@ const workflowEntries = [
 
 type WorkflowListProps = {
   onSelectWorkflow: (workflowType: WorkflowType) => void;
+  onOpenSongWorkbench?: () => void;
 };
 
-export function WorkflowList({ onSelectWorkflow }: WorkflowListProps) {
+export function WorkflowList({ onSelectWorkflow, onOpenSongWorkbench }: WorkflowListProps) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
 
@@ -89,7 +101,11 @@ export function WorkflowList({ onSelectWorkflow }: WorkflowListProps) {
               disabled={entry.comingSoon}
               onClick={() => {
                 if (entry.comingSoon) return;
-                onSelectWorkflow(entry.mode);
+                if (entry.mode) {
+                  onSelectWorkflow(entry.mode);
+                } else {
+                  onOpenSongWorkbench?.();
+                }
               }}
             >
               {entry.comingSoon ? (isZh ? "敬请期待" : "Coming Soon") : (isZh ? "开始" : "Start")}
