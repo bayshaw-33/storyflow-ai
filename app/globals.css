@@ -1104,6 +1104,15 @@ input:focus, textarea:focus, select:focus {
   min-height: 400px; resize: vertical; line-height: 1.7;
   font-size: 15px; font-family: var(--font-body);
 }
+textarea.script-editor {
+  display: block;
+  width: 100%;
+  min-height: clamp(420px, 58vh, 720px);
+  resize: vertical;
+  line-height: 1.7;
+  font-size: 15px;
+  font-family: var(--font-body);
+}
 .save-state { font-size: 12px; color: var(--ink-muted); }
 
 /* AI assistant panel */
@@ -1116,7 +1125,7 @@ input:focus, textarea:focus, select:focus {
 }
 .character-card {
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 9 / 16;
   padding: 0;
   border-radius: var(--radius-md);
   background: var(--glass-fill);
@@ -1208,7 +1217,7 @@ input:focus, textarea:focus, select:focus {
   margin-bottom: var(--space-4);
 }
 .character-view-panel {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 9 / 16;
   margin: 0;
   border-radius: var(--radius-md);
   background: var(--bg-deep);
