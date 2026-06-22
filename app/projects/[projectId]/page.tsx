@@ -294,6 +294,91 @@ function pickScoreLine(content: string, anchor: string, labels: string[]) {
   return "";
 }
 
+function normalizeForSimilarity(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+}
+
+function buildShingles(value: string, size = 8) {
+  const normalized = normalizeForSimilarity(value);
+  if (normalized.length <= size) return normalized ? [normalized] : [];
+  const shingles = new Set<string>();
+  for (let index = 0; index <= normalized.length - size; index += 1) {
+    shingles.add(normalized.slice(index, index + size));
+  }
+  return Array.from(shingles);
+}
+
+function similarityPercent(a: string, b: string) {
+  const left = buildShingles(a);
+  const right = new Set(buildShingles(b));
+  if (!left.length || !right.size) return 0;
+  const shared = left.filter((item) => right.has(item)).length;
+  return Math.round((shared / Math.max(left.length, right.size)) * 100);
+}
+
+function getDirectMatches(candidate: string, sources: string[]) {
+  const sourceText = sources.join("\n");
+  const lines = candidate
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => normalizeForSimilarity(line).length >= 24);
+
+  return Array.from(new Set(lines.filter((line) => sourceText.includes(line)))).slice(0, 4);
+}
+
+function countRepeatedSegments(content: string) {
+  const normalized = normalizeForSimilarity(content);
+  if (normalized.length < 80) return 0;
+  const seen = new Map<string, number>();
+  for (let index = 0; index <= normalized.length - 28; index += 14) {
+    const segment = normalized.slice(index, index + 28);
+    seen.set(segment, (seen.get(segment) || 0) + 1);
+  }
+  return Array.from(seen.values()).filter((count) => count > 1).length;
+}
+
+function buildPlagiarismReport(project: DramaProject) {
+  const candidate = project.localization.trim();
+  if (!candidate) {
+    return {
+      ready: false,
+      originality: 0,
+      sourceOverlap: 0,
+      directMatches: [] as string[],
+      repeatedSegments: 0,
+      level: "low",
+    };
+  }
+
+  const sources = [
+    project.importedScript,
+    project.existingScript,
+    project.continuationScript,
+    project.chineseScript,
+    project.translation,
+    project.brief,
+    project.outline,
+  ].filter((value) => value && value.trim() && value.trim() !== candidate);
+
+  const sourceOverlap = sources.length ? Math.max(...sources.map((source) => similarityPercent(candidate, source))) : 0;
+  const directMatches = getDirectMatches(candidate, sources);
+  const repeatedSegments = countRepeatedSegments(candidate);
+  const riskScore = Math.min(100, sourceOverlap + directMatches.length * 12 + repeatedSegments * 3);
+  const level = riskScore >= 60 ? "high" : riskScore >= 32 ? "medium" : "low";
+
+  return {
+    ready: true,
+    originality: Math.max(0, 100 - riskScore),
+    sourceOverlap,
+    directMatches,
+    repeatedSegments,
+    level,
+  };
+}
+
 export default function WorkflowPage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
@@ -492,6 +577,10 @@ export default function WorkflowPage() {
   const dramaScore = useMemo(
     () => buildDramaScoreCards(activeContent),
     [activeContent],
+  );
+  const plagiarismReport = useMemo(
+    () => project ? buildPlagiarismReport(project) : null,
+    [project],
   );
   const activeTaskRecords = useMemo(
     () => generationTasks.filter((task) => task.step_key === activeStep).slice(0, 4),
@@ -1944,7 +2033,7 @@ export default function WorkflowPage() {
                 placeholder={t("workspace.editorPlaceholder")}
               />
             </div>
-          ) : activeStep === "quality_evaluation" && activeContent.trim() ? (
+          ) : activeStep === "quality_evaluation" ? (
             <div className="hybrid-editor">
               <div className="drama-score-panel">
                 <div className="drama-score-total">
@@ -1966,6 +2055,43 @@ export default function WorkflowPage() {
                   ))}
                 </div>
               </div>
+              {plagiarismReport ? (
+                <div className={`plagiarism-panel risk-${plagiarismReport.level}`}>
+                  <div className="plagiarism-panel-head">
+                    <div>
+                      <span className="kicker">Originality Check</span>
+                      <h3>查重防抄袭</h3>
+                    </div>
+                    <strong>{plagiarismReport.ready ? `${plagiarismReport.originality}/100` : "--"}</strong>
+                  </div>
+                  <div className="plagiarism-metrics">
+                    <div>
+                      <span>源材料重合</span>
+                      <strong>{plagiarismReport.ready ? `${plagiarismReport.sourceOverlap}%` : "--"}</strong>
+                    </div>
+                    <div>
+                      <span>重复片段</span>
+                      <strong>{plagiarismReport.ready ? plagiarismReport.repeatedSegments : "--"}</strong>
+                    </div>
+                    <div>
+                      <span>风险等级</span>
+                      <strong>{plagiarismReport.ready ? (plagiarismReport.level === "high" ? "高" : plagiarismReport.level === "medium" ? "中" : "低") : "待检查"}</strong>
+                    </div>
+                  </div>
+                  {!plagiarismReport.ready ? (
+                    <p className="field-note">请先完成本土化稿。进入评估时，系统会对本土化稿做源材料重合、重复片段和直接复用检查。</p>
+                  ) : plagiarismReport.directMatches.length ? (
+                    <div className="plagiarism-matches">
+                      <span>疑似直接复用片段</span>
+                      {plagiarismReport.directMatches.map((line) => (
+                        <p key={line}>{line}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="field-note">未发现长句直接复用。仍建议在最终交付前接入外部版权库或平台查重。</p>
+                  )}
+                </div>
+              ) : null}
               <textarea
                 className="script-editor"
                 value={activeContent}

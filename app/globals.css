@@ -1315,6 +1315,69 @@ textarea.script-editor {
   gap: var(--space-3);
 }
 .drama-score-total { font-family: var(--font-mono); font-size: 32px; font-weight: 600; color: var(--accent-cyan); letter-spacing: -0.02em; }
+.plagiarism-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+}
+.plagiarism-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.plagiarism-panel-head h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.plagiarism-panel-head strong {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+.plagiarism-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.plagiarism-metrics div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+}
+.plagiarism-metrics span,
+.plagiarism-matches span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.plagiarism-metrics strong {
+  color: var(--ink-primary);
+  font-family: var(--font-mono);
+  font-size: 18px;
+}
+.plagiarism-matches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.plagiarism-matches p {
+  margin: 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--warning);
+  background: rgba(255,255,255,0.04);
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
 
 /* diffs */
 .localization-diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
