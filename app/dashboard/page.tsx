@@ -29,7 +29,7 @@ import { ProjectList } from "@/components/home/ProjectList";
 import { WorkflowList } from "@/components/home/WorkflowList";
 import { useKK } from "@/components/kk/KKProvider";
 import { TopNav } from "@/components/layout/TopNav";
-import { BRAND_NAME } from "@/lib/brand";
+import { AuthModal } from "@/components/layout/AuthModal";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 export default function ProjectListPage() {
@@ -43,9 +43,6 @@ export default function ProjectListPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authError, setAuthError] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardError, setWizardError] = useState("");
   const [wizardData, setWizardData] = useState({
@@ -167,35 +164,6 @@ export default function ProjectListPage() {
     void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
   }
 
-  async function submitAuth() {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) {
-      setAuthError("Supabase 尚未配置，暂时只能使用本地草稿。");
-      return;
-    }
-
-    setAuthError("");
-    const email = authEmail.trim();
-    const password = authPassword.trim();
-    if (!email || password.length < 6) {
-      setAuthError("请输入邮箱和至少 6 位密码。");
-      return;
-    }
-
-    const result =
-      authMode === "signup"
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
-
-    if (result.error) {
-      setAuthError(result.error.message);
-      return;
-    }
-
-    setAuthOpen(false);
-    setAuthPassword("");
-  }
-
   async function signOut() {
     const supabase = getSupabaseBrowserClient();
     await supabase?.auth.signOut();
@@ -243,33 +211,7 @@ export default function ProjectListPage() {
         </div>
       </section>
 
-      {authOpen ? (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h2>{BRAND_NAME}</h2>
-            <p>{t("auth.cloudSaveHint")}</p>
-            <input
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-              placeholder={t("auth.email")}
-              type="email"
-            />
-            <input
-              value={authPassword}
-              onChange={(event) => setAuthPassword(event.target.value)}
-              placeholder={t("auth.password")}
-              type="password"
-            />
-            {authError ? <div className="notice error">{authError}</div> : null}
-            <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setAuthOpen(false)}>{t("auth.cancel")}</button>
-              <button className="primary-button" onClick={submitAuth}>
-                {authMode === "signup" ? t("auth.signUp") : t("auth.signIn")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
 
       {wizardOpen ? (
         <div className="modal-backdrop">
