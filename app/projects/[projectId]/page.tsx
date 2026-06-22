@@ -313,6 +313,7 @@ export default function WorkflowPage() {
   const [statusText, setStatusText] = useState("");
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [characterView, setCharacterView] = useState<"cards" | "relationships">("cards");
+  const [selectedCharacterId, setSelectedCharacterId] = useState("");
   const [optimizeOpen, setOptimizeOpen] = useState(false);
   const [optimizeInstruction, setOptimizeInstruction] = useState("");
   const [projectFieldsOpen, setProjectFieldsOpen] = useState(false);
@@ -474,6 +475,10 @@ export default function WorkflowPage() {
   const requirement = project ? getRequirement(project, activeStep) : "";
   const activeContent = project ? getStepContent(project, activeStep) : "";
   const activeVersions = project ? getStepVersions(project, activeStep) : [];
+  const selectedCharacter = useMemo(
+    () => project?.characterCards.find((card) => card.id === selectedCharacterId) || null,
+    [project?.characterCards, selectedCharacterId],
+  );
   const storyBible = project?.storyBible;
   const structuredEpisodes = useMemo(
     () => parseStructuredEpisodes(activeContent),
@@ -1170,6 +1175,7 @@ export default function WorkflowPage() {
 
   function removeCharacter(id: string) {
     if (!project) return;
+    if (selectedCharacterId === id) setSelectedCharacterId("");
     syncCharacterCards(project.characterCards.filter((card) => card.id !== id));
   }
 
@@ -1786,41 +1792,31 @@ export default function WorkflowPage() {
 
                   {project.characterCards.map((card) => (
                     <article className="character-card" key={card.id}>
-                      <div className="character-card-head">
-                        <input value={card.name} onChange={(event) => updateCharacterCard(card.id, "name", event.target.value)} placeholder="角色名" />
-                        <button className="icon-button subtle" onClick={() => removeCharacter(card.id)} title="删除角色">
+                      <button className="character-card-open" type="button" onClick={() => setSelectedCharacterId(card.id)}>
+                        <div className="character-card-portrait">
+                          {card.imageUrl ? (
+                            <img src={card.imageUrl} alt={`${card.name || "角色"}形象图`} />
+                          ) : (
+                            <div className="character-image-placeholder">
+                              <UserPlus size={22} />
+                              <span>角色图</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="character-card-summary">
+                          <span>{card.role || "角色功能待定"}</span>
+                          <h3>{card.name || "未命名角色"}</h3>
+                          <p>{card.identity || card.goal || "点击打开角色资料，补充身份、目标、弱点和提示词。"}</p>
+                          <div className="workflow-template-meta">
+                            <span>{card.identity || "身份待定"}</span>
+                            <span>{card.arc || "弧线待定"}</span>
+                          </div>
+                        </div>
+                      </button>
+                      <div className="character-card-actions">
+                        <button className="icon-button subtle" onClick={() => removeCharacter(card.id)} title="删除角色" type="button">
                           <Trash2 size={16} />
                         </button>
-                      </div>
-                      <div className="character-image-panel">
-                        {card.imageUrl ? (
-                          <img src={card.imageUrl} alt={`${card.name || "角色"}形象图`} />
-                        ) : (
-                          <div className="character-image-placeholder">
-                            <UserPlus size={22} />
-                            <span>角色图</span>
-                          </div>
-                        )}
-                        <button
-                          className="secondary-button"
-                          onClick={() => generateCharacterImage(card)}
-                          disabled={characterImageLoadingId === card.id || !session || credits?.balance === 0 || (!card.name.trim() && !card.appearancePrompt.trim())}
-                        >
-                          {characterImageLoadingId === card.id ? <Loader2 className="spin" size={16} /> : <WandSparkles size={16} />}
-                          生成角色图片
-                        </button>
-                      </div>
-                      <div className="character-fields">
-                        <label>功能<input value={card.role} onChange={(event) => updateCharacterCard(card.id, "role", event.target.value)} /></label>
-                        <label>身份<input value={card.identity} onChange={(event) => updateCharacterCard(card.id, "identity", event.target.value)} /></label>
-                        <label>目标<textarea value={card.goal} onChange={(event) => updateCharacterCard(card.id, "goal", event.target.value)} /></label>
-                        <label>弱点<textarea value={card.weakness} onChange={(event) => updateCharacterCard(card.id, "weakness", event.target.value)} /></label>
-                        <label>秘密<textarea value={card.secret} onChange={(event) => updateCharacterCard(card.id, "secret", event.target.value)} /></label>
-                        <label>成长弧线<textarea value={card.arc} onChange={(event) => updateCharacterCard(card.id, "arc", event.target.value)} /></label>
-                        <label>冲突关系<textarea value={card.conflict} onChange={(event) => updateCharacterCard(card.id, "conflict", event.target.value)} /></label>
-                        <label>首次登场画面<textarea value={card.entrance} onChange={(event) => updateCharacterCard(card.id, "entrance", event.target.value)} /></label>
-                        <label>典型短对白<textarea value={card.line} onChange={(event) => updateCharacterCard(card.id, "line", event.target.value)} /></label>
-                        <label>人物形象提示词<textarea value={card.appearancePrompt} onChange={(event) => updateCharacterCard(card.id, "appearancePrompt", event.target.value)} /></label>
                       </div>
                     </article>
                   ))}
@@ -2188,6 +2184,71 @@ export default function WorkflowPage() {
                 {universeBusy ? <Loader2 className="spin" size={17} /> : null}
                 Create Universe
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedCharacter ? (
+        <div className="modal-backdrop">
+          <div className="modal wizard-modal character-detail-modal">
+            <div className="character-detail-head">
+              <div>
+                <span className="kicker">Character Card</span>
+                <h2>{selectedCharacter.name || "未命名角色"}</h2>
+              </div>
+              <button className="icon-button subtle" type="button" onClick={() => setSelectedCharacterId("")} aria-label="关闭角色详情">
+                ×
+              </button>
+            </div>
+
+            <div className="character-turnaround">
+              {["Front", "Side", "Back"].map((view) => (
+                <figure className="character-view-panel" key={view}>
+                  {selectedCharacter.imageUrl ? (
+                    <img src={selectedCharacter.imageUrl} alt={`${selectedCharacter.name || "角色"} ${view}`} />
+                  ) : (
+                    <div className="character-image-placeholder">
+                      <UserPlus size={22} />
+                      <span>{view}</span>
+                    </div>
+                  )}
+                  <figcaption>{view}</figcaption>
+                </figure>
+              ))}
+            </div>
+
+            <div className="modal-actions compact">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => generateCharacterImage(selectedCharacter)}
+                disabled={characterImageLoadingId === selectedCharacter.id || !session || credits?.balance === 0 || (!selectedCharacter.name.trim() && !selectedCharacter.appearancePrompt.trim())}
+              >
+                {characterImageLoadingId === selectedCharacter.id ? <Loader2 className="spin" size={16} /> : <WandSparkles size={16} />}
+                生成角色图片
+              </button>
+            </div>
+
+            <div className="wizard-grid">
+              <label>角色名<input value={selectedCharacter.name} onChange={(event) => updateCharacterCard(selectedCharacter.id, "name", event.target.value)} /></label>
+              <label>功能<input value={selectedCharacter.role} onChange={(event) => updateCharacterCard(selectedCharacter.id, "role", event.target.value)} /></label>
+              <label>身份<input value={selectedCharacter.identity} onChange={(event) => updateCharacterCard(selectedCharacter.id, "identity", event.target.value)} /></label>
+              <label>典型短对白<input value={selectedCharacter.line} onChange={(event) => updateCharacterCard(selectedCharacter.id, "line", event.target.value)} /></label>
+            </div>
+
+            <div className="character-fields">
+              <label>目标<textarea value={selectedCharacter.goal} onChange={(event) => updateCharacterCard(selectedCharacter.id, "goal", event.target.value)} /></label>
+              <label>弱点<textarea value={selectedCharacter.weakness} onChange={(event) => updateCharacterCard(selectedCharacter.id, "weakness", event.target.value)} /></label>
+              <label>秘密<textarea value={selectedCharacter.secret} onChange={(event) => updateCharacterCard(selectedCharacter.id, "secret", event.target.value)} /></label>
+              <label>成长弧线<textarea value={selectedCharacter.arc} onChange={(event) => updateCharacterCard(selectedCharacter.id, "arc", event.target.value)} /></label>
+              <label>冲突关系<textarea value={selectedCharacter.conflict} onChange={(event) => updateCharacterCard(selectedCharacter.id, "conflict", event.target.value)} /></label>
+              <label>首次登场画面<textarea value={selectedCharacter.entrance} onChange={(event) => updateCharacterCard(selectedCharacter.id, "entrance", event.target.value)} /></label>
+              <label>人物形象提示词<textarea value={selectedCharacter.appearancePrompt} onChange={(event) => updateCharacterCard(selectedCharacter.id, "appearancePrompt", event.target.value)} /></label>
+            </div>
+
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setSelectedCharacterId("")}>关闭</button>
             </div>
           </div>
         </div>
