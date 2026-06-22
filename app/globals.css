@@ -1309,7 +1309,7 @@ textarea.script-editor {
 .steps-panel, .ai-panel {
   position: sticky;
   top: 88px;
-  max-height: calc(100vh - 104px);
+  max-height: var(--workspace-panel-height, calc(100vh - 104px));
   overflow-y: auto;
 }
 .steps-panel { gap: var(--space-2); padding-right: 4px; }
@@ -1409,18 +1409,35 @@ textarea.script-editor {
 
 /* The real three-column workspace: step navigation | editor | AI assistant */
 .workflow-grid {
+  --workspace-panel-height: calc(100vh - 164px);
   display: grid;
   grid-template-columns: minmax(220px, 248px) minmax(620px, 1fr) minmax(260px, 300px);
-  align-items: start;
+  align-items: stretch;
   gap: var(--space-4);
   max-width: 1720px;
   margin: 0 auto;
   padding: var(--space-4) clamp(20px, 3vw, 32px) var(--space-12);
 }
-.editor-panel { min-width: 0; }
+.steps-panel,
+.editor-panel,
+.ai-panel {
+  height: var(--workspace-panel-height);
+  min-height: 640px;
+}
+.editor-panel {
+  min-width: 0;
+  overflow-y: auto;
+}
 @media (max-width: 1320px) {
   .workflow-grid { grid-template-columns: 1fr; }
-  .steps-panel, .ai-panel { position: static !important; height: auto !important; }
+  .steps-panel,
+  .editor-panel,
+  .ai-panel {
+    position: static !important;
+    height: auto !important;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
 /* ============================================================================
