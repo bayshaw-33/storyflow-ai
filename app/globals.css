@@ -702,6 +702,34 @@ input:focus, textarea:focus, select:focus {
 }
 .project-planet.dim { background: var(--glass-fill-strong); }
 
+.planet-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.planet-title-row strong {
+  min-width: 0;
+}
+
+.planet-workflow-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.planet-workflow-badge[data-workflow="song"],
+.planet-workflow-badge[data-workflow="viral"] {
+  color: var(--ink);
+  border-color: var(--glass-border-hover);
+}
+
 .planet-meta { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--ink-muted); }
 .planet-progress {
   height: 4px; border-radius: 2px;

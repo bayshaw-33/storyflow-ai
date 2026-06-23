@@ -47,7 +47,7 @@ export default function ProjectListPage() {
   const [wizardError, setWizardError] = useState("");
   const [wizardData, setWizardData] = useState({
     title: "",
-    workflowType: "creation" as WorkflowType,
+    workflowType: "creation" as Extract<WorkflowType, "creation" | "continuation">,
     market: "北美",
     genre: "逆袭复仇",
     targetLanguage: "英文",
@@ -106,7 +106,7 @@ export default function ProjectListPage() {
     [groups, sortedProjects],
   );
 
-  function openWizard(type: WorkflowType) {
+  function openWizard(type: Extract<WorkflowType, "creation" | "continuation">) {
     setWizardError("");
     setWizardData((current) => ({ ...current, workflowType: type, title: "" }));
     setWizardOpen(true);
@@ -232,7 +232,7 @@ export default function ProjectListPage() {
                 {t("wizard.workflowMode")}
                 <select
                   value={wizardData.workflowType}
-                  onChange={(event) => setWizardData((current) => ({ ...current, workflowType: event.target.value as WorkflowType }))}
+                  onChange={(event) => setWizardData((current) => ({ ...current, workflowType: event.target.value as Extract<WorkflowType, "creation" | "continuation"> }))}
                 >
                   <option value="creation">{t("wizard.original")}</option>
                   <option value="continuation">{t("wizard.continuation")}</option>

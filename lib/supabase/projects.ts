@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROJECT_GROUP,
   DramaProject,
+  WorkflowType,
   normalizeStoredProject,
   readProjectGroupsFromStorage,
   saveProjectGroupsToStorage,
@@ -225,7 +226,7 @@ function rowToProject(row: ProjectRow): DramaProject {
     ...row.data,
     id: row.id || row.data?.id,
     title: row.data?.title || row.title || "未命名短剧项目",
-    workflowType: row.data?.workflowType || (row.mode === "continuation" || row.workflow_type === "continuation" ? "continuation" : "creation"),
+    workflowType: normalizeWorkflowType(row.data?.workflowType || row.workflow_type || row.mode),
     market: row.data?.market || row.target_market || undefined,
     genre: row.data?.genre || row.genre || undefined,
     targetLanguage: row.data?.targetLanguage || row.language || undefined,
@@ -241,6 +242,11 @@ function rowToProject(row: ProjectRow): DramaProject {
     createdAt: row.data?.createdAt || row.created_at || new Date().toISOString(),
     updatedAt: row.data?.updatedAt || row.updated_at || new Date().toISOString(),
   });
+}
+
+function normalizeWorkflowType(value: unknown): WorkflowType {
+  if (value === "continuation" || value === "song" || value === "viral") return value;
+  return "creation";
 }
 
 function mergeProjects(localProjects: DramaProject[], cloudProjects: DramaProject[]) {

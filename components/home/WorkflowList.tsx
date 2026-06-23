@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import type { WorkflowType } from "@/lib/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
+type DramaWorkflowType = Extract<WorkflowType, "creation" | "continuation">;
+
 const workflowEntries = [
   {
     id: "short_drama",
@@ -14,7 +16,7 @@ const workflowEntries = [
     steps: 14,
     difficulty: "Focused",
     difficultyZh: "聚焦",
-    mode: "creation" as WorkflowType,
+    mode: "creation" as DramaWorkflowType,
     comingSoon: false,
   },
   {
@@ -38,7 +40,7 @@ const workflowEntries = [
     steps: 12,
     difficulty: "Deep",
     difficultyZh: "深入",
-    mode: "creation" as WorkflowType,
+    mode: "creation" as DramaWorkflowType,
     comingSoon: true,
   },
   {
@@ -63,13 +65,13 @@ const workflowEntries = [
     steps: 6,
     difficulty: "Beta",
     difficultyZh: "测试",
-    mode: "creation" as WorkflowType,
+    mode: "creation" as DramaWorkflowType,
     comingSoon: true,
   },
 ];
 
 type WorkflowListProps = {
-  onSelectWorkflow: (workflowType: WorkflowType) => void;
+  onSelectWorkflow: (workflowType: DramaWorkflowType) => void;
   onOpenSongWorkbench?: () => void;
 };
 

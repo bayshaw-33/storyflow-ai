@@ -1,7 +1,7 @@
 import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
-export type WorkflowType = "creation" | "continuation";
+export type WorkflowType = "creation" | "continuation" | "song" | "viral";
 export type StepVersionSource = "ai" | "manual" | "demo" | "optimize" | "restore";
 export type ProjectRole = "main_season" | "spin_off" | "prequel" | "adaptation" | "localization" | "other";
 

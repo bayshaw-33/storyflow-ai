@@ -41,6 +41,25 @@ function getProgress(completed: number, total: number) {
   return Math.min(100, Math.round((completed / total) * 100));
 }
 
+function getWorkflowBadge(project: DramaProject, isZh: boolean) {
+  if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
+  if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
+  return isZh ? "短剧" : "Drama";
+}
+
+function getWorkflowDetail(project: DramaProject, isZh: boolean) {
+  if (project.workflowType === "continuation") return isZh ? "续写" : "Continuation";
+  if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
+  if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
+  return isZh ? "原创" : "Original";
+}
+
+function getProjectHref(project: DramaProject) {
+  if (project.workflowType === "song") return "/song-workbench";
+  if (project.workflowType === "viral") return "/viral-workbench";
+  return `/projects/${project.id}`;
+}
+
 function formatUpdatedAt(value: string) {
   const updatedAt = new Date(value).getTime();
   if (Number.isNaN(updatedAt)) return "Unknown";
@@ -101,14 +120,19 @@ export function ProjectList({
               <Link
                 className="project-planet-card"
                 data-status={status.toLowerCase().replace(/\s+/g, "-")}
-                href={`/projects/${project.id}`}
+                href={getProjectHref(project)}
                 key={project.id}
               >
                 <span className={`project-planet planet-tone-${index % 4}`} />
                 <span className="planet-orbit" style={{ "--progress": `${progress}%` } as CSSProperties} />
                 <div>
-                  <strong>{project.title || (isZh ? "未命名世界" : "Untitled World")}</strong>
-                  <small>{project.genre || (isZh ? "题材待定" : "Genre TBD")} / {project.workflowType === "continuation" ? (isZh ? "续写" : "Continuation") : (isZh ? "原创" : "Original")}</small>
+                  <div className="planet-title-row">
+                    <strong>{project.title || (isZh ? "未命名世界" : "Untitled World")}</strong>
+                    <span className="planet-workflow-badge" data-workflow={project.workflowType}>
+                      {getWorkflowBadge(project, isZh)}
+                    </span>
+                  </div>
+                  <small>{project.genre || (isZh ? "题材待定" : "Genre TBD")} / {getWorkflowDetail(project, isZh)}</small>
                 </div>
                 <div className="planet-meta">
                   <span>{localizeStatus(status, isZh)}</span>
