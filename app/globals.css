@@ -363,12 +363,12 @@ input:focus, textarea:focus, select:focus {
   z-index: var(--z-nav);
   min-height: var(--nav-height);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-6);
   max-width: 1200px;
   margin: 16px auto 0;
-  padding: 10px 18px;
+  padding: 24px 18px 10px;
   transition: transform 280ms ease;
 }
 .kk-top-nav.is-nav-hidden,
@@ -443,7 +443,7 @@ input:focus, textarea:focus, select:focus {
 }
 .kk-nav-settings-corner a:hover { color: #FFFFFF; }
 .kk-nav-vertical a[aria-current="page"],
-.kk-nav-settings-corner a[aria-current="page"] { color: var(--accent-blue); font-weight: 500; }
+.kk-nav-settings-corner a[aria-current="page"] { color: #6FA8FF; font-weight: 500; }
 
 @media (max-width: 720px) {
   .kk-nav-vertical, .kk-nav-settings-corner { display: none; }
@@ -714,7 +714,7 @@ input:focus, textarea:focus, select:focus {
   gap: var(--space-6);
   max-width: 1400px;
   margin: 0 auto;
-  padding: var(--space-8) clamp(20px, 4vw, 40px) var(--space-16);
+  padding: calc(var(--nav-height) + var(--space-8)) clamp(20px, 4vw, 40px) var(--space-16);
   align-items: start;
 }
 .kiikis-dashboard-shell.kiikis-dashboard-single { grid-template-columns: 1fr; max-width: 1100px; }
