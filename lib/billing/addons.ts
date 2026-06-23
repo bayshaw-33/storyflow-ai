@@ -22,7 +22,7 @@ export const EXTRA_DRAFT_SCRIPT_CREDIT: DraftCreditAddon = {
   name: "Extra Draft Script Credit",
   description: "1 complete 60-80 episode Chinese draft script",
   priceUsd: 4.9,
-  availableTo: ["elite", "pro", "universe"],
+  availableTo: ["elite", "pro", "ultra"],
   model: "DeepSeek only",
 };
 
@@ -32,28 +32,28 @@ export const KK_CREDIT_PACKS: KkCreditPack[] = [
     name: "Spark Pack",
     kkCredits: 1000,
     priceUsd: 6.9,
-    availableTo: ["pro", "universe", "team"],
+    availableTo: ["pro", "ultra"],
   },
   {
     id: "creator_pack",
     name: "Orbit Pack",
     kkCredits: 5000,
     priceUsd: 24.9,
-    availableTo: ["pro", "universe", "team"],
+    availableTo: ["pro", "ultra"],
   },
   {
     id: "studio_pack",
     name: "Nebula Pack",
     kkCredits: 15000,
     priceUsd: 69.9,
-    availableTo: ["pro", "universe", "team"],
+    availableTo: ["pro", "ultra"],
   },
   {
     id: "production_pack",
     name: "Production Pack",
     kkCredits: 50000,
     priceUsd: 199,
-    availableTo: ["pro", "universe", "team"],
+    availableTo: ["pro", "ultra"],
   },
 ];
 

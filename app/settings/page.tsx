@@ -11,7 +11,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const PLAN_STORAGE_KEY = "kiikis_plan_id";
-const PLAN_IDS: PlanId[] = ["free", "elite", "pro", "universe", "team", "enterprise"];
+const PLAN_IDS: PlanId[] = ["free", "elite", "pro", "ultra"];
 
 type Profile = {
   email: string | null;

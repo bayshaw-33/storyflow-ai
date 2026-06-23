@@ -18,7 +18,7 @@ export type KKMirror = "idle" | "thinking" | "happy" | "guide";
 
 export type Access = {
   workspaceFull: boolean; // ELITE+
-  universe: boolean; // UNIVERSE tier only
+  universe: boolean; // ULTRA tier only
   fullKK: boolean; // PRO+ unlocks full KK behaviour (guide mode)
 };
 
@@ -44,9 +44,7 @@ const PLAN_RANK: Record<PlanId, number> = {
   free: 0,
   elite: 1,
   pro: 2,
-  universe: 3,
-  team: 4,
-  enterprise: 4,
+  ultra: 3,
 };
 
 const PLAN_STORAGE_KEY = "kiikis_plan_id";
