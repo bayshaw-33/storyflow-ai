@@ -5,7 +5,7 @@
 import type { AssetToken } from "@/lib/design/manifest";
 import type { PlanId } from "@/lib/billing/plans";
 
-export type TierId = "FREE" | "PRO" | "ELITE" | "TEAM";
+export type TierId = "FREE" | "ELITE" | "PRO" | "UNIVERSE" | "TEAM";
 
 // Badge overlays — the only allowed kinds. No text marketing labels.
 export type BadgeKind = "popular" | "flagship" | "pre-launch";
@@ -24,12 +24,13 @@ export type TierDef = {
 
 // Exactly ONE flagship tier — dynamic / configurable. Change this constant to
 // move the flagship highlight; only this tier uses the Universe flagship card.
-export const FLAGSHIP_TIER: TierId = "ELITE";
+export const FLAGSHIP_TIER: TierId = "UNIVERSE";
 
 export const TIERS: TierDef[] = [
-  { id: "FREE", planId: "free", next: "PRO" },
-  { id: "PRO", planId: "pro", icon: "UNIVERSE_TIER_ICONS", badge: "popular", next: "ELITE" },
-  { id: "ELITE", planId: "elite", icon: "UNIVERSE_TIER_ICONS", badge: "flagship", next: "TEAM" },
+  { id: "FREE", planId: "free", next: "ELITE" },
+  { id: "ELITE", planId: "elite", icon: "UNIVERSE_TIER_ICONS", next: "PRO" },
+  { id: "PRO", planId: "pro", icon: "UNIVERSE_TIER_ICONS", badge: "popular", next: "UNIVERSE" },
+  { id: "UNIVERSE", planId: "universe", icon: "UNIVERSE_TIER_ICONS", badge: "flagship", next: "TEAM" },
   { id: "TEAM", planId: "team", icon: "UNIVERSE_TIER_ICONS", badge: "pre-launch" },
 ];
 

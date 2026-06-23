@@ -1,4 +1,5 @@
 import type { DramaProject, StoryBible } from "@/lib/projects";
+import { getPlanEntitlement } from "@/lib/billing/plans";
 
 export type UniverseAccessLevel = "studio_annual" | "enterprise";
 export type UniverseStatus = "active" | "archived";
@@ -244,7 +245,7 @@ export function canUseUniverseEngine(input?: { email?: string | null; plan?: str
     enabledInDev ||
     forceEnabled ||
     allowlist.includes(email) ||
-    ["studio_annual", "enterprise", "admin", "founder"].includes(plan);
+    getPlanEntitlement(plan).features.universe;
 
   return {
     canUse,

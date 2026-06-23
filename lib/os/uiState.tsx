@@ -17,9 +17,9 @@ export type ActiveSystem = "hero" | "workspace" | "universe" | "pricing";
 export type KKMirror = "idle" | "thinking" | "happy" | "guide";
 
 export type Access = {
-  workspaceFull: boolean; // PRO+
-  universe: boolean; // PRO+ unlocks the graph engine
-  fullKK: boolean; // ELITE+ unlocks full KK behaviour (guide mode)
+  workspaceFull: boolean; // ELITE+
+  universe: boolean; // UNIVERSE tier only
+  fullKK: boolean; // PRO+ unlocks full KK behaviour (guide mode)
 };
 
 type UIState = {
@@ -42,11 +42,11 @@ type OSApi = UIState & {
 
 const PLAN_RANK: Record<PlanId, number> = {
   free: 0,
-  pro: 1,
-  elite: 2,
-  universe: 2,
-  team: 3,
-  enterprise: 3,
+  elite: 1,
+  pro: 2,
+  universe: 3,
+  team: 4,
+  enterprise: 4,
 };
 
 const PLAN_STORAGE_KEY = "kiikis_plan_id";
@@ -55,7 +55,7 @@ function accessFor(planId: PlanId): Access {
   const rank = PLAN_RANK[planId] ?? 0;
   return {
     workspaceFull: rank >= 1,
-    universe: rank >= 1,
+    universe: rank >= 3,
     fullKK: rank >= 2,
   };
 }

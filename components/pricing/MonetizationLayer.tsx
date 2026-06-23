@@ -8,7 +8,7 @@ import { glassAssetFor, isFlagship, TIERS, type TierDef } from "@/lib/pricing/ti
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
-const PRIMARY_TIER_IDS: TierDef["id"][] = ["FREE", "ELITE", "PRO"];
+const PRIMARY_TIER_IDS: TierDef["id"][] = ["FREE", "ELITE", "PRO", "UNIVERSE"];
 
 const tierCopy = {
   "en-US": {
