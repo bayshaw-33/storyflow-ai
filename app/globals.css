@@ -340,38 +340,52 @@ input:focus, textarea:focus, select:focus {
 /* ============================================================================
    TOP NAVIGATION  (glass capsule — matches design comp)
    ============================================================================ */
+/* scroll-hide wrapper — transparent, no layout; children are fixed independently */
 .kk-top-nav,
 .navbar {
   position: fixed;
-  left: 0; right: 0;
-  top: 16px;
+  left: 0; right: 0; top: 0;
   width: 100%;
   z-index: var(--z-nav);
-  min-height: var(--nav-height);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-6);
-  padding: 10px clamp(20px, 3vw, 40px) 10px clamp(60px, 6vw, 80px);
-  transition: transform 280ms ease;
-}
-.cosmic-page-header {
-  position: sticky;
-  top: 16px;
-  z-index: var(--z-nav);
-  min-height: var(--nav-height);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-6);
-  max-width: 1200px;
-  margin: 16px 0 0;
-  padding: 24px 18px 10px clamp(60px, 6vw, 80px);
+  pointer-events: none;
   transition: transform 280ms ease;
 }
 .kk-top-nav.is-nav-hidden,
 .navbar.is-nav-hidden {
   transform: translateY(-140%);
+}
+/* logo — fixed top-left on TopNav pages */
+.kk-nav-brand {
+  position: fixed;
+  top: 16px;
+  left: clamp(60px, 6vw, 80px);
+  z-index: var(--z-nav);
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+}
+/* right-side actions — fixed top-right on TopNav pages */
+.kk-nav-actions, .header-actions, .nav-actions {
+  position: fixed;
+  top: 16px;
+  right: clamp(20px, 3vw, 40px);
+  z-index: var(--z-nav);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* logo on cosmic-page-header pages (subscription, settings, templates, companions) */
+.cosmic-page-header > a:first-child {
+  position: fixed;
+  top: 16px;
+  left: clamp(60px, 6vw, 80px);
+  z-index: var(--z-nav);
+}
+/* cosmic-page-header itself: keep as minimal block so page flow is unaffected */
+.cosmic-page-header {
+  display: block;
+  min-height: var(--nav-height);
 }
 .kk-nav-brand, .brand-lockup, .universe-brand, .workflow-brand,
 .kk-monetization-brand {
@@ -889,9 +903,9 @@ input:focus, textarea:focus, select:focus {
    ============================================================================ */
 .kk-monetization-os { position: relative; padding: var(--space-16) 0; }
 .universe-engine > .universe-brand {
-  position: absolute;
-  top: clamp(20px, 3vw, 32px);
-  left: clamp(20px, 4vw, 48px);
+  position: fixed;
+  top: 16px;
+  left: clamp(60px, 6vw, 80px);
   z-index: var(--z-ui);
 }
 .kk-monetization {
@@ -1030,6 +1044,9 @@ input:focus, textarea:focus, select:focus {
   font-weight: 300; letter-spacing: -0.02em;
   line-height: 1.1; color: var(--ink-primary);
   margin-bottom: var(--space-4);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  line-break: strict;
 }
 .content-section-subtitle {
   font-size: clamp(1rem, 1.5vw, 1.2rem);
