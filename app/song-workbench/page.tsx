@@ -376,6 +376,7 @@ export default function SongWorkbenchPage() {
   const [audit, setAudit] = useState<AuditResult | null>(null);
   const [versions, setVersions] = useState<SongVersion[]>([]);
   const [session, setSession] = useState<Session | null>(null);
+  const [songProjectId, setSongProjectId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
@@ -390,6 +391,28 @@ export default function SongWorkbenchPage() {
 
     return () => listener?.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session?.user.id) {
+      setSongProjectId(null);
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    void supabase
+      .from("storyflow_projects")
+      .select("id")
+      .eq("user_id", session.user.id)
+      .eq("workflow_type", "song")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.id) setSongProjectId(String(data.id));
+      });
+  }, [session?.user.id]);
 
   useEffect(() => {
     try {
@@ -490,7 +513,7 @@ export default function SongWorkbenchPage() {
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
-      saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+      void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "AI generation failed.");
     } finally {
@@ -498,7 +521,7 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  function saveVersion(changeType = "Manual save", summary = "Saved current workbench state.", nextLyrics = lyrics, nextStyle = stylePrompt, nextComposition = compositionPrompt, nextStatus = audit?.status || "pass") {
+  async function saveVersion(changeType = "Manual save", summary = "Saved current workbench state.", nextLyrics = lyrics, nextStyle = stylePrompt, nextComposition = compositionPrompt, nextStatus = audit?.status || "pass") {
     const version: SongVersion = {
       id: `song-version-${Date.now()}`,
       versionNumber: versions.length + 1,
@@ -511,6 +534,51 @@ export default function SongWorkbenchPage() {
       createdAt: new Date().toISOString(),
     };
     setVersions((current) => [version, ...current]);
+    await syncSongProjectStub();
+  }
+
+  async function syncSongProjectStub() {
+    if (!session?.user.id) return;
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const title = form.title.trim() || "未命名歌曲";
+
+    try {
+      if (songProjectId) {
+        const { error: updateError } = await supabase
+          .from("storyflow_projects")
+          .update({
+            title,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", songProjectId)
+          .eq("user_id", session.user.id);
+
+        if (updateError) throw updateError;
+        return;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from("storyflow_projects")
+        .insert({
+          user_id: session.user.id,
+          title,
+          workflow_type: "song",
+          market: "",
+          genre: "音乐",
+          language: "zh",
+          data: { songWorkbenchKey: STORAGE_KEY },
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+      if (data?.id) setSongProjectId(String(data.id));
+    } catch {
+      setError(locale === "zh-CN" ? "歌曲项目已保存到本地，但同步到 Dashboard 失败。" : "Song saved locally, but Dashboard sync failed.");
+    }
   }
 
   function runAudit() {
@@ -527,7 +595,7 @@ export default function SongWorkbenchPage() {
     setLyrics(nextLyrics);
     setAudit(nextAudit);
     setRevisionInstruction("");
-    saveVersion("Revision", instruction, nextLyrics, stylePrompt, compositionPrompt, nextAudit.status);
+    void saveVersion("Revision", instruction, nextLyrics, stylePrompt, compositionPrompt, nextAudit.status);
   }
 
   async function copyText(value: string, guarded = false) {
@@ -814,7 +882,7 @@ export default function SongWorkbenchPage() {
           <div className="song-tool-section">
             <div className="song-tool-head">
               <span>{text.history}</span>
-              <button className="secondary-button" type="button" onClick={() => saveVersion()}>{text.saveVersion}</button>
+              <button className="secondary-button" type="button" onClick={() => void saveVersion()}>{text.saveVersion}</button>
             </div>
             <div className="settings-list song-history-list">
               {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
