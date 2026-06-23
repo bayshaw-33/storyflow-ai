@@ -192,6 +192,7 @@ export default function ViralWorkbenchPage() {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [viralStubProjectId, setViralStubProjectId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<ViralAnalysis | null>(null);
   const [remakeResult, setRemakeResult] = useState<string | null>(null);
   const [rewriteInput, setRewriteInput] = useState("");
@@ -243,6 +244,7 @@ export default function ViralWorkbenchPage() {
     setError("");
     setVideoPath(null);
     setProjectId(null);
+    setViralStubProjectId(null);
     setAnalysisResult(null);
     setRemakeResult(null);
     setTaskStatus("idle");
@@ -276,7 +278,7 @@ export default function ViralWorkbenchPage() {
     setStatusText(ui.uploadProgress);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("video", file);
       const response = await fetch("/api/viral/upload", {
         method: "POST",
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -286,12 +288,65 @@ export default function ViralWorkbenchPage() {
       if (!response.ok || !payload.success) throw new Error(payload.error || (language === "zh" ? "视频上传失败。" : "Video upload failed."));
       setProjectId(payload.projectId);
       setVideoPath(payload.videoPath);
+      await createViralProjectStub(payload.projectId, file.name);
       setStatusText(ui.uploaded);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : language === "zh" ? "视频上传失败。" : "Video upload failed.");
       setTaskStatus("failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function createViralProjectStub(viralProjectId: string, fileName: string) {
+    if (!session?.user.id) return;
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const title = fileName.replace(/\.[^/.]+$/, "") || (language === "zh" ? "未命名爆款创作" : "Untitled viral creation");
+    try {
+      const { data, error: insertError } = await supabase
+        .from("storyflow_projects")
+        .insert({
+          user_id: session.user.id,
+          title,
+          workflow_type: "viral",
+          market: "",
+          genre: "爆款视频",
+          language: "zh",
+          data: { viralProjectId },
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+      if (data?.id) setViralStubProjectId(String(data.id));
+    } catch {
+      setError(language === "zh" ? "视频已上传，但同步到 Dashboard 失败。" : "Video uploaded, but Dashboard sync failed.");
+    }
+  }
+
+  async function updateViralProjectStub(analysis: ViralAnalysis) {
+    if (!session?.user.id || !viralStubProjectId) return;
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    try {
+      const inferredTitle = inferViralTitle(analysis, videoFile?.name || "");
+      const { error: updateError } = await supabase
+        .from("storyflow_projects")
+        .update({
+          title: inferredTitle,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", viralStubProjectId)
+        .eq("user_id", session.user.id);
+
+      if (updateError) throw updateError;
+    } catch {
+      setError(language === "zh" ? "分析已完成，但 Dashboard 标题同步失败。" : "Analysis complete, but Dashboard title sync failed.");
     }
   }
 
@@ -342,6 +397,7 @@ export default function ViralWorkbenchPage() {
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || (language === "zh" ? "分析失败。" : "Analysis failed."));
       setAnalysisResult(payload.analysis);
+      await updateViralProjectStub(payload.analysis);
       setStatusText(ui.analysisDone);
       setTaskStatus("completed");
     } catch (analysisError) {
@@ -695,6 +751,12 @@ function downloadText(fileName: string, content: string) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function inferViralTitle(analysis: ViralAnalysis, fileName: string) {
+  const formula = analysis.f5_memory?.formula?.trim();
+  if (formula) return formula.length > 48 ? `${formula.slice(0, 48)}...` : formula;
+  return fileName.replace(/\.[^/.]+$/, "") || "未命名爆款创作";
 }
 
 function formatBytes(bytes: number) {
