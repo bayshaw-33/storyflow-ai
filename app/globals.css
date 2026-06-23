@@ -896,7 +896,6 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: flex-start;
   gap: var(--space-4);
-  aspect-ratio: 3 / 4;
   padding: var(--space-6);
   border-radius: var(--radius-lg);
   background: var(--bg-deep);
@@ -932,6 +931,29 @@ input:focus, textarea:focus, select:focus {
   transition: var(--transition-base);
 }
 .kk-tier-select:hover { background: var(--accent-blue); color: var(--bg-void); border-color: var(--accent-blue); }
+.kk-tier-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.kk-tier-beta-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--accent-blue);
+}
+.kk-tier-price-main {
+  font-size: 2rem; font-weight: 600;
+  color: var(--ink-primary); line-height: 1;
+}
+.kk-tier-price-period {
+  font-size: 0.75rem; font-weight: 400;
+  color: var(--ink-muted); margin-left: 2px;
+}
+.kk-tier-price-original {
+  font-size: 0.8rem; color: var(--ink-muted);
+  text-decoration: line-through;
+}
 .kk-billing-toggle {
   display: flex;
   justify-content: center;

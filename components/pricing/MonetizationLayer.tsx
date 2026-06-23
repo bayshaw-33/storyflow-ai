@@ -100,16 +100,6 @@ const MonetizationTier = memo(function MonetizationTier({
         draggable={false}
       />
 
-      {tier.badge ? (
-        <DesignAssetImage
-          className="kk-tier-badge"
-          data-badge={tier.badge}
-          token="UNIVERSE_BADGES"
-          alt={tier.badge}
-          draggable={false}
-        />
-      ) : null}
-
       {tier.icon ? (
         <DesignAssetImage
           className="kk-tier-icon"
