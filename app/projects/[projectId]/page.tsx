@@ -64,7 +64,10 @@ import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { localizeWorkflowPhase, localizeWorkflowStep } from "@/lib/i18n/workflow";
+import type { WorkspaceModuleId } from "@/lib/design/manifest";
+import { useOS } from "@/lib/os/uiState";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
+import { WorkspaceModuleGrid } from "@/components/workspace/WorkspaceModuleGrid";
 import {
   canUseUniverseEngine,
   createUniverseFromProject,
@@ -93,6 +96,16 @@ type GenerationTaskRecord = {
   latency_ms: number | null;
   created_at: string;
   completed_at: string | null;
+};
+
+const workspaceModuleStepCandidates: Record<WorkspaceModuleId, TaskType[]> = {
+  projects: ["market_analysis", "script_import"],
+  characters: ["characters"],
+  "story-bible": ["brief", "structure_model", "series_outline"],
+  scripts: ["chinese_script", "continuation_script", "existing_script", "translation", "localization", "final_script"],
+  storyboard: ["storyboard_script"],
+  delivery: ["final_delivery"],
+  settings: ["market_analysis", "script_import"],
 };
 
 function getPreviousKey(project: DramaProject, taskType: TaskType): TaskType | null {
@@ -383,6 +396,7 @@ export default function WorkflowPage() {
   const params = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
   const { locale, t } = useI18n();
+  const os = useOS();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [project, setProject] = useState<DramaProject | null>(null);
@@ -424,6 +438,21 @@ export default function WorkflowPage() {
     storyboard_delivery: false,
   });
   const [generationTasks, setGenerationTasks] = useState<GenerationTaskRecord[]>([]);
+
+  function handleSelectStep(step: TaskType) {
+    os.setSelectedWorkspaceModule(null);
+    setActiveStep(step);
+  }
+
+  function handleSelectWorkspaceModule(moduleId: WorkspaceModuleId) {
+    os.setSelectedWorkspaceModule(moduleId);
+    const availableSteps = getWorkflowSteps(project || undefined);
+    const availableKeys = new Set(availableSteps.map((step) => step.key));
+    const nextStep = workspaceModuleStepCandidates[moduleId].find((step) => availableKeys.has(step));
+    if (nextStep) {
+      setActiveStep(nextStep);
+    }
+  }
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -556,7 +585,8 @@ export default function WorkflowPage() {
     () => workflowPhases.find((phase) => phase.stepKeys.includes(activeStep)) || workflowPhases[0],
     [activeStep, workflowPhases],
   );
-  const showStoryBiblePanel = activePhase?.key === "story_design";
+  const selectedWorkspaceModule = os.selectedWorkspaceModule as WorkspaceModuleId | null;
+  const showStoryBiblePanel = activePhase?.key === "story_design" && (!selectedWorkspaceModule || selectedWorkspaceModule === "story-bible");
 
   const requirement = project ? getRequirement(project, activeStep) : "";
   const activeContent = project ? getStepContent(project, activeStep) : "";
@@ -1537,6 +1567,10 @@ export default function WorkflowPage() {
         </div>
       </header>
 
+      <section className="workspace-module-rail" data-selected={os.selectedWorkspaceModule || undefined}>
+        <WorkspaceModuleGrid onSelectModule={handleSelectWorkspaceModule} />
+      </section>
+
       <section className="workflow-grid">
         <aside className="steps-panel">
           <div className="panel-title">
@@ -1580,7 +1614,7 @@ export default function WorkflowPage() {
                         <button
                           key={step.key}
                           className={step.key === activeStep ? "step-item active" : "step-item"}
-                          onClick={() => setActiveStep(step.key)}
+                          onClick={() => handleSelectStep(step.key)}
                         >
                           <span>{statusLabel}</span>
                           <div>

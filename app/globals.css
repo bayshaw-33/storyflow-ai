@@ -1534,6 +1534,36 @@ textarea.script-editor {
 .workflow-header .title-input:hover,
 .workflow-header .title-input:focus { border-color: var(--glass-border); background: rgba(10,14,26,0.4); }
 
+.workspace-module-rail {
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 3vw, 32px) var(--space-2);
+}
+.workspace-module-rail .workspace-module-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.workspace-module-rail .workspace-module-card {
+  min-height: 74px;
+  padding: var(--space-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+}
+.workspace-module-rail .workspace-module-card img {
+  max-height: 84px;
+}
+.workspace-module-rail[data-selected="projects"] .workspace-module-card[data-module="projects"],
+.workspace-module-rail[data-selected="characters"] .workspace-module-card[data-module="characters"],
+.workspace-module-rail[data-selected="story-bible"] .workspace-module-card[data-module="story-bible"],
+.workspace-module-rail[data-selected="scripts"] .workspace-module-card[data-module="scripts"],
+.workspace-module-rail[data-selected="storyboard"] .workspace-module-card[data-module="storyboard"],
+.workspace-module-rail[data-selected="delivery"] .workspace-module-card[data-module="delivery"],
+.workspace-module-rail[data-selected="settings"] .workspace-module-card[data-module="settings"] {
+  border-color: var(--ink-primary);
+  background: rgba(255,255,255,0.08);
+}
+
 /* The real three-column workspace: step navigation | editor | AI assistant */
 .workflow-grid {
   --workspace-panel-height: calc(100vh - 164px);
@@ -1556,6 +1586,9 @@ textarea.script-editor {
   overflow-y: auto;
 }
 @media (max-width: 1320px) {
+  .workspace-module-rail .workspace-module-grid {
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  }
   .workflow-grid { grid-template-columns: 1fr; }
   .steps-panel,
   .editor-panel,
