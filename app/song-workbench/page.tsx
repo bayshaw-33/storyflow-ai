@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
@@ -85,12 +83,12 @@ const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: stri
   { value: "original_song", label: "原创歌曲", labelEn: "Original song", strategy: "standard Suno structure" },
   { value: "short_video_song", label: "短视频歌曲", labelEn: "Short-video song", strategy: "front-loaded hook" },
   { value: "ost_theme", label: "OST / 主题曲", labelEn: "OST / theme", strategy: "cinematic narrative lift" },
-  { value: "bgm_mood", label: "BGM / 氛围音乐", labelEn: "BGM / mood music", strategy: "lighter lyrics, stronger arrangement" },
   { value: "character_song", label: "角色歌曲", labelEn: "Character song", strategy: "inner monologue and conflict" },
-  { value: "brand_song", label: "广告 / 品牌歌曲", labelEn: "Brand song", strategy: "clear, safe, memorable" },
-  { value: "game_anime_song", label: "游戏 / 动漫歌曲", labelEn: "Game / anime song", strategy: "world, mission, destiny" },
   { value: "duet_song", label: "合唱 / 对唱歌曲", labelEn: "Duet / ensemble", strategy: "multi-vocal section split" },
   { value: "series_song", label: "系列歌曲", labelEn: "Series song", strategy: "repeatable versions" },
+  { value: "bgm_mood", label: "BGM / 氛围音乐", labelEn: "BGM / mood music", strategy: "lighter lyrics, stronger arrangement" },
+  { value: "game_anime_song", label: "游戏 / 动漫歌曲", labelEn: "Game / anime song", strategy: "world, mission, destiny" },
+  { value: "brand_song", label: "广告 / 品牌歌曲", labelEn: "Brand song", strategy: "clear, safe, memorable" },
 ];
 
 const primaryEmotionMap: Record<string, string[]> = {
@@ -107,37 +105,15 @@ const primaryEmotionMap: Record<string, string[]> = {
   "史诗 / 宿命": ["宏大", "悲壮", "神圣感", "命运感", "战争感", "终章感"],
 };
 
-const genreOptions = [
-  "Pop",
-  "R&B",
-  "Hip-hop",
-  "Trap",
-  "EDM",
-  "House",
-  "Synth-pop",
-  "Indie Pop",
-  "Alt-pop",
-  "Rock",
-  "Pop Rock",
-  "Folk Pop",
-  "Country",
-  "Ballad",
-  "Lo-fi",
-  "City Pop",
-  "Afrobeats",
-  "Latin Pop",
-  "K-pop",
-  "J-pop",
-  "Cinematic",
-  "Musical",
-  "Gospel",
-  "Soul",
-  "Reggae",
-  "Dancehall",
-  "Synthwave",
-  "Dark Pop",
-  "Hyperpop",
+const genreGroups = [
+  { title: "Pop", options: ["Pop", "Alt-pop", "Indie Pop", "Synth-pop", "City Pop", "K-pop", "J-pop"] },
+  { title: "R&B / Soul", options: ["R&B", "Soul", "Gospel", "Ballad"] },
+  { title: "Hip-hop", options: ["Hip-hop", "Trap", "Lo-fi", "Hyperpop"] },
+  { title: "Electronic", options: ["EDM", "House", "Synthwave", "Dancehall"] },
+  { title: "Rock / Folk", options: ["Rock", "Pop Rock", "Folk Pop", "Country"] },
+  { title: "Global / Screen", options: ["Afrobeats", "Latin Pop", "Reggae", "Cinematic", "Musical", "Dark Pop"] },
 ];
+const genreOptions = genreGroups.flatMap((group) => group.options);
 
 const grooveOptions = [
   "Not specified",
@@ -154,7 +130,15 @@ const grooveOptions = [
 ];
 
 const keyOptions = ["Not specified", "C major", "D major", "E major", "F major", "G major", "A major", "B major", "A minor", "B minor", "C minor", "D minor", "E minor", "F minor", "G minor"];
-const instrumentOptions = ["piano", "electric piano", "Rhodes", "acoustic guitar", "clean electric guitar", "distorted electric guitar", "reggae offbeat guitar", "808 bass", "synth bass", "warm bass guitar", "fuzzy bassline", "soft drums", "trap drums", "lo-fi drums", "live drums", "strings", "choir", "pads", "ambient textures", "vinyl noise", "analog synth", "arpeggiator", "glitch effects", "vocoder"];
+const instrumentGroups = [
+  { title: "Keys", options: ["piano", "electric piano", "Rhodes"] },
+  { title: "Guitars", options: ["acoustic guitar", "clean electric guitar", "distorted electric guitar", "reggae offbeat guitar"] },
+  { title: "Bass", options: ["808 bass", "synth bass", "warm bass guitar", "fuzzy bassline"] },
+  { title: "Drums", options: ["soft drums", "trap drums", "lo-fi drums", "live drums"] },
+  { title: "Orchestral / Vocal", options: ["strings", "choir", "pads"] },
+  { title: "Texture / Synth", options: ["ambient textures", "vinyl noise", "analog synth", "arpeggiator", "glitch effects", "vocoder"] },
+];
+const instrumentOptions = instrumentGroups.flatMap((group) => group.options);
 const structureOptions = ["Standard Suno song structure", "Short-video hook first", "OST gradual build", "BGM light-lyrics structure", "Rap + Chorus structure", "Duet structure", "Ensemble structure"];
 
 const defaultSingers: SingerProfile[] = [
@@ -184,6 +168,16 @@ const defaultSingers: SingerProfile[] = [
   },
 ];
 
+function uniqueSingerProfiles(singers: SingerProfile[]) {
+  const seen = new Set<string>();
+  return singers.filter((singer) => {
+    const key = `${singer.displayName}|${singer.safePromptTerms.join("|")}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const initialForm: SongForm = {
   title: "",
   projectType: "original_song",
@@ -206,7 +200,7 @@ const initialForm: SongForm = {
 const i18n = {
   "en-US": {
     title: "Song Creation Workbench",
-    subtitle: "Create Suno-ready lyrics, style prompts, and arrangement prompts. No audio generation or Suno account connection.",
+    subtitle: "Create Suno-ready lyrics and style prompts. No audio generation or Suno account connection.",
     setup: "Project setup",
     singerLibrary: "Singer library",
     advanced: "Advanced music settings",
@@ -222,14 +216,13 @@ const i18n = {
     secondaryEmotion: "Secondary emotions",
     genres: "Target genres",
     singers: "Singer tags",
-    generate: "Generate workbench text",
+    generate: "Generate idea",
     generating: "Generating",
     saveVersion: "Save version",
     copy: "Copy",
     copied: "Copied.",
-    lyrics: "Suno Lyrics",
+    lyrics: "Lyrics",
     stylePrompt: "Style Prompt",
-    compositionPrompt: "Composition Prompt",
     createSinger: "Create singer tag",
     fromReference: "Generate safe tag from reference",
     referencePlaceholder: "Reference artist name, used internally only",
@@ -243,7 +236,7 @@ const i18n = {
   },
   "zh-CN": {
     title: "歌曲创作工作流",
-    subtitle: "生成可复制到 Suno 的歌词、风格提示词和编曲提示词。不生成音频，也不连接 Suno 账号。",
+    subtitle: "生成可复制到 Suno 的歌词和风格提示词。不生成音频，也不连接 Suno 账号。",
     setup: "项目基础信息",
     singerLibrary: "歌手库",
     advanced: "高级音乐设定",
@@ -259,14 +252,13 @@ const i18n = {
     secondaryEmotion: "辅助情绪",
     genres: "目标曲风",
     singers: "歌手标签",
-    generate: "生成工作流文本",
+    generate: "生成创意",
     generating: "生成中",
     saveVersion: "保存版本",
     copy: "复制",
     copied: "已复制。",
-    lyrics: "Suno Lyrics",
+    lyrics: "Lyrics",
     stylePrompt: "Style Prompt",
-    compositionPrompt: "Composition Prompt",
     createSinger: "创建歌手标签",
     fromReference: "通过对标歌手生成安全标签",
     referencePlaceholder: "对标歌手名，仅内部理解使用",
@@ -294,10 +286,7 @@ export default function SongWorkbenchPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [manualSinger, setManualSinger] = useState("");
-  const [referenceArtist, setReferenceArtist] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
-  const [revisionScope, setRevisionScope] = useState("Auto");
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -333,9 +322,10 @@ export default function SongWorkbenchPage() {
   }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions]);
 
   const selectedSingers = useMemo(
-    () => singers.filter((singer) => form.selectedSingerIds.includes(singer.id)),
+    () => uniqueSingerProfiles(singers).filter((singer) => form.selectedSingerIds.includes(singer.id)),
     [form.selectedSingerIds, singers],
   );
+  const singerOptions = useMemo(() => uniqueSingerProfiles(singers), [singers]);
 
   const secondaryOptions = primaryEmotionMap[form.primaryEmotion] || [];
   const canCopyLyrics = !audit || audit.allowCopy;
@@ -431,24 +421,6 @@ export default function SongWorkbenchPage() {
     setVersions((current) => [version, ...current]);
   }
 
-  function addManualSinger() {
-    const name = manualSinger.trim();
-    if (!name) return;
-    const singer = createManualSinger(name);
-    setSingers((current) => [...current, singer]);
-    setForm((current) => ({ ...current, selectedSingerIds: [...current.selectedSingerIds, singer.id] }));
-    setManualSinger("");
-  }
-
-  function addReferenceSinger() {
-    const reference = referenceArtist.trim();
-    if (!reference) return;
-    const singer = createReferenceSinger(reference);
-    setSingers((current) => [...current, singer]);
-    setForm((current) => ({ ...current, selectedSingerIds: [...current.selectedSingerIds, singer.id] }));
-    setReferenceArtist("");
-  }
-
   function runAudit() {
     const nextAudit = auditLyrics(lyrics, stylePrompt, compositionPrompt, selectedSingers);
     setAudit(nextAudit);
@@ -457,12 +429,12 @@ export default function SongWorkbenchPage() {
   function applyRevision() {
     const instruction = revisionInstruction.trim();
     if (!instruction || !lyrics.trim()) return;
-    const nextLyrics = reviseLyrics(lyrics, instruction, revisionScope);
+    const nextLyrics = reviseLyrics(lyrics, instruction);
     const nextAudit = auditLyrics(nextLyrics, stylePrompt, compositionPrompt, selectedSingers);
     setLyrics(nextLyrics);
     setAudit(nextAudit);
     setRevisionInstruction("");
-    saveVersion("Revision", `${revisionScope}: ${instruction}`, nextLyrics, stylePrompt, compositionPrompt, nextAudit.status);
+    saveVersion("Revision", instruction, nextLyrics, stylePrompt, compositionPrompt, nextAudit.status);
   }
 
   async function copyText(value: string, guarded = false) {
@@ -484,36 +456,26 @@ export default function SongWorkbenchPage() {
   }
 
   return (
-    <main className="cosmic-page">
-      <header className="cosmic-page-header">
-        <Link href="/dashboard" aria-label="Dashboard"><KiikisLogo compact /></Link>
-        <div className="nav-actions">
-          <Link className="secondary-button" href="/dashboard">Dashboard</Link>
-        </div>
-      </header>
-
+    <main className="cosmic-page song-workbench-page">
       <section className="cosmic-title-band">
         <span>Suno Text Workflow</span>
         <h1>{text.title}</h1>
         <p>{text.subtitle}</p>
       </section>
 
-      <section className="app-shell song-workbench-shell">
+      <section className="song-workbench-shell">
         {error ? <div className="notice error">{error}</div> : null}
         {notice ? <div className="notice success">{notice}</div> : null}
 
-        <form className="dashboard-panel" onSubmit={generateAll}>
+        <form id="song-workbench-form" className="dashboard-panel song-setup-panel" onSubmit={generateAll}>
           <div className="dashboard-panel-head">
             <div>
               <span>{text.setup}</span>
               <h2>{form.title || "Untitled song project"}</h2>
             </div>
-            <button className="primary-button" type="submit" disabled={generating}>
-              {generating ? text.generating : text.generate}
-            </button>
           </div>
 
-          <div className="wizard-grid">
+          <div className="song-field-stack">
             <label>
               {text.titleField}
               <input
@@ -559,9 +521,9 @@ export default function SongWorkbenchPage() {
             />
           </label>
 
-          <fieldset className="settings-card">
+          <fieldset className="song-control-group">
             <span>{text.secondaryEmotion}</span>
-            <div className="workflow-template-meta">
+            <div className="song-chip-grid compact">
               {secondaryOptions.map((option) => (
                 <label key={option}>
                   <input
@@ -575,18 +537,25 @@ export default function SongWorkbenchPage() {
             </div>
           </fieldset>
 
-          <fieldset className="settings-card">
+          <fieldset className="song-control-group">
             <span>{text.genres}</span>
-            <div className="workflow-template-meta">
-              {genreOptions.map((option) => (
-                <label key={option}>
-                  <input
-                    type="checkbox"
-                    checked={form.genres.includes(option)}
-                    onChange={() => toggleListValue("genres", option)}
-                  />
-                  {option}
-                </label>
+            <div className="song-group-stack">
+              {genreGroups.map((group) => (
+                <div className="song-option-group" key={group.title}>
+                  <strong>{group.title}</strong>
+                  <div className="song-chip-grid">
+                    {group.options.map((option) => (
+                      <label key={option}>
+                        <input
+                          type="checkbox"
+                          checked={form.genres.includes(option)}
+                          onChange={() => toggleListValue("genres", option)}
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
             <input
@@ -595,55 +564,85 @@ export default function SongWorkbenchPage() {
               placeholder="Custom genre tags, comma separated"
             />
           </fieldset>
-        </form>
 
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{text.singerLibrary}</span>
-              <h2>{text.singers}</h2>
-            </div>
-          </div>
-          <div className="workflow-template-grid">
-            {singers.map((singer) => (
-              <article className="workflow-template-card" key={singer.id}>
-                <label>
+          <fieldset className="song-control-group">
+            <span>{text.singerLibrary}</span>
+            <div className="song-vocal-list">
+              {singerOptions.map((singer) => (
+                <label key={singer.id}>
                   <input
                     type="checkbox"
                     checked={form.selectedSingerIds.includes(singer.id)}
                     onChange={() => toggleListValue("selectedSingerIds", singer.id)}
                   />
-                  <strong>{singer.displayName}</strong>
+                  <span>
+                    <strong>{singer.displayName}</strong>
+                    <small>{singer.safePromptTerms.join(", ")}</small>
+                  </span>
                 </label>
-                <p>{singer.safePromptTerms.join(", ")}</p>
-                <div className="workflow-template-meta">
-                  {singer.genres.slice(0, 3).map((item) => <span key={item}>{item}</span>)}
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="song-control-group">
+            <span>Instruments / arrangement elements</span>
+            <div className="song-group-stack">
+              {instrumentGroups.map((group) => (
+                <div className="song-option-group" key={group.title}>
+                  <strong>{group.title}</strong>
+                  <div className="song-chip-grid">
+                    {group.options.map((option) => (
+                      <label key={option}>
+                        <input
+                          type="checkbox"
+                          checked={form.instruments.includes(option)}
+                          onChange={() => toggleListValue("instruments", option)}
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </article>
-            ))}
-          </div>
-          <div className="wizard-grid">
-            <label>
-              {text.createSinger}
-              <input value={manualSinger} onChange={(event) => setManualSinger(event.target.value)} placeholder="Warm Female Vocal" />
-              <button className="secondary-button" type="button" onClick={addManualSinger}>{text.add}</button>
-            </label>
-            <label>
-              {text.fromReference}
-              <input value={referenceArtist} onChange={(event) => setReferenceArtist(event.target.value)} placeholder={text.referencePlaceholder} />
-              <button className="secondary-button" type="button" onClick={addReferenceSinger}>{text.add}</button>
-            </label>
-          </div>
-        </section>
+              ))}
+            </div>
+            <input
+              value={form.customInstrument}
+              onChange={(event) => updateForm("customInstrument", event.target.value)}
+              placeholder="Custom instruments, comma separated"
+            />
+          </fieldset>
+        </form>
 
         <section className="dashboard-panel song-output-panel">
           <div className="dashboard-panel-head">
             <div>
-              <span>{text.advanced}</span>
-              <h2>Groove, key, instruments, structure</h2>
+              <span>{text.outputs}</span>
+              <h2>{text.lyrics}</h2>
+            </div>
+            <button className="secondary-button" type="button" disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>{text.copy}</button>
+          </div>
+          <div className="song-output-grid">
+            <label>
+              Lyrics
+              <textarea className="song-lyrics-textarea" value={lyrics} onChange={(event) => setLyrics(event.target.value)} placeholder="[Intro - 3 seconds]..." />
+            </label>
+            <label>
+              {text.stylePrompt}
+              <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
+              <button className="secondary-button" type="button" onClick={() => copyText(stylePrompt)}>{text.copy}</button>
+            </label>
+          </div>
+        </section>
+
+        <aside className="dashboard-panel song-ai-panel">
+          <div className="dashboard-panel-head">
+            <div>
+              <span>AI Tools</span>
+              <h2>{text.advanced}</h2>
             </div>
           </div>
-          <div className="wizard-grid">
+
+          <div className="song-field-stack">
             <label>
               Groove
               <select value={form.groove} onChange={(event) => updateForm("groove", event.target.value)}>
@@ -670,127 +669,63 @@ export default function SongWorkbenchPage() {
                 <option value="no_tags">Lyrics only, no tags</option>
               </select>
             </label>
+            <button className="primary-button full" type="submit" form="song-workbench-form" disabled={generating}>
+              {generating ? text.generating : text.generate}
+            </button>
           </div>
-          <fieldset className="settings-card">
-            <span>Instruments / arrangement elements</span>
-            <div className="workflow-template-meta">
-              {instrumentOptions.map((option) => (
-                <label key={option}>
-                  <input
-                    type="checkbox"
-                    checked={form.instruments.includes(option)}
-                    onChange={() => toggleListValue("instruments", option)}
-                  />
-                  {option}
-                </label>
-              ))}
-            </div>
-            <input
-              value={form.customInstrument}
-              onChange={(event) => updateForm("customInstrument", event.target.value)}
-              placeholder="Custom instruments, comma separated"
-            />
-          </fieldset>
-        </section>
 
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{text.outputs}</span>
-              <h2>{text.lyrics}</h2>
-            </div>
-            <div className="nav-actions">
-              <button className="secondary-button" type="button" onClick={runAudit}>{text.audit}</button>
-              <button className="primary-button" type="button" disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>{text.copy}</button>
-            </div>
-          </div>
-          <textarea className="song-lyrics-textarea" value={lyrics} onChange={(event) => setLyrics(event.target.value)} placeholder="[Intro - 3 seconds]..." />
-        </section>
-
-        <section className="workflow-template-grid song-prompt-grid">
-          <article className="workflow-template-card song-prompt-card">
-            <h3>{text.stylePrompt}</h3>
-            <p>{stylePrompt.length} characters</p>
-            <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
-            <button className="secondary-button" type="button" onClick={() => copyText(stylePrompt)}>{text.copy}</button>
-          </article>
-          <article className="workflow-template-card song-prompt-card">
-            <h3>{text.compositionPrompt}</h3>
-            <p>{compositionPrompt.length} characters</p>
-            <textarea className="song-prompt-textarea" value={compositionPrompt} onChange={(event) => setCompositionPrompt(event.target.value)} />
-            <button className="secondary-button" type="button" onClick={() => copyText(compositionPrompt)}>{text.copy}</button>
-          </article>
-        </section>
-
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-head">
-            <div>
+          <div className="song-tool-section">
+            <div className="song-tool-head">
               <span>{text.audit}</span>
-              <h2>{audit ? audit.status : text.auditPass}</h2>
+              <button className="secondary-button" type="button" onClick={runAudit}>{text.audit}</button>
             </div>
-          </div>
-          {audit ? (
-            <div className="settings-list">
-              <div className={`notice ${audit.status === "high_risk" ? "error" : audit.status === "medium_risk" ? "warning" : "success"}`}>
-                {audit.allowCopy ? "Copy allowed." : "Copy blocked until high-risk items are revised."}
-              </div>
-              {audit.items.length === 0 ? <p className="subtle">No risk items found.</p> : null}
-              {audit.items.map((item) => (
-                <article className="settings-card" key={`${item.type}-${item.message}`}>
-                  <span>{item.severity} / {item.type}</span>
-                  <p>{item.message}</p>
-                  <p>{item.suggestion}</p>
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </section>
-
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{text.revision}</span>
-              <h2>Preserve unchanged sections by default</h2>
-            </div>
-            <button className="primary-button" type="button" onClick={applyRevision}>{text.revise}</button>
-          </div>
-          <div className="wizard-grid">
-            <label>
-              Scope
-              <select value={revisionScope} onChange={(event) => setRevisionScope(event.target.value)}>
-                {["Auto", "Intro", "Verse 1", "Pre-Chorus", "Chorus", "Verse 2", "Bridge", "Final Chorus", "Outro", "Style Prompt only", "Composition Prompt only", "Full text micro-adjust"].map((option) => (
-                  <option key={option}>{option}</option>
+            {audit ? (
+              <div className="settings-list">
+                <div className={`notice ${audit.status === "high_risk" ? "error" : audit.status === "medium_risk" ? "warning" : "success"}`}>
+                  {audit.allowCopy ? "Copy allowed." : "Copy blocked until high-risk items are revised."}
+                </div>
+                {audit.items.length === 0 ? <p className="subtle">No risk items found.</p> : null}
+                {audit.items.map((item) => (
+                  <article className="settings-card" key={`${item.type}-${item.message}`}>
+                    <span>{item.severity} / {item.type}</span>
+                    <p>{item.message}</p>
+                    <p>{item.suggestion}</p>
+                  </article>
                 ))}
-              </select>
-            </label>
+              </div>
+            ) : <p className="subtle">{text.auditPass}</p>}
+          </div>
+
+          <div className="song-tool-section">
+            <div className="song-tool-head">
+              <span>{text.revision}</span>
+              <button className="primary-button" type="button" onClick={applyRevision}>{text.revise}</button>
+            </div>
             <label>
               Instruction
               <textarea className="song-revision-textarea" value={revisionInstruction} onChange={(event) => setRevisionInstruction(event.target.value)} placeholder={text.revisionPlaceholder} />
             </label>
           </div>
-        </section>
 
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-head">
-            <div>
+          <div className="song-tool-section">
+            <div className="song-tool-head">
               <span>{text.history}</span>
-              <h2>{versions.length} versions</h2>
+              <button className="secondary-button" type="button" onClick={() => saveVersion()}>{text.saveVersion}</button>
             </div>
-            <button className="secondary-button" type="button" onClick={() => saveVersion()}>{text.saveVersion}</button>
+            <div className="settings-list song-history-list">
+              {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
+              {versions.map((version) => (
+                <article className="settings-card" key={version.id}>
+                  <span>v{version.versionNumber} / {version.auditStatus}</span>
+                  <h3>{version.changeType}</h3>
+                  <p>{version.summary}</p>
+                  <p>{new Date(version.createdAt).toLocaleString()}</p>
+                  <button className="secondary-button" type="button" onClick={() => restoreVersion(version)}>Restore</button>
+                </article>
+              ))}
+            </div>
           </div>
-          <div className="settings-list">
-            {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
-            {versions.map((version) => (
-              <article className="settings-card" key={version.id}>
-                <span>v{version.versionNumber} / {version.auditStatus}</span>
-                <h3>{version.changeType}</h3>
-                <p>{version.summary}</p>
-                <p>{new Date(version.createdAt).toLocaleString()}</p>
-                <button className="secondary-button" type="button" onClick={() => restoreVersion(version)}>Restore</button>
-              </article>
-            ))}
-          </div>
-        </section>
+        </aside>
       </section>
     </main>
   );
@@ -851,38 +786,6 @@ function normalizedInstruments(form: SongForm) {
 
 function splitCustom(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
-}
-
-function createManualSinger(name: string): SingerProfile {
-  const safeName = name.replace(/[^\w\s-]/g, "").trim() || "Custom Vocal";
-  return {
-    id: `manual-${Date.now()}`,
-    displayName: safeName,
-    gender: "custom",
-    genres: ["custom"],
-    voiceTexture: ["custom"],
-    delivery: ["custom delivery"],
-    language: ["Custom"],
-    safePromptTerms: [`${safeName.toLowerCase()} vocal`.replace(/\s+/g, " ")],
-    forbiddenOutputTerms: [],
-    notes: "Manual singer tag.",
-  };
-}
-
-function createReferenceSinger(referenceArtist: string): SingerProfile {
-  const forbidden = referenceArtist.replace(/[^\w\s-]/g, "").trim();
-  return {
-    id: `reference-${Date.now()}`,
-    displayName: "Safe Reference Vocal",
-    gender: "custom",
-    genres: ["pop", "R&B", "melodic"],
-    voiceTexture: ["smooth", "bright", "rhythmic"],
-    delivery: ["melodic phrasing", "hook-driven delivery", "rhythmic vocal"],
-    language: ["English"],
-    safePromptTerms: ["smooth melodic vocal", "catchy hook-driven phrasing", "rhythmic emotional delivery"],
-    forbiddenOutputTerms: forbidden ? [forbidden] : [],
-    notes: `Internal reference only: ${forbidden || "unknown"}. Do not output this name.`,
-  };
 }
 
 function buildLyrics(form: SongForm, singers: SingerProfile[]) {
@@ -1032,15 +935,6 @@ function auditLyrics(lyrics: string, stylePrompt: string, compositionPrompt: str
     });
   }
 
-  if (compositionPrompt.length > 350) {
-    items.push({
-      type: "composition_prompt_length",
-      severity: "low",
-      message: "Composition Prompt is longer than recommended.",
-      suggestion: "Keep only intro, groove, instruments, section movement, and outro.",
-    });
-  }
-
   const hasHigh = items.some((item) => item.severity === "high");
   const hasMedium = items.some((item) => item.severity === "medium");
   const hasLow = items.some((item) => item.severity === "low");
@@ -1052,14 +946,9 @@ function auditLyrics(lyrics: string, stylePrompt: string, compositionPrompt: str
   };
 }
 
-function reviseLyrics(lyrics: string, instruction: string, scope: string) {
+function reviseLyrics(lyrics: string, instruction: string) {
   const note = `(Revision note: ${instruction})`;
-  if (scope === "Style Prompt only" || scope === "Composition Prompt only") return lyrics;
-  if (scope === "Auto" || scope === "Full text micro-adjust") return `${lyrics.trim()}\n\n[Revision Direction]\n${note}`;
-
-  const sectionPattern = new RegExp(`(\\[${escapeRegExp(scope)}[^\\]]*\\]\\n)([\\s\\S]*?)(?=\\n\\[[^\\]]+\\]|$)`, "i");
-  if (!sectionPattern.test(lyrics)) return `${lyrics.trim()}\n\n[${scope} Revision]\n${note}`;
-  return lyrics.replace(sectionPattern, (_match, heading, body) => `${heading}${body.trim()}\n${note}\n`);
+  return `${lyrics.trim()}\n\n[Revision Direction]\n${note}`;
 }
 
 function escapeRegExp(value: string) {
