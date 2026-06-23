@@ -1416,8 +1416,8 @@ export default function WorkflowPage() {
       <main className="app-shell">
         <section className="empty-state">
           <AlertCircle size={30} />
-          <h1>Project not found</h1>
-          <p>This world does not exist locally or in cloud sync. You can return to the dashboard or create a local draft with this route.</p>
+          <h1>{t("workspace.notFound.title")}</h1>
+          <p>{t("workspace.notFound.body")}</p>
           <div className="modal-actions">
             <Link className="secondary-button" href="/dashboard">Back to dashboard</Link>
             <button
@@ -1686,7 +1686,7 @@ export default function WorkflowPage() {
                 aria-expanded={storyBibleOpen}
               >
                 <div>
-                  <span>Story Bible</span>
+                  <span>{t("workspace.storyBible.label")}</span>
                   <strong>{t("workspace.storyBible.title")}</strong>
                 </div>
                 <small>{t("workspace.storyBible.note")}</small>
@@ -1787,7 +1787,7 @@ export default function WorkflowPage() {
                   </>
                 ) : (
                   <>
-                    <p>Upgrade this project into a reusable IP Universe. AI suggestions go to Inbox first and never become canon without review.</p>
+                    <p>{t("workspace.universe.upgrade.body")}</p>
                     <button
                       className="primary-button full"
                       disabled={!universeEntitlement.canUse}
@@ -1804,7 +1804,7 @@ export default function WorkflowPage() {
                         setUniverseModalOpen(true);
                       }}
                     >
-                      Upgrade to Universe
+                      {t("workspace.universe.upgrade.title")}
                     </button>
                     {!universeEntitlement.canUse ? <div className="notice warning">Universe plan required. Existing universes stay read-only and exportable.</div> : null}
                   </>
@@ -2249,8 +2249,8 @@ export default function WorkflowPage() {
       {universeModalOpen ? (
         <div className="modal-backdrop">
           <div className="modal wizard-modal">
-            <h2>Upgrade to Universe</h2>
-            <p>Create the long-term IP layer for this project. Extracted updates will go to Inbox first for manual canon review.</p>
+            <h2>{t("workspace.universe.upgrade.title")}</h2>
+            <p>{t("workspace.universe.upgrade.body")}</p>
             <div className="wizard-grid">
               <label>
                 Universe name

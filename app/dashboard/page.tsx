@@ -191,12 +191,12 @@ export default function ProjectListPage() {
         <div className="dashboard-main">
           <header className="dashboard-welcome">
             <div>
-              <span>{isZh ? "创作指挥中心" : "CREATOR COMMAND CENTER"}</span>
+              <span>{t("dashboard.welcome.kicker")}</span>
               <h2>{isZh ? "欢迎回来" : "Welcome back"}, {session?.user.email?.split("@")[0] || (isZh ? "作者" : "Writer")}.</h2>
-              <p>{isZh ? "今天继续构建一个难忘的故事。" : "Let's build something unforgettable."}</p>
+              <p>{t("dashboard.welcome.body")}</p>
             </div>
             <div className="dashboard-search" role="search">
-              <span>{isZh ? "搜索项目、世界、场景..." : "Search projects, worlds, scenes..."}</span>
+              <span>{t("dashboard.search.placeholder")}</span>
             </div>
           </header>
 

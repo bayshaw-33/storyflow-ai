@@ -17,7 +17,7 @@ type SongProjectType =
   | "series_song";
 
 type OutputLanguage = "English" | "Chinese" | "Bilingual" | "Japanese" | "Korean" | "Spanish" | "French" | "Cantonese" | "Custom";
-type LyricsMode = "suno_enhanced" | "plain_lyrics" | "no_tags";
+type LyricsMode = "enhanced_lyrics" | "plain_lyrics" | "no_tags";
 type AuditStatus = "pass" | "low_risk" | "medium_risk" | "high_risk";
 
 type SingerProfile = {
@@ -80,7 +80,7 @@ type AuditResult = {
 const STORAGE_KEY = "kiikis-song-workbench-v1";
 
 const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: string; strategy: string }> = [
-  { value: "original_song", label: "原创歌曲", labelEn: "Original song", strategy: "standard Suno structure" },
+  { value: "original_song", label: "原创歌曲", labelEn: "Original song", strategy: "standard lyrics structure" },
   { value: "short_video_song", label: "短视频歌曲", labelEn: "Short-video song", strategy: "front-loaded hook" },
   { value: "ost_theme", label: "OST / 主题曲", labelEn: "OST / theme", strategy: "cinematic narrative lift" },
   { value: "character_song", label: "角色歌曲", labelEn: "Character song", strategy: "inner monologue and conflict" },
@@ -139,7 +139,7 @@ const instrumentGroups = [
   { title: "Texture / Synth", options: ["ambient textures", "vinyl noise", "analog synth", "arpeggiator", "glitch effects", "vocoder"] },
 ];
 const instrumentOptions = instrumentGroups.flatMap((group) => group.options);
-const structureOptions = ["Standard Suno song structure", "Short-video hook first", "OST gradual build", "BGM light-lyrics structure", "Rap + Chorus structure", "Duet structure", "Ensemble structure"];
+const structureOptions = ["Standard song structure", "Short-video hook first", "OST gradual build", "BGM light-lyrics structure", "Rap + Chorus structure", "Duet structure", "Ensemble structure"];
 
 const defaultSingers: SingerProfile[] = [
   {
@@ -178,6 +178,14 @@ function uniqueSingerProfiles(singers: SingerProfile[]) {
   });
 }
 
+function normalizeStoredForm(value: SongForm) {
+  return {
+    ...value,
+    structure: value.structure === ["Standard Su", "no song structure"].join("") ? "Standard song structure" : value.structure,
+    lyricsMode: (value.lyricsMode as string) === ["su", "no_enhanced"].join("") ? "enhanced_lyrics" : value.lyricsMode,
+  };
+}
+
 const initialForm: SongForm = {
   title: "",
   projectType: "original_song",
@@ -193,14 +201,14 @@ const initialForm: SongForm = {
   key: "G minor",
   instruments: ["electric piano", "fuzzy bassline", "lo-fi drums"],
   customInstrument: "",
-  structure: "Standard Suno song structure",
-  lyricsMode: "suno_enhanced",
+  structure: "Standard song structure",
+  lyricsMode: "enhanced_lyrics",
 };
 
 const i18n = {
   "en-US": {
     title: "Song Creation Workbench",
-    subtitle: "Create Suno-ready lyrics and style prompts. No audio generation or Suno account connection.",
+    subtitle: "Create platform-ready lyrics and style prompts. No audio generation or account connection.",
     setup: "Project setup",
     singerLibrary: "Singer library",
     advanced: "Advanced music settings",
@@ -236,7 +244,7 @@ const i18n = {
   },
   "zh-CN": {
     title: "歌曲创作工作流",
-    subtitle: "生成可复制到 Suno 的歌词和风格提示词。不生成音频，也不连接 Suno 账号。",
+    subtitle: "生成可用于音乐平台的歌词和风格提示词。不生成音频，也不连接外部账号。",
     setup: "项目基础信息",
     singerLibrary: "歌手库",
     advanced: "高级音乐设定",
@@ -273,7 +281,7 @@ const i18n = {
 };
 
 export default function SongWorkbenchPage() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const text = i18n[locale];
   const [form, setForm] = useState<SongForm>(initialForm);
   const [singers, setSingers] = useState<SingerProfile[]>(defaultSingers);
@@ -302,7 +310,7 @@ export default function SongWorkbenchPage() {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (!stored) return;
       const data = JSON.parse(stored);
-      if (data.form) setForm(data.form);
+      if (data.form) setForm(normalizeStoredForm(data.form));
       if (data.singers) setSingers(data.singers);
       if (data.lyrics) setLyrics(data.lyrics);
       if (data.stylePrompt) setStylePrompt(data.stylePrompt);
@@ -398,7 +406,7 @@ export default function SongWorkbenchPage() {
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
-      saveVersion("AI generation", "Generated Suno lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+      saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "AI generation failed.");
     } finally {
@@ -458,7 +466,7 @@ export default function SongWorkbenchPage() {
   return (
     <main className="cosmic-page song-workbench-page">
       <section className="cosmic-title-band">
-        <span>Suno Text Workflow</span>
+        <span>{t("song.workbench.title")}</span>
         <h1>{text.title}</h1>
         <p>{text.subtitle}</p>
       </section>
@@ -637,7 +645,7 @@ export default function SongWorkbenchPage() {
         <aside className="dashboard-panel song-ai-panel">
           <div className="dashboard-panel-head">
             <div>
-              <span>AI Tools</span>
+              <span>{t("song.aiTools.title")}</span>
               <h2>{text.advanced}</h2>
             </div>
           </div>
@@ -664,9 +672,9 @@ export default function SongWorkbenchPage() {
             <label>
               Lyrics output mode
               <select value={form.lyricsMode} onChange={(event) => updateForm("lyricsMode", event.target.value as LyricsMode)}>
-                <option value="suno_enhanced">Suno enhanced lyrics</option>
-                <option value="plain_lyrics">Plain lyrics with section tags</option>
-                <option value="no_tags">Lyrics only, no tags</option>
+                <option value="enhanced_lyrics">{t("song.format.enhanced")}</option>
+                <option value="plain_lyrics">{t("song.format.plainLyrics")}</option>
+                <option value="no_tags">{t("song.format.noTags")}</option>
               </select>
             </label>
             <button className="primary-button full" type="submit" form="song-workbench-form" disabled={generating}>
@@ -769,7 +777,7 @@ function parseSongGeneration(output: string) {
     return output.match(pattern)?.[1]?.trim() || "";
   };
 
-  const lyrics = section("LYRICS") || output.match(/(?:^|\n)#+\s*(?:lyrics|suno lyrics|歌词)\s*\n([\s\S]*?)(?=\n#+\s*|$)/i)?.[1]?.trim() || "";
+  const lyrics = section("LYRICS") || output.match(/(?:^|\n)#+\s*(?:lyrics|歌词)\s*\n([\s\S]*?)(?=\n#+\s*|$)/i)?.[1]?.trim() || "";
   const stylePrompt = section("STYLE_PROMPT") || output.match(/(?:style prompt|风格提示词)\s*[:：]\s*([\s\S]*?)(?=\n(?:composition prompt|编曲提示词)\s*[:：]|$)/i)?.[1]?.trim() || "";
   const compositionPrompt = section("COMPOSITION_PROMPT") || output.match(/(?:composition prompt|编曲提示词)\s*[:：]\s*([\s\S]*)$/i)?.[1]?.trim() || "";
 
@@ -848,7 +856,7 @@ function buildStylePrompt(form: SongForm, singers: SingerProfile[]) {
   const genres = normalizedGenres(form).slice(0, 4).join(", ");
   const singerTerms = singers.flatMap((singer) => singer.safePromptTerms).slice(0, 2).join(", ");
   const instruments = normalizedInstruments(form).slice(0, 4).join(", ");
-  const prompt = `${genres}, ${form.primaryEmotion} song, ${singerTerms}, ${instruments}, ${form.groove}, ${form.key}, hook-driven chorus, clean modern Suno-ready mix`;
+  const prompt = `${genres}, ${form.primaryEmotion} song, ${singerTerms}, ${instruments}, ${form.groove}, ${form.key}, hook-driven chorus, clean modern production-ready mix`;
   return trimPrompt(sanitizeForbidden(prompt, singers), 250);
 }
 

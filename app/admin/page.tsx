@@ -21,8 +21,7 @@ type LoadState =
   | { status: "ready"; rows: AdminUserRow[] };
 
 export default function AdminPage() {
-  const { locale } = useI18n();
-  const isZh = locale === "zh-CN";
+  const { t } = useI18n();
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {
@@ -72,26 +71,26 @@ export default function AdminPage() {
         <div className="dashboard-main">
           <header className="dashboard-welcome">
             <div>
-              <span>{isZh ? "管理后台" : "ADMIN"}</span>
-              <h2>{isZh ? "用户总览" : "Users"}</h2>
-              <p>{isZh ? "所有注册用户的邮箱、注册时间、档位与积分。" : "Every registered user's email, signup time, plan and credits."}</p>
+              <span>{t("admin.title")}</span>
+              <h2>{t("admin.users.title")}</h2>
+              <p>{t("admin.users.body")}</p>
             </div>
           </header>
 
           <div className="dashboard-panel">
             {state.status === "loading" ? (
-              <p className="subtle">{isZh ? "加载中…" : "Loading…"}</p>
+              <p className="subtle">{t("admin.loading")}</p>
             ) : null}
 
             {state.status === "unauthorized" ? (
               <div className="notice error">
-                {isZh ? "无权限访问。请用管理员账号登录。" : "Not authorized. Sign in with the admin account."}
+                {t("admin.unauthorized")}
               </div>
             ) : null}
 
             {state.status === "error" ? (
               <div className="notice error">
-                {(isZh ? "加载失败：" : "Failed to load: ") + state.message}
+                {t("admin.loadFailed") + state.message}
               </div>
             ) : null}
 
@@ -100,11 +99,11 @@ export default function AdminPage() {
                 <table className="admin-user-table">
                   <thead>
                     <tr>
-                      <th>{isZh ? "邮箱" : "Email"}</th>
-                      <th>{isZh ? "名称" : "Name"}</th>
-                      <th>{isZh ? "注册时间" : "Signed up"}</th>
-                      <th>{isZh ? "档位" : "Plan"}</th>
-                      <th>{isZh ? "积分" : "Credits"}</th>
+                      <th>{t("admin.col.email")}</th>
+                      <th>{t("admin.col.name")}</th>
+                      <th>{t("admin.col.signedUp")}</th>
+                      <th>{t("admin.col.plan")}</th>
+                      <th>{t("admin.col.credits")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -123,7 +122,7 @@ export default function AdminPage() {
                     ))}
                     {state.rows.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="subtle">{isZh ? "暂无用户" : "No users yet"}</td>
+                        <td colSpan={5} className="subtle">{t("admin.empty")}</td>
                       </tr>
                     ) : null}
                   </tbody>

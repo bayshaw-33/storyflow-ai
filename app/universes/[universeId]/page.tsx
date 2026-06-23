@@ -8,6 +8,7 @@ import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle } from "
 import { createContinuationProject, upsertProject } from "@/lib/projects";
 import { upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/useI18n";
 import {
   acceptInboxItem,
   buildInheritedStoryBible,
@@ -30,6 +31,7 @@ type TabKey = "overview" | "characters" | "relationships" | "timeline" | "facts"
 export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
   const router = useRouter();
+  const { t } = useI18n();
   const [session, setSession] = useState<Session | null>(null);
   const [bundle, setBundle] = useState<UniverseBundle | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -161,7 +163,7 @@ export default function UniverseDetailPage() {
       <main className="app-shell">
         <section className="empty-state">
           <Loader2 className="spin" size={28} />
-          <h1>Loading Universe</h1>
+          <h1>{t("universe.loading")}</h1>
         </section>
       </main>
     );
@@ -171,7 +173,7 @@ export default function UniverseDetailPage() {
     return (
       <main className="app-shell">
         <section className="empty-state">
-          <h1>Universe not found</h1>
+          <h1>{t("universe.notFound")}</h1>
           <Link className="primary-button" href="/universes">Back to Universes</Link>
         </section>
       </main>
@@ -292,14 +294,14 @@ export default function UniverseDetailPage() {
       {createOpen ? (
         <div className="modal-backdrop">
           <div className="modal wizard-modal">
-            <h2>Create Project from Universe</h2>
-            <p>The new project starts with a Story Bible initialized from canon facts, state, characters and relationships.</p>
+            <h2>{t("universe.createProject.title")}</h2>
+            <p>{t("universe.createProject.body")}</p>
             <div className="wizard-grid">
               <label>Title<input value={createForm.title} onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))} autoFocus /></label>
               <label>
                 Role
                 <select value={createForm.projectRole} onChange={(event) => setCreateForm((current) => ({ ...current, projectRole: event.target.value as UniverseProjectRole }))}>
-                  <option value="main_season">Main season</option>
+                  <option value="main_season">{t("universe.projectType.mainSeason")}</option>
                   <option value="spin_off">Spin-off</option>
                   <option value="prequel">Prequel</option>
                   <option value="adaptation">Adaptation</option>
@@ -312,7 +314,7 @@ export default function UniverseDetailPage() {
               <label>Language<input value={createForm.language} onChange={(event) => setCreateForm((current) => ({ ...current, language: event.target.value }))} /></label>
               <label>Episodes<input type="number" value={createForm.episodeCount} onChange={(event) => setCreateForm((current) => ({ ...current, episodeCount: Number(event.target.value) || 12 }))} /></label>
             </div>
-            <label>Episode duration<input value={createForm.episodeDuration} onChange={(event) => setCreateForm((current) => ({ ...current, episodeDuration: event.target.value }))} /></label>
+            <label>{t("universe.episodeDuration.label")}<input value={createForm.episodeDuration} onChange={(event) => setCreateForm((current) => ({ ...current, episodeDuration: event.target.value }))} /></label>
             <div className="modal-actions">
               <button className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button>
               <button className="primary-button" onClick={createProjectFromUniverse}>Create</button>

@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { CatMark } from "@/components/brand/CatMark";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 const companions = [
   ["Lyra", "Story Architect", "Active", "Shapes loglines, structure, stakes, and story spine."],
@@ -11,6 +14,8 @@ const companions = [
 ];
 
 export default function CompanionsPage() {
+  const { t } = useI18n();
+
   return (
     <main className="cosmic-page">
       <header className="cosmic-page-header">
@@ -19,8 +24,8 @@ export default function CompanionsPage() {
 
       <section className="cosmic-title-band">
         <span>COMPANIONS</span>
-        <h1>AI writers with a quiet signal.</h1>
-        <p>Premium creative companions for structure, worlds, dialogue, mood, and ambient project state.</p>
+        <h1>{t("companions.hero.title")}</h1>
+        <p>{t("companions.hero.subtitle")}</p>
       </section>
 
       <section className="companion-grid-page">
@@ -38,9 +43,9 @@ export default function CompanionsPage() {
         ))}
         <article className="companion-card-page add-companion">
           <div className="companion-card-portrait">+</div>
-          <h2>Add companion</h2>
-          <p>Prepare a custom creative role for a future team or studio workflow.</p>
-          <button>Unlock later</button>
+          <h2>{t("companions.add.title")}</h2>
+          <p>{t("companions.add.body")}</p>
+          <button>{t("companions.add.unlock")}</button>
         </article>
       </section>
     </main>
