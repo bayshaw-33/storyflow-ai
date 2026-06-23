@@ -105,7 +105,7 @@ export function ProjectList({
           <article className="project-planet-card empty-world-card">
             <span className="project-planet dim" />
             <strong>{isZh ? "还没有故事星球" : "No story planets yet"}</strong>
-            <small>{isZh ? "进入编剧室创建第一个项目。" : "Enter the Writer's Room to create the first one."}</small>
+            <small>{isZh ? "进入创作室创建第一个项目。" : "Enter the Studio to create the first one."}</small>
           </article>
         ) : null}
 
