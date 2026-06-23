@@ -352,9 +352,7 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
-  max-width: 1200px;
-  margin: 0;
-  padding: 10px 18px 10px clamp(60px, 6vw, 80px);
+  padding: 10px clamp(20px, 3vw, 40px) 10px clamp(60px, 6vw, 80px);
   transition: transform 280ms ease;
 }
 .cosmic-page-header {
