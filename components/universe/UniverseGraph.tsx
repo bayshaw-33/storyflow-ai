@@ -155,18 +155,6 @@ export const UniverseGraph = memo(function UniverseGraph({ graph }: UniverseGrap
         />
       ))}
 
-      <DesignAssetImage
-        className="universe-filter-tabs"
-        token="UNIVERSE_FILTER_TABS"
-        alt="Filter tabs"
-        draggable={false}
-      />
-      <DesignAssetImage
-        className="universe-badges"
-        token="UNIVERSE_BADGES"
-        alt="Tier badges"
-        draggable={false}
-      />
     </div>
   );
 });
