@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle } from "lucide-react";
-import { createContinuationProject, upsertProject } from "@/lib/projects";
+import { createContinuationProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -20,9 +20,9 @@ import {
   getUniverseBundle,
   readUniverseEntitlement,
   rejectInboxItem,
-  UniverseBundle,
-  UniverseInboxItem,
-  UniverseProjectRole,
+  type UniverseBundle,
+  type UniverseInboxItem,
+  type UniverseProjectRole,
   upsertUniverseProjectLink,
 } from "@/lib/universe";
 
@@ -50,6 +50,13 @@ export default function UniverseDetailPage() {
     episodeDuration: "2 minutes",
   });
 
+  // Local projects (for extract / canon-check project selector)
+  const [projects, setProjects] = useState<DramaProject[]>([]);
+  const [extractProjectId, setExtractProjectId] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [checkProjectId, setCheckProjectId] = useState("");
+  const [checking, setChecking] = useState(false);
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     void supabase?.auth.getSession().then(({ data }) => {
@@ -66,6 +73,15 @@ export default function UniverseDetailPage() {
     if (!supabase) void refresh(null);
     return () => listener?.subscription.unsubscribe();
   }, [params.universeId]);
+
+  useEffect(() => {
+    setProjects(readProjectsFromStorage());
+  }, []);
+
+  const projectsById = useMemo(
+    () => new Map(projects.map((p) => [p.id, p])),
+    [projects],
+  );
 
   async function refresh(nextSession: Session | null = session) {
     setLoading(true);
@@ -89,6 +105,54 @@ export default function UniverseDetailPage() {
     await rejectInboxItem(item, { accessToken: session?.access_token });
     setStatus("Inbox item rejected.");
     await refresh();
+  }
+
+  async function extractFromProject() {
+    const project = projectsById.get(extractProjectId);
+    if (!project || !bundle) return;
+    setExtracting(true);
+    setStatus("");
+    setError("");
+    try {
+      const res = await fetch("/api/universe/extract", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ universeId: params.universeId, project }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => ""));
+      await refresh();
+      setStatus("Inbox updated with extracted candidates.");
+    } catch {
+      setError("Extract failed. Please try again.");
+    }
+    setExtracting(false);
+  }
+
+  async function runCheck() {
+    const project = projectsById.get(checkProjectId);
+    if (!project || !bundle) return;
+    setChecking(true);
+    setStatus("");
+    setError("");
+    try {
+      const res = await fetch("/api/universe/canon-check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ bundle, project }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => ""));
+      await refresh();
+      setStatus("Canon check complete.");
+    } catch {
+      setError("Canon check failed. Please try again.");
+    }
+    setChecking(false);
   }
 
   async function createProjectFromUniverse() {
@@ -183,6 +247,7 @@ export default function UniverseDetailPage() {
   const characters = bundle.entities.filter((item) => item.type === "character");
   const locations = bundle.entities.filter((item) => item.type === "location");
   const pendingInbox = bundle.inbox.filter((item) => item.status === "pending");
+  const hasLinks = bundle.links.length > 0;
 
   return (
     <main className="app-shell universe-shell">
@@ -249,12 +314,58 @@ export default function UniverseDetailPage() {
       {activeTab === "relationships" ? <ListSection items={bundle.relationships} render={(item) => ({ title: item.relationship_type, body: item.summary, meta: item.status })} /> : null}
       {activeTab === "timeline" ? <ListSection items={bundle.timeline} render={(item) => ({ title: item.title, body: item.description, meta: item.date_label || item.status })} /> : null}
       {activeTab === "facts" ? <ListSection items={bundle.canonFacts} render={(item) => ({ title: item.fact_text, body: item.source_location_text || "", meta: `${item.importance}${item.is_locked ? " / locked" : ""}` })} /> : null}
-      {activeTab === "projects" ? <ListSection items={bundle.links} render={(item) => ({ title: item.project_id, body: JSON.stringify(item.inheritance_settings), meta: item.project_role })} /> : null}
-      {activeTab === "checks" ? <ListSection items={bundle.reports} render={(item) => ({ title: `Score ${item.score}`, body: item.issues_json.map((issue) => `${issue.severity}: ${issue.title}`).join("\n"), meta: new Date(item.created_at).toLocaleString() })} /> : null}
+
+      {activeTab === "projects" ? (
+        <ListSection
+          items={bundle.links}
+          render={(item) => {
+            const proj = projectsById.get(item.project_id);
+            const enabledFlags = Object.entries(item.inheritance_settings)
+              .filter(([, v]) => v)
+              .map(([k]) => k.replace(/_/g, " "))
+              .join(", ");
+            return {
+              title: proj?.title || item.project_id,
+              body: enabledFlags || "No inheritance settings",
+              meta: item.project_role + (item.season_number != null ? ` · S${item.season_number}` : ""),
+            };
+          }}
+        />
+      ) : null}
 
       {activeTab === "inbox" ? (
         <section className="universe-list">
-          {bundle.inbox.length === 0 ? <div className="empty-state"><h2>Inbox is empty</h2><p>Extract updates from a project workspace to review canon candidates here.</p></div> : null}
+          <div className="universe-action-bar">
+            <select
+              value={extractProjectId}
+              onChange={(e) => setExtractProjectId(e.target.value)}
+              disabled={!hasLinks}
+            >
+              <option value="">— Select project to extract from —</option>
+              {bundle.links.map((link) => {
+                const proj = projectsById.get(link.project_id);
+                return (
+                  <option key={link.project_id} value={link.project_id}>
+                    {proj?.title || link.project_id}
+                  </option>
+                );
+              })}
+            </select>
+            <button
+              className="secondary-button"
+              onClick={extractFromProject}
+              disabled={!hasLinks || !extractProjectId || extracting || !session}
+            >
+              {extracting ? <Loader2 size={15} className="spin" /> : null}
+              Extract Updates
+            </button>
+          </div>
+          {bundle.inbox.length === 0 ? (
+            <div className="empty-state">
+              <h2>Inbox is empty</h2>
+              <p>Select a linked project above and click Extract Updates to review canon candidates here.</p>
+            </div>
+          ) : null}
           {bundle.inbox.map((item) => (
             <article className="universe-row" key={item.id}>
               <div>
@@ -276,7 +387,45 @@ export default function UniverseDetailPage() {
         </section>
       ) : null}
 
-      {locations.length && activeTab === "overview" ? (
+      {activeTab === "checks" ? (
+        <>
+          <div className="universe-action-bar">
+            <select
+              value={checkProjectId}
+              onChange={(e) => setCheckProjectId(e.target.value)}
+              disabled={!hasLinks}
+            >
+              <option value="">— Select project to check —</option>
+              {bundle.links.map((link) => {
+                const proj = projectsById.get(link.project_id);
+                return (
+                  <option key={link.project_id} value={link.project_id}>
+                    {proj?.title || link.project_id}
+                  </option>
+                );
+              })}
+            </select>
+            <button
+              className="secondary-button"
+              onClick={runCheck}
+              disabled={!hasLinks || !checkProjectId || checking || !session}
+            >
+              {checking ? <Loader2 size={15} className="spin" /> : null}
+              Run Canon Check
+            </button>
+          </div>
+          <ListSection
+            items={bundle.reports}
+            render={(item) => ({
+              title: `Score ${item.score}`,
+              body: item.issues_json.map((issue) => `${issue.severity}: ${issue.title}`).join("\n"),
+              meta: new Date(item.created_at).toLocaleString(),
+            })}
+          />
+        </>
+      ) : null}
+
+      {locations.length > 0 && activeTab === "overview" ? (
         <section className="universe-list">
           <h2>Locations</h2>
           {locations.slice(0, 6).map((item) => (
