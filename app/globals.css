@@ -1839,8 +1839,9 @@ textarea.script-editor {
   padding: 0 clamp(20px, 3vw, 32px) var(--space-2);
 }
 .workspace-module-rail .workspace-module-grid {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(7, 80px);
   gap: var(--space-3);
+  justify-content: center;
 }
 .workspace-module-rail .workspace-module-card {
   min-height: 56px;
