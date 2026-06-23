@@ -2073,3 +2073,56 @@ textarea.script-editor {
 /* FIX 5: pricing tier icon (the 3 little tier glyphs) was floating mid-card.
    Pin it near the bottom so it stops overlapping the name. */
 .kk-tier-icon { width: 40px; height: 40px; margin-bottom: 4px; opacity: 0.9; }
+
+/* ── Universe graph node + label ─────────────────────────────────────────── */
+/* Nodes are absolutely positioned by JS-computed left/top percentages. */
+.universe-node {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(var(--node-scale, 1));
+  transform-origin: center;
+  transition: transform var(--transition-base), opacity var(--transition-base);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.universe-node:hover { opacity: 0.85; }
+.universe-node.is-active { opacity: 1; }
+
+/* Universe name label beneath each world node */
+.universe-node-label {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-secondary);
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* ── Universe action bar (project selector + trigger button row) ──────────── */
+.universe-action-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 var(--space-4);
+}
+.universe-action-bar select {
+  flex: 1;
+  max-width: 320px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  color: var(--ink-primary);
+  font-size: 14px;
+  transition: border-color var(--transition-base);
+}
+.universe-action-bar select:hover:not(:disabled) { border-color: var(--glass-border-hover); }
+.universe-action-bar select:disabled { opacity: 0.45; cursor: not-allowed; }
