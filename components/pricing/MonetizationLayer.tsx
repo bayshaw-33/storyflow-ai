@@ -223,7 +223,7 @@ export function MonetizationLayer() {
           className={`kk-billing-option${annual ? " is-active" : ""}`}
           onClick={() => setAnnual(true)}
         >
-          {copy.annual}
+          {copy.annual}{" "}
           <span className="kk-billing-save">{copy.annualSave}</span>
         </button>
       </div>

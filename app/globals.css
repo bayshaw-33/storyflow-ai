@@ -894,7 +894,7 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-4);
   aspect-ratio: 3 / 4;
   padding: var(--space-6);
@@ -904,7 +904,6 @@ input:focus, textarea:focus, select:focus {
   overflow: hidden;
   transition: transform var(--transition-base), border-color var(--transition-base);
 }
-.kk-tier:hover { transform: translateY(-4px); border-color: var(--glass-border-hover); }
 .kk-tier.is-flagship { border-color: rgba(255, 255, 255, 0.30); box-shadow: var(--glow-cyan); }
 .kk-tier.is-selected { border-color: var(--accent-cyan); }
 /* glass texture fills the card background */
@@ -922,6 +921,7 @@ input:focus, textarea:focus, select:focus {
 }
 .kk-tier-select {
   position: relative; z-index: 2;
+  margin-top: auto;
   min-height: 42px; padding: 10px 28px;
   border-radius: var(--radius-full);
   border: 1px solid var(--glass-border-hover);
@@ -932,6 +932,27 @@ input:focus, textarea:focus, select:focus {
   transition: var(--transition-base);
 }
 .kk-tier-select:hover { background: var(--accent-blue); color: var(--bg-void); border-color: var(--accent-blue); }
+.kk-billing-toggle {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  margin: var(--space-6) auto var(--space-4);
+}
+.kk-billing-option {
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-base);
+}
+.kk-billing-option.is-active {
+  border-color: var(--glass-border-hover);
+  color: var(--ink-primary);
+  background: var(--glass-fill);
+}
 
 /* ============================================================================
    COSMIC PAGE  (templates / generic content page)
