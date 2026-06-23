@@ -1076,7 +1076,7 @@ input:focus, textarea:focus, select:focus {
 .universe-stats-panel h2 { font-size: 16px; font-weight: 600; margin: 4px 0 12px; }
 .universe-mini-stats { display: flex; gap: var(--space-4); }
 .universe-graph, .universe-engine, .creative-field { position: relative; min-height: 400px; }
-.universe-graph { background: radial-gradient(ellipse at 50% 40%, #0d1525 0%, #060a14 100%); }
+.universe-graph { height: 100vh; background: radial-gradient(ellipse at 50% 40%, #0d1525 0%, #060a14 100%); }
 
 /* ============================================================================
    COMPANIONS
@@ -2213,13 +2213,29 @@ textarea.script-editor {
 .universe-action-bar select:hover:not(:disabled) { border-color: var(--glass-border-hover); }
 .universe-action-bar select:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* ── Universe node image sizing (tokens resolve to large cards; constrain to icon) ── */
-.universe-node img {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
+/* ── Universe graph nodes — CSS circles (no clean icon assets exist) ──────── */
+.universe-node img { display: none; }
+.universe-node {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(111, 168, 255, 0.12);
+  border: 1.5px solid rgba(111, 168, 255, 0.35);
 }
-.universe-node.node-flagship img {
-  width: 64px;
-  height: 64px;
+.universe-node.node-flagship {
+  width: 60px;
+  height: 60px;
+  background: rgba(111, 168, 255, 0.22);
+  border-color: rgba(111, 168, 255, 0.65);
+}
+.universe-node.node-feature {
+  width: 32px;
+  height: 32px;
+  background: rgba(111, 168, 255, 0.06);
+  border-color: rgba(111, 168, 255, 0.18);
+}
+.universe-node.is-active,
+.universe-node:hover {
+  border-color: rgba(111, 168, 255, 0.9);
+  box-shadow: 0 0 16px rgba(111, 168, 255, 0.35);
 }
