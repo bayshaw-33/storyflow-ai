@@ -1416,6 +1416,85 @@ input:focus, textarea:focus, select:focus {
   resize: vertical;
   line-height: 1.6;
 }
+.viral-title-block {
+  min-width: 0;
+}
+.viral-title-block span {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.viral-title-block h1 {
+  margin-top: 3px;
+  font-size: 20px;
+  font-weight: 500;
+}
+.viral-upload-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-5);
+  border: 1px dashed var(--glass-border-hover);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+}
+.viral-upload-box input {
+  display: none;
+}
+.viral-upload-box span,
+.viral-file-card span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.viral-file-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+.viral-file-card video {
+  width: 100%;
+  max-height: 260px;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+.viral-empty-state {
+  min-height: 420px;
+}
+.viral-output-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.viral-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.viral-section-body strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.viral-section-body p {
+  margin: 0;
+  color: var(--ink-secondary);
+  line-height: 1.65;
+}
+.viral-remake-output {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--ink-secondary);
+  font-family: var(--font-body);
+  line-height: 1.7;
+}
 @media (max-width: 1320px) {
   .song-workbench-shell {
     grid-template-columns: 1fr;
@@ -2132,3 +2211,14 @@ textarea.script-editor {
 }
 .universe-action-bar select:hover:not(:disabled) { border-color: var(--glass-border-hover); }
 .universe-action-bar select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Universe node image sizing (tokens resolve to large cards; constrain to icon) ── */
+.universe-node img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+.universe-node.node-flagship img {
+  width: 64px;
+  height: 64px;
+}
