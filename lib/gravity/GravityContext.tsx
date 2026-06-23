@@ -1,7 +1,23 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { WRITERS_ROOM_ROLES, type WriterActivityState, type WriterRoomRoleId } from "@/lib/universe/writersRoom";
+
+export type WriterRoomRoleId =
+  | "story-architect"
+  | "character-designer"
+  | "script-doctor"
+  | "market-analyst"
+  | "visual-director";
+
+export type WriterActivityState = "idle" | "reading" | "thinking" | "writing" | "blocked";
+
+const WRITERS_ROOM_ROLE_IDS: WriterRoomRoleId[] = [
+  "story-architect",
+  "character-designer",
+  "script-doctor",
+  "market-analyst",
+  "visual-director",
+];
 
 export type GravityProjectFocus = {
   projectId: string;
@@ -56,8 +72,8 @@ function createInitialGravityState(): GravityState {
       completedSteps: 0,
       totalSteps: 0,
     },
-    writers: WRITERS_ROOM_ROLES.map((role) => ({
-      roleId: role.id,
+    writers: WRITERS_ROOM_ROLE_IDS.map((roleId) => ({
+      roleId,
       state: "idle",
       currentTask: null,
     })),
