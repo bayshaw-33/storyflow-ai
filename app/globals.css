@@ -739,7 +739,13 @@ input:focus, textarea:focus, select:focus {
   border-radius: var(--radius-md);
   background: var(--glass-fill);
   border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
 }
+.dashboard-welcome > div:first-child { flex: 1 1 300px; }
+.dashboard-welcome .dashboard-search { flex: 1 1 220px; max-width: 300px; }
 .dashboard-welcome h1, .dashboard-welcome h2 {
   font-family: var(--font-heading);
   font-size: clamp(1.6rem, 3vw, 2.2rem);
@@ -747,6 +753,22 @@ input:focus, textarea:focus, select:focus {
   letter-spacing: -0.01em;
 }
 .dashboard-welcome p { color: var(--ink-secondary); margin-top: 6px; }
+
+.dashboard-panel h2 {
+  font-family: var(--font-heading);
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+.dashboard-panel-head > div > span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin-bottom: 4px;
+}
 
 /* right rail */
 .dashboard-right-rail { display: flex; flex-direction: column; gap: var(--space-6); }
