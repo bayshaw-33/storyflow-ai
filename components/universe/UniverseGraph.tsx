@@ -112,21 +112,6 @@ export const UniverseGraph = memo(function UniverseGraph({ graph }: UniverseGrap
 
   return (
     <div className="universe-graph" role="application" aria-label="Universe story graph">
-      <DesignAssetImage
-        className="universe-bg universe-bg-map"
-        token="UNIVERSE_MAP"
-        alt=""
-        aria-hidden="true"
-        draggable={false}
-      />
-      <DesignAssetImage
-        className="universe-bg universe-bg-texture"
-        token="UNIVERSE_TEXTURE"
-        alt=""
-        aria-hidden="true"
-        draggable={false}
-      />
-
       <svg className="universe-edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         {visibleEdges.map((edge) => {
           const from = byId.get(edge.from);
