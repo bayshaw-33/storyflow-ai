@@ -1,14 +1,14 @@
 "use client";
 
 import { memo, useCallback, useMemo, useState } from "react";
-import { getPlanEntitlement, formatLaunchPrice, type PlanEntitlement } from "@/lib/billing/plans";
+import { getPlanEntitlement, formatPrice, formatCnyPrice, type PlanEntitlement } from "@/lib/billing/plans";
 import type { Locale } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { glassAssetFor, isFlagship, TIERS, type TierDef } from "@/lib/pricing/tiers";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
-const PRIMARY_TIER_IDS: TierDef["id"][] = ["FREE", "ELITE", "PRO", "UNIVERSE"];
+const PRIMARY_TIER_IDS: TierDef["id"][] = ["FREE", "ELITE", "PRO", "ULTRA"];
 
 const tierCopy = {
   "en-US": {
@@ -22,11 +22,13 @@ const tierCopy = {
     saved: "Plan updated.",
     error: "Could not update your plan. Please try again.",
     missingProfile: "Profile was not found for this account.",
-    launchPrice: "Launch price",
-    regularPrice: "Regular price",
+    betaLabel: "Beta",
+    originalPrice: "Original",
     included: "Included",
-    model: "Model access",
-    monthly: "/ month",
+    monthly: "/ mo",
+    annual: "Annual",
+    monthlyToggle: "Monthly",
+    annualSave: "Save more",
   },
   "zh-CN": {
     kicker: "定价",
@@ -39,11 +41,13 @@ const tierCopy = {
     saved: "套餐已更新。",
     error: "套餐更新失败，请重试。",
     missingProfile: "未找到当前账号的个人资料。",
-    launchPrice: "上线价格",
-    regularPrice: "原价",
+    betaLabel: "公测价",
+    originalPrice: "原价",
     included: "包含",
-    model: "模型权限",
     monthly: "/ 月",
+    annual: "年付",
+    monthlyToggle: "月付",
+    annualSave: "更划算",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -53,6 +57,8 @@ const MonetizationTier = memo(function MonetizationTier({
   copy,
   selected,
   saving,
+  annual,
+  locale,
   onSelect,
 }: {
   tier: TierDef;
@@ -60,11 +66,25 @@ const MonetizationTier = memo(function MonetizationTier({
   copy: Record<string, string>;
   selected: boolean;
   saving: boolean;
+  annual: boolean;
+  locale: string;
   onSelect: (tier: TierDef) => void;
 }) {
-  const price = formatLaunchPrice(plan.launchMonthlyPrice);
-  const regularPrice = formatLaunchPrice(plan.originalMonthlyPrice);
-  const disabled = saving || plan.launchState === "coming-soon" || plan.launchState === "contact";
+  const isZh = locale === "zh-CN";
+
+  const betaPrice = annual
+    ? (isZh ? plan.cnyBetaAnnualMonthlyPrice : plan.betaAnnualMonthlyPrice)
+    : (isZh ? plan.cnyBetaMonthlyPrice : plan.betaMonthlyPrice);
+  const originalPrice = annual
+    ? (isZh ? plan.cnyAnnualMonthlyPrice : plan.annualMonthlyPrice)
+    : (isZh ? plan.cnyMonthlyPrice : plan.monthlyPrice);
+
+  const fmtBeta = isZh ? formatCnyPrice(betaPrice) : formatPrice(betaPrice);
+  const fmtOriginal = isZh ? formatCnyPrice(originalPrice) : formatPrice(originalPrice);
+  const showStrike = originalPrice > betaPrice;
+  const isFree = plan.monthlyPrice === 0;
+
+  const disabled = saving;
 
   return (
     <div
@@ -102,29 +122,21 @@ const MonetizationTier = memo(function MonetizationTier({
 
       <span className="kk-tier-name">{tier.id}</span>
       <h2>{plan.name}</h2>
-      <p>{plan.positioning}</p>
-      <dl className="plan-entitlements">
-        <div>
-          <dt>{copy.launchPrice}</dt>
-          <dd>
-            {price}
-            {plan.launchMonthlyPrice !== null ? copy.monthly : ""}
-          </dd>
-        </div>
-        <div>
-          <dt>{copy.regularPrice}</dt>
-          <dd>
-            {regularPrice}
-            {plan.originalMonthlyPrice !== null ? copy.monthly : ""}
-          </dd>
-        </div>
-        <div>
-          <dt>{copy.model}</dt>
-          <dd>{plan.model}</dd>
-        </div>
-      </dl>
+      <p>{isZh ? plan.positioningZh : plan.positioning}</p>
+
+      <div className="kk-tier-price">
+        {!isFree && <span className="kk-tier-beta-label">{copy.betaLabel}</span>}
+        <strong className="kk-tier-price-main">
+          {fmtBeta}
+          {!isFree && <span className="kk-tier-price-period">{copy.monthly}</span>}
+        </strong>
+        {showStrike && (
+          <s className="kk-tier-price-original">{fmtOriginal}{copy.monthly}</s>
+        )}
+      </div>
+
       <div className="workflow-template-meta" aria-label={copy.included}>
-        {plan.includes.slice(0, 4).map((item) => (
+        {plan.includes.map((item) => (
           <span key={item}>{item}</span>
         ))}
       </div>
@@ -141,6 +153,7 @@ export function MonetizationLayer() {
   const copy = tierCopy[locale];
   const [selected, setSelected] = useState<TierDef["id"] | null>(null);
   const [savingTier, setSavingTier] = useState<TierDef["id"] | null>(null);
+  const [annual, setAnnual] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   const tiers = useMemo(
@@ -197,6 +210,24 @@ export function MonetizationLayer() {
         <p>{copy.subtitle}</p>
       </header>
 
+      <div className="kk-billing-toggle">
+        <button
+          type="button"
+          className={`kk-billing-option${!annual ? " is-active" : ""}`}
+          onClick={() => setAnnual(false)}
+        >
+          {copy.monthlyToggle}
+        </button>
+        <button
+          type="button"
+          className={`kk-billing-option${annual ? " is-active" : ""}`}
+          onClick={() => setAnnual(true)}
+        >
+          {copy.annual}
+          <span className="kk-billing-save">{copy.annualSave}</span>
+        </button>
+      </div>
+
       {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
 
       <section className="kk-monetization" aria-label="Tiers">
@@ -208,6 +239,8 @@ export function MonetizationLayer() {
             copy={copy}
             selected={selected === tier.id}
             saving={savingTier === tier.id}
+            annual={annual}
+            locale={locale}
             onSelect={selectTier}
           />
         ))}
