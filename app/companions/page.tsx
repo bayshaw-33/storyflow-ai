@@ -6,15 +6,71 @@ import { CatMark } from "@/components/brand/CatMark";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const companions = [
-  ["Lyra", "Story Architect", "Active", "Shapes loglines, structure, stakes, and story spine."],
-  ["Arlo", "Worldbuilder", "Idle", "Builds worlds, rules, lore, timelines, and continuity."],
-  ["Vale", "Dialogue Expert", "Idle", "Tightens voice, subtext, rhythm, and scene turns."],
-  ["Muse", "Mood & Tone", "Active", "Keeps atmosphere, emotion, and visual direction aligned."],
-  ["KK", "Creative Companion", "Idle", "Ambient status, creative nudge, and room signal."],
-];
+  {
+    id: "lyra",
+    name: { zh: "Lyra", en: "Lyra" },
+    role: { zh: "故事架构师", en: "Story Architect" },
+    status: "active",
+    description: {
+      zh: "负责一句话卖点、结构骨架、戏剧筹码和故事主脊，让灵感真正站起来。",
+      en: "Shapes loglines, structure, stakes, and the story spine.",
+    },
+  },
+  {
+    id: "arlo",
+    name: { zh: "Arlo", en: "Arlo" },
+    role: { zh: "世界观筑造者", en: "Worldbuilder" },
+    status: "idle",
+    description: {
+      zh: "梳理世界规则、时间线、设定边界和连续性，让虚构世界有自己的重力。",
+      en: "Builds worlds, rules, lore, timelines, and continuity.",
+    },
+  },
+  {
+    id: "vale",
+    name: { zh: "Vale", en: "Vale" },
+    role: { zh: "对白医生", en: "Dialogue Expert" },
+    status: "idle",
+    description: {
+      zh: "打磨人物声线、潜台词、节奏和场景转折，让每句对白都带着动作。",
+      en: "Tightens voice, subtext, rhythm, and scene turns.",
+    },
+  },
+  {
+    id: "muse",
+    name: { zh: "Muse", en: "Muse" },
+    role: { zh: "情绪与调性顾问", en: "Mood & Tone" },
+    status: "active",
+    description: {
+      zh: "守住氛围、情绪走向和视觉气质，让作品始终拥有同一种心跳。",
+      en: "Keeps atmosphere, emotion, and visual direction aligned.",
+    },
+  },
+  {
+    id: "kk",
+    name: { zh: "KK", en: "KK" },
+    role: { zh: "创作搭档", en: "Creative Companion" },
+    status: "idle",
+    description: {
+      zh: "感知工作台状态，适时给出轻推、提醒和房间信号。",
+      en: "Reads the room, offers creative nudges, and keeps the signal alive.",
+    },
+  },
+] satisfies Array<{
+  id: string;
+  name: Record<"zh" | "en", string>;
+  role: Record<"zh" | "en", string>;
+  status: "active" | "idle";
+  description: Record<"zh" | "en", string>;
+}>;
 
 export default function CompanionsPage() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const language = locale === "zh-CN" ? "zh" : "en";
+  const statusLabel = {
+    active: language === "zh" ? "在线" : "Active",
+    idle: language === "zh" ? "待命" : "Idle",
+  };
 
   return (
     <main className="cosmic-page">
@@ -29,16 +85,16 @@ export default function CompanionsPage() {
       </section>
 
       <section className="companion-grid-page">
-        {companions.map(([name, role, status, description]) => (
-          <article className="companion-card-page" key={name}>
+        {companions.map((companion) => (
+          <article className="companion-card-page" key={companion.id}>
             <div className="companion-card-portrait">
-              {name === "KK" ? <CatMark /> : name[0]}
+              {companion.id === "kk" ? <CatMark /> : companion.name.en[0]}
             </div>
-            <span data-state={status.toLowerCase()}>{status}</span>
-            <h2>{name}</h2>
-            <strong>{role}</strong>
-            <p>{description}</p>
-            <button>{status === "Active" ? "Active" : "Set active"}</button>
+            <span data-state={companion.status}>{statusLabel[companion.status]}</span>
+            <h2>{companion.name[language]}</h2>
+            <strong>{companion.role[language]}</strong>
+            <p>{companion.description[language]}</p>
+            <button>{companion.status === "active" ? statusLabel.active : language === "zh" ? "设为当前搭档" : "Set active"}</button>
           </article>
         ))}
         <article className="companion-card-page add-companion">
