@@ -4,6 +4,7 @@
 
 import type { AssetToken } from "@/lib/design/manifest";
 import type { DramaProject } from "@/lib/projects";
+import type { Universe } from "@/lib/universe";
 
 export type NodeType = "flagship" | "world" | "story" | "feature";
 export type EdgeType = "relation" | "unlock" | "dependency";
@@ -19,6 +20,8 @@ export type GraphNode = {
   scale: number;
   /** optional navigation target on click */
   href?: string;
+  /** optional display label shown on the node */
+  label?: string;
   /** node ids this node connects to */
   connections: string[];
 };
@@ -130,4 +133,61 @@ export function buildUniverseGraph(projects: DramaProject[]): UniverseGraph {
 
 function clampPct(value: number): number {
   return Math.max(6, Math.min(94, value));
+}
+
+export function buildUniverseGraphFromUniverses(universes: Universe[]): UniverseGraph {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  const flagship: GraphNode = {
+    id: "flagship",
+    type: "flagship",
+    asset: NODE_ASSET.flagship,
+    x: 50,
+    y: 48,
+    scale: 1.25,
+    href: "/dashboard",
+    connections: [],
+  };
+  nodes.push(flagship);
+
+  const featureDefs: { id: string; x: number; y: number; href: string }[] = [
+    { id: "feature-explore", x: 22, y: 22, href: "/templates" },
+    { id: "feature-canon", x: 80, y: 26, href: "/universes" },
+    { id: "feature-timeline", x: 84, y: 74, href: "/universes" },
+  ];
+
+  for (const feature of featureDefs) {
+    nodes.push({
+      id: feature.id,
+      type: "feature",
+      asset: NODE_ASSET.feature,
+      x: feature.x,
+      y: feature.y,
+      scale: 0.7,
+      href: feature.href,
+      connections: ["flagship"],
+    });
+    edges.push({ from: "flagship", to: feature.id, type: "unlock" });
+  }
+
+  universes.forEach((universe, index) => {
+    const pos = scatter(index, universes.length);
+    const worldId = `world-${universe.id}`;
+    nodes.push({
+      id: worldId,
+      type: "world",
+      asset: NODE_ASSET.world,
+      x: clampPct(pos.x),
+      y: clampPct(pos.y),
+      scale: 0.95,
+      href: `/universes/${universe.id}`,
+      label: universe.name,
+      connections: ["flagship"],
+    });
+    flagship.connections.push(worldId);
+    edges.push({ from: "flagship", to: worldId, type: "relation" });
+  });
+
+  return { nodes, edges };
 }

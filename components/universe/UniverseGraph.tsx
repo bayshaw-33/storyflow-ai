@@ -48,6 +48,7 @@ const UniverseNodeButton = memo(function UniverseNodeButton({
       onMouseEnter={handleMouseEnter}
     >
       <DesignAssetImage token={node.asset} alt="" aria-hidden="true" draggable={false} />
+      {node.label ? <span className="universe-node-label">{node.label}</span> : null}
     </button>
   );
 });
