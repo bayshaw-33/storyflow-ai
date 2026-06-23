@@ -1,35 +1,18 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { HeroSection } from "@/components/home/HeroSection";
 import { ContentSection } from "@/components/home/ContentSection";
-import { SignatureSections } from "@/components/landing/SignatureSections";
 import { TopNav } from "@/components/layout/TopNav";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-
-const landingCopy = {
-  "en-US": {
-    statsLabel: "Platform capabilities",
-    episodeDrafts: "Episodes per complete draft",
-    writers: "Specialized AI writer roles",
-    formats: "Story formats supported",
-  },
-  "zh-CN": {
-    statsLabel: "平台能力",
-    episodeDrafts: "集完整初稿",
-    writers: "个专业 AI 编剧角色",
-    formats: "种故事格式",
-  },
-};
 
 export default function LandingPage() {
   const router = useRouter();
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
-  const text = landingCopy[locale];
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
@@ -75,25 +58,6 @@ export default function LandingPage() {
         align="left"
         lightBg={false}
       />
-
-      <section className="scroll-transition" aria-hidden="true" />
-      <div className="container">
-        <section className="kk-landing-stats" aria-label={text.statsLabel}>
-          <div className="kk-stat-glass-card">
-            <strong>60-80</strong>
-            <span>{text.episodeDrafts}</span>
-          </div>
-          <div className="kk-stat-glass-card">
-            <strong>5</strong>
-            <span>{text.writers}</span>
-          </div>
-          <div className="kk-stat-glass-card">
-            <strong>6</strong>
-            <span>{text.formats}</span>
-          </div>
-        </section>
-        <SignatureSections />
-      </div>
 
       <ContentSection
         id="platform"
