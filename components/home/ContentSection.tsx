@@ -2,30 +2,43 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 type ContentSectionProps = {
   id: string;
   kicker: string;
-  title: string;
-  subtitle: string;
+  titleZh: string;
+  titleEn: string;
+  subtitleZh: string;
+  subtitleEn: string;
   ctaLabel?: string;
   ctaHref?: string;
-  bgGradient: string;
+  /** Full CSS background-image value: gradient string or url('/path/to/img.png') */
+  bgImageZh: string;
+  bgImageEn: string;
   align?: "left" | "center" | "right";
+  lightBg?: boolean;
   children?: React.ReactNode;
 };
 
 export function ContentSection({
   id,
   kicker,
-  title,
-  subtitle,
+  titleZh,
+  titleEn,
+  subtitleZh,
+  subtitleEn,
   ctaLabel,
   ctaHref,
-  bgGradient,
+  bgImageZh,
+  bgImageEn,
   align = "left",
+  lightBg = false,
   children,
 }: ContentSectionProps) {
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
+  const bgImage = isZh ? bgImageZh : bgImageEn;
   const innerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,16 +60,16 @@ export function ContentSection({
   return (
     <section
       id={id}
-      className={`content-section align-${align}`}
-      style={{ backgroundImage: bgGradient }}
-      data-bg-image=""
+      className={`content-section align-${align}${lightBg ? " light-bg" : ""}`}
+      style={{ backgroundImage: bgImage }}
+      data-bg-image={bgImage}
     >
       <div className="content-section-inner" ref={innerRef}>
         <p className="content-section-kicker">{kicker}</p>
-        <h2 className="content-section-title">{title}</h2>
-        <p className="content-section-subtitle">{subtitle}</p>
+        <h2 className="content-section-title">{isZh ? titleZh : titleEn}</h2>
+        <p className="content-section-subtitle">{isZh ? subtitleZh : subtitleEn}</p>
         {ctaLabel && ctaHref && (
-          <Link className="primary-button" href={ctaHref}>
+          <Link className="content-section-cta primary-button" href={ctaHref}>
             {ctaLabel}
           </Link>
         )}

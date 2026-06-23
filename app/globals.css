@@ -1037,6 +1037,11 @@ input:focus, textarea:focus, select:focus {
   margin-bottom: var(--space-8);
   white-space: pre-line;
 }
+.content-section-cta { display: inline-block; }
+.content-section.light-bg { background-color: #f8f8fa; }
+.content-section.light-bg .content-section-kicker { color: #6b6b80; }
+.content-section.light-bg .content-section-title { color: #0a0a0b; }
+.content-section.light-bg .content-section-subtitle { color: #3a3a45; }
 
 /* ============================================================================
    COSMIC PAGE  (templates / generic content page)
