@@ -340,13 +340,15 @@ input:focus, textarea:focus, select:focus {
 /* ============================================================================
    TOP NAVIGATION  (glass capsule — matches design comp)
    ============================================================================ */
-/* scroll-hide nav row — fixed flex container; logo + actions are flex children */
+/* scroll-hide nav row — fixed flex container; logo + actions are flex children.
+   Row height matches the 64px compact logo so both children center on the
+   same midline (no overflow). */
 .kk-top-nav,
 .navbar {
   position: fixed;
-  left: 0; right: 0; top: 16px;
+  left: 0; right: 0; top: 20px;
   width: 100%;
-  height: 48px;
+  height: 64px;
   z-index: var(--z-nav);
   display: flex;
   align-items: center;
