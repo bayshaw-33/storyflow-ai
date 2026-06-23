@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { Copy } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
@@ -80,15 +81,15 @@ type AuditResult = {
 const STORAGE_KEY = "kiikis-song-workbench-v1";
 
 const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: string; strategy: string }> = [
-  { value: "original_song", label: "原创歌曲", labelEn: "Original song", strategy: "standard lyrics structure" },
-  { value: "short_video_song", label: "短视频歌曲", labelEn: "Short-video song", strategy: "front-loaded hook" },
-  { value: "ost_theme", label: "OST / 主题曲", labelEn: "OST / theme", strategy: "cinematic narrative lift" },
-  { value: "character_song", label: "角色歌曲", labelEn: "Character song", strategy: "inner monologue and conflict" },
-  { value: "duet_song", label: "合唱 / 对唱歌曲", labelEn: "Duet / ensemble", strategy: "multi-vocal section split" },
-  { value: "series_song", label: "系列歌曲", labelEn: "Series song", strategy: "repeatable versions" },
-  { value: "bgm_mood", label: "BGM / 氛围音乐", labelEn: "BGM / mood music", strategy: "lighter lyrics, stronger arrangement" },
-  { value: "game_anime_song", label: "游戏 / 动漫歌曲", labelEn: "Game / anime song", strategy: "world, mission, destiny" },
-  { value: "brand_song", label: "广告 / 品牌歌曲", labelEn: "Brand song", strategy: "clear, safe, memorable" },
+  { value: "original_song", label: "原创/独立歌曲", labelEn: "Original / indie song", strategy: "standard lyrics structure" },
+  { value: "short_video_song", label: "短视频/竖屏歌曲", labelEn: "Short video / vertical song", strategy: "front-loaded hook" },
+  { value: "ost_theme", label: "OST/主题歌曲", labelEn: "OST / theme song", strategy: "cinematic narrative lift" },
+  { value: "character_song", label: "角色/IP歌曲", labelEn: "Character / IP song", strategy: "inner monologue and conflict" },
+  { value: "duet_song", label: "合唱/对唱歌曲", labelEn: "Ensemble / duet song", strategy: "multi-vocal section split" },
+  { value: "series_song", label: "系列/续作歌曲", labelEn: "Series / sequel song", strategy: "repeatable versions" },
+  { value: "bgm_mood", label: "BGM/氛围歌曲", labelEn: "BGM / mood song", strategy: "lighter lyrics, stronger arrangement" },
+  { value: "game_anime_song", label: "游戏/动漫歌曲", labelEn: "Game / anime song", strategy: "world, mission, destiny" },
+  { value: "brand_song", label: "广告/品牌歌曲", labelEn: "Brand / campaign song", strategy: "clear, safe, memorable" },
 ];
 
 const primaryEmotionMap: Record<string, string[]> = {
@@ -98,7 +99,7 @@ const primaryEmotionMap: Record<string, string[]> = {
   "愤怒 / 反击": ["叛逆", "压抑", "爆发", "冷酷", "胜利感", "危险感", "不甘"],
   "黑暗 / 神秘": ["危险感", "迷离", "冷感", "压迫感", "性感", "复仇感", "宿命感"],
   "治愈 / 温暖": ["释怀", "安静", "希望", "陪伴感", "柔和", "明亮"],
-  "燃 / 胜利": ["高能", "宣言感", "荣耀感", "反击", "释放", "大合唱感"],
+  "热血 / 胜利": ["高能", "宣言感", "荣耀感", "反击", "释放", "大合唱感"],
   "孤独 / 空旷": ["冷清", "失重感", "夜晚感", "疏离", "空灵", "克制"],
   "性感 / 迷离": ["暧昧", "低频", "危险感", "夜晚感", "柔软", "神秘"],
   "讽刺 / 荒诞": ["幽默", "疲惫", "自嘲", "怪诞", "松弛", "丧感", "反差感"],
@@ -183,6 +184,8 @@ function normalizeStoredForm(value: SongForm) {
     ...value,
     structure: value.structure === ["Standard Su", "no song structure"].join("") ? "Standard song structure" : value.structure,
     lyricsMode: (value.lyricsMode as string) === ["su", "no_enhanced"].join("") ? "enhanced_lyrics" : value.lyricsMode,
+    primaryEmotion: value.primaryEmotion === ["燃", " / 胜利"].join("") ? "热血 / 胜利" : value.primaryEmotion,
+    secondaryEmotions: [],
   };
 }
 
@@ -193,7 +196,7 @@ const initialForm: SongForm = {
   customLanguage: "",
   concept: "",
   primaryEmotion: "讽刺 / 荒诞",
-  secondaryEmotions: ["疲惫", "自嘲", "幽默"],
+  secondaryEmotions: [],
   genres: ["Lo-fi", "Indie Pop", "Pop Rock"],
   customGenre: "",
   selectedSingerIds: ["dry-sarcastic-male"],
@@ -207,12 +210,13 @@ const initialForm: SongForm = {
 
 const i18n = {
   "en-US": {
-    title: "Song Creation Workbench",
+    title: "Song Creation",
     subtitle: "Create platform-ready lyrics and style prompts. No audio generation or account connection.",
-    setup: "Project setup",
+    setup: "Idea Zone",
+    tools: "Tool Zone",
     singerLibrary: "Singer library",
     advanced: "Advanced music settings",
-    outputs: "Outputs",
+    outputs: "Creation Zone",
     audit: "Lyrics audit",
     revision: "Revision",
     history: "Version history",
@@ -221,7 +225,6 @@ const i18n = {
     outputLanguage: "Output language",
     concept: "Song concept",
     primaryEmotion: "Primary emotion",
-    secondaryEmotion: "Secondary emotions",
     genres: "Target genres",
     singers: "Singer tags",
     generate: "Generate idea",
@@ -243,12 +246,13 @@ const i18n = {
     revisionPlaceholder: "Example: make the chorus catchier while preserving the main hook.",
   },
   "zh-CN": {
-    title: "歌曲创作工作流",
+    title: "歌曲创作",
     subtitle: "生成可用于音乐平台的歌词和风格提示词。不生成音频，也不连接外部账号。",
-    setup: "项目基础信息",
+    setup: "创意区",
+    tools: "工具区",
     singerLibrary: "歌手库",
     advanced: "高级音乐设定",
-    outputs: "输出区",
+    outputs: "创作区",
     audit: "歌词审查",
     revision: "修改指令",
     history: "版本历史",
@@ -257,7 +261,6 @@ const i18n = {
     outputLanguage: "输出语言",
     concept: "歌曲概念",
     primaryEmotion: "主情绪",
-    secondaryEmotion: "辅助情绪",
     genres: "目标曲风",
     singers: "歌手标签",
     generate: "生成创意",
@@ -295,6 +298,7 @@ export default function SongWorkbenchPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
+  const [auditOpen, setAuditOpen] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -335,7 +339,6 @@ export default function SongWorkbenchPage() {
   );
   const singerOptions = useMemo(() => uniqueSingerProfiles(singers), [singers]);
 
-  const secondaryOptions = primaryEmotionMap[form.primaryEmotion] || [];
   const canCopyLyrics = !audit || audit.allowCopy;
 
   function updateForm<K extends keyof SongForm>(key: K, value: SongForm[K]) {
@@ -432,6 +435,7 @@ export default function SongWorkbenchPage() {
   function runAudit() {
     const nextAudit = auditLyrics(lyrics, stylePrompt, compositionPrompt, selectedSingers);
     setAudit(nextAudit);
+    setAuditOpen(true);
   }
 
   function applyRevision() {
@@ -455,20 +459,17 @@ export default function SongWorkbenchPage() {
     setNotice(text.copied);
   }
 
-  function restoreVersion(version: SongVersion) {
+  function previewVersion(version: SongVersion) {
     setLyrics(version.lyrics);
     setStylePrompt(version.stylePrompt);
     setCompositionPrompt(version.compositionPrompt);
     setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers));
-    saveVersion("Restore", `Restored version ${version.versionNumber}.`, version.lyrics, version.stylePrompt, version.compositionPrompt, version.auditStatus);
   }
 
   return (
     <main className="cosmic-page song-workbench-page">
       <section className="cosmic-title-band">
-        <span>{t("song.workbench.title")}</span>
         <h1>{text.title}</h1>
-        <p>{text.subtitle}</p>
       </section>
 
       <section className="song-workbench-shell">
@@ -479,7 +480,7 @@ export default function SongWorkbenchPage() {
           <div className="dashboard-panel-head">
             <div>
               <span>{text.setup}</span>
-              <h2>{form.title || "Untitled song project"}</h2>
+              <h2>{form.title || text.concept}</h2>
             </div>
           </div>
 
@@ -529,25 +530,9 @@ export default function SongWorkbenchPage() {
             />
           </label>
 
-          <fieldset className="song-control-group">
-            <span>{text.secondaryEmotion}</span>
-            <div className="song-chip-grid compact">
-              {secondaryOptions.map((option) => (
-                <label key={option}>
-                  <input
-                    type="checkbox"
-                    checked={form.secondaryEmotions.includes(option)}
-                    onChange={() => toggleListValue("secondaryEmotions", option)}
-                  />
-                  {option}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset className="song-control-group">
-            <span>{text.genres}</span>
-            <div className="song-group-stack">
+          <details className="song-control-group">
+            <summary>{text.genres}</summary>
+            <div className="song-group-stack song-details-body">
               {genreGroups.map((group) => (
                 <div className="song-option-group" key={group.title}>
                   <strong>{group.title}</strong>
@@ -565,36 +550,35 @@ export default function SongWorkbenchPage() {
                   </div>
                 </div>
               ))}
+              <input
+                value={form.customGenre}
+                onChange={(event) => updateForm("customGenre", event.target.value)}
+                placeholder="Custom genre tags, comma separated"
+              />
             </div>
-            <input
-              value={form.customGenre}
-              onChange={(event) => updateForm("customGenre", event.target.value)}
-              placeholder="Custom genre tags, comma separated"
-            />
-          </fieldset>
+          </details>
 
-          <fieldset className="song-control-group">
+          <section className="song-control-group">
             <span>{text.singerLibrary}</span>
-            <div className="song-vocal-list">
+            <div className="song-singer-grid">
               {singerOptions.map((singer) => (
-                <label key={singer.id}>
+                <label className="song-singer-card" key={singer.id}>
                   <input
                     type="checkbox"
                     checked={form.selectedSingerIds.includes(singer.id)}
                     onChange={() => toggleListValue("selectedSingerIds", singer.id)}
                   />
-                  <span>
-                    <strong>{singer.displayName}</strong>
-                    <small>{singer.safePromptTerms.join(", ")}</small>
-                  </span>
+                  <strong>{singer.displayName}</strong>
+                  <small>{singer.gender} / {singer.language.join(", ")}</small>
+                  <p>{singer.safePromptTerms.join(", ")}</p>
                 </label>
               ))}
             </div>
-          </fieldset>
+          </section>
 
-          <fieldset className="song-control-group">
-            <span>Instruments / arrangement elements</span>
-            <div className="song-group-stack">
+          <details className="song-control-group">
+            <summary>Instruments / arrangement elements</summary>
+            <div className="song-group-stack song-details-body">
               {instrumentGroups.map((group) => (
                 <div className="song-option-group" key={group.title}>
                   <strong>{group.title}</strong>
@@ -612,32 +596,74 @@ export default function SongWorkbenchPage() {
                   </div>
                 </div>
               ))}
+              <input
+                value={form.customInstrument}
+                onChange={(event) => updateForm("customInstrument", event.target.value)}
+                placeholder="Custom instruments, comma separated"
+              />
             </div>
-            <input
-              value={form.customInstrument}
-              onChange={(event) => updateForm("customInstrument", event.target.value)}
-              placeholder="Custom instruments, comma separated"
-            />
-          </fieldset>
+          </details>
+
+          <details className="song-control-group">
+            <summary>{text.advanced}</summary>
+            <div className="song-field-stack song-details-body">
+              <label>
+                Groove
+                <select value={form.groove} onChange={(event) => updateForm("groove", event.target.value)}>
+                  {grooveOptions.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                Key
+                <select value={form.key} onChange={(event) => updateForm("key", event.target.value)}>
+                  {keyOptions.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                Lyrics structure
+                <select value={form.structure} onChange={(event) => updateForm("structure", event.target.value)}>
+                  {structureOptions.map((option) => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label>
+                Lyrics output mode
+                <select value={form.lyricsMode} onChange={(event) => updateForm("lyricsMode", event.target.value as LyricsMode)}>
+                  <option value="enhanced_lyrics">{t("song.format.enhanced")}</option>
+                  <option value="plain_lyrics">{t("song.format.plainLyrics")}</option>
+                  <option value="no_tags">{t("song.format.noTags")}</option>
+                </select>
+              </label>
+            </div>
+          </details>
         </form>
 
         <section className="dashboard-panel song-output-panel">
           <div className="dashboard-panel-head">
             <div>
               <span>{text.outputs}</span>
-              <h2>{text.lyrics}</h2>
             </div>
-            <button className="secondary-button" type="button" disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>{text.copy}</button>
+            <button className="primary-button" type="submit" form="song-workbench-form" disabled={generating}>
+              {generating ? text.generating : text.generate}
+            </button>
           </div>
           <div className="song-output-grid">
-            <label>
-              Lyrics
+            <label className="song-output-card">
+              <span className="song-output-card-head">
+                Lyrics
+                <button className="icon-button" type="button" title={text.copy} disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>
+                  <Copy size={15} />
+                </button>
+              </span>
               <textarea className="song-lyrics-textarea" value={lyrics} onChange={(event) => setLyrics(event.target.value)} placeholder="[Intro - 3 seconds]..." />
             </label>
-            <label>
-              {text.stylePrompt}
+            <label className="song-output-card">
+              <span className="song-output-card-head">
+                {text.stylePrompt}
+                <button className="icon-button" type="button" title={text.copy} disabled={!stylePrompt} onClick={() => copyText(stylePrompt)}>
+                  <Copy size={15} />
+                </button>
+              </span>
               <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
-              <button className="secondary-button" type="button" onClick={() => copyText(stylePrompt)}>{text.copy}</button>
             </label>
           </div>
         </section>
@@ -645,41 +671,9 @@ export default function SongWorkbenchPage() {
         <aside className="dashboard-panel song-ai-panel">
           <div className="dashboard-panel-head">
             <div>
-              <span>{t("song.aiTools.title")}</span>
-              <h2>{text.advanced}</h2>
+              <span>{text.tools}</span>
+              <h2>{text.audit}</h2>
             </div>
-          </div>
-
-          <div className="song-field-stack">
-            <label>
-              Groove
-              <select value={form.groove} onChange={(event) => updateForm("groove", event.target.value)}>
-                {grooveOptions.map((option) => <option key={option}>{option}</option>)}
-              </select>
-            </label>
-            <label>
-              Key
-              <select value={form.key} onChange={(event) => updateForm("key", event.target.value)}>
-                {keyOptions.map((option) => <option key={option}>{option}</option>)}
-              </select>
-            </label>
-            <label>
-              Lyrics structure
-              <select value={form.structure} onChange={(event) => updateForm("structure", event.target.value)}>
-                {structureOptions.map((option) => <option key={option}>{option}</option>)}
-              </select>
-            </label>
-            <label>
-              Lyrics output mode
-              <select value={form.lyricsMode} onChange={(event) => updateForm("lyricsMode", event.target.value as LyricsMode)}>
-                <option value="enhanced_lyrics">{t("song.format.enhanced")}</option>
-                <option value="plain_lyrics">{t("song.format.plainLyrics")}</option>
-                <option value="no_tags">{t("song.format.noTags")}</option>
-              </select>
-            </label>
-            <button className="primary-button full" type="submit" form="song-workbench-form" disabled={generating}>
-              {generating ? text.generating : text.generate}
-            </button>
           </div>
 
           <div className="song-tool-section">
@@ -687,21 +681,7 @@ export default function SongWorkbenchPage() {
               <span>{text.audit}</span>
               <button className="secondary-button" type="button" onClick={runAudit}>{text.audit}</button>
             </div>
-            {audit ? (
-              <div className="settings-list">
-                <div className={`notice ${audit.status === "high_risk" ? "error" : audit.status === "medium_risk" ? "warning" : "success"}`}>
-                  {audit.allowCopy ? "Copy allowed." : "Copy blocked until high-risk items are revised."}
-                </div>
-                {audit.items.length === 0 ? <p className="subtle">No risk items found.</p> : null}
-                {audit.items.map((item) => (
-                  <article className="settings-card" key={`${item.type}-${item.message}`}>
-                    <span>{item.severity} / {item.type}</span>
-                    <p>{item.message}</p>
-                    <p>{item.suggestion}</p>
-                  </article>
-                ))}
-              </div>
-            ) : <p className="subtle">{text.auditPass}</p>}
+            <p className="subtle">{audit ? auditSummary(audit) : text.auditPass}</p>
           </div>
 
           <div className="song-tool-section">
@@ -723,18 +703,29 @@ export default function SongWorkbenchPage() {
             <div className="settings-list song-history-list">
               {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
               {versions.map((version) => (
-                <article className="settings-card" key={version.id}>
+                <button className="settings-card song-version-card" type="button" key={version.id} onClick={() => previewVersion(version)}>
                   <span>v{version.versionNumber} / {version.auditStatus}</span>
                   <h3>{version.changeType}</h3>
                   <p>{version.summary}</p>
                   <p>{new Date(version.createdAt).toLocaleString()}</p>
-                  <button className="secondary-button" type="button" onClick={() => restoreVersion(version)}>Restore</button>
-                </article>
+                </button>
               ))}
             </div>
           </div>
         </aside>
       </section>
+
+      {auditOpen && audit ? (
+        <div className="modal-backdrop">
+          <div className="modal song-audit-modal">
+            <h2>{text.audit}</h2>
+            <p>{auditReportText(audit)}</p>
+            <div className="modal-actions">
+              <button className="primary-button" type="button" onClick={() => setAuditOpen(false)}>OK</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -769,6 +760,23 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[]) {
     null,
     2,
   );
+}
+
+function auditSummary(audit: AuditResult) {
+  if (audit.items.length === 0) return "No risk items found.";
+  return `${audit.items.length} item(s) found. Click audit to review the full result.`;
+}
+
+function auditReportText(audit: AuditResult) {
+  if (audit.items.length === 0) {
+    return "歌词审查通过。当前文本没有发现明显的引用艺人、过长风格提示词或高风险对白式表达，可以继续复制或进入下一轮修改。";
+  }
+
+  const statusText = audit.allowCopy ? "当前可以复制，但建议先处理以下提示。" : "当前包含高风险内容，建议修改后再复制。";
+  const details = audit.items
+    .map((item) => `${item.severity.toUpperCase()} · ${item.message} ${item.suggestion}`)
+    .join(" ");
+  return `${statusText} ${details}`;
 }
 
 function parseSongGeneration(output: string) {
@@ -877,7 +885,7 @@ function buildSingerCue(singers: SingerProfile[]) {
 
 function buildHookLine(form: SongForm) {
   if (form.primaryEmotion.includes("讽刺")) return `${form.title || "Monday"}, I am not ready`;
-  if (form.primaryEmotion.includes("燃")) return `${form.title || "Tonight"}, we rise again`;
+  if (form.primaryEmotion.includes("热血")) return `${form.title || "Tonight"}, we rise again`;
   if (form.primaryEmotion.includes("浪漫")) return `${form.title || "Stay"}, you glow in the dark`;
   if (form.primaryEmotion.includes("悲伤")) return `${form.title || "Goodbye"}, I still carry the sound`;
   return `${form.title || "Tonight"}, I turn the dark into sound`;

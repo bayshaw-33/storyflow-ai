@@ -1151,7 +1151,12 @@ input:focus, textarea:focus, select:focus {
 }
 .song-workbench-page .cosmic-title-band {
   max-width: 1580px;
-  padding-top: var(--space-8);
+  padding-top: var(--space-6);
+  padding-bottom: 0;
+}
+.song-workbench-page .cosmic-title-band h1 {
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  font-weight: 500;
 }
 .song-workbench-shell {
   display: grid;
@@ -1193,12 +1198,20 @@ input:focus, textarea:focus, select:focus {
   background: rgba(255, 255, 255, 0.02);
 }
 .song-control-group > span,
+.song-control-group > summary,
 .song-tool-section > span,
 .song-tool-head > span,
 .song-option-group strong {
   color: var(--ink-primary);
   font-size: 13px;
   font-weight: 600;
+}
+.song-control-group > summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+.song-details-body {
+  margin-top: var(--space-3);
 }
 .song-concept-textarea {
   min-height: 160px;
@@ -1234,6 +1247,44 @@ input:focus, textarea:focus, select:focus {
   color: var(--ink-muted);
   line-height: 1.45;
 }
+.song-singer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.song-singer-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  aspect-ratio: 9 / 16;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--ink-primary);
+  overflow: hidden;
+}
+.song-singer-card input {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.song-singer-card strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+.song-singer-card small,
+.song-singer-card p {
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.song-singer-card p {
+  margin: 0;
+}
 .song-output-panel {
   display: flex;
   flex-direction: column;
@@ -1251,6 +1302,15 @@ input:focus, textarea:focus, select:focus {
   flex-direction: column;
   gap: var(--space-2);
   min-height: 0;
+}
+.song-output-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--ink-primary);
+  font-size: 14px;
+  font-weight: 600;
 }
 .song-lyrics-textarea,
 .song-prompt-textarea {
@@ -1274,6 +1334,16 @@ input:focus, textarea:focus, select:focus {
 .song-history-list {
   max-height: 320px;
   overflow-y: auto;
+}
+.song-version-card {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.song-audit-modal p {
+  white-space: pre-wrap;
+  line-height: 1.7;
 }
 .song-revision-textarea {
   min-height: 180px;
