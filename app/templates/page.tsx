@@ -28,14 +28,14 @@ const templates = [
     idea: "A serialized fiction world with a long arc, recurring characters, and chapter momentum.",
   },
   {
-    id: "film_script",
-    title: "Film Script",
-    titleZh: "电影剧本",
-    description: "Feature concepts, treatment, scenes, rewrites, and final draft.",
-    descriptionZh: "电影概念、Treatment、场景、改写和最终稿。",
-    steps: "10 steps",
-    difficulty: "Pro",
-    idea: "A feature film concept prepared for treatment, scene breakdown, and final draft.",
+    id: "viral_creation",
+    title: "Viral Creation",
+    titleZh: "爆款创作",
+    description: "Upload video, AI deconstructs viral structure, one-click remake.",
+    descriptionZh: "上传视频，AI拆解爆款结构，一键同结构改写。",
+    steps: "6 steps",
+    difficulty: "Viral",
+    idea: "A viral video structure remake project prepared for video analysis and same-structure rewriting.",
   },
   {
     id: "mv_concept",
@@ -66,6 +66,11 @@ export default function TemplatesPage() {
 
   function startTemplate(templateId: string) {
     const template = templates.find((item) => item.id === templateId) || templates[0];
+    if (template.id === "viral_creation") {
+      router.push("/viral-workbench");
+      return;
+    }
+
     const project = createProject({
       title: `${template.title} World`,
       genre: template.title,

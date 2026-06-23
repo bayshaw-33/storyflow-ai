@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { WorkflowType } from "@/lib/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const workflowEntries = [
   {
+    id: "short_drama",
     title: "Short Drama",
     titleZh: "短剧",
     description: "Fast vertical episodes with hooks, cliffhangers, and delivery assets.",
@@ -16,17 +18,19 @@ const workflowEntries = [
     comingSoon: false,
   },
   {
+    id: "song_creation",
     title: "Song Creation",
     titleZh: "歌曲创作",
-    description: "Suno-ready lyrics, style prompts, composition prompts, singer tags, and versioned copy.",
-    descriptionZh: "生成可复制到 Suno 的歌词、风格提示词、编曲提示词、歌手标签和版本。",
+    description: "Platform-ready lyrics, style prompts, singer tags, and versioned copy.",
+    descriptionZh: "生成可用于音乐平台的歌词、风格提示词、歌手标签和版本。",
     steps: 10,
-    difficulty: "Suno Text",
-    difficultyZh: "Suno 文本",
+    difficulty: "Music text",
+    difficultyZh: "音乐文本",
     mode: null,
     comingSoon: false,
   },
   {
+    id: "novel",
     title: "Novel",
     titleZh: "小说",
     description: "Long-form arcs, chapter engines, canon, and serialized pacing.",
@@ -38,17 +42,20 @@ const workflowEntries = [
     comingSoon: true,
   },
   {
-    title: "Film Script",
-    titleZh: "电影剧本",
-    description: "Feature treatments, scenes, rewrites, and final draft support.",
-    descriptionZh: "电影梗概、场景、改写和最终稿支持。",
-    steps: 10,
-    difficulty: "Pro",
-    difficultyZh: "专业",
-    mode: "creation" as WorkflowType,
-    comingSoon: true,
+    id: "viral_creation",
+    title: "Viral Creation",
+    titleZh: "爆款创作",
+    description: "Upload video, AI deconstructs viral structure, one-click remake.",
+    descriptionZh: "上传视频，AI拆解爆款结构，一键同结构改写。",
+    steps: 6,
+    difficulty: "Viral",
+    difficultyZh: "爆款",
+    mode: null,
+    route: "/viral-workbench",
+    comingSoon: false,
   },
   {
+    id: "mv_concept",
     title: "MV Concept",
     titleZh: "MV 概念",
     description: "Visual story frames, mood, symbolic sequences, and direction.",
@@ -67,6 +74,7 @@ type WorkflowListProps = {
 };
 
 export function WorkflowList({ onSelectWorkflow, onOpenSongWorkbench }: WorkflowListProps) {
+  const router = useRouter();
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
 
@@ -103,6 +111,8 @@ export function WorkflowList({ onSelectWorkflow, onOpenSongWorkbench }: Workflow
                 if (entry.comingSoon) return;
                 if (entry.mode) {
                   onSelectWorkflow(entry.mode);
+                } else if ("route" in entry && entry.route) {
+                  router.push(entry.route);
                 } else {
                   onOpenSongWorkbench?.();
                 }
