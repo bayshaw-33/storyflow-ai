@@ -1843,14 +1843,19 @@ textarea.script-editor {
   gap: var(--space-3);
 }
 .workspace-module-rail .workspace-module-card {
-  min-height: 74px;
-  padding: var(--space-2);
-  border: 1px solid var(--glass-border);
+  min-height: 56px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
+  background: transparent;
+  transition: background var(--transition-base), border-color var(--transition-base);
+}
+.workspace-module-rail .workspace-module-card:hover {
   background: var(--glass-fill);
+  border-color: var(--glass-border);
 }
 .workspace-module-rail .workspace-module-card img {
-  max-height: 84px;
+  max-height: 40px;
 }
 .workspace-module-rail[data-selected="projects"] .workspace-module-card[data-module="projects"],
 .workspace-module-rail[data-selected="characters"] .workspace-module-card[data-module="characters"],
@@ -1865,7 +1870,7 @@ textarea.script-editor {
 
 /* The real three-column workspace: step navigation | editor | AI assistant */
 .workflow-grid {
-  --workspace-panel-height: calc(100vh - 164px);
+  --workspace-panel-height: calc(100vh - 230px);
   display: grid;
   grid-template-columns: minmax(220px, 248px) minmax(620px, 1fr) minmax(260px, 300px);
   align-items: stretch;
