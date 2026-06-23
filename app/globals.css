@@ -353,8 +353,8 @@ input:focus, textarea:focus, select:focus {
   justify-content: space-between;
   gap: var(--space-6);
   max-width: 1200px;
-  margin: 0 auto;
-  padding: 10px 18px;
+  margin: 0;
+  padding: 10px 18px 10px clamp(60px, 6vw, 80px);
   transition: transform 280ms ease;
 }
 .cosmic-page-header {
@@ -367,8 +367,8 @@ input:focus, textarea:focus, select:focus {
   justify-content: space-between;
   gap: var(--space-6);
   max-width: 1200px;
-  margin: 16px auto 0;
-  padding: 24px 18px 10px;
+  margin: 16px 0 0;
+  padding: 24px 18px 10px clamp(60px, 6vw, 80px);
   transition: transform 280ms ease;
 }
 .kk-top-nav.is-nav-hidden,
@@ -485,7 +485,7 @@ input:focus, textarea:focus, select:focus {
   display: block;
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.55));
 }
-.kiikis-logo.compact .kiikis-logo-image { height: 88px; }
+.kiikis-logo.compact .kiikis-logo-image { height: 64px; }
 .kiikis-logo.lockup .kiikis-logo-image { height: 128px; }
 
 /* ============================================================================
