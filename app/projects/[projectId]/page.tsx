@@ -1056,7 +1056,6 @@ export default function WorkflowPage() {
     setStatusText("");
 
     try {
-      {
       const baseInput = extra?.inputOverride || getTaskInput(baseProject, step, stepContent);
       const data = await requestGenerate(step, baseProject, baseInput, extra?.optimizeInstruction || "");
       setLoading(false);
@@ -1120,69 +1119,6 @@ export default function WorkflowPage() {
           ? `已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`
           : `Generated: ${data.meta?.taskName || activeMeta.short} (${data.meta?.model || "DeepSeek"})${incompleteNotice}`,
       );
-      void refreshGenerationTasks();
-      return;
-      }
-
-      const response = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taskType: step,
-          input: extra?.inputOverride || getTaskInput(baseProject, step, stepContent),
-          context: extra?.optimizeInstruction
-            ? `请根据以下优化要求重写当前页内容：${extra?.optimizeInstruction}`
-            : baseProject.idea,
-          options: {
-            market: baseProject.market,
-            genre: baseProject.genre,
-            sourceLanguage: "中文",
-            targetLanguage: baseProject.targetLanguage,
-            benchmarkTitle: baseProject.benchmarkTitle,
-            benchmarkLink: baseProject.benchmarkLink,
-            episodeDuration: baseProject.episodeDuration,
-            episodeCount: baseProject.episodeCount,
-            chineseScriptRange: baseProject.chineseScriptRange,
-            finalScriptVersion: baseProject.finalScriptVersion,
-            localizationMode: baseProject.localizationMode,
-            optimizeInstruction: extra?.optimizeInstruction || "",
-          },
-          projectTitle: baseProject.title,
-          market: baseProject.market,
-          genre: baseProject.genre,
-          benchmarkTitle: baseProject.benchmarkTitle,
-          benchmarkLink: baseProject.benchmarkLink,
-          idea: baseProject.idea,
-          allSteps: previousStepContent(baseProject, step),
-        }),
-      });
-
-      const data = await response.json();
-      setLoading(false);
-
-      if (!response.ok || !data.success) {
-        markError(generatingProject, data.error || "生成失败，请检查 DeepSeek API。已有内容已保留。");
-        return;
-      }
-
-      let nextProject = {
-        ...setStepContent(generatingProject, step, data.output),
-        status: "ready" as const,
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (step === "script_import" && baseProject.workflowType === "continuation" && !nextProject.existingScript.trim()) {
-        nextProject = { ...nextProject, existingScript: baseProject.idea };
-      }
-
-      if (step === "brief" && (!baseProject.title.trim() || baseProject.title.trim() === DEFAULT_TITLE)) {
-        const generatedTitle = extractGeneratedTitle(data.output);
-        if (generatedTitle) nextProject = { ...nextProject, title: generatedTitle };
-      }
-
-      setProject(nextProject);
-      saveProjectEverywhere(nextProject);
-      setStatusText(`已生成：${data.meta?.taskName || "当前步骤"} (${data.meta?.model || "DeepSeek"})`);
       void refreshGenerationTasks();
     } catch (generateError) {
       setLoading(false);
