@@ -1169,11 +1169,29 @@ input:focus, textarea:focus, select:focus {
 }
 .song-workbench-shell > .notice {
   grid-column: 1 / -1;
+  padding: 10px 14px;
+  min-height: 0;
+  font-size: 13px;
 }
 .song-setup-panel,
 .song-output-panel,
 .song-ai-panel {
   min-width: 0;
+}
+.song-workbench-page .dashboard-panel-head {
+  margin-bottom: var(--space-4);
+}
+.song-workbench-page .dashboard-panel-head > div > span {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.song-workbench-page .dashboard-panel-head h2 {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 500;
+}
+.song-workbench-page label {
+  font-size: 13px;
 }
 .song-setup-panel,
 .song-ai-panel {
@@ -1199,6 +1217,7 @@ input:focus, textarea:focus, select:focus {
 }
 .song-control-group > span,
 .song-control-group > summary,
+.song-section-head > span,
 .song-tool-section > span,
 .song-tool-head > span,
 .song-option-group strong {
@@ -1212,6 +1231,12 @@ input:focus, textarea:focus, select:focus {
 }
 .song-details-body {
   margin-top: var(--space-3);
+}
+.song-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 .song-concept-textarea {
   min-height: 160px;
@@ -1267,6 +1292,20 @@ input:focus, textarea:focus, select:focus {
   color: var(--ink-primary);
   overflow: hidden;
 }
+.song-singer-card > button {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
 .song-singer-card input {
   position: absolute;
   top: 10px;
@@ -1284,6 +1323,22 @@ input:focus, textarea:focus, select:focus {
 }
 .song-singer-card p {
   margin: 0;
+}
+.song-singer-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.song-singer-form label,
+.song-singer-form-full {
+  min-width: 0;
+}
+.song-singer-form textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+.song-singer-form-full {
+  grid-column: 1 / -1;
 }
 .song-output-panel {
   display: flex;
@@ -1337,9 +1392,20 @@ input:focus, textarea:focus, select:focus {
 }
 .song-version-card {
   width: 100%;
+  padding: var(--space-3);
   text-align: left;
   color: inherit;
   cursor: pointer;
+}
+.song-version-card h3 {
+  margin: 2px 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.song-version-card p,
+.song-version-card span {
+  font-size: 11px;
+  line-height: 1.35;
 }
 .song-audit-modal p {
   white-space: pre-wrap;

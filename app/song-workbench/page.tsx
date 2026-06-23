@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy } from "lucide-react";
+import { Copy, Plus } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
@@ -179,6 +179,49 @@ function uniqueSingerProfiles(singers: SingerProfile[]) {
   });
 }
 
+function cloneSinger(singer: SingerProfile) {
+  return {
+    ...singer,
+    genres: [...singer.genres],
+    voiceTexture: [...singer.voiceTexture],
+    delivery: [...singer.delivery],
+    language: [...singer.language],
+    safePromptTerms: [...singer.safePromptTerms],
+    forbiddenOutputTerms: [...singer.forbiddenOutputTerms],
+  };
+}
+
+function normalizeSingerDraft(singer: SingerProfile) {
+  const displayName = singer.displayName.trim();
+  return {
+    ...singer,
+    id: singer.id || `manual-${Date.now()}`,
+    displayName,
+    gender: singer.gender.trim() || "custom",
+    genres: singer.genres.filter(Boolean),
+    voiceTexture: singer.voiceTexture.filter(Boolean),
+    delivery: singer.delivery.filter(Boolean),
+    language: singer.language.filter(Boolean),
+    safePromptTerms: singer.safePromptTerms.filter(Boolean),
+    forbiddenOutputTerms: singer.forbiddenOutputTerms.filter(Boolean),
+    notes: singer.notes.trim(),
+  };
+}
+
+function formatSingerProfile(singer: SingerProfile) {
+  return [
+    `Name: ${singer.displayName}`,
+    `Gender: ${singer.gender}`,
+    `Language: ${singer.language.join(", ")}`,
+    `Genres: ${singer.genres.join(", ")}`,
+    `Voice texture: ${singer.voiceTexture.join(", ")}`,
+    `Delivery: ${singer.delivery.join(", ")}`,
+    `Safe prompt terms: ${singer.safePromptTerms.join(", ")}`,
+    `Reference / blocked terms: ${singer.forbiddenOutputTerms.join(", ")}`,
+    `Notes: ${singer.notes}`,
+  ].join("\n");
+}
+
 function normalizeStoredForm(value: SongForm) {
   return {
     ...value,
@@ -208,6 +251,19 @@ const initialForm: SongForm = {
   lyricsMode: "enhanced_lyrics",
 };
 
+const emptySingerDraft: SingerProfile = {
+  id: "",
+  displayName: "",
+  gender: "custom",
+  genres: [],
+  voiceTexture: [],
+  delivery: [],
+  language: ["English"],
+  safePromptTerms: [],
+  forbiddenOutputTerms: [],
+  notes: "",
+};
+
 const i18n = {
   "en-US": {
     title: "Song Creation",
@@ -231,9 +287,22 @@ const i18n = {
     generating: "Generating",
     saveVersion: "Save version",
     copy: "Copy",
-    copied: "Copied.",
     lyrics: "Lyrics",
-    stylePrompt: "Style Prompt",
+    stylePrompt: "Style prompt",
+    singerDetails: "Singer details",
+    newSinger: "New singer",
+    edit: "Edit",
+    delete: "Delete",
+    save: "Save",
+    close: "Close",
+    referenceArtist: "Reference singer",
+    safePromptTerms: "Safe prompt terms",
+    forbiddenOutputTerms: "Reference / blocked terms",
+    voiceTexture: "Voice texture",
+    delivery: "Delivery",
+    language: "Language",
+    gender: "Gender",
+    notes: "Notes",
     createSinger: "Create singer tag",
     fromReference: "Generate safe tag from reference",
     referencePlaceholder: "Reference artist name, used internally only",
@@ -267,9 +336,22 @@ const i18n = {
     generating: "生成中",
     saveVersion: "保存版本",
     copy: "复制",
-    copied: "已复制。",
-    lyrics: "Lyrics",
-    stylePrompt: "Style Prompt",
+    lyrics: "歌词",
+    stylePrompt: "风格提示词",
+    singerDetails: "歌手资料",
+    newSinger: "新建歌手",
+    edit: "编辑",
+    delete: "删除",
+    save: "保存",
+    close: "关闭",
+    referenceArtist: "对标歌手",
+    safePromptTerms: "安全提示词",
+    forbiddenOutputTerms: "对标 / 禁用词",
+    voiceTexture: "声音质感",
+    delivery: "演唱方式",
+    language: "语言",
+    gender: "性别",
+    notes: "备注",
     createSinger: "创建歌手标签",
     fromReference: "通过对标歌手生成安全标签",
     referencePlaceholder: "对标歌手名，仅内部理解使用",
@@ -296,9 +378,9 @@ export default function SongWorkbenchPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
   const [auditOpen, setAuditOpen] = useState(false);
+  const [singerDraft, setSingerDraft] = useState<SingerProfile | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -366,7 +448,6 @@ export default function SongWorkbenchPage() {
   async function generateAll(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setError("");
-    setNotice("");
     if (!validateForm()) {
       setError(text.required);
       return;
@@ -450,13 +531,11 @@ export default function SongWorkbenchPage() {
   }
 
   async function copyText(value: string, guarded = false) {
-    setNotice("");
     if (guarded && !canCopyLyrics) {
       setError("High-risk lyrics must be revised before copying.");
       return;
     }
     await navigator.clipboard.writeText(value);
-    setNotice(text.copied);
   }
 
   function previewVersion(version: SongVersion) {
@@ -464,6 +543,36 @@ export default function SongWorkbenchPage() {
     setStylePrompt(version.stylePrompt);
     setCompositionPrompt(version.compositionPrompt);
     setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers));
+  }
+
+  function openSingerEditor(singer?: SingerProfile) {
+    setSingerDraft(singer ? cloneSinger(singer) : { ...emptySingerDraft, id: `manual-${Date.now()}` });
+  }
+
+  function updateSingerDraft<K extends keyof SingerProfile>(key: K, value: SingerProfile[K]) {
+    setSingerDraft((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  function saveSingerDraft() {
+    if (!singerDraft) return;
+    const normalized = normalizeSingerDraft(singerDraft);
+    if (!normalized.displayName) return;
+    setSingers((current) => {
+      const exists = current.some((singer) => singer.id === normalized.id);
+      return exists ? current.map((singer) => (singer.id === normalized.id ? normalized : singer)) : [...current, normalized];
+    });
+    setForm((current) => ({
+      ...current,
+      selectedSingerIds: current.selectedSingerIds.includes(normalized.id) ? current.selectedSingerIds : [...current.selectedSingerIds, normalized.id],
+    }));
+    setSingerDraft(null);
+  }
+
+  function deleteSingerDraft() {
+    if (!singerDraft) return;
+    setSingers((current) => current.filter((singer) => singer.id !== singerDraft.id));
+    setForm((current) => ({ ...current, selectedSingerIds: current.selectedSingerIds.filter((id) => id !== singerDraft.id) }));
+    setSingerDraft(null);
   }
 
   return (
@@ -474,7 +583,6 @@ export default function SongWorkbenchPage() {
 
       <section className="song-workbench-shell">
         {error ? <div className="notice error">{error}</div> : null}
-        {notice ? <div className="notice success">{notice}</div> : null}
 
         <form id="song-workbench-form" className="dashboard-panel song-setup-panel" onSubmit={generateAll}>
           <div className="dashboard-panel-head">
@@ -559,25 +667,33 @@ export default function SongWorkbenchPage() {
           </details>
 
           <section className="song-control-group">
-            <span>{text.singerLibrary}</span>
+            <div className="song-section-head">
+              <span>{text.singerLibrary}</span>
+              <button className="icon-button" type="button" title={text.newSinger} onClick={() => openSingerEditor()}>
+                <Plus size={15} />
+              </button>
+            </div>
             <div className="song-singer-grid">
               {singerOptions.map((singer) => (
-                <label className="song-singer-card" key={singer.id}>
+                <article className="song-singer-card" key={singer.id}>
                   <input
                     type="checkbox"
+                    aria-label={singer.displayName}
                     checked={form.selectedSingerIds.includes(singer.id)}
                     onChange={() => toggleListValue("selectedSingerIds", singer.id)}
                   />
-                  <strong>{singer.displayName}</strong>
-                  <small>{singer.gender} / {singer.language.join(", ")}</small>
-                  <p>{singer.safePromptTerms.join(", ")}</p>
-                </label>
+                  <button type="button" onClick={() => openSingerEditor(singer)}>
+                    <strong>{singer.displayName}</strong>
+                    <small>{singer.gender} / {singer.language.join(", ")}</small>
+                    <p>{singer.safePromptTerms.join(", ")}</p>
+                  </button>
+                </article>
               ))}
             </div>
           </section>
 
           <details className="song-control-group">
-            <summary>Instruments / arrangement elements</summary>
+            <summary>{locale === "zh-CN" ? "乐器 / 编曲元素" : "Instruments / Arrangement"}</summary>
             <div className="song-group-stack song-details-body">
               {instrumentGroups.map((group) => (
                 <div className="song-option-group" key={group.title}>
@@ -608,25 +724,25 @@ export default function SongWorkbenchPage() {
             <summary>{text.advanced}</summary>
             <div className="song-field-stack song-details-body">
               <label>
-                Groove
+                {locale === "zh-CN" ? "律动 / 速度" : "Groove"}
                 <select value={form.groove} onChange={(event) => updateForm("groove", event.target.value)}>
                   {grooveOptions.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                Key
+                {locale === "zh-CN" ? "调性" : "Key"}
                 <select value={form.key} onChange={(event) => updateForm("key", event.target.value)}>
                   {keyOptions.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                Lyrics structure
+                {locale === "zh-CN" ? "歌词结构" : "Lyrics structure"}
                 <select value={form.structure} onChange={(event) => updateForm("structure", event.target.value)}>
                   {structureOptions.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </label>
               <label>
-                Lyrics output mode
+                {locale === "zh-CN" ? "歌词格式" : "Lyrics output mode"}
                 <select value={form.lyricsMode} onChange={(event) => updateForm("lyricsMode", event.target.value as LyricsMode)}>
                   <option value="enhanced_lyrics">{t("song.format.enhanced")}</option>
                   <option value="plain_lyrics">{t("song.format.plainLyrics")}</option>
@@ -649,7 +765,7 @@ export default function SongWorkbenchPage() {
           <div className="song-output-grid">
             <label className="song-output-card">
               <span className="song-output-card-head">
-                Lyrics
+                {text.lyrics}
                 <button className="icon-button" type="button" title={text.copy} disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>
                   <Copy size={15} />
                 </button>
@@ -690,7 +806,7 @@ export default function SongWorkbenchPage() {
               <button className="primary-button" type="button" onClick={applyRevision}>{text.revise}</button>
             </div>
             <label>
-              Instruction
+              {locale === "zh-CN" ? "指令" : "Instruction"}
               <textarea className="song-revision-textarea" value={revisionInstruction} onChange={(event) => setRevisionInstruction(event.target.value)} placeholder={text.revisionPlaceholder} />
             </label>
           </div>
@@ -721,7 +837,66 @@ export default function SongWorkbenchPage() {
             <h2>{text.audit}</h2>
             <p>{auditReportText(audit)}</p>
             <div className="modal-actions">
-              <button className="primary-button" type="button" onClick={() => setAuditOpen(false)}>OK</button>
+              <button className="primary-button" type="button" onClick={() => setAuditOpen(false)}>{text.close}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {singerDraft ? (
+        <div className="modal-backdrop">
+          <div className="modal song-singer-modal">
+            <div className="dashboard-panel-head">
+              <div>
+                <span>{text.singerDetails}</span>
+                <h2>{singerDraft.displayName || text.newSinger}</h2>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => copyText(formatSingerProfile(singerDraft))}>
+                <Copy size={15} /> {text.copy}
+              </button>
+            </div>
+            <div className="song-singer-form">
+              <label>
+                {text.singers}
+                <input value={singerDraft.displayName} onChange={(event) => updateSingerDraft("displayName", event.target.value)} autoFocus />
+              </label>
+              <label>
+                {text.gender}
+                <input value={singerDraft.gender} onChange={(event) => updateSingerDraft("gender", event.target.value)} />
+              </label>
+              <label>
+                {text.language}
+                <input value={singerDraft.language.join(", ")} onChange={(event) => updateSingerDraft("language", splitCustom(event.target.value))} />
+              </label>
+              <label>
+                {text.genres}
+                <input value={singerDraft.genres.join(", ")} onChange={(event) => updateSingerDraft("genres", splitCustom(event.target.value))} />
+              </label>
+              <label>
+                {text.voiceTexture}
+                <input value={singerDraft.voiceTexture.join(", ")} onChange={(event) => updateSingerDraft("voiceTexture", splitCustom(event.target.value))} />
+              </label>
+              <label>
+                {text.delivery}
+                <input value={singerDraft.delivery.join(", ")} onChange={(event) => updateSingerDraft("delivery", splitCustom(event.target.value))} />
+              </label>
+              <label>
+                {text.safePromptTerms}
+                <textarea value={singerDraft.safePromptTerms.join(", ")} onChange={(event) => updateSingerDraft("safePromptTerms", splitCustom(event.target.value))} />
+              </label>
+              <label>
+                {text.forbiddenOutputTerms}
+                <textarea value={singerDraft.forbiddenOutputTerms.join(", ")} onChange={(event) => updateSingerDraft("forbiddenOutputTerms", splitCustom(event.target.value))} placeholder={text.referenceArtist} />
+              </label>
+              <label className="song-singer-form-full">
+                {text.notes}
+                <textarea value={singerDraft.notes} onChange={(event) => updateSingerDraft("notes", event.target.value)} />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setSingerDraft(null)}>{text.close}</button>
+              <button className="secondary-button" type="button" onClick={deleteSingerDraft}>{text.delete}</button>
+              <button className="primary-button" type="button" onClick={saveSingerDraft}>{text.save}</button>
             </div>
           </div>
         </div>
