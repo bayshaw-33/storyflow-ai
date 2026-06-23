@@ -62,6 +62,20 @@ export default function LandingPage() {
         onSignOut={signOut}
       />
       <HeroSection onStartCreating={enterWriterRoom} />
+
+      <ContentSection
+        id="section-1"
+        kicker="KIIKIS"
+        titleZh="创作者的 AI 宇宙"
+        titleEn="The AI Universe for Creators"
+        subtitleZh="短剧、歌曲、爆款视频、小说——所有创作，一个平台。AI 全程协作，从灵感到交付。"
+        subtitleEn="Short drama, music, viral video, novels — all your creative work, one platform."
+        bgImageZh="url('/design/hero/section-1-zh.png')"
+        bgImageEn="url('/design/hero/section-1-en.png')"
+        align="left"
+        lightBg={false}
+      />
+
       <section className="scroll-transition" aria-hidden="true" />
       <div className="container">
         <section className="kk-landing-stats" aria-label={text.statsLabel}>
