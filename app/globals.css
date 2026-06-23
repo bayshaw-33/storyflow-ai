@@ -443,7 +443,7 @@ input:focus, textarea:focus, select:focus {
 }
 .kk-nav-settings-corner a:hover { color: #FFFFFF; }
 .kk-nav-vertical a[aria-current="page"],
-.kk-nav-settings-corner a[aria-current="page"] { color: #FFFFFF; }
+.kk-nav-settings-corner a[aria-current="page"] { color: var(--accent-blue); font-weight: 500; }
 
 @media (max-width: 720px) {
   .kk-nav-vertical, .kk-nav-settings-corner { display: none; }
