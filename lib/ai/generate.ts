@@ -21,6 +21,9 @@ const taskTypes: TaskType[] = [
   "storyboard_script",
   "final_delivery",
   "song_workbench",
+  "viral_video_analysis",
+  "viral_structure_remake",
+  "viral_export_package",
 ];
 
 export type GenerateSuccess = {

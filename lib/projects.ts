@@ -226,6 +226,9 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   storyboard_script: "storyboardScript",
   final_delivery: "deliveryPackage",
   song_workbench: "idea",
+  viral_video_analysis: "idea",
+  viral_structure_remake: "idea",
+  viral_export_package: "deliveryPackage",
 };
 
 export type WorkflowStep = { key: TaskType; field: keyof DramaProject; label: string; short: string };
@@ -1198,4 +1201,10 @@ const demoStepContent: Record<TaskType, string> = {
     "1. 故事概况：隐藏继承人林晚在订婚宴被背叛后，以董事身份回归复仇。\n2. 大纲交付范围：三幕结构、八段式 Treatment、分集大纲。\n3. 最终剧本版本清单：中文版本、英文版本、双语版本。\n4. 分镜交付范围：按集拆分，每集包含镜头、台词、音效和 AI 生成提示词。\n5. 现场演示建议：先展示附件导入，再一键推进到分镜和交付下载。",
   song_workbench:
     "---LYRICS---\n[Verse]\nA demo song draft belongs in the song workbench, not the drama workflow.\n---STYLE_PROMPT---\nindie pop, safe vocal descriptor, clean Suno-ready mix\n---COMPOSITION_PROMPT---\nStart with a small motif, build into a repeatable chorus, then end with a clean outro.",
+  viral_video_analysis:
+    "# 爆款视频结构拆解\n\n## F1 开场钩子\n前 3 秒建立强反差和明确利益点。\n\n## F2 主体结构\n用连续动作推进信息密度和情绪曲线。\n\n## F3 动作节点\n关键转折让观众重新评估结果。\n\n## F4 结果呈现\n结果必须可视化、可验证。\n\n## F5 记忆点\n保留一句可复用的结构公式。",
+  viral_structure_remake:
+    "## F6 同结构改写分镜\n### 开场（0-3秒）\n用同样的反差结构换到新赛道。\n### 主体\n按原视频节奏推进，但素材、人物和表达保持原创。\n### 结尾记忆点\n给出可复制的标签和画面收束。",
+  viral_export_package:
+    "# 爆款创作版本\n\n包含结构拆解、同结构改写分镜和后续图片提示词方向。",
 };

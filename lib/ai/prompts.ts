@@ -17,7 +17,10 @@ export type TaskType =
   | "format_check"
   | "storyboard_script"
   | "final_delivery"
-  | "song_workbench";
+  | "song_workbench"
+  | "viral_video_analysis"
+  | "viral_structure_remake"
+  | "viral_export_package";
 
 export type ChineseScriptRange = "first3" | "first15" | "first_half" | "full";
 export type FinalScriptVersion = "chinese" | "foreign" | "bilingual";
@@ -73,6 +76,9 @@ export const taskNames: Record<TaskType, string> = {
   storyboard_script: "分镜",
   final_delivery: "最终交付",
   song_workbench: "歌曲创作",
+  viral_video_analysis: "爆款结构分析",
+  viral_structure_remake: "同结构改写",
+  viral_export_package: "爆款创作交付",
 };
 
 const commonRules = [
@@ -393,6 +399,25 @@ const promptByTask: Record<TaskType, string> = {
     "---COMPOSITION_PROMPT---",
     "一段编曲提示词，说明 intro、verse、pre-chorus、chorus、bridge、final chorus、outro 的推进方式。",
     "要求：歌词要有清晰 hook，副歌适合重复；不要使用真实艺人名字；不要输出解释。",
+  ].join("\n"),
+
+  viral_video_analysis: [
+    "任务：分析短视频的爆款结构。",
+    "输出必须是稳定 JSON，包含 f1_hook、f2_body、f3_action、f4_result、f5_memory、raw_storyboard。",
+    "重点拆解前 3 秒钩子、节奏推进、动作转折、结果呈现、记忆点和可复用结构公式。",
+    "不要输出解释性开场白。",
+  ].join("\n"),
+
+  viral_structure_remake: [
+    "任务：基于爆款结构分析和用户改写要求，生成同结构改写分镜。",
+    "输出包含开场、主体、结尾记忆点、旁白/字幕建议和拍摄执行建议。",
+    "保持结构一致，但内容表达必须原创，不照搬原视频具体台词或镜头。",
+  ].join("\n"),
+
+  viral_export_package: [
+    "任务：整理爆款创作工作台的交付版本。",
+    "输出包含结构分析摘要、改写分镜、图片提示词方向和执行提醒。",
+    "不要新增未确认的结构事实。",
   ].join("\n"),
 };
 
