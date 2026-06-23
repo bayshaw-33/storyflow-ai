@@ -19,7 +19,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: BRAND_NAME,
+  title: "KIIKIS - AI内容创作平台",
   description: TAGLINE_EN,
   applicationName: BRAND_NAME,
 };
