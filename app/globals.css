@@ -340,13 +340,18 @@ input:focus, textarea:focus, select:focus {
 /* ============================================================================
    TOP NAVIGATION  (glass capsule — matches design comp)
    ============================================================================ */
-/* scroll-hide wrapper — transparent, no layout; children are fixed independently */
+/* scroll-hide nav row — fixed flex container; logo + actions are flex children */
 .kk-top-nav,
 .navbar {
   position: fixed;
-  left: 0; right: 0; top: 0;
+  left: 0; right: 0; top: 16px;
   width: 100%;
+  height: 48px;
   z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(20px, 3vw, 40px) 0 clamp(60px, 6vw, 80px);
   pointer-events: none;
   transition: transform 280ms ease;
 }
@@ -354,18 +359,21 @@ input:focus, textarea:focus, select:focus {
 .navbar.is-nav-hidden {
   transform: translateY(-140%);
 }
-/* logo — fixed top-left on TopNav pages */
+/* logo — flex child of TopNav row */
 .kk-nav-brand {
-  position: fixed;
-  top: 16px;
-  left: clamp(60px, 6vw, 80px);
-  z-index: var(--z-nav);
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
 }
-/* right-side actions — fixed top-right on TopNav pages */
-.kk-nav-actions, .header-actions, .nav-actions {
+/* TopNav right-side actions — flex child of TopNav row */
+.kk-nav-actions {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* standalone page header actions (project workspace, viral workbench, universe detail) */
+.header-actions, .nav-actions {
   position: fixed;
   top: 16px;
   right: clamp(20px, 3vw, 40px);
@@ -410,11 +418,6 @@ input:focus, textarea:focus, select:focus {
   transition: color var(--transition-base);
 }
 .kk-nav-links a:hover { color: #FFFFFF; }
-.kk-nav-actions, .header-actions, .nav-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
 .kk-nav-email { font-size: 13px; color: rgba(255, 255, 255, 0.6); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
 .kk-auth-buttons { display: flex; align-items: center; gap: 4px; }
 
