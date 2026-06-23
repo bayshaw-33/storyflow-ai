@@ -7,9 +7,9 @@ import { MonetizationLayer } from "@/components/pricing/MonetizationLayer";
 export default function SubscriptionPage() {
   return (
     <main className="kk-monetization-os">
-      <Link href="/" className="kk-monetization-brand" aria-label="Home">
-        <KiikisLogo compact />
-      </Link>
+      <header className="cosmic-page-header">
+        <Link href="/"><KiikisLogo compact /></Link>
+      </header>
       <MonetizationLayer />
     </main>
   );

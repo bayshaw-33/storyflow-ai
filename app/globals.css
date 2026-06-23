@@ -890,10 +890,11 @@ input:focus, textarea:focus, select:focus {
    PRICING / MONETIZATION  (minimal tier-selection layer)
    ============================================================================ */
 .kk-monetization-os { position: relative; padding: var(--space-16) 0; }
-.kk-monetization-brand {
-  position: absolute; top: var(--space-8); left: clamp(20px, 4vw, 48px);
+.universe-engine > .universe-brand {
+  position: absolute;
+  top: clamp(20px, 3vw, 32px);
+  left: clamp(20px, 4vw, 48px);
   z-index: var(--z-ui);
-  display: inline-flex; align-items: center;
 }
 .kk-monetization {
   display: grid;
