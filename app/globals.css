@@ -991,6 +991,55 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* ============================================================================
+   CONTENT SECTIONS  (parallax full-screen waterfall — landing page)
+   ============================================================================ */
+.content-section {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
+  background-color: #060a14;
+  overflow: hidden;
+}
+.content-section-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 680px;
+  padding: clamp(40px, 8vw, 120px);
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.content-section-inner.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.content-section.align-left .content-section-inner { margin-right: auto; }
+.content-section.align-right .content-section-inner { margin-left: auto; }
+.content-section.align-center .content-section-inner { margin: 0 auto; text-align: center; }
+.content-section-kicker {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-muted); margin-bottom: var(--space-4);
+}
+.content-section-title {
+  font-family: var(--font-heading);
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 300; letter-spacing: -0.02em;
+  line-height: 1.1; color: var(--ink-primary);
+  margin-bottom: var(--space-4);
+}
+.content-section-subtitle {
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  color: var(--ink-secondary); line-height: 1.7;
+  margin-bottom: var(--space-8);
+  white-space: pre-line;
+}
+
+/* ============================================================================
    COSMIC PAGE  (templates / generic content page)
    ============================================================================ */
 .cosmic-page { padding-bottom: var(--space-16); }
