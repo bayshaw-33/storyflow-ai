@@ -11,6 +11,7 @@ import {
 import { usePathname } from "next/navigation";
 import type { PlanId } from "@/lib/billing/plans";
 import type { TierId } from "@/lib/pricing/tiers";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // ── The single source of truth for the whole UI OS ──────────────
 export type ActiveSystem = "hero" | "workspace" | "universe" | "pricing";
@@ -85,11 +86,39 @@ export function OSProvider({ children }: { children: React.ReactNode }) {
   const [planId, setPlanId] = useState<PlanId>("free");
   const [planReady, setPlanReady] = useState(false);
 
-  // hydrate the access tier from the persisted plan (no bypass paths)
+  // hydrate plan from localStorage (fast) then Supabase profile (authoritative)
   useEffect(() => {
-    const stored = window.localStorage.getItem(PLAN_STORAGE_KEY) as PlanId | null;
-    if (stored && stored in PLAN_RANK) setPlanId(stored);
-    setPlanReady(true);
+    // localStorage migration: "universe" was renamed to "ultra"
+    let cached = window.localStorage.getItem(PLAN_STORAGE_KEY) as string | null;
+    if (cached === "universe") {
+      cached = "ultra";
+      window.localStorage.setItem(PLAN_STORAGE_KEY, "ultra");
+    }
+    if (cached && cached in PLAN_RANK) setPlanId(cached as PlanId);
+
+    // Supabase is authoritative; delay planReady until it resolves
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) { setPlanReady(true); return; }
+
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const user = data.session?.user;
+      if (!user) { setPlanReady(true); return; }
+      try {
+        const { data: profile } = await supabase
+          .from("storyflow_profiles")
+          .select("plan")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        const raw = profile?.plan as string | null | undefined;
+        const normalized = raw === "universe" ? "ultra" : raw;
+        if (normalized && normalized in PLAN_RANK) {
+          window.localStorage.setItem(PLAN_STORAGE_KEY, normalized);
+          setPlanId(normalized as PlanId);
+        }
+      } finally {
+        setPlanReady(true);
+      }
+    });
   }, []);
 
   const updateKkState = useCallback((next: KKMirror) => {
