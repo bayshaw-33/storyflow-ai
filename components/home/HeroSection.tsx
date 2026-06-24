@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
@@ -11,7 +10,6 @@ type HeroSectionProps = {
 export function HeroSection({ onStartCreating }: HeroSectionProps) {
   const { t, locale } = useI18n();
   const isZh = locale === "zh-CN";
-  const [heroVideoReady, setHeroVideoReady] = useState(false);
 
   return (
     <div className="hero-root" aria-labelledby="kiikis-hero-title">
@@ -53,26 +51,12 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
       />
       <DesignAssetImage
         token="HERO_MAIN"
-        className="hero-asset-layer layer-main hero-main-fallback"
+        className="hero-asset-layer layer-main"
         alt=""
         aria-hidden="true"
         draggable={false}
         priority
       />
-      <video
-        className={`hero-asset-layer layer-main hero-main-video${heroVideoReady ? " is-ready" : ""}`}
-        poster="/design/hero/hero-main.png"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        aria-hidden="true"
-        onCanPlay={() => setHeroVideoReady(true)}
-        onError={() => setHeroVideoReady(false)}
-      >
-        <source src="/design/hero/hero-main.mp4" type="video/mp4" />
-      </video>
 
       <div className="hero-content hero-copy layer-ui">
         <h1 id="kiikis-hero-title">
