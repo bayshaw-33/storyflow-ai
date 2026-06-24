@@ -51,11 +51,22 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
       />
       <DesignAssetImage
         token="HERO_MAIN"
-        className="hero-asset-layer layer-main"
+        className="hero-asset-layer layer-main hero-main-fallback"
         alt=""
         aria-hidden="true"
         draggable={false}
         priority
+      />
+      <video
+        className="hero-asset-layer layer-main hero-main-video"
+        src="/design/hero/hero-main.mp4"
+        poster="/design/hero/hero-main.png"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden="true"
       />
 
       <div className="hero-content hero-copy layer-ui">
