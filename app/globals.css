@@ -524,6 +524,17 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: center;
 }
+.hero-root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 255, 255, 0.04) 0%, rgba(0, 0, 0, 0) 34%),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.34) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.38) 100%);
+}
 
 /* asset layers */
 .hero-root .hero-asset-layer,
@@ -542,6 +553,20 @@ input:focus, textarea:focus, select:focus {
 .hero-root .layer-nebula     { z-index: 4; opacity: 0.8; mix-blend-mode: screen; }
 .hero-root .layer-atmo       { z-index: 5; opacity: 0.85; mix-blend-mode: screen; }
 .hero-root .layer-main       { z-index: 6; object-fit: cover; }
+.hero-root .hero-main-fallback {
+  z-index: 6;
+}
+.hero-root .hero-main-video {
+  z-index: 7;
+  opacity: 0;
+  mix-blend-mode: screen;
+  filter: saturate(1.08) contrast(1.06) brightness(0.92);
+  transform: scale(1.012);
+  transition: opacity 1400ms ease;
+}
+.hero-root .hero-main-video.is-ready {
+  opacity: 0.28;
+}
 .hero-root .layer-ui         { z-index: var(--z-ui); }
 
 /* hero copy — centred */
@@ -752,6 +777,11 @@ input:focus, textarea:focus, select:focus {
   .hero-copy h1 { font-size: clamp(2rem, 9vw, 3rem); }
   .kk-top-nav, .navbar { gap: 12px; padding: 8px 12px; }
   .kk-nav-links { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-root .hero-main-video {
+    display: none;
+  }
 }
 
 /* ============================================================================
