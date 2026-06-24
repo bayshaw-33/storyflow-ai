@@ -14,8 +14,7 @@ export function LanguageToggle() {
         onClick={() => setLocale("zh-CN")}
         aria-pressed={isChinese}
       >
-        ZH
-        <span>{t("language.zh")}</span>
+        {t("language.zh")}
       </button>
       <button
         className={!isChinese ? "active" : ""}
@@ -23,8 +22,7 @@ export function LanguageToggle() {
         onClick={() => setLocale("en-US")}
         aria-pressed={!isChinese}
       >
-        EN
-        <span>{t("language.en")}</span>
+        {t("language.en")}
       </button>
     </div>
   );

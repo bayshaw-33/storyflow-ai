@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -37,9 +37,13 @@ const copy = {
     localProjects: "local projects",
     profile: "Profile",
     avatar: "Avatar",
-    avatarUrl: "Avatar URL",
+    avatarUrl: "Avatar link",
     avatarUrlPlaceholder: "https://example.com/avatar.jpg",
-    avatarHint: "Paste an image URL. It is saved to your account metadata.",
+    avatarHint: "Upload an image, or paste a public image link.",
+    avatarUpload: "Upload image",
+    avatarUploading: "Uploading",
+    avatarUploadFailed: "Avatar upload failed. Check the avatars storage bucket.",
+    avatarTypeError: "Please upload an image file.",
     displayName: "Display name",
     displayNamePlaceholder: "Name shown in your workspace",
     email: "Email",
@@ -68,7 +72,11 @@ const copy = {
     avatar: "头像",
     avatarUrl: "头像链接",
     avatarUrlPlaceholder: "https://example.com/avatar.jpg",
-    avatarHint: "粘贴图片链接，保存到账号 metadata。",
+    avatarHint: "上传图片，或粘贴公开图片链接。",
+    avatarUpload: "上传头像",
+    avatarUploading: "上传中",
+    avatarUploadFailed: "头像上传失败，请检查 avatars 存储桶。",
+    avatarTypeError: "请上传图片文件。",
     displayName: "显示名称",
     displayNamePlaceholder: "工作区中显示的名称",
     email: "邮箱",
@@ -119,6 +127,7 @@ export default function SettingsPage() {
   const [credits, setCredits] = useState<Credits | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -193,6 +202,58 @@ export default function SettingsPage() {
   const trimmedAvatarUrl = avatarUrl.trim();
   const avatarInitial = getAvatarInitial(displayName, email);
 
+  async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setMessage({ tone: "error", text: text.avatarTypeError });
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !session?.user) {
+      setMessage({ tone: "error", text: text.saveFailed });
+      return;
+    }
+
+    setAvatarUploading(true);
+    setMessage(null);
+
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `${session.user.id}/${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { contentType: file.type, upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+      if (!data.publicUrl) throw new Error("missing-public-url");
+
+      setAvatarUrl(data.publicUrl);
+      const nextName = displayName.trim();
+      const { data: authData, error: authError } = await supabase.auth.updateUser({
+        data: {
+          avatar_url: data.publicUrl,
+          display_name: nextName || null,
+          full_name: nextName || null,
+        },
+      });
+      if (authError) throw authError;
+      if (authData.user) {
+        setSession((current) => (current ? { ...current, user: authData.user } : current));
+      }
+      setMessage({ tone: "success", text: text.saved });
+    } catch {
+      setMessage({ tone: "error", text: text.avatarUploadFailed });
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -218,6 +279,8 @@ export default function SettingsPage() {
       const { data: authData, error: authError } = await supabase.auth.updateUser({
         data: {
           avatar_url: trimmedAvatarUrl || null,
+          display_name: displayName.trim() || null,
+          full_name: displayName.trim() || null,
         },
       });
       if (authError) throw authError;
@@ -243,13 +306,13 @@ export default function SettingsPage() {
       <section className="cosmic-title-band">
         <span>{text.kicker}</span>
         <h1>{text.title}</h1>
-        <p>{session?.user.email || text.signedOut} / {projectCount} {text.localProjects}</p>
+        <p>{displayName.trim() || session?.user.email || text.signedOut} / {projectCount} {text.localProjects}</p>
       </section>
 
       {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
 
       <section className="settings-grid">
-        <form className="settings-card" onSubmit={saveProfile}>
+        <form className="settings-card profile-settings-card" onSubmit={saveProfile}>
           <span>{text.profile}</span>
 
           <div className="avatar-editor">
@@ -260,17 +323,28 @@ export default function SettingsPage() {
             >
               {trimmedAvatarUrl ? null : avatarInitial}
             </div>
-            <label>
-              {text.avatarUrl}
-              <input
-                type="url"
-                value={avatarUrl}
-                placeholder={text.avatarUrlPlaceholder}
-                disabled={loading || !session}
-                onChange={(event) => setAvatarUrl(event.target.value)}
-              />
-              <small className="field-note">{text.avatarHint}</small>
-            </label>
+            <div className="avatar-controls">
+              <label className="avatar-upload-button secondary-button">
+                {avatarUploading ? text.avatarUploading : text.avatarUpload}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={loading || avatarUploading || !session}
+                  onChange={uploadAvatar}
+                />
+              </label>
+              <label>
+                {text.avatarUrl}
+                <input
+                  type="url"
+                  value={avatarUrl}
+                  placeholder={text.avatarUrlPlaceholder}
+                  disabled={loading || avatarUploading || !session}
+                  onChange={(event) => setAvatarUrl(event.target.value)}
+                />
+                <small className="field-note">{text.avatarHint}</small>
+              </label>
+            </div>
           </div>
 
           <label>

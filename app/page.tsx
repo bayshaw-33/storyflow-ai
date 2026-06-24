@@ -68,7 +68,7 @@ export default function LandingPage() {
         subtitleEn="Short drama, music, viral video, novels — all your creative work, one platform."
         bgImageZh="url('/design/hero/section-2-ch.png')"
         bgImageEn="url('/design/hero/section-2-en.png')"
-        align="left"
+        align="right"
         lightBg={false}
       />
 

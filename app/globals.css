@@ -340,7 +340,7 @@ input:focus, textarea:focus, select:focus {
 /* ============================================================================
    TOP NAVIGATION  (glass capsule — matches design comp)
    ============================================================================ */
-/* scroll-hide nav row — fixed flex container; logo + actions are flex children.
+/* fixed nav row — fixed flex container; logo + actions are flex children.
    Row height matches the 64px compact logo so both children center on the
    same midline (no overflow). */
 .kk-top-nav,
@@ -355,11 +355,6 @@ input:focus, textarea:focus, select:focus {
   justify-content: space-between;
   padding: 0 clamp(20px, 3vw, 40px) 0 clamp(60px, 6vw, 80px);
   pointer-events: none;
-  transition: transform 280ms ease;
-}
-.kk-top-nav.is-nav-hidden,
-.navbar.is-nav-hidden {
-  transform: translateY(-140%);
 }
 /* logo — flex child of TopNav row */
 .kk-nav-brand {
@@ -420,7 +415,15 @@ input:focus, textarea:focus, select:focus {
   transition: color var(--transition-base);
 }
 .kk-nav-links a:hover { color: #FFFFFF; }
-.kk-nav-email { font-size: 13px; color: rgba(255, 255, 255, 0.6); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
+.kk-nav-email {
+  max-width: min(220px, 28vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
 .kk-auth-buttons { display: flex; align-items: center; gap: 4px; }
 
 /* ── Global side navigation (left-middle vertical + bottom-left settings) ── */
@@ -477,6 +480,7 @@ input:focus, textarea:focus, select:focus {
   padding: 5px 10px;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1;
   color: rgba(255, 255, 255, 0.65);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
   background: transparent;
@@ -920,6 +924,44 @@ input:focus, textarea:focus, select:focus {
   margin-top: var(--space-6);
 }
 .modal-actions.compact { margin-top: 0; margin-bottom: var(--space-4); }
+.auth-modal {
+  max-width: 520px;
+  padding: clamp(24px, 4vw, 36px);
+  border-radius: 22px;
+  background: rgba(16, 16, 18, 0.96);
+}
+.auth-modal-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.auth-modal-heading h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
+  font-weight: 500;
+}
+.auth-modal-heading p {
+  margin: 0;
+  color: var(--ink-secondary);
+  line-height: 1.7;
+}
+.auth-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.auth-modal input {
+  min-height: 48px;
+  background: #09090a;
+  color: var(--ink-primary);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.auth-modal .kk-text-button {
+  align-self: flex-start;
+  margin-top: var(--space-3);
+  padding-left: 0;
+}
 .wizard-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-4); margin: var(--space-4) 0;
@@ -1072,6 +1114,22 @@ input:focus, textarea:focus, select:focus {
 .content-section.align-center .content-section-inner { margin: 0 auto; text-align: center; }
 .content-section.has-image .content-section-inner {
   z-index: 2;
+}
+#platform .content-section-inner {
+  text-align: right;
+}
+#platform .content-section-kicker,
+#platform .content-section-title,
+#platform .content-section-subtitle,
+#workspace .content-section-kicker,
+#workspace .content-section-title,
+#workspace .content-section-subtitle {
+  color: #111214;
+  text-shadow: none;
+}
+#platform .content-section-subtitle,
+#workspace .content-section-subtitle {
+  color: #2f3237;
 }
 .content-section-media {
   position: absolute;
@@ -1293,17 +1351,26 @@ input:focus, textarea:focus, select:focus {
   gap: var(--space-4); padding: var(--space-4) 0;
   border-bottom: 1px solid var(--divider);
 }
+.profile-settings-card {
+  gap: var(--space-5);
+}
+.settings-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
 .avatar-editor {
   display: grid;
-  grid-template-columns: 88px 1fr;
-  gap: var(--space-4);
-  align-items: center;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
 }
 .avatar-preview {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 88px;
+  width: 112px;
   aspect-ratio: 1;
   border-radius: 50%;
   border: 1px solid var(--glass-border);
@@ -1311,8 +1378,21 @@ input:focus, textarea:focus, select:focus {
   background-position: center;
   background-size: cover;
   color: var(--ink-primary);
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 600;
+}
+.avatar-controls {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.avatar-upload-button {
+  width: fit-content;
+  cursor: pointer;
+}
+.avatar-upload-button input {
+  display: none;
 }
 .plan-entitlements { display: flex; flex-direction: column; gap: var(--space-2); }
 

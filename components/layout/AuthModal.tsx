@@ -106,23 +106,33 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal">
+      <div className="modal auth-modal">
         {view === "auth" ? (
           <>
-            <h2>{BRAND_NAME}</h2>
-            <p>{t("auth.cloudSaveHint")}</p>
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder={t("auth.email")}
-              type="email"
-            />
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder={t("auth.password")}
-              type="password"
-            />
+            <div className="auth-modal-heading">
+              <h2>{BRAND_NAME}</h2>
+              <p>{t("auth.cloudSaveHint")}</p>
+            </div>
+            <form
+              className="auth-form-stack"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitAuth();
+              }}
+            >
+              <input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder={t("auth.email")}
+                type="email"
+              />
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={t("auth.password")}
+                type="password"
+              />
+            </form>
             {error ? <div className="notice error">{error}</div> : null}
             {mode === "signin" ? (
               <button
@@ -149,8 +159,10 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
 
         {view === "forgot" ? (
           <>
-            <h2>{t("auth.resetTitle")}</h2>
-            <p>{t("auth.resetHint")}</p>
+            <div className="auth-modal-heading">
+              <h2>{t("auth.resetTitle")}</h2>
+              <p>{t("auth.resetHint")}</p>
+            </div>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}

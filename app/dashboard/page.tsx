@@ -41,6 +41,7 @@ export default function ProjectListPage() {
   const [groups, setGroups] = useState<string[]>([DEFAULT_PROJECT_GROUP]);
   const [loaded, setLoaded] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const [profileName, setProfileName] = useState("");
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -76,6 +77,32 @@ export default function ProjectListPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setProfileName("");
+
+    async function loadProfileName() {
+      if (!session?.user.id) return;
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return;
+
+      const { data } = await supabase
+        .from("storyflow_profiles")
+        .select("display_name")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!cancelled && typeof data?.display_name === "string") {
+        setProfileName(data.display_name.trim());
+      }
+    }
+
+    void loadProfileName();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id]);
+
   function loadProjects(accessToken: string | null) {
     const localProjects = readProjectsFromStorage();
     setProjects(localProjects);
@@ -105,6 +132,14 @@ export default function ProjectListPage() {
         .filter((item) => item.projects.length > 0 || item.group === DEFAULT_PROJECT_GROUP),
     [groups, sortedProjects],
   );
+
+  const metadata = session?.user.user_metadata as Record<string, unknown> | undefined;
+  const metadataName = metadata?.display_name || metadata?.full_name || metadata?.name;
+  const accountName =
+    profileName ||
+    (typeof metadataName === "string" ? metadataName.trim() : "") ||
+    session?.user.email?.split("@")[0] ||
+    (isZh ? "作者" : "Writer");
 
   function openWizard(type: Extract<WorkflowType, "creation" | "continuation">) {
     setWizardError("");
@@ -192,7 +227,7 @@ export default function ProjectListPage() {
           <header className="dashboard-welcome">
             <div>
               <span>{t("dashboard.welcome.kicker")}</span>
-              <h2>{isZh ? "欢迎回来" : "Welcome back"}, {session?.user.email?.split("@")[0] || (isZh ? "作者" : "Writer")}.</h2>
+              <h2>{isZh ? "欢迎回来" : "Welcome back"}, {accountName}.</h2>
               <p>{t("dashboard.welcome.body")}</p>
             </div>
             <div className="dashboard-search" role="search">

@@ -106,6 +106,20 @@ const primaryEmotionMap: Record<string, string[]> = {
   "史诗 / 宿命": ["宏大", "悲壮", "神圣感", "命运感", "战争感", "终章感"],
 };
 
+const primaryEmotionOptions = [
+  { value: "快乐 / 轻松", labelEn: "Happy / Easy" },
+  { value: "悲伤 / 遗憾", labelEn: "Sad / Regretful" },
+  { value: "浪漫 / 甜蜜", labelEn: "Romantic / Sweet" },
+  { value: "愤怒 / 反击", labelEn: "Angry / Retaliatory" },
+  { value: "黑暗 / 神秘", labelEn: "Dark / Mysterious" },
+  { value: "治愈 / 温暖", labelEn: "Healing / Warm" },
+  { value: "热血 / 胜利", labelEn: "Heroic / Victorious" },
+  { value: "孤独 / 空旷", labelEn: "Lonely / Spacious" },
+  { value: "性感 / 迷离", labelEn: "Sensual / Hazy" },
+  { value: "讽刺 / 荒诞", labelEn: "Satirical / Absurd" },
+  { value: "史诗 / 宿命", labelEn: "Epic / Fated" },
+] satisfies Array<{ value: keyof typeof primaryEmotionMap; labelEn: string }>;
+
 const genreGroups = [
   { title: "Pop", options: ["Pop", "Alt-pop", "Indie Pop", "Synth-pop", "City Pop", "K-pop", "J-pop"] },
   { title: "R&B / Soul", options: ["R&B", "Soul", "Gospel", "Ballad"] },
@@ -691,7 +705,11 @@ export default function SongWorkbenchPage() {
                 value={form.primaryEmotion}
                 onChange={(event) => setForm((current) => ({ ...current, primaryEmotion: event.target.value, secondaryEmotions: [] }))}
               >
-                {Object.keys(primaryEmotionMap).map((option) => <option key={option}>{option}</option>)}
+                {primaryEmotionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {locale === "zh-CN" ? option.value : option.labelEn}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
