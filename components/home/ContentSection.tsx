@@ -39,6 +39,7 @@ export function ContentSection({
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const bgImage = isZh ? bgImageZh : bgImageEn;
+  const hasImage = bgImage.trim().startsWith("url(");
   const innerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,8 +61,8 @@ export function ContentSection({
   return (
     <section
       id={id}
-      className={`content-section align-${align}${lightBg ? " light-bg" : ""}`}
-      style={{ backgroundImage: bgImage }}
+      className={`content-section align-${align}${lightBg ? " light-bg" : ""}${hasImage ? " has-image" : ""}`}
+      style={hasImage ? undefined : { backgroundImage: bgImage }}
       data-bg-image={bgImage}
     >
       <div className="content-section-inner" ref={innerRef}>
@@ -75,6 +76,9 @@ export function ContentSection({
         )}
         {children}
       </div>
+      {hasImage ? (
+        <div className="content-section-media" style={{ backgroundImage: bgImage }} aria-hidden="true" />
+      ) : null}
     </section>
   );
 }

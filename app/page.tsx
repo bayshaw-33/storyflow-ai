@@ -53,7 +53,7 @@ export default function LandingPage() {
         titleEn="Short Drama · Music · Viral Video · Fiction"
         subtitleZh="所有创作类型，一个平台。AI 全程协作，从灵感到交付。"
         subtitleEn="Short drama, music, viral video, novels — all your creative work, one platform."
-        bgImageZh="url('/design/hero/section-1-zh.png')"
+        bgImageZh="url('/design/hero/section-1-ch.png')"
         bgImageEn="url('/design/hero/section-1-en.png')"
         align="left"
         lightBg={false}
@@ -66,8 +66,8 @@ export default function LandingPage() {
         titleEn="The AI Universe for Creators"
         subtitleZh="短剧、歌曲、爆款视频、小说——所有创作，一个平台。AI 全程协作，从灵感到交付。"
         subtitleEn="Short drama, music, viral video, novels — all your creative work, one platform."
-        bgImageZh="radial-gradient(ellipse at 60% 50%, #0d1a3a 0%, #060a14 100%)"
-        bgImageEn="radial-gradient(ellipse at 60% 50%, #0d1a3a 0%, #060a14 100%)"
+        bgImageZh="url('/design/hero/section-2-ch.png')"
+        bgImageEn="url('/design/hero/section-2-en.png')"
         align="left"
         lightBg={false}
       />
@@ -81,8 +81,8 @@ export default function LandingPage() {
         subtitleEn="Short Drama · Song Creation · Viral Video · Serialized Fiction"
         ctaLabel={isZh ? "开始创作" : "Start Creating"}
         ctaHref="/dashboard"
-        bgImageZh="radial-gradient(ellipse at 70% 40%, #0a1628 0%, #060a14 100%)"
-        bgImageEn="radial-gradient(ellipse at 70% 40%, #0a1628 0%, #060a14 100%)"
+        bgImageZh="url('/design/hero/section-3-ch.png')"
+        bgImageEn="url('/design/hero/section-3-en.png')"
         align="left"
         lightBg={false}
       />
@@ -96,8 +96,8 @@ export default function LandingPage() {
         subtitleEn="Modular layout, BYO API. PRO users own their entire creative environment."
         ctaLabel={isZh ? "了解 PRO" : "Learn PRO"}
         ctaHref="/subscription"
-        bgImageZh="radial-gradient(ellipse at 30% 60%, #0d1525 0%, #060a14 100%)"
-        bgImageEn="radial-gradient(ellipse at 30% 60%, #0d1525 0%, #060a14 100%)"
+        bgImageZh="url('/design/hero/section-4-ch.png')"
+        bgImageEn="url('/design/hero/section-4-en.png')"
         align="right"
         lightBg={false}
       />

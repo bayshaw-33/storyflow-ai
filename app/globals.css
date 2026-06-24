@@ -1050,6 +1050,10 @@ input:focus, textarea:focus, select:focus {
   background-color: #060a14;
   overflow: hidden;
 }
+.content-section.has-image {
+  background-image: none;
+  background-color: #050509;
+}
 .content-section-inner {
   position: relative;
   z-index: 2;
@@ -1066,6 +1070,17 @@ input:focus, textarea:focus, select:focus {
 .content-section.align-left .content-section-inner { margin-right: auto; }
 .content-section.align-right .content-section-inner { margin-left: auto; }
 .content-section.align-center .content-section-inner { margin: 0 auto; text-align: center; }
+.content-section.has-image .content-section-inner {
+  z-index: 2;
+}
+.content-section-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
 .content-section-kicker {
   font-size: 11px; font-weight: 600;
   letter-spacing: 0.12em; text-transform: uppercase;
