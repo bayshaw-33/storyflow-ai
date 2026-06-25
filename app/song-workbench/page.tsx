@@ -3,7 +3,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Copy } from "lucide-react";
+import { createProject, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 type SongProjectType =
@@ -76,6 +78,14 @@ type AuditResult = {
   status: AuditStatus;
   allowCopy: boolean;
   items: AuditItem[];
+};
+
+type SaveSongProjectOptions = {
+  silent?: boolean;
+  lyrics?: string;
+  stylePrompt?: string;
+  compositionPrompt?: string;
+  audit?: AuditResult | null;
 };
 
 const STORAGE_KEY = "kiikis-song-workbench-v1";
@@ -339,6 +349,10 @@ const i18n = {
     generate: "Generate idea",
     generating: "Generating",
     saveVersion: "Save version",
+    saving: "Saving",
+    saveToProjects: "Save to projects",
+    savedToProjects: "Saved to project list.",
+    saveToProjectsHint: "Saved songs appear on Dashboard and can be used as Universe sources.",
     copy: "Copy",
     lyrics: "Lyrics",
     stylePrompt: "Style prompt",
@@ -388,6 +402,10 @@ const i18n = {
     generate: "生成创意",
     generating: "生成中",
     saveVersion: "保存版本",
+    saving: "保存中",
+    saveToProjects: "保存到项目列表",
+    savedToProjects: "已保存到项目列表。",
+    saveToProjectsHint: "保存后会出现在工作台项目列表，也可作为 Universe 来源项目。",
     copy: "复制",
     lyrics: "歌词",
     stylePrompt: "风格提示词",
@@ -431,7 +449,9 @@ export default function SongWorkbenchPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [songProjectId, setSongProjectId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
   const [error, setError] = useState("");
+  const [saveStatus, setSaveStatus] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
   const [auditOpen, setAuditOpen] = useState(false);
   const [singerDraft, setSingerDraft] = useState<SingerProfile | null>(null);
@@ -576,13 +596,13 @@ export default function SongWorkbenchPage() {
       const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || "", selectedSingers);
       const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
       const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
-      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers);
+      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
       setLyrics(nextLyrics);
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
-      void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+      void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "AI generation failed.");
     } finally {
@@ -590,68 +610,62 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  async function saveVersion(changeType = "Manual save", summary = "Saved current workbench state.", nextLyrics = lyrics, nextStyle = stylePrompt, nextComposition = compositionPrompt, nextStatus = audit?.status || "pass") {
+  async function saveVersion(
+    changeType = "Manual save",
+    summary = "Saved current workbench state.",
+    nextLyrics = lyrics,
+    nextStyle = stylePrompt,
+    nextComposition = compositionPrompt,
+    nextAudit = audit,
+  ) {
     const version: SongVersion = {
       id: `song-version-${Date.now()}`,
       versionNumber: versions.length + 1,
       changeType,
       summary,
-      auditStatus: nextStatus,
+      auditStatus: nextAudit?.status || "pass",
       lyrics: nextLyrics,
       stylePrompt: nextStyle,
       compositionPrompt: nextComposition,
       createdAt: new Date().toISOString(),
     };
     setVersions((current) => [version, ...current]);
-    await syncSongProjectStub();
+    await saveSongProjectToList({
+      silent: true,
+      lyrics: nextLyrics,
+      stylePrompt: nextStyle,
+      compositionPrompt: nextComposition,
+      audit: nextAudit,
+    });
   }
 
-  async function syncSongProjectStub() {
-    if (!session?.user.id) return;
-
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    const title = form.title.trim() || "未命名歌曲";
-
+  async function saveSongProjectToList(options: SaveSongProjectOptions = {}) {
+    const project = buildSongProjectSnapshot(
+      songProjectId,
+      form,
+      options.lyrics ?? lyrics,
+      options.stylePrompt ?? stylePrompt,
+      options.compositionPrompt ?? compositionPrompt,
+      options.audit ?? audit,
+    );
+    setSavingProject(true);
+    setError("");
     try {
-      if (songProjectId) {
-        const { error: updateError } = await supabase
-          .from("storyflow_projects")
-          .update({
-            title,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", songProjectId)
-          .eq("user_id", session.user.id);
-
-        if (updateError) throw updateError;
-        return;
+      upsertProject(project);
+      setSongProjectId(project.id);
+      if (session?.access_token) {
+        await upsertProjectToSupabase(project, { accessToken: session.access_token });
       }
-
-      const { data, error: insertError } = await supabase
-        .from("storyflow_projects")
-        .insert({
-          user_id: session.user.id,
-          title,
-          workflow_type: "song",
-          market: "",
-          genre: "音乐",
-          language: "zh",
-          data: { songWorkbenchKey: STORAGE_KEY },
-        })
-        .select("id")
-        .single();
-
-      if (insertError) throw insertError;
-      if (data?.id) setSongProjectId(String(data.id));
+      if (!options.silent) setSaveStatus(text.savedToProjects);
     } catch {
-      setError(locale === "zh-CN" ? "歌曲项目已保存到本地，但同步到 Dashboard 失败。" : "Song saved locally, but Dashboard sync failed.");
+      setError(locale === "zh-CN" ? "歌曲项目已保存到本地，但同步到云端失败。" : "Song saved locally, but cloud sync failed.");
+    } finally {
+      setSavingProject(false);
     }
   }
 
   function runAudit() {
-    const nextAudit = auditLyrics(lyrics, stylePrompt, compositionPrompt, selectedSingers);
+    const nextAudit = auditLyrics(lyrics, stylePrompt, compositionPrompt, selectedSingers, form);
     setAudit(nextAudit);
     setAuditOpen(true);
   }
@@ -692,14 +706,14 @@ export default function SongWorkbenchPage() {
       const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || reviseLyrics(lyrics, instruction), selectedSingers);
       const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
       const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
-      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers);
+      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
       setLyrics(nextLyrics);
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
       setRevisionInstruction("");
-      await saveVersion("Revision", instruction, nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+      await saveVersion("Revision", instruction, nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
     } catch (revisionError) {
       setError(revisionError instanceof Error ? revisionError.message : "Revision failed.");
     } finally {
@@ -719,7 +733,7 @@ export default function SongWorkbenchPage() {
     setLyrics(version.lyrics);
     setStylePrompt(version.stylePrompt);
     setCompositionPrompt(version.compositionPrompt);
-    setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers));
+    setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers, form));
   }
 
   function openSingerEditor(singer?: SingerProfile) {
@@ -913,10 +927,16 @@ export default function SongWorkbenchPage() {
           <div className="dashboard-panel-head">
             <div>
               <span>{text.outputs}</span>
+              {saveStatus ? <small className="field-note">{saveStatus}</small> : <small className="field-note">{text.saveToProjectsHint}</small>}
             </div>
-            <button className="primary-button" type="submit" form="song-workbench-form" disabled={generating}>
-              {generating ? text.generating : text.generate}
-            </button>
+            <div className="header-actions">
+              <button className="secondary-button" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
+                {savingProject ? text.saving : text.saveToProjects}
+              </button>
+              <button className="primary-button" type="submit" form="song-workbench-form" disabled={generating}>
+                {generating ? text.generating : text.generate}
+              </button>
+            </div>
           </div>
           <div className="song-output-grid">
             <label className="song-output-card">
@@ -1071,6 +1091,75 @@ function buildSongRevisionInput(form: SongForm, instruction: string) {
     null,
     2,
   );
+}
+
+function buildSongProjectSnapshot(
+  existingId: string | null,
+  form: SongForm,
+  lyrics: string,
+  stylePrompt: string,
+  compositionPrompt: string,
+  audit: AuditResult | null,
+): DramaProject {
+  const now = new Date().toISOString();
+  const title = form.title.trim() || "未命名歌曲";
+  const genres = normalizedGenres(form);
+  const content = buildSongProjectMarkdown(form, lyrics, stylePrompt, compositionPrompt, audit);
+
+  return createProject({
+    id: existingId || `song-${crypto.randomUUID()}`,
+    workflowType: "song",
+    title,
+    market: "",
+    genre: genres.join(", ") || "音乐",
+    targetLanguage: form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage,
+    episodeCount: 1,
+    episodeDuration: "",
+    idea: form.concept,
+    brief: content,
+    finalScript: lyrics,
+    deliveryPackage: content,
+    status: lyrics.trim() || stylePrompt.trim() || compositionPrompt.trim() ? "ready" : "draft",
+    updatedAt: now,
+  });
+}
+
+function buildSongProjectMarkdown(
+  form: SongForm,
+  lyrics: string,
+  stylePrompt: string,
+  compositionPrompt: string,
+  audit: AuditResult | null,
+) {
+  const projectType = projectTypes.find((item) => item.value === form.projectType);
+  return [
+    `# ${form.title.trim() || "未命名歌曲"}`,
+    "",
+    "## 创作设定",
+    `- 项目类型：${projectType ? `${projectType.label} / ${projectType.labelEn}` : form.projectType}`,
+    `- 输出语言：${form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage}`,
+    `- 曲风：${normalizedGenres(form).join(", ") || "Not specified"}`,
+    `- 情绪：${form.primaryEmotion}`,
+    `- 乐器：${normalizedInstruments(form).join(", ") || "Not specified"}`,
+    `- 律动：${specifiedValue(form.groove) || "Not specified"}`,
+    `- 调性：${specifiedValue(form.key) || "Not specified"}`,
+    `- 结构：${specifiedValue(form.structure) || "Not specified"}`,
+    "",
+    "## 歌曲概念",
+    form.concept || "未填写",
+    "",
+    "## 歌词",
+    lyrics || "未生成",
+    "",
+    "## Style Prompt",
+    stylePrompt || "未生成",
+    "",
+    "## Composition Prompt",
+    compositionPrompt || "未生成",
+    "",
+    "## 歌词审查",
+    audit ? auditReportText(audit) : "未审查",
+  ].join("\n");
 }
 
 function auditSummary(audit: AuditResult) {
@@ -1259,18 +1348,44 @@ function trimPrompt(value: string, max: number) {
   return value.length <= max ? value : value.slice(0, max - 1).trimEnd();
 }
 
-function auditLyrics(lyrics: string, stylePrompt: string, compositionPrompt: string, singers: SingerProfile[]): AuditResult {
+function auditLyrics(
+  lyrics: string,
+  stylePrompt: string,
+  compositionPrompt: string,
+  singers: SingerProfile[],
+  form?: SongForm,
+): AuditResult {
   const items: AuditItem[] = [];
   const joined = `${lyrics}\n${stylePrompt}\n${compositionPrompt}`;
   const forbidden = singers.flatMap((singer) => singer.forbiddenOutputTerms).filter(Boolean);
+  const lyricLines = lyrics.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const uniqueLyricLines = new Set(lyricLines.map((line) => line.toLowerCase()));
+  const genres = form ? normalizedGenres(form) : [];
+  const instruments = form ? normalizedInstruments(form) : [];
+
+  if (!lyrics.trim()) {
+    items.push({
+      type: "missing_lyrics",
+      severity: "high",
+      message: "歌词为空，无法完成审查。",
+      suggestion: "先生成或粘贴完整歌词，再运行歌词审查。",
+    });
+  } else if (lyricLines.length < 8) {
+    items.push({
+      type: "lyrics_too_short",
+      severity: "medium",
+      message: "歌词行数偏少，可能不足以支撑完整歌曲结构。",
+      suggestion: "补足主歌、副歌和桥段，或把短视频歌曲明确写成 hook-first 结构。",
+    });
+  }
 
   for (const term of forbidden) {
     if (new RegExp(escapeRegExp(term), "i").test(joined)) {
       items.push({
         type: "artist_name_misuse",
         severity: "high",
-        message: `Output contains a forbidden reference artist term: ${term}.`,
-        suggestion: "Replace it with neutral vocal descriptors such as male vocal, female vocal, duet, harmony, or rap vocal.",
+        message: `输出中包含禁用的参考艺人或歌手词：${term}。`,
+        suggestion: "改成中性的声线描述，例如 male vocal、female vocal、duet、harmony 或 rap vocal。",
       });
     }
   }
@@ -1279,17 +1394,102 @@ function auditLyrics(lyrics: string, stylePrompt: string, compositionPrompt: str
     items.push({
       type: "quoted_or_dialogue_lyric",
       severity: "medium",
-      message: "Lyrics contain dialogue-style quoted speech.",
-      suggestion: "Rewrite as inner monologue or image-based narration instead of direct said/told phrasing.",
+      message: "歌词中出现对白式 said/told 表达。",
+      suggestion: "改写成内心独白或画面叙述，减少直接对白感。",
     });
   }
 
-  if (stylePrompt.length > 250) {
+  if (form?.lyricsMode !== "no_tags" && lyrics.trim() && !/\[(intro|verse|pre[-\s]?chorus|chorus|hook|bridge|outro|final chorus|主歌|副歌|桥段|间奏|尾奏)[^\]]*\]/i.test(lyrics)) {
+    items.push({
+      type: "missing_section_tags",
+      severity: form?.lyricsMode === "enhanced_lyrics" ? "medium" : "low",
+      message: "当前歌词缺少清晰段落标签。",
+      suggestion: "为 Intro、Verse、Pre-Chorus、Chorus、Bridge、Outro 添加段落标签，便于后续模型演唱和编曲。",
+    });
+  }
+
+  if (lyrics.trim() && !/(chorus|hook|副歌|钩子)/i.test(lyrics)) {
+    items.push({
+      type: "missing_hook",
+      severity: "medium",
+      message: "没有检测到明确的副歌或 hook。",
+      suggestion: "补一个可重复、可记忆的 Chorus/Hook，并让标题或核心意象在副歌中出现。",
+    });
+  }
+
+  const longLine = lyricLines.find((line) => line.length > 110);
+  if (longLine) {
+    items.push({
+      type: "line_too_long",
+      severity: "low",
+      message: "检测到过长歌词行，可能影响演唱断句。",
+      suggestion: `拆分这一行：${longLine.slice(0, 54)}...`,
+    });
+  }
+
+  if (lyricLines.length >= 8 && uniqueLyricLines.size / lyricLines.length < 0.6) {
+    items.push({
+      type: "over_repetition",
+      severity: "low",
+      message: "歌词重复比例偏高。",
+      suggestion: "保留副歌复现，但让主歌和桥段提供新的画面、动作或情绪推进。",
+    });
+  }
+
+  if (!stylePrompt.trim()) {
+    items.push({
+      type: "missing_style_prompt",
+      severity: "medium",
+      message: "Style Prompt 为空。",
+      suggestion: "补充曲风、情绪、声线、乐器和混音方向，便于音乐模型稳定生成。",
+    });
+  } else if (stylePrompt.length > 250) {
     items.push({
       type: "style_prompt_length",
       severity: "medium",
-      message: "Style Prompt is longer than the recommended hard limit.",
-      suggestion: "Reduce genre, vocal, instrument, and mix descriptors to the strongest terms.",
+      message: "Style Prompt 超过推荐长度。",
+      suggestion: "只保留最关键的曲风、声线、乐器和混音描述，避免堆叠过多形容词。",
+    });
+  } else if (stylePrompt.trim().length < 24) {
+    items.push({
+      type: "style_prompt_too_sparse",
+      severity: "low",
+      message: "Style Prompt 信息偏少。",
+      suggestion: "至少写清曲风、主情绪、核心乐器和制作质感。",
+    });
+  }
+
+  if (genres.length > 0 && !genres.some((genre) => new RegExp(escapeRegExp(genre), "i").test(stylePrompt))) {
+    items.push({
+      type: "style_genre_missing",
+      severity: "low",
+      message: "Style Prompt 没有包含已选择的目标曲风。",
+      suggestion: `把 ${genres.slice(0, 3).join(", ")} 写入 Style Prompt，保持设定和输出一致。`,
+    });
+  }
+
+  if (instruments.length > 0 && !instruments.some((instrument) => new RegExp(escapeRegExp(instrument), "i").test(`${stylePrompt}\n${compositionPrompt}`))) {
+    items.push({
+      type: "instrument_missing",
+      severity: "low",
+      message: "提示词中没有体现已选择的乐器。",
+      suggestion: `把 ${instruments.slice(0, 4).join(", ")} 写入 Style 或 Composition Prompt。`,
+    });
+  }
+
+  if (!compositionPrompt.trim()) {
+    items.push({
+      type: "missing_composition_prompt",
+      severity: "medium",
+      message: "Composition Prompt 为空。",
+      suggestion: "补充 intro、verse、chorus、bridge、outro 的编曲推进方式。",
+    });
+  } else if (!/(intro|verse|pre[-\s]?chorus|chorus|hook|bridge|outro|主歌|副歌|桥段)/i.test(compositionPrompt)) {
+    items.push({
+      type: "composition_structure_missing",
+      severity: "low",
+      message: "Composition Prompt 缺少结构推进信息。",
+      suggestion: "明确每个段落的能量变化，例如主歌收束、副歌抬升、桥段抽离、最终副歌加厚。",
     });
   }
 

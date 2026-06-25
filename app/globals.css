@@ -2571,3 +2571,65 @@ textarea.script-editor {
   border-color: rgba(111, 168, 255, 0.9);
   box-shadow: 0 0 16px rgba(111, 168, 255, 0.35);
 }
+
+.universe-empty-panel {
+  position: absolute;
+  left: clamp(24px, 8vw, 112px);
+  bottom: clamp(28px, 9vh, 96px);
+  z-index: 2;
+  width: min(440px, calc(100vw - 48px));
+  padding: var(--space-5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  background: rgba(12, 13, 18, 0.78);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+.universe-empty-panel span {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.universe-empty-panel h1 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 24px;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+.universe-empty-panel p {
+  margin: var(--space-3) 0 0;
+  color: var(--ink-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.universe-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.universe-empty-actions .primary-button,
+.universe-empty-actions .secondary-button {
+  min-height: 40px;
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .universe-empty-panel {
+    left: 16px;
+    right: 16px;
+    bottom: 20px;
+    width: auto;
+    padding: var(--space-4);
+  }
+
+  .universe-empty-panel h1 {
+    font-size: 20px;
+  }
+}

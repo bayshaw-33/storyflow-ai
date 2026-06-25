@@ -47,11 +47,6 @@ export default function UniversesPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
-  // PRICING → access control: Universe graph requires the PRO layer. No bypass.
-  useEffect(() => {
-    if (os.planReady && !os.access.universe) router.replace("/subscription");
-  }, [os.planReady, os.access.universe, router]);
-
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
@@ -136,8 +131,7 @@ export default function UniversesPage() {
     }
   }
 
-  if (os.planReady && !os.access.universe) return null;
-
+  const noUniverseAccess = os.planReady && !os.access.universe;
   const activeCount = universes.filter((u) => u.status === "active").length;
 
   return (
@@ -159,12 +153,54 @@ export default function UniversesPage() {
             <span>{isZh ? "活跃" : "active"}</span>
           </strong>
         </div>
-        <button className="secondary-button" onClick={openCreate} disabled={projects.length === 0}>
+        <button className="secondary-button" onClick={openCreate} disabled={noUniverseAccess || projects.length === 0}>
           {isZh ? "从项目创建宇宙" : "Create Universe"}
         </button>
       </div>
 
       <UniverseGraph graph={graph} />
+
+      {noUniverseAccess ? (
+        <section className="universe-empty-panel">
+          <span>{isZh ? "权限未开启" : "Access required"}</span>
+          <h1>{isZh ? "宇宙功能暂未对当前账号开放" : "Universe is not enabled for this account"}</h1>
+          <p>
+            {isZh
+              ? "页面现在会保留入口和说明，不再空白。升级或开通后，可以从项目列表创建宇宙，并把角色、地点、关系和规则先进入 Inbox 再确认入 canon。"
+              : "The entry now stays visible instead of rendering blank. Once enabled, create a Universe from a project and review extracted characters, places, relations, and rules through Inbox before canon."}
+          </p>
+          <div className="universe-empty-actions">
+            <Link className="primary-button" href="/subscription">
+              {isZh ? "查看套餐" : "View plans"}
+            </Link>
+            <Link className="secondary-button" href="/dashboard">
+              {isZh ? "返回工作台" : "Back to dashboard"}
+            </Link>
+          </div>
+        </section>
+      ) : universes.length === 0 ? (
+        <section className="universe-empty-panel">
+          <span>{isZh ? "尚未创建宇宙" : "No Universe yet"}</span>
+          <h1>{isZh ? "先从一个项目建立宇宙" : "Start with a saved project"}</h1>
+          <p>
+            {projects.length === 0
+              ? isZh
+                ? "项目列表为空。先在歌曲创作或短剧工作台保存一个项目，再回到这里创建宇宙。"
+                : "Your project list is empty. Save a song or drama project first, then come back to create a Universe."
+              : isZh
+                ? "选择一个项目作为来源，宇宙会继承项目标题、类型、语言和市场设定。后续角色、地点、关系和规则应先进入 Inbox，由你确认后再写入 canon。"
+                : "Pick a source project. The Universe will inherit its title, genre, language, and market settings. Characters, places, relations, and rules should enter Inbox first, then canon after review."}
+          </p>
+          <div className="universe-empty-actions">
+            <button className="primary-button" onClick={openCreate} disabled={projects.length === 0}>
+              {isZh ? "从项目创建宇宙" : "Create from project"}
+            </button>
+            <Link className="secondary-button" href="/dashboard">
+              {isZh ? "查看项目列表" : "Open projects"}
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       {createOpen ? (
         <div className="modal-backdrop">
