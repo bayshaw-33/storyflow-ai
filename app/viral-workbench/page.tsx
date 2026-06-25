@@ -6,7 +6,9 @@ import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, Download, Loader2, Save, UploadCloud } from "lucide-react";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { createProject, upsertProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { upsertProjectToSupabase } from "@/lib/supabase/projects";
 
 type ViralAnalysis = {
   f1_hook?: {
@@ -49,6 +51,7 @@ type ViralVersion = {
 type TaskStatus = "idle" | "queued" | "running" | "completed" | "failed";
 
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+const VIRAL_BUCKET = "viral-assets";
 const copy = {
   zh: {
     back: "返回工作台",
@@ -277,15 +280,40 @@ export default function ViralWorkbenchPage() {
     setUploading(true);
     setStatusText(ui.uploadProgress);
     try {
-      const formData = new FormData();
-      formData.append("video", file);
       const response = await fetch("/api/viral/upload", {
         method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type || "application/octet-stream",
+          fileSize: file.size,
+        }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse<{
+        success?: boolean;
+        error?: string;
+        projectId?: string;
+        videoPath?: string;
+        uploadToken?: string;
+      }>(response);
       if (!response.ok || !payload.success) throw new Error(payload.error || (language === "zh" ? "视频上传失败。" : "Video upload failed."));
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase || !payload.videoPath || !payload.uploadToken || !payload.projectId) {
+        throw new Error(language === "zh" ? "上传凭证无效，请重新上传。" : "Invalid upload token. Please upload again.");
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from(VIRAL_BUCKET)
+        .uploadToSignedUrl(payload.videoPath, payload.uploadToken, file, {
+          contentType: file.type || "application/octet-stream",
+        });
+
+      if (uploadError) throw new Error(uploadError.message || (language === "zh" ? "视频上传失败。" : "Video upload failed."));
+
       setProjectId(payload.projectId);
       setVideoPath(payload.videoPath);
       await createViralProjectStub(payload.projectId, file.name);
@@ -299,52 +327,47 @@ export default function ViralWorkbenchPage() {
   }
 
   async function createViralProjectStub(viralProjectId: string, fileName: string) {
-    if (!session?.user.id) return;
-
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
+    if (!session?.access_token) return;
 
     const title = fileName.replace(/\.[^/.]+$/, "") || (language === "zh" ? "未命名爆款创作" : "Untitled viral creation");
     try {
-      const { data, error: insertError } = await supabase
-        .from("storyflow_projects")
-        .insert({
-          user_id: session.user.id,
-          title,
-          workflow_type: "viral",
-          market: "",
-          genre: "爆款视频",
-          language: "zh",
-          data: { viralProjectId },
-        })
-        .select("id")
-        .single();
-
-      if (insertError) throw insertError;
-      if (data?.id) setViralStubProjectId(String(data.id));
+      const dashboardProject = createProject({
+        id: `viral-${viralProjectId}`,
+        workflowType: "viral",
+        title,
+        market: "",
+        genre: "爆款视频",
+        targetLanguage: "中文",
+        episodeCount: 1,
+        episodeDuration: "1 分钟",
+        idea: `源视频：${fileName}`,
+      });
+      upsertProject(dashboardProject);
+      await upsertProjectToSupabase(dashboardProject, { accessToken: session.access_token });
+      setViralStubProjectId(dashboardProject.id);
     } catch {
       setError(language === "zh" ? "视频已上传，但同步到 Dashboard 失败。" : "Video uploaded, but Dashboard sync failed.");
     }
   }
 
   async function updateViralProjectStub(analysis: ViralAnalysis) {
-    if (!session?.user.id || !viralStubProjectId) return;
-
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
+    if (!session?.access_token || !viralStubProjectId) return;
 
     try {
       const inferredTitle = inferViralTitle(analysis, videoFile?.name || "");
-      const { error: updateError } = await supabase
-        .from("storyflow_projects")
-        .update({
-          title: inferredTitle,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", viralStubProjectId)
-        .eq("user_id", session.user.id);
-
-      if (updateError) throw updateError;
+      const dashboardProject = createProject({
+        id: viralStubProjectId,
+        workflowType: "viral",
+        title: inferredTitle,
+        market: "",
+        genre: "爆款视频",
+        targetLanguage: "中文",
+        episodeCount: 1,
+        episodeDuration: "1 分钟",
+        idea: `源视频：${videoFile?.name || inferredTitle}`,
+      });
+      upsertProject(dashboardProject);
+      await upsertProjectToSupabase(dashboardProject, { accessToken: session.access_token });
     } catch {
       setError(language === "zh" ? "分析已完成，但 Dashboard 标题同步失败。" : "Analysis complete, but Dashboard title sync failed.");
     }
@@ -363,7 +386,7 @@ export default function ViralWorkbenchPage() {
     const formData = new FormData();
     formData.append("file", file);
     const response = await fetch("/api/files/parse", { method: "POST", body: formData });
-    const payload = await response.json();
+    const payload = await readJsonResponse<{ success?: boolean; error?: string; fileName?: string; text?: string }>(response);
     if (!response.ok || !payload.success) {
       setError(payload.error || (language === "zh" ? "附件解析失败。" : "Attachment parsing failed."));
       return;
@@ -394,10 +417,10 @@ export default function ViralWorkbenchPage() {
         },
         body: JSON.stringify({ projectId }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; analysis?: ViralAnalysis }>(response);
       if (!response.ok || !payload.success) throw new Error(payload.error || (language === "zh" ? "分析失败。" : "Analysis failed."));
-      setAnalysisResult(payload.analysis);
-      await updateViralProjectStub(payload.analysis);
+      setAnalysisResult(payload.analysis || null);
+      if (payload.analysis) await updateViralProjectStub(payload.analysis);
       setStatusText(ui.analysisDone);
       setTaskStatus("completed");
     } catch (analysisError) {
@@ -436,9 +459,9 @@ export default function ViralWorkbenchPage() {
         },
         body: JSON.stringify({ projectId, rewriteInput: input }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; remake?: string; remakeMarkdown?: string }>(response);
       if (!response.ok || !payload.success) throw new Error(payload.error || (language === "zh" ? "改写失败。" : "Remake failed."));
-      setRemakeResult(payload.remakeMarkdown || payload.remake);
+      setRemakeResult(payload.remakeMarkdown || payload.remake || null);
       setStatusText(ui.remakeDone);
       setTaskStatus("completed");
     } catch (remakeError) {
@@ -470,7 +493,7 @@ export default function ViralWorkbenchPage() {
           content: markdown,
         }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; version?: ViralVersion }>(response);
       if (!response.ok || !payload.success) throw new Error(payload.error || (language === "zh" ? "保存版本失败。" : "Failed to save version."));
       setStatusText(ui.versionSaved);
       await loadVersions();
@@ -486,7 +509,7 @@ export default function ViralWorkbenchPage() {
     const response = await fetch(`/api/viral/save-version?projectId=${encodeURIComponent(projectId)}`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
-    const payload = await response.json();
+    const payload = await readJsonResponse<{ success?: boolean; error?: string; versions?: ViralVersion[] }>(response);
     if (response.ok && payload.success) setVersions(payload.versions || []);
   }
 
@@ -757,6 +780,17 @@ function inferViralTitle(analysis: ViralAnalysis, fileName: string) {
   const formula = analysis.f5_memory?.formula?.trim();
   if (formula) return formula.length > 48 ? `${formula.slice(0, 48)}...` : formula;
   return fileName.replace(/\.[^/.]+$/, "") || "未命名爆款创作";
+}
+
+async function readJsonResponse<T extends { error?: string }>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text) return {} as T;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return { error: text.slice(0, 240) } as T;
+  }
 }
 
 function formatBytes(bytes: number) {

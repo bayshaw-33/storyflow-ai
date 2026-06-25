@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, Plus } from "lucide-react";
+import { Copy } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
@@ -154,7 +154,38 @@ const instrumentGroups = [
   { title: "Texture / Synth", options: ["ambient textures", "vinyl noise", "analog synth", "arpeggiator", "glitch effects", "vocoder"] },
 ];
 const instrumentOptions = instrumentGroups.flatMap((group) => group.options);
-const structureOptions = ["Standard song structure", "Short-video hook first", "OST gradual build", "BGM light-lyrics structure", "Rap + Chorus structure", "Duet structure", "Ensemble structure"];
+const structureOptions = ["Not specified", "Standard song structure", "Short-video hook first", "OST gradual build", "BGM light-lyrics structure", "Rap + Chorus structure", "Duet structure", "Ensemble structure"];
+const genreInstrumentPresets: Record<string, string[]> = {
+  Pop: ["piano", "synth bass", "soft drums"],
+  "Alt-pop": ["electric piano", "synth bass", "analog synth"],
+  "Indie Pop": ["electric piano", "warm bass guitar", "soft drums"],
+  "Synth-pop": ["analog synth", "synth bass", "arpeggiator"],
+  "City Pop": ["Rhodes", "warm bass guitar", "clean electric guitar"],
+  "K-pop": ["synth bass", "trap drums", "analog synth"],
+  "J-pop": ["piano", "clean electric guitar", "live drums"],
+  "R&B": ["Rhodes", "808 bass", "soft drums"],
+  Soul: ["Rhodes", "warm bass guitar", "choir"],
+  Gospel: ["piano", "choir", "live drums"],
+  Ballad: ["piano", "strings", "soft drums"],
+  "Hip-hop": ["808 bass", "trap drums", "electric piano"],
+  Trap: ["808 bass", "trap drums", "glitch effects"],
+  "Lo-fi": ["electric piano", "lo-fi drums", "vinyl noise"],
+  Hyperpop: ["synth bass", "glitch effects", "vocoder"],
+  EDM: ["synth bass", "analog synth", "arpeggiator"],
+  House: ["synth bass", "soft drums", "electric piano"],
+  Synthwave: ["analog synth", "synth bass", "arpeggiator"],
+  Dancehall: ["808 bass", "reggae offbeat guitar", "soft drums"],
+  Rock: ["distorted electric guitar", "warm bass guitar", "live drums"],
+  "Pop Rock": ["clean electric guitar", "warm bass guitar", "live drums"],
+  "Folk Pop": ["acoustic guitar", "warm bass guitar", "soft drums"],
+  Country: ["acoustic guitar", "clean electric guitar", "warm bass guitar"],
+  Afrobeats: ["synth bass", "soft drums", "clean electric guitar"],
+  "Latin Pop": ["acoustic guitar", "warm bass guitar", "soft drums"],
+  Reggae: ["reggae offbeat guitar", "warm bass guitar", "soft drums"],
+  Cinematic: ["strings", "choir", "pads"],
+  Musical: ["piano", "strings", "choir"],
+  "Dark Pop": ["synth bass", "pads", "ambient textures"],
+};
 
 const defaultSingers: SingerProfile[] = [
   {
@@ -237,11 +268,19 @@ function formatSingerProfile(singer: SingerProfile) {
 }
 
 function normalizeStoredForm(value: SongForm) {
+  const normalizedStructure = value.structure === ["Standard Su", "no song structure"].join("")
+    ? "Standard song structure"
+    : value.structure;
+
   return {
     ...value,
-    structure: value.structure === ["Standard Su", "no song structure"].join("") ? "Standard song structure" : value.structure,
     lyricsMode: (value.lyricsMode as string) === ["su", "no_enhanced"].join("") ? "enhanced_lyrics" : value.lyricsMode,
     primaryEmotion: value.primaryEmotion === ["燃", " / 胜利"].join("") ? "热血 / 胜利" : value.primaryEmotion,
+    groove: value.groove === "mid-tempo pop, 76-95 BPM" ? "Not specified" : value.groove,
+    key: value.key === "G minor" ? "Not specified" : value.key,
+    instruments: withGenreInstrumentDefaults(value.genres || [], value.instruments || []),
+    structure: normalizedStructure === "Standard song structure" ? "Not specified" : normalizedStructure,
+    selectedSingerIds: [],
     secondaryEmotions: [],
   };
 }
@@ -256,12 +295,12 @@ const initialForm: SongForm = {
   secondaryEmotions: [],
   genres: ["Lo-fi", "Indie Pop", "Pop Rock"],
   customGenre: "",
-  selectedSingerIds: ["dry-sarcastic-male"],
-  groove: "mid-tempo pop, 76-95 BPM",
-  key: "G minor",
-  instruments: ["electric piano", "fuzzy bassline", "lo-fi drums"],
+  selectedSingerIds: [],
+  groove: "Not specified",
+  key: "Not specified",
+  instruments: withGenreInstrumentDefaults(["Lo-fi", "Indie Pop", "Pop Rock"], ["electric piano", "fuzzy bassline", "lo-fi drums"]),
   customInstrument: "",
-  structure: "Standard song structure",
+  structure: "Not specified",
   lyricsMode: "enhanced_lyrics",
 };
 
@@ -321,7 +360,7 @@ const i18n = {
     fromReference: "Generate safe tag from reference",
     referencePlaceholder: "Reference artist name, used internally only",
     add: "Add",
-    required: "Please fill title, concept, at least one genre, and at least one singer tag.",
+    required: "Please fill title, concept, and at least one genre.",
     signInRequired: "Please sign in before using AI generation.",
     noVersions: "No versions yet.",
     auditPass: "Audit before copying lyrics.",
@@ -370,7 +409,7 @@ const i18n = {
     fromReference: "通过对标歌手生成安全标签",
     referencePlaceholder: "对标歌手名，仅内部理解使用",
     add: "添加",
-    required: "请填写标题、歌曲概念，并至少选择一个曲风和一个歌手标签。",
+    required: "请填写标题、歌曲概念，并至少选择一个曲风。",
     signInRequired: "请先登录后再调用 AI 生成。",
     noVersions: "暂无版本。",
     auditPass: "复制歌词前建议先审查。",
@@ -456,7 +495,6 @@ export default function SongWorkbenchPage() {
     () => uniqueSingerProfiles(singers).filter((singer) => form.selectedSingerIds.includes(singer.id)),
     [form.selectedSingerIds, singers],
   );
-  const singerOptions = useMemo(() => uniqueSingerProfiles(singers), [singers]);
 
   const canCopyLyrics = !audit || audit.allowCopy;
 
@@ -477,9 +515,26 @@ export default function SongWorkbenchPage() {
     });
   }
 
+  function updateGenreSelection(value: string, checked: boolean) {
+    setForm((current) => {
+      const nextGenres = checked
+        ? Array.from(new Set([...current.genres, value]))
+        : current.genres.filter((item) => item !== value);
+      const nextInstruments = checked
+        ? Array.from(new Set([...current.instruments, ...recommendedInstrumentsForGenre(value)]))
+        : current.instruments;
+
+      return {
+        ...current,
+        genres: nextGenres,
+        instruments: nextInstruments,
+      };
+    });
+  }
+
   function validateForm() {
     const genres = normalizedGenres(form);
-    return Boolean(form.title.trim() && form.concept.trim() && genres.length > 0 && selectedSingers.length > 0);
+    return Boolean(form.title.trim() && form.concept.trim() && genres.length > 0);
   }
 
   async function generateAll(event?: FormEvent<HTMLFormElement>) {
@@ -514,7 +569,7 @@ export default function SongWorkbenchPage() {
           ].filter(Boolean).join("\n\n"),
         }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI generation failed.");
 
       const parsed = parseSongGeneration(payload.output || "");
@@ -601,15 +656,55 @@ export default function SongWorkbenchPage() {
     setAuditOpen(true);
   }
 
-  function applyRevision() {
+  async function applyRevision() {
     const instruction = revisionInstruction.trim();
     if (!instruction || !lyrics.trim()) return;
-    const nextLyrics = reviseLyrics(lyrics, instruction);
-    const nextAudit = auditLyrics(nextLyrics, stylePrompt, compositionPrompt, selectedSingers);
-    setLyrics(nextLyrics);
-    setAudit(nextAudit);
-    setRevisionInstruction("");
-    void saveVersion("Revision", instruction, nextLyrics, stylePrompt, compositionPrompt, nextAudit.status);
+    if (!session?.access_token) {
+      setError(text.signInRequired);
+      return;
+    }
+
+    setGenerating(true);
+    setError("");
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          taskType: "song_workbench",
+          projectTitle: form.title || "Song revision",
+          genre: normalizedGenres(form).join(", "),
+          input: buildSongRevisionInput(form, instruction),
+          context: [
+            `Current lyrics:\n${lyrics}`,
+            stylePrompt.trim() ? `Current style prompt:\n${stylePrompt}` : "",
+            compositionPrompt.trim() ? `Current composition prompt:\n${compositionPrompt}` : "",
+          ].filter(Boolean).join("\n\n"),
+        }),
+      });
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "Revision failed.");
+
+      const parsed = parseSongGeneration(payload.output || "");
+      const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || reviseLyrics(lyrics, instruction), selectedSingers);
+      const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
+      const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
+      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers);
+
+      setLyrics(nextLyrics);
+      setStylePrompt(nextStylePrompt);
+      setCompositionPrompt(nextCompositionPrompt);
+      setAudit(nextAudit);
+      setRevisionInstruction("");
+      await saveVersion("Revision", instruction, nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit.status);
+    } catch (revisionError) {
+      setError(revisionError instanceof Error ? revisionError.message : "Revision failed.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function copyText(value: string, guarded = false) {
@@ -736,7 +831,8 @@ export default function SongWorkbenchPage() {
                         <input
                           type="checkbox"
                           checked={form.genres.includes(option)}
-                          onChange={() => toggleListValue("genres", option)}
+                          onClick={(event) => updateGenreSelection(option, event.currentTarget.checked)}
+                          onChange={(event) => updateGenreSelection(option, event.target.checked)}
                         />
                         {option}
                       </label>
@@ -751,32 +847,6 @@ export default function SongWorkbenchPage() {
               />
             </div>
           </details>
-
-          <section className="song-control-group">
-            <div className="song-section-head">
-              <span>{text.singerLibrary}</span>
-              <button className="icon-button" type="button" title={text.newSinger} onClick={() => openSingerEditor()}>
-                <Plus size={15} />
-              </button>
-            </div>
-            <div className="song-singer-grid">
-              {singerOptions.map((singer) => (
-                <article className="song-singer-card" key={singer.id}>
-                  <input
-                    type="checkbox"
-                    aria-label={singer.displayName}
-                    checked={form.selectedSingerIds.includes(singer.id)}
-                    onChange={() => toggleListValue("selectedSingerIds", singer.id)}
-                  />
-                  <button type="button" onClick={() => openSingerEditor(singer)}>
-                    <strong>{singer.displayName}</strong>
-                    <small>{singer.gender} / {singer.language.join(", ")}</small>
-                    <p>{singer.safePromptTerms.join(", ")}</p>
-                  </button>
-                </article>
-              ))}
-            </div>
-          </section>
 
           <details className="song-control-group">
             <summary>{locale === "zh-CN" ? "乐器 / 编曲元素" : "Instruments / Arrangement"}</summary>
@@ -884,12 +954,27 @@ export default function SongWorkbenchPage() {
               <button className="secondary-button" type="button" onClick={runAudit}>{text.audit}</button>
             </div>
             <p className="subtle">{audit ? auditSummary(audit) : text.auditPass}</p>
+            {audit ? (
+              <div className="song-audit-inline">
+                {audit.items.length === 0 ? (
+                  <p>{auditReportText(audit)}</p>
+                ) : (
+                  audit.items.map((item) => (
+                    <article key={`${item.type}-${item.message}`}>
+                      <strong>{item.severity.toUpperCase()} · {item.type}</strong>
+                      <p>{item.message}</p>
+                      <small>{item.suggestion}</small>
+                    </article>
+                  ))
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div className="song-tool-section">
             <div className="song-tool-head">
               <span>{text.revision}</span>
-              <button className="primary-button" type="button" onClick={applyRevision}>{text.revise}</button>
+              <button className="primary-button" type="button" onClick={applyRevision} disabled={generating || !revisionInstruction.trim() || !lyrics.trim()}>{generating ? text.generating : text.revise}</button>
             </div>
             <label>
               {locale === "zh-CN" ? "指令" : "Instruction"}
@@ -928,65 +1013,6 @@ export default function SongWorkbenchPage() {
           </div>
         </div>
       ) : null}
-
-      {singerDraft ? (
-        <div className="modal-backdrop">
-          <div className="modal song-singer-modal">
-            <div className="dashboard-panel-head">
-              <div>
-                <span>{text.singerDetails}</span>
-                <h2>{singerDraft.displayName || text.newSinger}</h2>
-              </div>
-              <button className="secondary-button" type="button" onClick={() => copyText(formatSingerProfile(singerDraft))}>
-                <Copy size={15} /> {text.copy}
-              </button>
-            </div>
-            <div className="song-singer-form">
-              <label>
-                {text.singers}
-                <input value={singerDraft.displayName} onChange={(event) => updateSingerDraft("displayName", event.target.value)} autoFocus />
-              </label>
-              <label>
-                {text.gender}
-                <input value={singerDraft.gender} onChange={(event) => updateSingerDraft("gender", event.target.value)} />
-              </label>
-              <label>
-                {text.language}
-                <input value={singerDraft.language.join(", ")} onChange={(event) => updateSingerDraft("language", splitCustom(event.target.value))} />
-              </label>
-              <label>
-                {text.genres}
-                <input value={singerDraft.genres.join(", ")} onChange={(event) => updateSingerDraft("genres", splitCustom(event.target.value))} />
-              </label>
-              <label>
-                {text.voiceTexture}
-                <input value={singerDraft.voiceTexture.join(", ")} onChange={(event) => updateSingerDraft("voiceTexture", splitCustom(event.target.value))} />
-              </label>
-              <label>
-                {text.delivery}
-                <input value={singerDraft.delivery.join(", ")} onChange={(event) => updateSingerDraft("delivery", splitCustom(event.target.value))} />
-              </label>
-              <label>
-                {text.safePromptTerms}
-                <textarea value={singerDraft.safePromptTerms.join(", ")} onChange={(event) => updateSingerDraft("safePromptTerms", splitCustom(event.target.value))} />
-              </label>
-              <label>
-                {text.forbiddenOutputTerms}
-                <textarea value={singerDraft.forbiddenOutputTerms.join(", ")} onChange={(event) => updateSingerDraft("forbiddenOutputTerms", splitCustom(event.target.value))} placeholder={text.referenceArtist} />
-              </label>
-              <label className="song-singer-form-full">
-                {text.notes}
-                <textarea value={singerDraft.notes} onChange={(event) => updateSingerDraft("notes", event.target.value)} />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button className="secondary-button" type="button" onClick={() => setSingerDraft(null)}>{text.close}</button>
-              <button className="secondary-button" type="button" onClick={deleteSingerDraft}>{text.delete}</button>
-              <button className="primary-button" type="button" onClick={saveSingerDraft}>{text.save}</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }
@@ -1006,17 +1032,41 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[]) {
       primaryEmotion: form.primaryEmotion,
       secondaryEmotions: form.secondaryEmotions,
       genres: normalizedGenres(form),
-      singers: singers.map((singer) => ({
-        displayName: singer.displayName,
-        safePromptTerms: singer.safePromptTerms,
-        forbiddenOutputTerms: singer.forbiddenOutputTerms,
-        voiceTexture: singer.voiceTexture,
-        delivery: singer.delivery,
-      })),
-      groove: form.groove,
-      key: form.key,
+      vocalDirection: singers.length
+        ? singers.map((singer) => ({
+            displayName: singer.displayName,
+            safePromptTerms: singer.safePromptTerms,
+            forbiddenOutputTerms: singer.forbiddenOutputTerms,
+            voiceTexture: singer.voiceTexture,
+            delivery: singer.delivery,
+          }))
+        : "not specified",
+      groove: specifiedValue(form.groove) || "not specified",
+      key: specifiedValue(form.key) || "not specified",
       instruments: normalizedInstruments(form),
-      structure: form.structure,
+      structure: specifiedValue(form.structure) || "not specified",
+    },
+    null,
+    2,
+  );
+}
+
+function buildSongRevisionInput(form: SongForm, instruction: string) {
+  return JSON.stringify(
+    {
+      mode: "revise_existing_song",
+      revisionInstruction: instruction,
+      requiredBehavior: "Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.",
+      title: form.title,
+      outputLanguage: form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage,
+      lyricsMode: form.lyricsMode,
+      concept: form.concept,
+      primaryEmotion: form.primaryEmotion,
+      genres: normalizedGenres(form),
+      instruments: normalizedInstruments(form),
+      groove: specifiedValue(form.groove) || "not specified",
+      key: specifiedValue(form.key) || "not specified",
+      structure: specifiedValue(form.structure) || "not specified",
     },
     null,
     2,
@@ -1061,6 +1111,18 @@ function normalizedInstruments(form: SongForm) {
   return [...form.instruments, ...splitCustom(form.customInstrument)].filter(Boolean);
 }
 
+function recommendedInstrumentsForGenre(genre: string) {
+  return genreInstrumentPresets[genre]?.filter((item) => instrumentOptions.includes(item)) || [];
+}
+
+function withGenreInstrumentDefaults(genres: string[], instruments: string[]) {
+  return Array.from(new Set([...instruments, ...genres.flatMap(recommendedInstrumentsForGenre)]));
+}
+
+function specifiedValue(value: string) {
+  return value && value !== "Not specified" ? value : "";
+}
+
 function splitCustom(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
@@ -1074,7 +1136,7 @@ function buildLyrics(form: SongForm, singers: SingerProfile[]) {
   const hook = buildHookLine(form);
 
   const enhanced = `[Intro - 3 seconds]
-(${form.groove}; ${normalizedInstruments(form).slice(0, 4).join(", ")} enters with a clear motif)
+(${[specifiedValue(form.groove), normalizedInstruments(form).slice(0, 4).join(", ") || "lean arrangement"].filter(Boolean).join("; ")} enters with a clear motif)
 
 [Verse 1 - ${singerCue}]
 The room keeps counting every sign
@@ -1125,13 +1187,32 @@ function buildStylePrompt(form: SongForm, singers: SingerProfile[]) {
   const genres = normalizedGenres(form).slice(0, 4).join(", ");
   const singerTerms = singers.flatMap((singer) => singer.safePromptTerms).slice(0, 2).join(", ");
   const instruments = normalizedInstruments(form).slice(0, 4).join(", ");
-  const prompt = `${genres}, ${form.primaryEmotion} song, ${singerTerms}, ${instruments}, ${form.groove}, ${form.key}, hook-driven chorus, clean modern production-ready mix`;
+  const prompt = [
+    genres,
+    `${form.primaryEmotion} song`,
+    singerTerms,
+    instruments,
+    specifiedValue(form.groove),
+    specifiedValue(form.key),
+    "hook-driven chorus",
+    "clean modern production-ready mix",
+  ].filter(Boolean).join(", ");
   return trimPrompt(sanitizeForbidden(prompt, singers), 250);
 }
 
 function buildCompositionPrompt(form: SongForm, singers: SingerProfile[]) {
-  const instruments = normalizedInstruments(form).slice(0, 6).join(", ");
-  const prompt = `Start with a concise motif, build around ${instruments}, keep verses lean, lift the pre-chorus, make the chorus repeatable, use ${form.groove}, ${form.key}, then drop into a bridge before a fuller final chorus and clean outro.`;
+  const instruments = normalizedInstruments(form).slice(0, 6).join(", ") || "a lean arrangement";
+  const groove = specifiedValue(form.groove);
+  const key = specifiedValue(form.key);
+  const prompt = [
+    `Start with a concise motif, build around ${instruments}`,
+    "keep verses lean",
+    "lift the pre-chorus",
+    "make the chorus repeatable",
+    groove ? `use ${groove}` : "",
+    key ? `center the harmony around ${key}` : "",
+    "then drop into a bridge before a fuller final chorus and clean outro",
+  ].filter(Boolean).join(", ");
   return trimPrompt(sanitizeForbidden(prompt, singers), 350);
 }
 
@@ -1226,6 +1307,17 @@ function auditLyrics(lyrics: string, stylePrompt: string, compositionPrompt: str
 function reviseLyrics(lyrics: string, instruction: string) {
   const note = `(Revision note: ${instruction})`;
   return `${lyrics.trim()}\n\n[Revision Direction]\n${note}`;
+}
+
+async function readJsonResponse<T extends { error?: string }>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text) return {} as T;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return { error: text.slice(0, 240) } as T;
+  }
 }
 
 function escapeRegExp(value: string) {

@@ -7,6 +7,7 @@ import {
   createContinuationProject,
   createProject,
   DEFAULT_PROJECT_GROUP,
+  deleteProject,
   DramaProject,
   EPISODE_COUNT_OPTIONS,
   EPISODE_DURATION_OPTIONS,
@@ -20,6 +21,7 @@ import {
   WorkflowType,
 } from "@/lib/projects";
 import {
+  deleteProjectFromSupabase,
   saveProjectGroupsToSupabase,
   syncProjectsWithSupabase,
   upsertProjectToSupabase,
@@ -128,8 +130,7 @@ export default function ProjectListPage() {
         .map((group) => ({
           group,
           projects: sortedProjects.filter((project) => (project.projectGroup || DEFAULT_PROJECT_GROUP) === group),
-        }))
-        .filter((item) => item.projects.length > 0 || item.group === DEFAULT_PROJECT_GROUP),
+        })),
     [groups, sortedProjects],
   );
 
@@ -199,6 +200,37 @@ export default function ProjectListPage() {
     void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
   }
 
+  function moveProject(projectId: string, nextGroup: string) {
+    const group = nextGroup.trim() || DEFAULT_PROJECT_GROUP;
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) return;
+
+    const updatedProject = {
+      ...project,
+      projectGroup: group,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextGroups = Array.from(new Set([DEFAULT_PROJECT_GROUP, ...groups, group]));
+
+    setProjects((current) => current.map((item) => (item.id === projectId ? updatedProject : item)));
+    setGroups(nextGroups);
+    upsertProject(updatedProject);
+    saveProjectGroupsToStorage(nextGroups);
+    void upsertProjectToSupabase(updatedProject, { accessToken: session?.access_token });
+    void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
+  }
+
+  function removeProject(projectId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    const title = project?.title || (isZh ? "这个项目" : "this project");
+    const confirmed = window.confirm(isZh ? `确定删除「${title}」吗？` : `Delete "${title}"?`);
+    if (!confirmed) return;
+
+    setProjects((current) => current.filter((item) => item.id !== projectId));
+    deleteProject(projectId);
+    void deleteProjectFromSupabase(projectId, { accessToken: session?.access_token });
+  }
+
   async function signOut() {
     const supabase = getSupabaseBrowserClient();
     await supabase?.auth.signOut();
@@ -238,10 +270,13 @@ export default function ProjectListPage() {
           <WorkflowList onSelectWorkflow={openWizard} onOpenSongWorkbench={() => router.push("/song-workbench")} />
           <ProjectList
             groupedProjects={groupedProjects}
+            groups={groups}
             loaded={loaded}
             projectCount={projects.length}
             onAddGroup={addGroup}
             onCreateProject={() => openWizard("creation")}
+            onDeleteProject={removeProject}
+            onMoveProject={moveProject}
           />
         </div>
       </section>

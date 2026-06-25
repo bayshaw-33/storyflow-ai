@@ -3,6 +3,11 @@ import { authenticateRequest, serviceFetch } from "@/lib/supabase/server";
 import { failure, getServiceSupabase, sanitizeStorageName, VIRAL_BUCKET, type ViralProjectRow } from "../_utils";
 
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+type UploadRequestBody = {
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+};
 
 export async function POST(request: Request) {
   let user;
@@ -13,30 +18,32 @@ export async function POST(request: Request) {
     return failure("请先登录后再上传视频。", 401);
   }
 
-  let formData: FormData;
+  let body: UploadRequestBody;
   try {
-    formData = await request.formData();
+    body = (await request.json()) as UploadRequestBody;
   } catch {
     return failure("上传格式不正确。", 400);
   }
 
-  const file = formData.get("video");
-  if (!(file instanceof File)) return failure("请上传视频文件。", 400);
-  if (!file.type.startsWith("video/")) return failure("仅支持视频文件。", 400);
-  if (file.size > MAX_VIDEO_SIZE) return failure("视频不能超过 100MB。", 400);
+  const fileName = body.fileName?.trim();
+  const fileType = body.fileType?.trim() || "application/octet-stream";
+  const fileSize = Number(body.fileSize || 0);
+
+  if (!fileName) return failure("请上传视频文件。", 400);
+  if (!fileType.startsWith("video/")) return failure("仅支持视频文件。", 400);
+  if (!fileSize || fileSize > MAX_VIDEO_SIZE) return failure("视频不能超过 100MB。", 400);
 
   try {
     const supabase = getServiceSupabase();
     const timestamp = Date.now();
-    const safeName = sanitizeStorageName(file.name);
+    const safeName = sanitizeStorageName(fileName);
     const videoPath = `${user.id}/${timestamp}-${safeName}`;
-    const { error: uploadError } = await supabase.storage.from(VIRAL_BUCKET).upload(videoPath, file, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
+    const { data: signedUpload, error: signedUploadError } = await supabase.storage
+      .from(VIRAL_BUCKET)
+      .createSignedUploadUrl(videoPath);
 
-    if (uploadError) {
-      throw new Error(`VIRAL_STORAGE_UPLOAD_ERROR:${uploadError.message}`);
+    if (signedUploadError || !signedUpload?.token) {
+      throw new Error(`VIRAL_STORAGE_UPLOAD_ERROR:${signedUploadError?.message || "EMPTY_SIGNED_UPLOAD_TOKEN"}`);
     }
 
     const rows = await serviceFetch<ViralProjectRow[]>("/rest/v1/storyflow_viral_projects", {
@@ -44,11 +51,11 @@ export async function POST(request: Request) {
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
         user_id: user.id,
-        title: file.name.replace(/\.[^.]+$/, "") || "爆款创作",
+        title: fileName.replace(/\.[^.]+$/, "") || "爆款创作",
         source_video_path: videoPath,
-        source_video_name: file.name,
-        source_video_mime: file.type,
-        source_video_size: file.size,
+        source_video_name: fileName,
+        source_video_mime: fileType,
+        source_video_size: fileSize,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }),
@@ -61,6 +68,7 @@ export async function POST(request: Request) {
       success: true,
       projectId: project.id,
       videoPath,
+      uploadToken: signedUpload.token,
     });
   } catch (error) {
     return failure(toFriendlyError(error), 500);

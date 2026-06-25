@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { Trash2 } from "lucide-react";
 import {
   DEFAULT_PROJECT_GROUP,
   type DramaProject,
@@ -15,10 +16,13 @@ type ProjectListProps = {
     group: string;
     projects: DramaProject[];
   }>;
+  groups: string[];
   loaded: boolean;
   projectCount: number;
   onAddGroup: () => void;
   onCreateProject?: () => void;
+  onDeleteProject: (projectId: string) => void;
+  onMoveProject: (projectId: string, group: string) => void;
 };
 
 function getProjectStatus(project: DramaProject, completed: number, total: number) {
@@ -74,9 +78,12 @@ function formatUpdatedAt(value: string) {
 
 export function ProjectList({
   groupedProjects,
+  groups,
   loaded,
+  onDeleteProject,
   onAddGroup,
   onCreateProject,
+  onMoveProject,
   projectCount,
 }: ProjectListProps) {
   const { locale } = useI18n();
@@ -94,58 +101,82 @@ export function ProjectList({
         </button>
       </div>
 
-      <div className="planet-card-grid">
-        <button className="project-planet-card new-world-card" type="button" onClick={onCreateProject}>
-          <span className="new-world-plus">+</span>
-          <strong>{isZh ? "新世界" : "New World"}</strong>
-          <small>{isZh ? "开始一个新故事" : "Start a new story"}</small>
-        </button>
+      <div className="planet-group-stack">
+        {groupedProjects.map(({ group, projects }, groupIndex) => (
+          <section className="planet-group-section" key={group || DEFAULT_PROJECT_GROUP}>
+            <div className="planet-group-header">
+              <strong>{group || DEFAULT_PROJECT_GROUP}</strong>
+              <span>{projects.length} {isZh ? "个项目" : "projects"}</span>
+            </div>
+            <div className="planet-card-grid">
+              {groupIndex === 0 ? (
+                <button className="project-planet-card new-world-card" type="button" onClick={onCreateProject}>
+                  <span className="new-world-plus">+</span>
+                  <strong>{isZh ? "新世界" : "New World"}</strong>
+                  <small>{isZh ? "开始一个新故事" : "Start a new story"}</small>
+                </button>
+              ) : null}
 
-        {loaded && projectCount === 0 ? (
-          <article className="project-planet-card empty-world-card">
-            <span className="project-planet dim" />
-            <strong>{isZh ? "还没有故事星球" : "No story planets yet"}</strong>
-            <small>{isZh ? "进入创作室创建第一个项目。" : "Enter the Studio to create the first one."}</small>
-          </article>
-        ) : null}
+              {projects.length === 0 ? (
+                <article className="project-planet-card empty-world-card">
+                  <span className="project-planet dim" />
+                  <strong>{loaded && projectCount === 0 ? (isZh ? "还没有故事星球" : "No story planets yet") : (isZh ? "空分组" : "Empty group")}</strong>
+                  <small>{loaded && projectCount === 0 ? (isZh ? "进入创作室创建第一个项目。" : "Enter the Studio to create the first one.") : (isZh ? "可把项目移动到这里。" : "Move projects here when ready.")}</small>
+                </article>
+              ) : null}
 
-        {groupedProjects.map(({ group, projects }) =>
-          projects.map((project, index) => {
-            const completed = getCompletedStepCount(project);
-            const total = getWorkflowSteps(project).length;
-            const status = getProjectStatus(project, completed, total);
-            const progress = getProgress(completed, total);
+              {projects.map((project, index) => {
+                const completed = getCompletedStepCount(project);
+                const total = getWorkflowSteps(project).length;
+                const status = getProjectStatus(project, completed, total);
+                const progress = getProgress(completed, total);
 
-            return (
-              <Link
-                className="project-planet-card"
-                data-status={status.toLowerCase().replace(/\s+/g, "-")}
-                href={getProjectHref(project)}
-                key={project.id}
-              >
-                <span className={`project-planet planet-tone-${index % 4}`} />
-                <span className="planet-orbit" style={{ "--progress": `${progress}%` } as CSSProperties} />
-                <div>
-                  <div className="planet-title-row">
-                    <strong>{project.title || (isZh ? "未命名世界" : "Untitled World")}</strong>
-                    <span className="planet-workflow-badge" data-workflow={project.workflowType}>
-                      {getWorkflowBadge(project, isZh)}
-                    </span>
-                  </div>
-                  <small>{project.genre || (isZh ? "题材待定" : "Genre TBD")} / {getWorkflowDetail(project, isZh)}</small>
-                </div>
-                <div className="planet-meta">
-                  <span>{localizeStatus(status, isZh)}</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="planet-progress">
-                  <i style={{ width: `${progress}%` }} />
-                </div>
-                <small className="planet-updated">{group || DEFAULT_PROJECT_GROUP} · {formatUpdatedAt(project.updatedAt)}</small>
-              </Link>
-            );
-          }),
-        )}
+                return (
+                  <article
+                    className="project-planet-card"
+                    data-status={status.toLowerCase().replace(/\s+/g, "-")}
+                    key={project.id}
+                  >
+                    <Link className="project-card-main" href={getProjectHref(project)}>
+                      <span className={`project-planet planet-tone-${index % 4}`} />
+                      <span className="planet-orbit" style={{ "--progress": `${progress}%` } as CSSProperties} />
+                      <div>
+                        <div className="planet-title-row">
+                          <strong>{project.title || (isZh ? "未命名世界" : "Untitled World")}</strong>
+                          <span className="planet-workflow-badge" data-workflow={project.workflowType}>
+                            {getWorkflowBadge(project, isZh)}
+                          </span>
+                        </div>
+                        <small>{project.genre || (isZh ? "题材待定" : "Genre TBD")} / {getWorkflowDetail(project, isZh)}</small>
+                      </div>
+                      <div className="planet-meta">
+                        <span>{localizeStatus(status, isZh)}</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="planet-progress">
+                        <i style={{ width: `${progress}%` }} />
+                      </div>
+                      <small className="planet-updated">{group || DEFAULT_PROJECT_GROUP} · {formatUpdatedAt(project.updatedAt)}</small>
+                    </Link>
+                    <div className="project-card-actions">
+                      <label>
+                        <span>{isZh ? "分组" : "Group"}</span>
+                        <select value={project.projectGroup || DEFAULT_PROJECT_GROUP} onChange={(event) => onMoveProject(project.id, event.target.value)}>
+                          {groups.map((item) => (
+                            <option key={item} value={item}>{item}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button className="icon-button subtle" type="button" onClick={() => onDeleteProject(project.id)} title={isZh ? "删除项目" : "Delete project"}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
     </section>
   );
