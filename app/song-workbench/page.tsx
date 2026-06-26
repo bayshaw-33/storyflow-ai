@@ -5,7 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Copy, Save, Sparkles } from "lucide-react";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { readProjectFromSupabase, readProjectsFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 type SongProjectType =
@@ -39,6 +39,7 @@ type SingerProfile = {
 type SongForm = {
   title: string;
   projectType: SongProjectType;
+  sourceProjectId: string;
   outputLanguage: OutputLanguage;
   customLanguage: string;
   concept: string;
@@ -284,6 +285,7 @@ function normalizeStoredForm(value: SongForm) {
 
   return {
     ...value,
+    sourceProjectId: value.sourceProjectId || "",
     lyricsMode: (value.lyricsMode as string) === ["su", "no_enhanced"].join("") ? "enhanced_lyrics" : value.lyricsMode,
     primaryEmotion: value.primaryEmotion === ["燃", " / 胜利"].join("") ? "热血 / 胜利" : value.primaryEmotion,
     groove: value.groove === "mid-tempo pop, 76-95 BPM" ? "Not specified" : value.groove,
@@ -298,6 +300,7 @@ function normalizeStoredForm(value: SongForm) {
 const initialForm: SongForm = {
   title: "",
   projectType: "original_song",
+  sourceProjectId: "",
   outputLanguage: "English",
   customLanguage: "",
   concept: "",
@@ -450,6 +453,7 @@ export default function SongWorkbenchPage() {
   const [compositionPrompt, setCompositionPrompt] = useState("");
   const [audit, setAudit] = useState<AuditResult | null>(null);
   const [versions, setVersions] = useState<SongVersion[]>([]);
+  const [sourceProjects, setSourceProjects] = useState<DramaProject[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [songProjectId, setSongProjectId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -529,6 +533,21 @@ export default function SongWorkbenchPage() {
   }, [session?.access_token]);
 
   useEffect(() => {
+    const localProjects = readProjectsFromStorage().filter((project) => project.workflowType !== "song");
+    setSourceProjects(localProjects);
+
+    if (!session?.access_token) return;
+
+    void readProjectsFromSupabase({ accessToken: session.access_token })
+      .then((cloudProjects) => {
+        setSourceProjects(mergeSourceProjects(localProjects, cloudProjects.filter((project) => project.workflowType !== "song")));
+      })
+      .catch(() => {
+        setSourceProjects(localProjects);
+      });
+  }, [session?.access_token]);
+
+  useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId }),
@@ -571,11 +590,28 @@ export default function SongWorkbenchPage() {
     () => uniqueSingerProfiles(singers).filter((singer) => form.selectedSingerIds.includes(singer.id)),
     [form.selectedSingerIds, singers],
   );
+  const selectedSourceProject = useMemo(
+    () => sourceProjects.find((project) => project.id === form.sourceProjectId) || null,
+    [form.sourceProjectId, sourceProjects],
+  );
 
   const canCopyLyrics = !audit || audit.allowCopy;
 
   function updateForm<K extends keyof SongForm>(key: K, value: SongForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateSourceProject(projectId: string) {
+    const source = sourceProjects.find((project) => project.id === projectId);
+    setForm((current) => ({
+      ...current,
+      sourceProjectId: projectId,
+      projectType: projectId ? "ost_theme" : current.projectType,
+      title: current.title || (source?.title ? `${source.title} OST` : current.title),
+      concept: current.concept || (source ? buildSourceProjectSongConcept(source) : current.concept),
+      genres: current.genres.length ? current.genres : (source?.genre ? splitCustom(source.genre).filter((item) => genreOptions.includes(item)) : current.genres),
+      customGenre: current.customGenre || (source?.genre ? splitCustom(source.genre).filter((item) => !genreOptions.includes(item)).join(", ") : ""),
+    }));
   }
 
   function toggleListValue<K extends "secondaryEmotions" | "genres" | "selectedSingerIds" | "instruments">(
@@ -628,6 +664,10 @@ export default function SongWorkbenchPage() {
       return;
     }
 
+    setLyrics("");
+    setStylePrompt("");
+    setCompositionPrompt("");
+    setAudit(null);
     setGenerating(true);
     try {
       const response = await fetch("/api/ai/generate", {
@@ -640,8 +680,9 @@ export default function SongWorkbenchPage() {
           taskType: "song_workbench",
           projectTitle: form.title,
           genre: normalizedGenres(form).join(", "),
-          input: buildSongGenerationInput(form, selectedSingers),
+          input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject),
           context: [
+            selectedSourceProject ? `Source story project for OST/theme song:\n${summarizeSourceProject(selectedSourceProject)}` : "",
             lyrics.trim() ? `Existing lyrics to improve or replace:\n${lyrics}` : "",
             stylePrompt.trim() ? `Existing style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Existing composition prompt:\n${compositionPrompt}` : "",
@@ -707,6 +748,7 @@ export default function SongWorkbenchPage() {
       options.stylePrompt ?? stylePrompt,
       options.compositionPrompt ?? compositionPrompt,
       options.audit ?? audit,
+      selectedSourceProject,
     );
     setSavingProject(true);
     setError("");
@@ -887,6 +929,17 @@ export default function SongWorkbenchPage() {
               </select>
             </label>
             <label>
+              {locale === "zh-CN" ? "关联故事 / 宇宙来源" : "Story / Universe source"}
+              <select value={form.sourceProjectId} onChange={(event) => updateSourceProject(event.target.value)}>
+                <option value="">{locale === "zh-CN" ? "不关联，创建独立歌曲" : "No source, standalone song"}</option>
+                {sourceProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.title || project.id}{project.universeId ? " · Universe" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               {text.outputLanguage}
               <select value={form.outputLanguage} onChange={(event) => updateForm("outputLanguage", event.target.value as OutputLanguage)}>
                 {["English", "Chinese", "Bilingual", "Japanese", "Korean", "Spanish", "French", "Cantonese", "Custom"].map((option) => (
@@ -918,6 +971,22 @@ export default function SongWorkbenchPage() {
               placeholder="A burned-out office worker fights another miserable Monday with sarcasm and dark humor."
             />
           </label>
+
+          {selectedSourceProject ? (
+            <div className="song-source-panel">
+              <span>{locale === "zh-CN" ? "OST 来源" : "OST source"}</span>
+              <strong>{selectedSourceProject.title}</strong>
+              <p>
+                {selectedSourceProject.universeId
+                  ? locale === "zh-CN"
+                    ? "该歌曲会继承来源项目的 Universe，可作为同一 IP 的 OST/主题曲沉淀。"
+                    : "This song inherits the source project's Universe and can be saved as an OST/theme asset for the same IP."
+                  : locale === "zh-CN"
+                    ? "保存后会记录来源项目摘要；来源项目升级为 Universe 后，可继续用于 IP 资产联动。"
+                    : "The source project summary will be saved; once the source is upgraded to a Universe, it can continue as linked IP material."}
+              </p>
+            </div>
+          ) : null}
 
           <details className="song-control-group">
             <summary>{text.genres}</summary>
@@ -1119,11 +1188,11 @@ export default function SongWorkbenchPage() {
         </aside>
       </section>
 
-      {auditOpen && audit ? (
+      {auditOpen ? (
         <div className="modal-backdrop">
           <div className="modal song-audit-modal">
             <h2>{text.audit}</h2>
-            <p>{auditReportText(audit)}</p>
+            <p>{audit ? auditReportText(audit) : text.auditPass}</p>
             <div className="modal-actions">
               <button className="primary-button" type="button" onClick={() => setAuditOpen(false)}>{text.close}</button>
             </div>
@@ -1134,7 +1203,7 @@ export default function SongWorkbenchPage() {
   );
 }
 
-function buildSongGenerationInput(form: SongForm, singers: SingerProfile[]) {
+function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sourceProject: DramaProject | null) {
   const projectType = projectTypes.find((item) => item.value === form.projectType);
   const language = form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage;
 
@@ -1162,6 +1231,14 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[]) {
       key: specifiedValue(form.key) || "not specified",
       instruments: normalizedInstruments(form),
       structure: specifiedValue(form.structure) || "not specified",
+      sourceProject: sourceProject ? {
+        id: sourceProject.id,
+        title: sourceProject.title,
+        workflowType: sourceProject.workflowType,
+        genre: sourceProject.genre,
+        universeId: sourceProject.universeId || null,
+        summary: summarizeSourceProject(sourceProject),
+      } : "not specified",
     },
     null,
     2,
@@ -1197,11 +1274,12 @@ function buildSongProjectSnapshot(
   stylePrompt: string,
   compositionPrompt: string,
   audit: AuditResult | null,
+  sourceProject: DramaProject | null,
 ): DramaProject {
   const now = new Date().toISOString();
   const title = form.title.trim() || "未命名歌曲";
   const genres = normalizedGenres(form);
-  const content = buildSongProjectMarkdown(form, lyrics, stylePrompt, compositionPrompt, audit);
+  const content = buildSongProjectMarkdown(form, lyrics, stylePrompt, compositionPrompt, audit, sourceProject);
 
   return createProject({
     id: existingId || `song-${crypto.randomUUID()}`,
@@ -1216,6 +1294,14 @@ function buildSongProjectSnapshot(
     brief: content,
     finalScript: lyrics,
     deliveryPackage: content,
+    universeId: sourceProject?.universeId || null,
+    projectRole: sourceProject?.universeId ? "other" : null,
+    inheritanceSettings: sourceProject ? {
+      sourceProjectId: sourceProject.id,
+      sourceProjectTitle: sourceProject.title,
+      purpose: "ost_theme_song",
+      inheritUniverse: Boolean(sourceProject.universeId),
+    } : null,
     status: lyrics.trim() || stylePrompt.trim() || compositionPrompt.trim() ? "ready" : "draft",
     updatedAt: now,
   });
@@ -1227,6 +1313,7 @@ function buildSongProjectMarkdown(
   stylePrompt: string,
   compositionPrompt: string,
   audit: AuditResult | null,
+  sourceProject: DramaProject | null,
 ) {
   const projectType = projectTypes.find((item) => item.value === form.projectType);
   return [
@@ -1241,10 +1328,15 @@ function buildSongProjectMarkdown(
     `- 律动：${specifiedValue(form.groove) || "Not specified"}`,
     `- 调性：${specifiedValue(form.key) || "Not specified"}`,
     `- 结构：${specifiedValue(form.structure) || "Not specified"}`,
+    sourceProject ? `- 来源项目：${sourceProject.title || sourceProject.id}` : "",
+    sourceProject?.universeId ? `- 关联 Universe：${sourceProject.universeId}` : "",
     "",
     "## 歌曲概念",
     form.concept || "未填写",
     "",
+    sourceProject ? "## 来源故事 / Universe" : "",
+    sourceProject ? summarizeSourceProject(sourceProject) : "",
+    sourceProject ? "" : "",
     "## 歌词",
     lyrics || "未生成",
     "",
@@ -1267,6 +1359,7 @@ function songProjectToWorkbench(project: DramaProject) {
     ...initialForm,
     title: project.title || "",
     concept: project.idea || extractMarkdownSection(content, "歌曲概念"),
+    sourceProjectId: typeof project.inheritanceSettings?.sourceProjectId === "string" ? project.inheritanceSettings.sourceProjectId : "",
     outputLanguage: normalizeOutputLanguage(project.targetLanguage),
     customLanguage: isKnownOutputLanguage(project.targetLanguage) ? "" : project.targetLanguage || "",
     genres: genres.length ? genres : initialForm.genres,
@@ -1291,10 +1384,47 @@ function songProjectToWorkbench(project: DramaProject) {
 function getSongEntry() {
   if (typeof window === "undefined") return { forceNew: false, projectId: "" };
   const params = new URLSearchParams(window.location.search);
+  const projectId = params.get("projectId") || "";
   return {
-    forceNew: params.get("new") === "1",
-    projectId: params.get("projectId") || "",
+    forceNew: params.get("new") === "1" || !projectId,
+    projectId,
   };
+}
+
+function mergeSourceProjects(localProjects: DramaProject[], cloudProjects: DramaProject[]) {
+  const byId = new Map<string, DramaProject>();
+  for (const project of [...localProjects, ...cloudProjects]) {
+    const existing = byId.get(project.id);
+    if (!existing || project.updatedAt.localeCompare(existing.updatedAt) > 0) {
+      byId.set(project.id, project);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function buildSourceProjectSongConcept(project: DramaProject) {
+  const source = summarizeSourceProject(project);
+  return [
+    `Create an OST/theme song for "${project.title}".`,
+    source,
+    "Focus on the protagonist's core conflict, the central emotional hook, and the long-running IP mood.",
+  ].join("\n");
+}
+
+function summarizeSourceProject(project: DramaProject) {
+  return [
+    `Title: ${project.title || "Untitled"}`,
+    `Workflow: ${project.workflowType}`,
+    project.universeId ? `Universe ID: ${project.universeId}` : "",
+    project.genre ? `Genre: ${project.genre}` : "",
+    project.market ? `Market: ${project.market}` : "",
+    project.idea ? `Idea: ${project.idea}` : "",
+    project.brief ? `Brief: ${project.brief.slice(0, 600)}` : "",
+    project.outline ? `Outline: ${project.outline.slice(0, 600)}` : "",
+    project.storyBible?.logline ? `Logline: ${project.storyBible.logline}` : "",
+    project.storyBible?.mainConflict ? `Main conflict: ${project.storyBible.mainConflict}` : "",
+    project.storyBible?.characterRelationships ? `Characters: ${project.storyBible.characterRelationships.slice(0, 400)}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function extractMarkdownSection(markdown: string, heading: string) {

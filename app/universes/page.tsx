@@ -124,6 +124,10 @@ export default function UniversesPage() {
   }
 
   async function submitCreate() {
+    if (!os.planReady || !os.access.universe) {
+      setError(isZh ? "Ultra 会员才能创建和写入宇宙。" : "Ultra is required to create and write Universes.");
+      return;
+    }
     const project = projects.find((p) => p.id === createForm.projectId);
     if (!project) {
       setError(isZh ? "请选择一个项目" : "Select a project first.");
@@ -158,12 +162,16 @@ export default function UniversesPage() {
     }
   }
 
+  const universeAccessPending = !os.planReady;
   const noUniverseAccess = os.planReady && !os.access.universe;
+  const canWriteUniverse = os.planReady && os.access.universe;
   const activeCount = universes.filter((u) => u.status === "active").length;
   const totalPendingInbox = Object.values(universeSummaries).reduce((sum, item) => sum + item.pendingInbox, 0);
   const totalCanonFacts = Object.values(universeSummaries).reduce((sum, item) => sum + item.canonCount, 0);
   const totalLinkedProjects = Object.values(universeSummaries).reduce((sum, item) => sum + item.linkedProjects, 0);
-  const healthState = noUniverseAccess
+  const healthState = universeAccessPending
+    ? isZh ? "校验中" : "Checking"
+    : noUniverseAccess
     ? isZh ? "待开通" : "Locked"
     : universes.length === 0
       ? isZh ? "待创建" : "Setup"
@@ -207,13 +215,17 @@ export default function UniversesPage() {
       </section>
 
       <section className="universe-module-layout">
-        {noUniverseAccess ? (
+        {universeAccessPending || noUniverseAccess ? (
           <section className="dashboard-panel universe-access-banner">
             <div>
               <span>{isZh ? "Ultra 功能" : "Ultra feature"}</span>
-              <h2>{isZh ? "当前为只读预览模式" : "Read-only preview mode"}</h2>
+              <h2>{universeAccessPending ? (isZh ? "正在校验会员权限" : "Checking membership") : (isZh ? "当前为只读预览模式" : "Read-only preview mode")}</h2>
               <p>
-                {isZh
+                {universeAccessPending
+                  ? isZh
+                    ? "正在读取账号套餐。校验完成前不会开放创建、Inbox 写入或 canon 确认操作。"
+                    : "Reading account plan. Create, Inbox write, and canon confirmation stay disabled while checking."
+                  : isZh
                   ? "非 Ultra 会员可以看到 Universe Engine 的工作流、来源项目和升级入口，但不能创建宇宙、写入 Inbox 或确认 canon。升级后可从项目建立长期 IP 资产。"
                   : "Non-Ultra users can preview the workflow, source projects, and upgrade entry, but cannot create Universes, write Inbox items, or confirm canon."}
               </p>
@@ -280,9 +292,9 @@ export default function UniversesPage() {
                   : "Use an existing project as the foundation. Extracted items should enter Inbox before canon."}
           </p>
           <div className="universe-module-actions">
-            {noUniverseAccess ? (
+            {!canWriteUniverse ? (
               <Link className="primary-button" href="/subscription">
-                {isZh ? "查看套餐" : "View plans"}
+                {universeAccessPending ? (isZh ? "校验中" : "Checking") : (isZh ? "查看套餐" : "View plans")}
               </Link>
             ) : (
               <button className="primary-button" onClick={openCreate} disabled={projects.length === 0}>
@@ -478,7 +490,7 @@ export default function UniversesPage() {
               <button className="secondary-button" onClick={() => setCreateOpen(false)} disabled={creating}>
                 {isZh ? "取消" : "Cancel"}
               </button>
-              <button className="primary-button" onClick={submitCreate} disabled={creating}>
+              <button className="primary-button" onClick={submitCreate} disabled={creating || !canWriteUniverse}>
                 {creating ? (isZh ? "创建中…" : "Creating…") : isZh ? "创建宇宙" : "Create Universe"}
               </button>
             </div>

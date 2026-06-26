@@ -1594,6 +1594,32 @@ input:focus, textarea:focus, select:focus {
   resize: vertical;
   line-height: 1.65;
 }
+.song-source-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+}
+.song-source-panel span {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.song-source-panel strong {
+  color: var(--ink-primary);
+  font-size: 13px;
+}
+.song-source-panel p {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
 .song-chip-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
