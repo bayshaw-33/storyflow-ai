@@ -18,6 +18,14 @@ export type TaskType =
   | "storyboard_script"
   | "final_delivery"
   | "song_workbench"
+  | "novel_brief"
+  | "novel_bible"
+  | "novel_characters"
+  | "novel_volume_outline"
+  | "novel_chapter_outline"
+  | "novel_chapter_draft"
+  | "novel_revision"
+  | "novel_export"
   | "viral_video_analysis"
   | "viral_structure_remake"
   | "viral_export_package";
@@ -39,6 +47,9 @@ export type GenerateOptions = {
   finalScriptVersion?: FinalScriptVersion;
   localizationMode?: LocalizationMode;
   optimizeInstruction?: string;
+  targetWordCount?: number;
+  platform?: string;
+  chapterNo?: number;
 };
 
 export type GeneratePayload = {
@@ -76,6 +87,14 @@ export const taskNames: Record<TaskType, string> = {
   storyboard_script: "分镜",
   final_delivery: "最终交付",
   song_workbench: "歌曲创作",
+  novel_brief: "小说创意 Brief",
+  novel_bible: "小说 Bible",
+  novel_characters: "小说角色卡",
+  novel_volume_outline: "小说分卷大纲",
+  novel_chapter_outline: "小说章节大纲",
+  novel_chapter_draft: "小说章节正文",
+  novel_revision: "小说章节修改",
+  novel_export: "小说导出包",
   viral_video_analysis: "爆款结构分析",
   viral_structure_remake: "同结构改写",
   viral_export_package: "爆款创作交付",
@@ -100,6 +119,16 @@ const songRules = [
   "歌词必须原创，避免照抄用户输入中的长句，避免套用知名歌词、影视台词或可识别的版权表达。",
   "Suno 标签要清晰、短促、可复制；Style Prompt 控制在 250 字符左右，Composition Prompt 控制在 350 字符左右。",
   "输出格式必须稳定，严格包含：---LYRICS---、---STYLE_PROMPT---、---COMPOSITION_PROMPT--- 三个分隔标题。",
+].join("\n");
+
+const novelRules = [
+  "你是 Kiikis 的小说创作助手，专门服务网文作者、短剧编剧和内容工作室。",
+  "只输出生成内容本身，不输出解释、教程、免责声明或 AI 回复套话。",
+  "面向长篇连载、章节持续生产、人物连续性、伏笔埋设和后续短剧改编。",
+  "必须尊重用户输入、已确认 Bible、角色状态、locked canon 和 Universe 继承内容。",
+  "不得静默覆盖用户设定；如果需要新增设定，必须在连续性备注中标明。",
+  "输出格式要稳定，使用清晰标题、编号、短段落，便于前端保存版本和后续编辑。",
+  "不要输出 Markdown 表格。",
 ].join("\n");
 
 const promptByTask: Record<TaskType, string> = {
@@ -401,6 +430,125 @@ const promptByTask: Record<TaskType, string> = {
     "要求：歌词要有清晰 hook，副歌适合重复；不要使用真实艺人名字；不要输出解释。",
   ].join("\n"),
 
+  novel_brief: [
+    "任务：根据小说创意生成 Novel Brief，并自动生成暂定书名。",
+    "输出结构必须包含：",
+    "书名：",
+    "1. 类型定位",
+    "2. 目标平台与读者",
+    "3. 一句话卖点",
+    "4. 主角欲望",
+    "5. 主冲突",
+    "6. 情感线",
+    "7. 金手指 / 身份秘密 / 反转设定",
+    "8. 前 3 章爆点",
+    "9. 留存钩子",
+    "要求：适合长篇连载，不要写成短剧 Brief；必须给出可连续生产章节的主线动力。",
+  ].join("\n"),
+
+  novel_bible: [
+    "任务：生成小说 Bible。",
+    "输出结构必须包含：",
+    "1. 世界观",
+    "2. 核心规则",
+    "3. 主要阵营 / 组织",
+    "4. 角色关系总览",
+    "5. 伏笔清单",
+    "6. locked canon：列出不能被后续章节覆盖的事实",
+    "7. 语言风格",
+    "8. 节奏规则",
+    "9. Universe Inbox 候选项：列出建议抽取到 Universe Inbox 的角色、地点、关系、事件和规则",
+    "要求：不要直接写入 canon，只列为候选；设定要能支撑分卷和章节生产。",
+  ].join("\n"),
+
+  novel_characters: [
+    "任务：生成小说角色卡。",
+    "输出结构必须包含：",
+    "## 主角",
+    "- 身份：",
+    "- 外显目标：",
+    "- 内在欲望：",
+    "- 弱点：",
+    "- 秘密：",
+    "- 成长线：",
+    "- 与主冲突关系：",
+    "## 反派 / 阻力角色",
+    "## 关键配角",
+    "## 关系网",
+    "## 角色状态追踪规则",
+    "要求：角色必须能支撑长线变化、误会、反转和章节连续性。",
+  ].join("\n"),
+
+  novel_volume_outline: [
+    "任务：生成分卷大纲与长线结构。",
+    "输出结构必须包含：",
+    "1. 全书主线",
+    "2. 分卷结构：每卷包含卷名、卷目标、主要矛盾、关键反转、情感推进、结尾状态",
+    "3. 阶段性爽点 / 虐点",
+    "4. 伏笔埋设与回收表",
+    "5. 结局方向",
+    "要求：至少生成 3 卷；每卷都要有可拆成章节的推进目标。",
+  ].join("\n"),
+
+  novel_chapter_outline: [
+    "任务：生成当前章节大纲。",
+    "输出结构必须包含：",
+    "---CHAPTER_TITLE---",
+    "章节标题",
+    "---CHAPTER_OUTLINE---",
+    "1. 本章目标",
+    "2. 场景列表",
+    "3. 主要冲突",
+    "4. 角色状态变化",
+    "5. 伏笔埋设 / 回收",
+    "---ENDING_HOOK---",
+    "本章结尾钩子",
+    "---CONTINUITY_NOTES---",
+    "连续性备注",
+    "要求：必须承接上一章摘要、当前卷目标和已有人物状态。",
+  ].join("\n"),
+
+  novel_chapter_draft: [
+    "任务：生成当前章节正文。",
+    "输出必须严格使用以下结构：",
+    "---CHAPTER_TITLE---",
+    "章节标题",
+    "---CHAPTER_OUTLINE---",
+    "简要大纲",
+    "---CHAPTER_DRAFT---",
+    "章节正文",
+    "---ENDING_HOOK---",
+    "结尾钩子",
+    "---CONTINUITY_NOTES---",
+    "角色状态、伏笔、canon 影响和下章承接点",
+    "要求：正文要有网文连载节奏、场景推进、情绪转折和结尾钩子；不要只写梗概。",
+  ].join("\n"),
+
+  novel_revision: [
+    "任务：按用户修改指令重写当前章节。",
+    "输出必须严格使用以下结构：",
+    "---CHAPTER_TITLE---",
+    "---CHAPTER_OUTLINE---",
+    "---CHAPTER_DRAFT---",
+    "---ENDING_HOOK---",
+    "---CONTINUITY_NOTES---",
+    "要求：必须执行 optimizeInstruction 中的具体要求，返回完整改写后的章节，不要只列修改建议。",
+  ].join("\n"),
+
+  novel_export: [
+    "任务：整理小说项目导出包。",
+    "输出结构必须包含：",
+    "1. Novel Brief",
+    "2. 小说 Bible",
+    "3. 角色卡",
+    "4. 分卷大纲",
+    "5. 章节清单",
+    "6. 连续性备注",
+    "7. 可转短剧 Brief",
+    "8. Universe Inbox 候选项",
+    "要求：这是导出包目录和内容摘要，不要新增未确认的 canon 事实。",
+  ].join("\n"),
+
   viral_video_analysis: [
     "任务：分析短视频的爆款结构。",
     "输出必须是稳定 JSON，包含 f1_hook、f2_body、f3_action、f4_result、f5_memory、raw_storyboard。",
@@ -422,7 +570,7 @@ const promptByTask: Record<TaskType, string> = {
 };
 
 export function buildPrompt(payload: GeneratePayload) {
-  const rules = payload.taskType === "song_workbench" ? songRules : commonRules;
+  const rules = payload.taskType === "song_workbench" ? songRules : isNovelTask(payload.taskType) ? novelRules : commonRules;
 
   return [
     rules,
@@ -439,6 +587,10 @@ export function buildPrompt(payload: GeneratePayload) {
     `【taskType】${payload.taskType} / ${taskNames[payload.taskType]}`,
     promptByTask[payload.taskType],
   ].join("\n");
+}
+
+function isNovelTask(taskType: TaskType) {
+  return taskType.startsWith("novel_");
 }
 
 function buildContext(payload: GeneratePayload) {
@@ -484,5 +636,8 @@ function buildOptions(payload: GeneratePayload) {
     finalScriptVersion: payload.options?.finalScriptVersion || "foreign",
     localizationMode: payload.options?.localizationMode || "script",
     optimizeInstruction: payload.options?.optimizeInstruction || "",
+    targetWordCount: payload.options?.targetWordCount || 1800,
+    platform: payload.options?.platform || "",
+    chapterNo: payload.options?.chapterNo || 1,
   };
 }

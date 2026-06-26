@@ -40,8 +40,9 @@ const workflowEntries = [
     steps: 12,
     difficulty: "Deep",
     difficultyZh: "深入",
-    mode: "creation" as DramaWorkflowType,
-    comingSoon: true,
+    mode: null,
+    route: "/novel-workbench?new=1",
+    comingSoon: false,
   },
   {
     id: "viral_creation",

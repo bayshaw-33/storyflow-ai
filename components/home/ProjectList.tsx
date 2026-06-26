@@ -50,6 +50,7 @@ function getProgress(completed: number, total: number) {
 function getWorkflowBadge(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
+  if (project.workflowType === "novel") return isZh ? "小说" : "Novel";
   return isZh ? "短剧" : "Drama";
 }
 
@@ -57,12 +58,14 @@ function getWorkflowDetail(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "continuation") return isZh ? "续写" : "Continuation";
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
+  if (project.workflowType === "novel") return isZh ? "小说创作" : "Novel Creation";
   return isZh ? "原创" : "Original";
 }
 
 function getProjectHref(project: DramaProject) {
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
   if (project.workflowType === "viral") return "/viral-workbench";
+  if (project.workflowType === "novel") return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
   return `/projects/${project.id}`;
 }
 

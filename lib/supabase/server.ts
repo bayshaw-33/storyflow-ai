@@ -117,8 +117,9 @@ export async function refundCredits(userId: string, amount: number) {
 
 export function estimateCreditCost(taskType: TaskType) {
   if (taskType === "viral_video_analysis") return 2;
+  if (taskType === "novel_chapter_draft" || taskType === "novel_revision") return 2;
   if (taskType === "chinese_script" || taskType === "continuation_script" || taskType === "storyboard_script") return 2;
-  if (taskType === "final_delivery" || taskType === "viral_export_package") return 0;
+  if (taskType === "final_delivery" || taskType === "viral_export_package" || taskType === "novel_export") return 0;
   return 1;
 }
 
@@ -263,6 +264,10 @@ export async function cancelGenerationTask(params: { userId: string; taskId: str
 
 export function resolvePhaseKey(taskType: TaskType) {
   if (taskType === "song_workbench" || taskType === "viral_video_analysis" || taskType === "viral_structure_remake" || taskType === "viral_export_package") return "development";
+  if (taskType === "novel_brief") return "development";
+  if (taskType === "novel_bible" || taskType === "novel_characters" || taskType === "novel_volume_outline") return "story_bible";
+  if (taskType === "novel_chapter_outline" || taskType === "novel_chapter_draft" || taskType === "novel_revision") return "script_production";
+  if (taskType === "novel_export") return "delivery";
   if (taskType === "market_analysis" || taskType === "brief" || taskType === "script_import") return "development";
   if (taskType === "characters" || taskType === "structure_model" || taskType === "beat_cards" || taskType === "series_outline") return "story_bible";
   if (taskType === "chinese_script" || taskType === "continuation_script" || taskType === "translation" || taskType === "localization") return "script_production";

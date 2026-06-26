@@ -170,6 +170,10 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
     input.project.storyBible?.confirmedFacts,
     input.project.brief,
     input.project.outline,
+    input.project.novelBible,
+    input.project.novelBrief,
+    input.project.novelVolumeOutline,
+    input.project.novelContinuityNotes,
   ]
     .filter(Boolean)
     .join("\n")
@@ -210,13 +214,13 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
     title: `${input.project.title} ending state`,
     proposed_payload: {
       title: `${input.project.title} ending state`,
-      summary: input.project.finalScript || input.project.outline || input.project.storyBible?.mainConflict || "",
+      summary: input.project.finalScript || input.project.novelChapterDraft || input.project.outline || input.project.storyBible?.mainConflict || "",
       season_number: input.project.seasonNumber || 1,
       character_states: characters.map((card) => ({ name: card.name, state: card.arc || card.goal })),
       relationship_states: input.project.relationshipDiagram,
-      unresolved_threads: input.project.storyBible?.confirmedFacts || "",
+      unresolved_threads: input.project.novelContinuityNotes || input.project.storyBible?.confirmedFacts || "",
     },
-    source_excerpt: [input.project.outline, input.project.finalScript].filter(Boolean).join("\n\n").slice(0, 800),
+    source_excerpt: [input.project.novelVolumeOutline, input.project.novelChapterDraft, input.project.outline, input.project.finalScript].filter(Boolean).join("\n\n").slice(0, 800),
     confidence: 0.6,
     status: "pending",
     reviewed_at: null,
@@ -314,6 +318,16 @@ function buildProjectSourceText(project: DramaProject) {
     project.continuationScript,
     "Final script:",
     project.finalScript || project.finalScriptForeign || project.finalScriptChinese,
+    "Novel brief:",
+    project.novelBrief,
+    "Novel bible:",
+    project.novelBible,
+    "Novel characters:",
+    project.novelCharacters,
+    "Novel volume outline:",
+    project.novelVolumeOutline,
+    "Novel chapters:",
+    (project.novelChapters || []).map((chapter) => `#${chapter.chapterNo} ${chapter.title}\n${chapter.outline}\n${chapter.draft}\n${chapter.continuityNotes}`).join("\n\n"),
   ].filter(Boolean).join("\n\n");
 }
 

@@ -2350,8 +2350,235 @@ textarea.script-editor {
 
 /* project worlds / toggle */
 .project-worlds, .workflow-worlds { display: flex; flex-direction: column; gap: var(--space-3); }
-.project-fields-toggle {
-  display: inline-flex; align-items: center; gap: 8px;
+
+.novel-workbench-page .cosmic-title-band {
+  max-width: 1580px;
+  padding-top: var(--space-6);
+  padding-bottom: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.novel-workbench-page .cosmic-title-band h1 {
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  font-weight: 500;
+}
+
+.novel-workbench-page .header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.novel-workbench-shell {
+  width: min(1580px, calc(100% - 40px));
+  margin: var(--space-6) auto var(--space-10);
+  display: grid;
+  grid-template-columns: minmax(260px, 330px) minmax(520px, 1fr) minmax(280px, 360px);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.novel-workbench-shell > .notice {
+  grid-column: 1 / -1;
+  padding: 10px 14px;
+  min-height: 0;
+}
+
+.novel-sidebar,
+.novel-editor-panel,
+.novel-ai-panel {
+  min-width: 0;
+}
+
+.novel-workbench-page label,
+.novel-tool-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.novel-workbench-page input,
+.novel-workbench-page select,
+.novel-workbench-page textarea {
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-primary);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.novel-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.novel-sidebar textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.novel-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: var(--space-2);
+}
+
+.novel-step-button {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink-primary);
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.novel-step-button:hover,
+.novel-step-button.active {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.novel-step-button span,
+.novel-step-button i {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.novel-step-button strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novel-editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.novel-main-editor {
+  min-height: 640px;
+  resize: vertical;
+  line-height: 1.7;
+  font-size: 15px;
+}
+
+.novel-chapter-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.novel-chapter-strip button,
+.novel-empty-chapters {
+  min-height: 72px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink-primary);
+  padding: 10px;
+  text-align: left;
+}
+
+.novel-chapter-strip button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+}
+
+.novel-chapter-strip button span,
+.novel-chapter-strip button i,
+.novel-empty-chapters {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.novel-ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.novel-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.novel-action-grid .secondary-button,
+.novel-tool-section .full {
+  width: 100%;
+  justify-content: center;
+}
+
+.novel-tool-section {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--glass-border);
+}
+
+.novel-tool-section textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.novel-tool-section p {
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 180px;
+  overflow: auto;
+}
+
+@media (max-width: 1180px) {
+  .novel-workbench-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .novel-main-editor {
+    min-height: 460px;
+  }
+}
+
+@media (max-width: 720px) {
+  .novel-workbench-page .cosmic-title-band {
+    grid-template-columns: 1fr;
+    width: min(100% - 28px, 1580px);
+  }
+
+  .novel-workbench-page .header-actions {
+    justify-content: flex-start;
+  }
+
+  .novel-workbench-shell {
+    width: min(100% - 28px, 1580px);
+  }
+
+  .novel-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+  .project-fields-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
   font-size: 13px; color: var(--accent-cyan);
 }
 .project-fields-toggle span { font-size: 13px; color: var(--ink-secondary); }

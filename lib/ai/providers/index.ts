@@ -19,6 +19,9 @@ const deepSeekPreferredTasks = new Set<TaskType>([
   "final_script",
   "format_check",
   "song_workbench",
+  "novel_chapter_draft",
+  "novel_revision",
+  "novel_export",
 ]);
 
 export function getProviderStatus() {

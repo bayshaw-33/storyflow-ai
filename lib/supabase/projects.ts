@@ -276,7 +276,7 @@ function rowToProject(row: ProjectRow): DramaProject {
 }
 
 function normalizeWorkflowType(value: unknown): WorkflowType {
-  if (value === "continuation" || value === "song" || value === "viral") return value;
+  if (value === "continuation" || value === "song" || value === "viral" || value === "novel") return value;
   return "creation";
 }
 

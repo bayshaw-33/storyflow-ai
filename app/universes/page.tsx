@@ -181,7 +181,7 @@ export default function UniversesPage() {
   const workflowCards = [
     {
       title: isZh ? "1. 项目接入" : "1. Project intake",
-      body: isZh ? "从短剧、歌曲或爆款项目创建宇宙，保留来源项目关系。" : "Create Universes from drama, song, or viral projects while keeping source links.",
+      body: isZh ? "从短剧、小说、歌曲或爆款项目创建宇宙，保留来源项目关系。" : "Create Universes from drama, novel, song, or viral projects while keeping source links.",
       value: projects.length,
     },
     {
@@ -286,7 +286,7 @@ export default function UniversesPage() {
               : projects.length === 0
                 ? isZh
                   ? "项目列表为空。先保存歌曲或短剧项目，再回来创建宇宙。"
-                  : "Your project list is empty. Save a song or drama project first."
+                  : "Your project list is empty. Save a drama, novel, song, or viral project first."
                 : isZh
                   ? "选择一个现有项目作为宇宙起点，后续抽取内容先进入 Inbox，再确认写入 canon。"
                   : "Use an existing project as the foundation. Extracted items should enter Inbox before canon."}
@@ -388,7 +388,7 @@ export default function UniversesPage() {
           <div className="universe-source-list">
             {projects.slice(0, 6).map((project) => (
               <article key={project.id}>
-                <span>{project.workflowType === "song" ? (isZh ? "歌曲" : "Song") : project.workflowType === "viral" ? (isZh ? "爆款" : "Viral") : (isZh ? "短剧" : "Drama")}</span>
+                <span>{project.workflowType === "song" ? (isZh ? "歌曲" : "Song") : project.workflowType === "viral" ? (isZh ? "爆款" : "Viral") : project.workflowType === "novel" ? (isZh ? "小说" : "Novel") : (isZh ? "短剧" : "Drama")}</span>
                 <strong>{project.title || project.id}</strong>
                 <small>{[project.genre, project.targetLanguage, project.projectGroup].filter(Boolean).join(" · ")}</small>
               </article>

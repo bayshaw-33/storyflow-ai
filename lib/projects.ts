@@ -1,7 +1,7 @@
 import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
-export type WorkflowType = "creation" | "continuation" | "song" | "viral";
+export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel";
 export type StepVersionSource = "ai" | "manual" | "demo" | "optimize" | "restore";
 export type ProjectRole = "main_season" | "spin_off" | "prequel" | "adaptation" | "localization" | "other";
 
@@ -19,7 +19,12 @@ export type WorkflowPhaseKey =
   | "story_design"
   | "script_production"
   | "localization_evaluation"
-  | "storyboard_delivery";
+  | "storyboard_delivery"
+  | "novel_setup"
+  | "novel_bible"
+  | "novel_structure"
+  | "novel_chapters"
+  | "novel_delivery";
 
 export type StepStatus = "empty" | "draft" | "confirmed" | "stale";
 
@@ -92,6 +97,31 @@ export type StructuredEpisode = {
   scenes: StructuredScene[];
 };
 
+export type NovelSettings = {
+  type: string;
+  targetPlatform: string;
+  targetLanguage: string;
+  targetWordCount: number;
+  serializationFrequency: string;
+  targetReader: string;
+  retentionHook: string;
+};
+
+export type NovelChapter = {
+  id: string;
+  chapterNo: number;
+  title: string;
+  outline: string;
+  draft: string;
+  endingHook: string;
+  pov: string;
+  wordCount: number;
+  continuityNotes: string;
+  status: "draft" | "reviewed" | "locked";
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DramaProject = {
   id: string;
   workflowType: WorkflowType;
@@ -134,6 +164,16 @@ export type DramaProject = {
   storyboardScript: string;
   storyboardEpisodes: StoryboardEpisode[];
   deliveryPackage: string;
+  novelSettings: NovelSettings;
+  novelBrief: string;
+  novelBible: string;
+  novelCharacters: string;
+  novelVolumeOutline: string;
+  novelChapterOutline: string;
+  novelChapterDraft: string;
+  novelContinuityNotes: string;
+  novelStyleGuide: string;
+  novelChapters: NovelChapter[];
   projectGroup: string;
   universeId?: string | null;
   seasonNumber?: number | null;
@@ -226,6 +266,14 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   storyboard_script: "storyboardScript",
   final_delivery: "deliveryPackage",
   song_workbench: "idea",
+  novel_brief: "novelBrief",
+  novel_bible: "novelBible",
+  novel_characters: "novelCharacters",
+  novel_volume_outline: "novelVolumeOutline",
+  novel_chapter_outline: "novelChapterOutline",
+  novel_chapter_draft: "novelChapterDraft",
+  novel_revision: "novelChapterDraft",
+  novel_export: "deliveryPackage",
   viral_video_analysis: "idea",
   viral_structure_remake: "idea",
   viral_export_package: "deliveryPackage",
@@ -265,6 +313,17 @@ export const continuationWorkflowSteps: WorkflowStep[] = [
   { key: "format_check", field: "formatCheck", label: "格式检查 / Hollywood & Asian", short: "格式" },
   { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
   { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
+];
+
+export const novelWorkflowSteps: WorkflowStep[] = [
+  { key: "novel_brief", field: "novelBrief", label: "小说创意 Brief", short: "Brief" },
+  { key: "novel_bible", field: "novelBible", label: "小说 Bible", short: "Bible" },
+  { key: "novel_characters", field: "novelCharacters", label: "小说角色卡", short: "角色" },
+  { key: "novel_volume_outline", field: "novelVolumeOutline", label: "分卷大纲", short: "卷纲" },
+  { key: "novel_chapter_outline", field: "novelChapterOutline", label: "章节大纲", short: "章纲" },
+  { key: "novel_chapter_draft", field: "novelChapterDraft", label: "章节正文", short: "正文" },
+  { key: "novel_revision", field: "novelChapterDraft", label: "章节修改", short: "修改" },
+  { key: "novel_export", field: "deliveryPackage", label: "小说导出包", short: "导出" },
 ];
 
 export const workflowSteps = creationWorkflowSteps;
@@ -315,12 +374,53 @@ export const workflowPhases: WorkflowPhase[] = [
   },
 ];
 
+export const novelWorkflowPhases: WorkflowPhase[] = [
+  {
+    key: "novel_setup",
+    title: "项目设定",
+    englishTitle: "Project Setup",
+    description: "标题、类型、平台、语言、目标字数、连载频率和读者定位。",
+    stepKeys: ["novel_brief"],
+  },
+  {
+    key: "novel_bible",
+    title: "小说 Bible",
+    englishTitle: "Novel Bible",
+    description: "世界观、角色、关系、规则、伏笔和 locked canon。",
+    stepKeys: ["novel_bible", "novel_characters"],
+  },
+  {
+    key: "novel_structure",
+    title: "卷纲与长线结构",
+    englishTitle: "Volume Structure",
+    description: "全书结构、分卷目标、关键反转和情感线推进。",
+    stepKeys: ["novel_volume_outline"],
+  },
+  {
+    key: "novel_chapters",
+    title: "章节生产",
+    englishTitle: "Chapter Production",
+    description: "章节大纲、正文、结尾钩子和连续性备注。",
+    stepKeys: ["novel_chapter_outline", "novel_chapter_draft", "novel_revision"],
+  },
+  {
+    key: "novel_delivery",
+    title: "修订与交付",
+    englishTitle: "Revision & Delivery",
+    description: "导出、转短剧 Brief、Universe Inbox 候选项。",
+    stepKeys: ["novel_export"],
+  },
+];
+
 export function getWorkflowSteps(projectOrType?: DramaProject | WorkflowType) {
   const workflowType = typeof projectOrType === "string" ? projectOrType : projectOrType?.workflowType;
+  if (workflowType === "novel") return novelWorkflowSteps;
   return workflowType === "continuation" ? continuationWorkflowSteps : creationWorkflowSteps;
 }
 
 export function getWorkflowPhases(projectOrType?: DramaProject | WorkflowType) {
+  const workflowType = typeof projectOrType === "string" ? projectOrType : projectOrType?.workflowType;
+  if (workflowType === "novel") return novelWorkflowPhases;
   const steps = getWorkflowSteps(projectOrType);
   const availableStepKeys = new Set(steps.map((step) => step.key));
   return workflowPhases
@@ -332,7 +432,7 @@ export function getWorkflowPhases(projectOrType?: DramaProject | WorkflowType) {
 }
 
 export function getPhaseForStep(taskType: TaskType) {
-  return workflowPhases.find((phase) => phase.stepKeys.includes(taskType))?.key || "story_design";
+  return [...workflowPhases, ...novelWorkflowPhases].find((phase) => phase.stepKeys.includes(taskType))?.key || "story_design";
 }
 
 export function createProject(overrides: Partial<DramaProject> = {}): DramaProject {
@@ -380,6 +480,16 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     storyboardScript: "",
     storyboardEpisodes: [],
     deliveryPackage: "",
+    novelSettings: createEmptyNovelSettings(),
+    novelBrief: "",
+    novelBible: "",
+    novelCharacters: "",
+    novelVolumeOutline: "",
+    novelChapterOutline: "",
+    novelChapterDraft: "",
+    novelContinuityNotes: "",
+    novelStyleGuide: "",
+    novelChapters: [],
     projectGroup: DEFAULT_PROJECT_GROUP,
     universeId: null,
     seasonNumber: null,
@@ -417,6 +527,22 @@ export function createContinuationProject(overrides: Partial<DramaProject> = {})
   });
 }
 
+export function createNovelProject(overrides: Partial<DramaProject> = {}): DramaProject {
+  return createProject({
+    workflowType: "novel",
+    title: "未命名小说项目",
+    genre: "狼人Alpha",
+    episodeDuration: "",
+    episodeCount: 0,
+    storyBible: createEmptyStoryBible({
+      languageStyle: "强代入、强情绪、连续钩子、章节末尾留悬念。",
+      pacingRules: "每章有明确目标、冲突升级、状态变化和结尾钩子。",
+    }),
+    novelSettings: createEmptyNovelSettings(),
+    ...overrides,
+  });
+}
+
 export function applyDemoStep(project: DramaProject, taskType: TaskType): DramaProject {
   return {
     ...setStepContent(project, taskType, demoStepContent[taskType]),
@@ -426,10 +552,12 @@ export function applyDemoStep(project: DramaProject, taskType: TaskType): DramaP
 }
 
 export function exportProjectMarkdown(project: DramaProject) {
+  if (project.workflowType === "novel") return buildNovelMarkdown(project);
   return buildDeliveryMarkdown(project, false);
 }
 
 export function buildDeliveryMarkdown(project: DramaProject, deliveryOnly = true) {
+  if (project.workflowType === "novel") return buildNovelMarkdown(project, deliveryOnly);
   const lines = [
     `# ${project.title}`,
     "",
@@ -486,6 +614,58 @@ export function buildDeliveryMarkdown(project: DramaProject, deliveryOnly = true
     project.qualityEvaluation || "未生成",
     "",
     "## 最终交付说明",
+    project.deliveryPackage || "未生成",
+    "",
+  ].join("\n");
+}
+
+function buildNovelMarkdown(project: DramaProject, deliveryOnly = false) {
+  const settings = normalizeNovelSettings(project.novelSettings);
+  const chapters = project.novelChapters || [];
+  const lines = [
+    `# ${project.title}`,
+    "",
+    `导出时间：${new Date().toLocaleString("zh-CN")}`,
+    `小说类型：${settings.type || project.genre}`,
+    `目标平台：${settings.targetPlatform}`,
+    `目标语言：${settings.targetLanguage}`,
+    `目标字数：${settings.targetWordCount}`,
+    `连载频率：${settings.serializationFrequency}`,
+    "",
+    "## Novel Brief",
+    project.novelBrief || "未生成",
+    "",
+    "## 小说 Bible",
+    project.novelBible || "未生成",
+    "",
+    "## 角色卡",
+    project.novelCharacters || "未生成",
+    "",
+    "## 分卷大纲",
+    project.novelVolumeOutline || "未生成",
+    "",
+    "## 章节",
+    chapters.length
+      ? chapters.map((chapter) => [
+          `### 第 ${chapter.chapterNo} 章 ${chapter.title}`,
+          "",
+          chapter.outline ? `#### 大纲\n${chapter.outline}` : "",
+          chapter.draft ? `#### 正文\n${chapter.draft}` : "",
+          chapter.endingHook ? `#### 结尾钩子\n${chapter.endingHook}` : "",
+          chapter.continuityNotes ? `#### 连续性备注\n${chapter.continuityNotes}` : "",
+        ].filter(Boolean).join("\n\n")).join("\n\n")
+      : project.novelChapterDraft || "未生成",
+    "",
+  ];
+
+  if (deliveryOnly) return lines.join("\n");
+
+  return [
+    ...lines,
+    "## 连续性备注",
+    project.novelContinuityNotes || "未生成",
+    "",
+    "## 小说导出包 / 转短剧 Brief",
     project.deliveryPackage || "未生成",
     "",
   ].join("\n");
@@ -591,6 +771,10 @@ export function setStepContent(project: DramaProject, taskType: TaskType, conten
   if (taskType === "storyboard_script") {
     nextProject.storyboardEpisodes = parseStoryboardEpisodes(content);
     nextProject.storyboardScript = storyboardEpisodesToMarkdown(nextProject.storyboardEpisodes) || content;
+  }
+
+  if (taskType === "novel_chapter_outline" || taskType === "novel_chapter_draft" || taskType === "novel_revision") {
+    return upsertNovelChapterFromOutput(nextProject, content, taskType);
   }
 
   return nextProject;
@@ -728,6 +912,19 @@ export function createEmptyStoryBible(overrides: Partial<StoryBible> = {}): Stor
     languageStyle: "",
     pacingRules: "",
     confirmedFacts: "",
+    ...overrides,
+  };
+}
+
+export function createEmptyNovelSettings(overrides: Partial<NovelSettings> = {}): NovelSettings {
+  return {
+    type: "狼人Alpha",
+    targetPlatform: "WebNovel / Dreame",
+    targetLanguage: "英文",
+    targetWordCount: 120000,
+    serializationFrequency: "每日 1 章",
+    targetReader: "18-34 岁女性向连载读者",
+    retentionHook: "身份秘密、情感拉扯、章节末尾反转",
     ...overrides,
   };
 }
@@ -930,6 +1127,16 @@ function normalizeProject(project: LegacyProject): DramaProject {
     storyboardScript: storyboardEpisodesToMarkdown(storyboardEpisodes) || project.storyboardScript || "",
     storyboardEpisodes,
     deliveryPackage: project.deliveryPackage || "",
+    novelSettings: normalizeNovelSettings(project.novelSettings),
+    novelBrief: project.novelBrief || "",
+    novelBible: project.novelBible || "",
+    novelCharacters: project.novelCharacters || "",
+    novelVolumeOutline: project.novelVolumeOutline || "",
+    novelChapterOutline: project.novelChapterOutline || "",
+    novelChapterDraft: project.novelChapterDraft || "",
+    novelContinuityNotes: project.novelContinuityNotes || "",
+    novelStyleGuide: project.novelStyleGuide || "",
+    novelChapters: Array.isArray(project.novelChapters) ? project.novelChapters.map(normalizeNovelChapter) : [],
     projectGroup: normalizeProjectGroup(project.projectGroup),
     universeId: typeof project.universeId === "string" ? project.universeId : null,
     seasonNumber: Number.isFinite(Number(project.seasonNumber)) ? Number(project.seasonNumber) : null,
@@ -1010,6 +1217,64 @@ function parseStoryboardEpisodes(content: string): StoryboardEpisode[] {
   });
 }
 
+function upsertNovelChapterFromOutput(project: DramaProject, content: string, taskType: TaskType): DramaProject {
+  const now = new Date().toISOString();
+  const parsed = parseNovelChapterOutput(content);
+  const existingIndex = Math.max(0, (project.novelChapters || []).length - 1);
+  const existing = project.novelChapters?.[existingIndex];
+  const chapterNo = existing?.chapterNo || project.novelChapters.length + 1;
+  const nextChapter = normalizeNovelChapter({
+    ...existing,
+    chapterNo,
+    title: parsed.title || existing?.title || `第 ${chapterNo} 章`,
+    outline: parsed.outline || (taskType === "novel_chapter_outline" ? content : existing?.outline || project.novelChapterOutline),
+    draft: parsed.draft || existing?.draft || "",
+    endingHook: parsed.endingHook || existing?.endingHook || "",
+    continuityNotes: parsed.continuityNotes || existing?.continuityNotes || project.novelContinuityNotes,
+    updatedAt: now,
+  }, chapterNo - 1);
+  const nextChapters = [...(project.novelChapters || [])];
+
+  if (existing) {
+    nextChapters[existingIndex] = nextChapter;
+  } else {
+    nextChapters.push(nextChapter);
+  }
+
+  return {
+    ...project,
+    novelChapterOutline: parsed.outline || project.novelChapterOutline,
+    novelChapterDraft: parsed.draft || project.novelChapterDraft,
+    novelContinuityNotes: parsed.continuityNotes || project.novelContinuityNotes,
+    novelChapters: nextChapters,
+    updatedAt: now,
+  };
+}
+
+function parseNovelChapterOutput(content: string) {
+  return {
+    title: pickDelimitedSection(content, "CHAPTER_TITLE").split("\n")[0]?.trim() || "",
+    outline: pickDelimitedSection(content, "CHAPTER_OUTLINE"),
+    draft: pickDelimitedSection(content, "CHAPTER_DRAFT"),
+    endingHook: pickDelimitedSection(content, "ENDING_HOOK"),
+    continuityNotes: pickDelimitedSection(content, "CONTINUITY_NOTES"),
+  };
+}
+
+function pickDelimitedSection(content: string, key: string) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = content.match(new RegExp(`---${escaped}---\\s*([\\s\\S]*?)(?=\\n---[A-Z_]+---|$)`, "i"));
+  return match?.[1]?.trim() || "";
+}
+
+function countWords(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const cjkCount = (trimmed.match(/[\u4e00-\u9fff]/g) || []).length;
+  const wordCount = (trimmed.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g) || []).length;
+  return cjkCount + wordCount;
+}
+
 function pickLine(section: string, labels: string[]) {
   for (const label of labels) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1045,6 +1310,39 @@ function normalizeStoryBible(
     pacingRules: storyBible?.pacingRules || "前 3 秒出钩子，每 30-45 秒有价值变化，每集结尾留强钩子。",
     confirmedFacts: storyBible?.confirmedFacts || "",
   });
+}
+
+function normalizeNovelSettings(settings?: Partial<NovelSettings>): NovelSettings {
+  return createEmptyNovelSettings({
+    type: settings?.type || undefined,
+    targetPlatform: settings?.targetPlatform || undefined,
+    targetLanguage: settings?.targetLanguage || undefined,
+    targetWordCount: Number.isFinite(Number(settings?.targetWordCount)) ? Number(settings?.targetWordCount) : undefined,
+    serializationFrequency: settings?.serializationFrequency || undefined,
+    targetReader: settings?.targetReader || undefined,
+    retentionHook: settings?.retentionHook || undefined,
+  });
+}
+
+function normalizeNovelChapter(chapter: Partial<NovelChapter>, index = 0): NovelChapter {
+  const now = new Date().toISOString();
+  const draft = chapter.draft || "";
+  const status = chapter.status === "reviewed" || chapter.status === "locked" ? chapter.status : "draft";
+
+  return {
+    id: chapter.id || createId(),
+    chapterNo: Number.isFinite(Number(chapter.chapterNo)) ? Number(chapter.chapterNo) : index + 1,
+    title: chapter.title || `第 ${index + 1} 章`,
+    outline: chapter.outline || "",
+    draft,
+    endingHook: chapter.endingHook || "",
+    pov: chapter.pov || "",
+    wordCount: Number.isFinite(Number(chapter.wordCount)) ? Number(chapter.wordCount) : countWords(draft),
+    continuityNotes: chapter.continuityNotes || "",
+    status,
+    createdAt: chapter.createdAt || now,
+    updatedAt: chapter.updatedAt || now,
+  };
 }
 
 function normalizeCharacterCard(card: Partial<CharacterCard>): CharacterCard {
@@ -1201,6 +1499,22 @@ const demoStepContent: Record<TaskType, string> = {
     "1. 故事概况：隐藏继承人林晚在订婚宴被背叛后，以董事身份回归复仇。\n2. 大纲交付范围：三幕结构、八段式 Treatment、分集大纲。\n3. 最终剧本版本清单：中文版本、英文版本、双语版本。\n4. 分镜交付范围：按集拆分，每集包含镜头、台词、音效和 AI 生成提示词。\n5. 现场演示建议：先展示附件导入，再一键推进到分镜和交付下载。",
   song_workbench:
     "---LYRICS---\n[Verse]\nA demo song draft belongs in the song workbench, not the drama workflow.\n---STYLE_PROMPT---\nindie pop, safe vocal descriptor, clean Suno-ready mix\n---COMPOSITION_PROMPT---\nStart with a small motif, build into a repeatable chorus, then end with a clean outro.",
+  novel_brief:
+    "书名：月影契约\n1. 类型定位：狼人 Alpha 女性向连载\n2. 一句话卖点：被逐出族群的女主发现自己才是月神契约的真正继承人。\n3. 主冲突：身份被夺、伴侣契约被伪造、族群权力重组。\n4. 前 3 章爆点：退婚羞辱、隐藏血脉觉醒、真正 Alpha 现身。",
+  novel_bible:
+    "1. 世界观：狼人族群由月神契约和血脉等级维持秩序。\n2. 核心规则：契约不能被强行转移，除非原继承人被公开判定死亡。\n3. locked canon：女主没有真正失去继承权。\n4. 伏笔清单：伪造死亡证明、月影印记、男主旧伤来源。",
+  novel_characters:
+    "## 主角\n- 身份：被流放的月神契约继承人\n- 外显目标：夺回身份\n- 秘密：血脉未被封印\n## 反派 / 阻力角色\n- 伪继承人：靠伪造证据占据族群位置\n## 关系网\n女主 -> 被夺权 -> 伪继承人；男主 -> 守护契约 -> 女主",
+  novel_volume_outline:
+    "1. 全书主线：女主从被流放者成长为族群秩序重建者。\n2. 第一卷：身份觉醒与退婚反击。\n3. 第二卷：族群审判与契约真相。\n4. 第三卷：月神规则改写与最终联盟。",
+  novel_chapter_outline:
+    "---CHAPTER_TITLE---\n第一章 退婚夜\n---CHAPTER_OUTLINE---\n1. 女主在族群仪式上被公开退婚。\n2. 伪继承人拿出死亡证明。\n3. 女主的月影印记短暂亮起。\n---ENDING_HOOK---\n真正 Alpha 叫出她被抹去的本名。\n---CONTINUITY_NOTES---\n月影印记不能提前完全暴露。",
+  novel_chapter_draft:
+    "---CHAPTER_TITLE---\n第一章 退婚夜\n---CHAPTER_OUTLINE---\n女主被公开退婚，隐藏血脉第一次失控。\n---CHAPTER_DRAFT---\n大厅里的银色火焰一盏盏亮起时，所有人都在等她低头。\n可她没有。\n退婚书被推到面前，纸边沾着月桂香，那是族群审判才会用的香。\n“签了它。”\n她抬眼，看见曾经的未婚夫站在高台上，身边是披着白纱的伪继承人。\n指尖忽然发烫。被他们宣称早已消失的月影印记，在袖口下亮了一瞬。\n---ENDING_HOOK---\n门外传来低沉男声：“谁允许你们审判真正的继承人？”\n---CONTINUITY_NOTES---\n女主印记只短暂出现；男主知道她的本名但暂不解释来源。",
+  novel_revision:
+    "---CHAPTER_TITLE---\n第一章 退婚夜\n---CHAPTER_OUTLINE---\n按修改指令重写后的章节大纲。\n---CHAPTER_DRAFT---\n这是按指令重写后的完整章节示例。\n---ENDING_HOOK---\n新的章节钩子。\n---CONTINUITY_NOTES---\n修改后需要继续追踪的角色状态。",
+  novel_export:
+    "1. Novel Brief：月影契约。\n2. 小说 Bible：狼人族群、月神契约、身份夺回。\n3. 角色卡：女主、真正 Alpha、伪继承人。\n4. 可转短剧 Brief：退婚羞辱开场，三集内完成身份反击。",
   viral_video_analysis:
     "# 爆款视频结构拆解\n\n## F1 开场钩子\n前 3 秒建立强反差和明确利益点。\n\n## F2 主体结构\n用连续动作推进信息密度和情绪曲线。\n\n## F3 动作节点\n关键转折让观众重新评估结果。\n\n## F4 结果呈现\n结果必须可视化、可验证。\n\n## F5 记忆点\n保留一句可复用的结构公式。",
   viral_structure_remake:

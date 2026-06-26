@@ -430,7 +430,7 @@ export default function WorkflowPage() {
     targetMarkets: "North America",
     tone: "",
   });
-  const [openPhases, setOpenPhases] = useState<Record<WorkflowPhaseKey, boolean>>({
+  const [openPhases, setOpenPhases] = useState<Partial<Record<WorkflowPhaseKey, boolean>>>({
     project_setup: true,
     story_design: true,
     script_production: false,

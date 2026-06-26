@@ -17,10 +17,22 @@
 `storyflow_projects`
 - `id`: 项目 ID，前端已有 UUID 或 demo ID。
 - `user_id`: Supabase Auth 用户 ID。
-- `workflow_type`: `creation` 或 `continuation`。
+- `workflow_type`: `creation` / `continuation` / `song` / `viral` / `novel`。
 - `project_group`: 首页左侧分组。
 - `status`: `draft` / `generating` / `ready` / `error`。
 - `data`: 完整 `DramaProject` JSON。
+
+当前 `novel` MVP 先写入 `storyflow_projects.data` 兼容快照，字段包括：
+- `novelSettings`: 类型、平台、语言、目标字数、连载频率、目标读者和留存钩子。
+- `novelBrief`
+- `novelBible`
+- `novelCharacters`
+- `novelVolumeOutline`
+- `novelChapterOutline`
+- `novelChapterDraft`
+- `novelContinuityNotes`
+- `novelStyleGuide`
+- `novelChapters[]`: `chapterNo`、`title`、`outline`、`draft`、`endingHook`、`pov`、`wordCount`、`continuityNotes`、`status`。
 
 `storyflow_project_steps`
 - 预留给 Codex2 拆分 5 阶段和结构化步骤。
@@ -65,6 +77,7 @@
   - `options`
   - `allSteps`
 - 成功后写入 `storyflow_generation_tasks` 和 `storyflow_generations`。
+- 小说任务已接入同一 API：`novel_brief`、`novel_bible`、`novel_characters`、`novel_volume_outline`、`novel_chapter_outline`、`novel_chapter_draft`、`novel_revision`、`novel_export`。
 
 `POST /api/ai/character-image`
 - Header: `Authorization: Bearer <supabase_access_token>`

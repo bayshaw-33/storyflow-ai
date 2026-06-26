@@ -21,6 +21,14 @@ const taskTypes: TaskType[] = [
   "storyboard_script",
   "final_delivery",
   "song_workbench",
+  "novel_brief",
+  "novel_bible",
+  "novel_characters",
+  "novel_volume_outline",
+  "novel_chapter_outline",
+  "novel_chapter_draft",
+  "novel_revision",
+  "novel_export",
   "viral_video_analysis",
   "viral_structure_remake",
   "viral_export_package",
@@ -64,7 +72,7 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
       {
         role: "system",
         content:
-          "你是 StoryFlow AI 的服务端生成器，只输出符合海外漫剧研发流程的正文内容。严禁输出“好的”“以下是”等 AI 回复套话。用户给出优化要求时，必须执行实质改写，不能只做措辞微调。",
+          "你是 Kiikis 的服务端生成器，只输出符合当前创作工作流的正文内容。严禁输出“好的”“以下是”等 AI 回复套话。用户给出优化要求时，必须执行实质改写，不能只做措辞微调。",
       },
       {
         role: "user",

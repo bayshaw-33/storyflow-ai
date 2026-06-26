@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
-import { createProject, upsertProject } from "@/lib/projects";
+import { createNovelProject, createProject, upsertProject } from "@/lib/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const templates = [
   {
     id: "short_drama",
-    title: "Short Drama",
-    titleZh: "短剧",
+    title: "Short Drama Creation",
+    titleZh: "短剧创作",
     description: "Vertical episodes, high-density turns, hooks, and delivery package.",
     descriptionZh: "竖屏分集、高密度反转、钩子和交付包。",
     steps: "9 steps",
@@ -19,8 +19,8 @@ const templates = [
   },
   {
     id: "novel",
-    title: "Novel",
-    titleZh: "小说",
+    title: "Novel Creation",
+    titleZh: "小说创作",
     description: "Serialized arcs, chapter plans, world logic, and character continuity.",
     descriptionZh: "连载弧线、章节规划、世界逻辑和角色连续性。",
     steps: "12 steps",
@@ -68,6 +68,18 @@ export default function TemplatesPage() {
     const template = templates.find((item) => item.id === templateId) || templates[0];
     if (template.id === "viral_creation") {
       router.push("/viral-workbench");
+      return;
+    }
+
+    if (template.id === "novel") {
+      const project = createNovelProject({
+        title: `${template.title} World`,
+        genre: template.titleZh,
+        idea: template.idea,
+        novelBrief: template.idea,
+      });
+      upsertProject(project);
+      router.push(`/novel-workbench?projectId=${encodeURIComponent(project.id)}`);
       return;
     }
 
