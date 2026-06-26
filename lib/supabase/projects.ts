@@ -189,6 +189,14 @@ export async function saveProjectGroupsToSupabase(groups: string[], options: Sup
   await Promise.allSettled(mergeGroups(groups).map((group) => upsertProjectGroupToSupabase(group, options)));
 }
 
+export async function deleteProjectGroupFromSupabase(name: string, options: SupabaseSyncOptions = {}) {
+  if (!isSupabaseConfigured() || !options.accessToken) return;
+  const group = normalizeGroup(name);
+  await supabaseFetch(`${tableUrl(GROUP_TABLE)}?user_id=eq.${encodeURIComponent(getUserIdFromAccessToken(options.accessToken) || "")}&name=eq.${encodeURIComponent(group)}`, {
+    method: "DELETE",
+  }, options);
+}
+
 function projectToRow(project: DramaProject, accessToken?: string | null): ProjectRow {
   const userId = getUserIdFromAccessToken(accessToken);
   return {

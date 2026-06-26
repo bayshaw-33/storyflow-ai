@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   DEFAULT_PROJECT_GROUP,
   type DramaProject,
@@ -20,6 +20,8 @@ type ProjectListProps = {
   loaded: boolean;
   projectCount: number;
   onAddGroup: () => void;
+  onRenameGroup: (group: string) => void;
+  onDeleteGroup: (group: string) => void;
   onCreateProject?: () => void;
   onDeleteProject: (projectId: string) => void;
   onMoveProject: (projectId: string, group: string) => void;
@@ -81,6 +83,8 @@ export function ProjectList({
   groups,
   loaded,
   onDeleteProject,
+  onRenameGroup,
+  onDeleteGroup,
   onAddGroup,
   onCreateProject,
   onMoveProject,
@@ -105,8 +109,20 @@ export function ProjectList({
         {groupedProjects.map(({ group, projects }, groupIndex) => (
           <section className="planet-group-section" key={group || DEFAULT_PROJECT_GROUP}>
             <div className="planet-group-header">
-              <strong>{group || DEFAULT_PROJECT_GROUP}</strong>
-              <span>{projects.length} {isZh ? "个项目" : "projects"}</span>
+              <div>
+                <strong>{group || DEFAULT_PROJECT_GROUP}</strong>
+                <span>{projects.length} {isZh ? "个项目" : "projects"}</span>
+              </div>
+              {(group || DEFAULT_PROJECT_GROUP) !== DEFAULT_PROJECT_GROUP ? (
+                <div className="planet-group-actions">
+                  <button className="icon-button subtle" type="button" onClick={() => onRenameGroup(group || DEFAULT_PROJECT_GROUP)} title={isZh ? "编辑分组" : "Edit group"}>
+                    <Pencil size={15} />
+                  </button>
+                  <button className="icon-button subtle" type="button" onClick={() => onDeleteGroup(group || DEFAULT_PROJECT_GROUP)} title={isZh ? "删除分组" : "Delete group"}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ) : null}
             </div>
             <div className="planet-card-grid">
               {groupIndex === 0 ? (

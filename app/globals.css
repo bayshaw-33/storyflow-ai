@@ -681,9 +681,26 @@ input:focus, textarea:focus, select:focus {
   color: var(--ink-secondary);
   font-size: 13px;
 }
+.planet-group-header > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.planet-group-header strong {
+  color: var(--ink-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .planet-group-header span {
   color: var(--ink-muted);
   font-size: 12px;
+}
+.planet-group-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
 }
 .story-planet-card,
 .project-planet-card {

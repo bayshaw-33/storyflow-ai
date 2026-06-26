@@ -9,8 +9,8 @@ type DramaWorkflowType = Extract<WorkflowType, "creation" | "continuation">;
 const workflowEntries = [
   {
     id: "short_drama",
-    title: "Short Drama",
-    titleZh: "短剧",
+    title: "Short Drama Creation",
+    titleZh: "短剧创作",
     description: "Fast vertical episodes with hooks, cliffhangers, and delivery assets.",
     descriptionZh: "高密度竖屏短剧，包含钩子、反转和交付内容。",
     steps: 14,
@@ -33,8 +33,8 @@ const workflowEntries = [
   },
   {
     id: "novel",
-    title: "Novel",
-    titleZh: "小说",
+    title: "Novel Creation",
+    titleZh: "小说创作",
     description: "Long-form arcs, chapter engines, canon, and serialized pacing.",
     descriptionZh: "长篇故事线、章节推进、设定连续性与连载节奏。",
     steps: 12,

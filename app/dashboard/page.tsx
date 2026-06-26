@@ -17,10 +17,12 @@ import {
   readProjectGroupsFromStorage,
   readProjectsFromStorage,
   saveProjectGroupsToStorage,
+  saveProjectsToStorage,
   upsertProject,
   WorkflowType,
 } from "@/lib/projects";
 import {
+  deleteProjectGroupFromSupabase,
   deleteProjectFromSupabase,
   saveProjectGroupsToSupabase,
   syncProjectsWithSupabase,
@@ -200,6 +202,65 @@ export default function ProjectListPage() {
     void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
   }
 
+  function renameGroup(group: string) {
+    if (group === DEFAULT_PROJECT_GROUP) return;
+
+    const name = window.prompt(isZh ? "请输入新的分组名称" : "Enter a new group name", group);
+    const nextName = name?.trim();
+    if (!nextName || nextName === group) return;
+
+    const now = new Date().toISOString();
+    const nextProjects = projects.map((project) => (
+      (project.projectGroup || DEFAULT_PROJECT_GROUP) === group
+        ? { ...project, projectGroup: nextName, updatedAt: now }
+        : project
+    ));
+    const nextGroups = Array.from(new Set([DEFAULT_PROJECT_GROUP, ...groups.map((item) => (item === group ? nextName : item))]));
+
+    setProjects(nextProjects);
+    setGroups(nextGroups);
+    saveProjectsToStorage(nextProjects);
+    saveProjectGroupsToStorage(nextGroups);
+    void deleteProjectGroupFromSupabase(group, { accessToken: session?.access_token });
+    void saveProjectGroupsToSupabase(nextGroups, { accessToken: session?.access_token });
+    void Promise.allSettled(
+      nextProjects
+        .filter((project) => (project.projectGroup || DEFAULT_PROJECT_GROUP) === nextName)
+        .map((project) => upsertProjectToSupabase(project, { accessToken: session?.access_token })),
+    );
+  }
+
+  function deleteGroup(group: string) {
+    if (group === DEFAULT_PROJECT_GROUP) return;
+
+    const affectedCount = projects.filter((project) => (project.projectGroup || DEFAULT_PROJECT_GROUP) === group).length;
+    const confirmed = window.confirm(
+      isZh
+        ? `确定删除分组「${group}」吗？该分组内 ${affectedCount} 个项目会移回「${DEFAULT_PROJECT_GROUP}」。`
+        : `Delete group "${group}"? ${affectedCount} project(s) will move back to "${DEFAULT_PROJECT_GROUP}".`,
+    );
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+    const nextProjects = projects.map((project) => (
+      (project.projectGroup || DEFAULT_PROJECT_GROUP) === group
+        ? { ...project, projectGroup: DEFAULT_PROJECT_GROUP, updatedAt: now }
+        : project
+    ));
+    const nextGroups = groups.filter((item) => item !== group);
+
+    setProjects(nextProjects);
+    setGroups(nextGroups);
+    saveProjectsToStorage(nextProjects);
+    saveProjectGroupsToStorage(nextGroups);
+    void deleteProjectGroupFromSupabase(group, { accessToken: session?.access_token });
+    void Promise.allSettled(
+      nextProjects
+        .filter((project) => (project.projectGroup || DEFAULT_PROJECT_GROUP) === DEFAULT_PROJECT_GROUP)
+        .map((project) => upsertProjectToSupabase(project, { accessToken: session?.access_token })),
+    );
+  }
+
   function moveProject(projectId: string, nextGroup: string) {
     const group = nextGroup.trim() || DEFAULT_PROJECT_GROUP;
     const project = projects.find((item) => item.id === projectId);
@@ -274,6 +335,8 @@ export default function ProjectListPage() {
             loaded={loaded}
             projectCount={projects.length}
             onAddGroup={addGroup}
+            onRenameGroup={renameGroup}
+            onDeleteGroup={deleteGroup}
             onCreateProject={() => openWizard("creation")}
             onDeleteProject={removeProject}
             onMoveProject={moveProject}
