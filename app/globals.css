@@ -1726,6 +1726,12 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.7;
   font-family: var(--font-body);
 }
+.song-output-grid .song-output-card:first-child {
+  grid-row: span 2;
+}
+.song-output-grid .song-prompt-textarea {
+  min-height: clamp(220px, 29vh, 360px);
+}
 .song-ai-panel {
   display: flex;
   flex-direction: column;
@@ -1760,6 +1766,38 @@ input:focus, textarea:focus, select:focus {
 .song-audit-inline small {
   display: block;
   color: var(--ink-muted);
+}
+.song-audit-result-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+}
+.song-audit-result-panel[data-status="high_risk"] {
+  border-color: rgba(255, 96, 96, 0.45);
+}
+.song-audit-result-panel > div {
+  min-width: 0;
+}
+.song-audit-result-panel span {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.song-audit-result-panel strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-primary);
+  font-size: 13px;
+  line-height: 1.45;
 }
 .song-history-list {
   max-height: 320px;
@@ -1889,6 +1927,13 @@ input:focus, textarea:focus, select:focus {
   }
   .song-output-grid {
     grid-template-columns: 1fr;
+  }
+  .song-output-grid .song-output-card:first-child {
+    grid-row: auto;
+  }
+  .universe-access-banner {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 .app-header {
@@ -2680,6 +2725,38 @@ textarea.script-editor {
 .universe-list-card,
 .universe-source-card {
   min-width: 0;
+}
+.universe-access-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.035);
+}
+.universe-access-banner div {
+  min-width: 0;
+}
+.universe-access-banner span {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.universe-access-banner h2 {
+  margin: 4px 0 0;
+  color: var(--ink-primary);
+  font-size: 18px;
+  font-weight: 600;
+}
+.universe-access-banner p {
+  max-width: 760px;
+  margin: var(--space-2) 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.65;
 }
 .universe-list-card {
   grid-row: span 2;

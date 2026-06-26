@@ -207,6 +207,23 @@ export default function UniversesPage() {
       </section>
 
       <section className="universe-module-layout">
+        {noUniverseAccess ? (
+          <section className="dashboard-panel universe-access-banner">
+            <div>
+              <span>{isZh ? "Ultra 功能" : "Ultra feature"}</span>
+              <h2>{isZh ? "当前为只读预览模式" : "Read-only preview mode"}</h2>
+              <p>
+                {isZh
+                  ? "非 Ultra 会员可以看到 Universe Engine 的工作流、来源项目和升级入口，但不能创建宇宙、写入 Inbox 或确认 canon。升级后可从项目建立长期 IP 资产。"
+                  : "Non-Ultra users can preview the workflow, source projects, and upgrade entry, but cannot create Universes, write Inbox items, or confirm canon."}
+              </p>
+            </div>
+            <Link className="primary-button" href="/subscription">
+              {isZh ? "升级 Ultra" : "Upgrade to Ultra"}
+            </Link>
+          </section>
+        ) : null}
+
         <section className="dashboard-panel universe-overview-card">
           <div className="dashboard-panel-head">
             <div>

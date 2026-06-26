@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Copy, Save, Sparkles } from "lucide-react";
-import { createProject, upsertProject, type DramaProject } from "@/lib/projects";
+import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 type SongProjectType =
@@ -460,6 +460,7 @@ export default function SongWorkbenchPage() {
   const [revisionInstruction, setRevisionInstruction] = useState("");
   const [auditOpen, setAuditOpen] = useState(false);
   const [singerDraft, setSingerDraft] = useState<SingerProfile | null>(null);
+  const loadedEntryRef = useRef("");
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -471,31 +472,46 @@ export default function SongWorkbenchPage() {
   }, []);
 
   useEffect(() => {
-    if (!session?.user.id) {
-      setSongProjectId(null);
+    const entry = getSongEntry();
+
+    if (entry.forceNew) {
+      if (loadedEntryRef.current !== "new") {
+        resetSongWorkbench();
+        loadedEntryRef.current = "new";
+      }
       return;
     }
 
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
+    if (entry.projectId) {
+      const key = `project:${entry.projectId}`;
+      if (loadedEntryRef.current === key) return;
 
-    void supabase
-      .from("storyflow_projects")
-      .select("id")
-      .eq("user_id", session.user.id)
-      .eq("workflow_type", "song")
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.id) setSongProjectId(String(data.id));
-      });
-  }, [session?.user.id]);
+      const localProject = readProjectsFromStorage().find((project) => project.id === entry.projectId);
+      if (localProject) {
+        applySongProject(localProject);
+        loadedEntryRef.current = key;
+        return;
+      }
 
-  useEffect(() => {
+      if (session?.access_token) {
+        void readProjectFromSupabase(entry.projectId, { accessToken: session.access_token }).then((cloudProject) => {
+          if (cloudProject) {
+            applySongProject(cloudProject);
+            loadedEntryRef.current = key;
+          }
+        });
+      }
+      return;
+    }
+
+    if (loadedEntryRef.current === "draft") return;
+
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (!stored) return;
+      if (!stored) {
+        loadedEntryRef.current = "draft";
+        return;
+      }
       const data = JSON.parse(stored);
       if (data.form) setForm(normalizeStoredForm(data.form));
       if (data.singers) setSingers(data.singers);
@@ -504,17 +520,52 @@ export default function SongWorkbenchPage() {
       if (data.compositionPrompt) setCompositionPrompt(data.compositionPrompt);
       if (data.audit) setAudit(data.audit);
       if (data.versions) setVersions(data.versions);
+      if (data.songProjectId) setSongProjectId(data.songProjectId);
+      loadedEntryRef.current = "draft";
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
+      loadedEntryRef.current = "draft";
     }
-  }, []);
+  }, [session?.access_token]);
 
   useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions }),
+      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId }),
     );
-  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions]);
+  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId]);
+
+  function resetSongWorkbench() {
+    setForm(initialForm);
+    setSingers(defaultSingers);
+    setLyrics("");
+    setStylePrompt("");
+    setCompositionPrompt("");
+    setAudit(null);
+    setVersions([]);
+    setSongProjectId(null);
+    setError("");
+    setSaveStatus("");
+    setSaveWarning("");
+    setRevisionInstruction("");
+    setAuditOpen(false);
+  }
+
+  function applySongProject(project: DramaProject) {
+    const snapshot = songProjectToWorkbench(project);
+    setForm(snapshot.form);
+    setLyrics(snapshot.lyrics);
+    setStylePrompt(snapshot.stylePrompt);
+    setCompositionPrompt(snapshot.compositionPrompt);
+    setAudit(snapshot.audit);
+    setVersions([]);
+    setSongProjectId(project.id);
+    setError("");
+    setSaveStatus("");
+    setSaveWarning("");
+    setRevisionInstruction("");
+    setAuditOpen(false);
+  }
 
   const selectedSingers = useMemo(
     () => uniqueSingerProfiles(singers).filter((singer) => form.selectedSingerIds.includes(singer.id)),
@@ -565,6 +616,9 @@ export default function SongWorkbenchPage() {
   async function generateAll(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setError("");
+    setSaveStatus("");
+    setSaveWarning("");
+    setAuditOpen(false);
     if (!validateForm()) {
       setError(text.required);
       return;
@@ -598,7 +652,8 @@ export default function SongWorkbenchPage() {
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI generation failed.");
 
       const parsed = parseSongGeneration(payload.output || "");
-      const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || "", selectedSingers);
+      const fallbackLyrics = buildLyrics(form, selectedSingers);
+      const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers);
       const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
       const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
@@ -674,6 +729,7 @@ export default function SongWorkbenchPage() {
 
   function runAudit() {
     const nextAudit = auditLyrics(lyrics, stylePrompt, compositionPrompt, selectedSingers, form);
+    setError("");
     setAudit(nextAudit);
     setAuditOpen(true);
   }
@@ -798,7 +854,7 @@ export default function SongWorkbenchPage() {
               <Save size={15} />
               {savingProject ? text.saving : text.saveToProjects}
             </button>
-            <button className="primary-button" type="submit" form="song-workbench-form" disabled={generating}>
+            <button className="primary-button" type="button" onClick={() => void generateAll()} disabled={generating}>
               <Sparkles size={15} />
               {generating ? text.generating : text.generate}
             </button>
@@ -978,7 +1034,27 @@ export default function SongWorkbenchPage() {
               </span>
               <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
             </label>
+            <label className="song-output-card">
+              <span className="song-output-card-head">
+                {locale === "zh-CN" ? "编曲提示词" : "Composition prompt"}
+                <button className="icon-button" type="button" title={text.copy} disabled={!compositionPrompt} onClick={() => copyText(compositionPrompt)}>
+                  <Copy size={15} />
+                </button>
+              </span>
+              <textarea className="song-prompt-textarea" value={compositionPrompt} onChange={(event) => setCompositionPrompt(event.target.value)} />
+            </label>
           </div>
+          {audit ? (
+            <div className="song-audit-result-panel" data-status={audit.status}>
+              <div>
+                <span>{text.audit}</span>
+                <strong>{audit.items.length === 0 ? (locale === "zh-CN" ? "审查通过" : "Audit passed") : auditSummary(audit)}</strong>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setAuditOpen(true)}>
+                {locale === "zh-CN" ? "查看详情" : "View details"}
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <aside className="dashboard-panel song-ai-panel">
@@ -1181,6 +1257,59 @@ function buildSongProjectMarkdown(
     "## 歌词审查",
     audit ? auditReportText(audit) : "未审查",
   ].join("\n");
+}
+
+function songProjectToWorkbench(project: DramaProject) {
+  const content = project.deliveryPackage || project.brief || "";
+  const genres = splitCustom(project.genre || "").filter((item) => genreOptions.includes(item));
+  const customGenre = splitCustom(project.genre || "").filter((item) => !genreOptions.includes(item)).join(", ");
+  const form = normalizeStoredForm({
+    ...initialForm,
+    title: project.title || "",
+    concept: project.idea || extractMarkdownSection(content, "歌曲概念"),
+    outputLanguage: normalizeOutputLanguage(project.targetLanguage),
+    customLanguage: isKnownOutputLanguage(project.targetLanguage) ? "" : project.targetLanguage || "",
+    genres: genres.length ? genres : initialForm.genres,
+    customGenre,
+    instruments: withGenreInstrumentDefaults(genres.length ? genres : initialForm.genres, initialForm.instruments),
+  });
+  const lyrics = project.finalScript || extractMarkdownSection(content, "歌词");
+  const stylePrompt = extractMarkdownSection(content, "Style Prompt");
+  const compositionPrompt = extractMarkdownSection(content, "Composition Prompt");
+
+  return {
+    form,
+    lyrics,
+    stylePrompt,
+    compositionPrompt,
+    audit: lyrics || stylePrompt || compositionPrompt
+      ? auditLyrics(lyrics, stylePrompt, compositionPrompt, [], form)
+      : null,
+  };
+}
+
+function getSongEntry() {
+  if (typeof window === "undefined") return { forceNew: false, projectId: "" };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    forceNew: params.get("new") === "1",
+    projectId: params.get("projectId") || "",
+  };
+}
+
+function extractMarkdownSection(markdown: string, heading: string) {
+  if (!markdown.trim()) return "";
+  const escaped = escapeRegExp(heading);
+  const match = markdown.match(new RegExp(`(?:^|\\n)##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i"));
+  return match?.[1]?.trim() || "";
+}
+
+function isKnownOutputLanguage(value: string) {
+  return ["English", "Chinese", "Bilingual", "Japanese", "Korean", "Spanish", "French", "Cantonese"].includes(value);
+}
+
+function normalizeOutputLanguage(value: string): OutputLanguage {
+  return isKnownOutputLanguage(value) ? value as OutputLanguage : value ? "Custom" : initialForm.outputLanguage;
 }
 
 function auditSummary(audit: AuditResult) {

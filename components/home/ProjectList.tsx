@@ -59,7 +59,7 @@ function getWorkflowDetail(project: DramaProject, isZh: boolean) {
 }
 
 function getProjectHref(project: DramaProject) {
-  if (project.workflowType === "song") return "/song-workbench";
+  if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
   if (project.workflowType === "viral") return "/viral-workbench";
   return `/projects/${project.id}`;
 }

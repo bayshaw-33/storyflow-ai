@@ -267,7 +267,7 @@ export default function ProjectListPage() {
             </div>
           </header>
 
-          <WorkflowList onSelectWorkflow={openWizard} onOpenSongWorkbench={() => router.push("/song-workbench")} />
+          <WorkflowList onSelectWorkflow={openWizard} onOpenSongWorkbench={() => router.push("/song-workbench?new=1")} />
           <ProjectList
             groupedProjects={groupedProjects}
             groups={groups}
