@@ -122,25 +122,35 @@ export async function upsertProjectToSupabase(project: DramaProject, options: Su
   if (!isSupabaseConfigured() || !options.accessToken) return;
 
   try {
-    await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
-      method: "POST",
-      headers: {
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify(projectToRow(project, options.accessToken)),
-    }, options);
+    await upsertProjectRow(projectToRow(project, options.accessToken), options);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (!isMissingPhase2ColumnError(message)) throw error;
-
-    await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
-      method: "POST",
-      headers: {
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify(legacyProjectToRow(project, options.accessToken)),
-    }, options);
+    try {
+      await upsertProjectRow(legacyProjectToRow(project, options.accessToken), options);
+    } catch (legacyError) {
+      try {
+        await upsertProjectRow(minimalProjectToRow(project, options.accessToken), options);
+      } catch (minimalError) {
+        const detail = minimalError instanceof Error
+          ? minimalError.message
+          : legacyError instanceof Error
+            ? legacyError.message
+            : error instanceof Error
+              ? error.message
+              : "Unknown Supabase sync error";
+        throw new Error(detail);
+      }
+    }
   }
+}
+
+async function upsertProjectRow(row: Partial<ProjectRow>, options: SupabaseSyncOptions) {
+  await supabaseFetch(`${tableUrl(PROJECT_TABLE)}?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(row),
+  }, options);
 }
 
 export async function deleteProjectFromSupabase(id: string, options: SupabaseSyncOptions = {}) {
@@ -221,6 +231,19 @@ function legacyProjectToRow(project: DramaProject, accessToken?: string | null):
   };
 }
 
+function minimalProjectToRow(project: DramaProject, accessToken?: string | null): Partial<ProjectRow> {
+  return {
+    id: project.id,
+    user_id: getUserIdFromAccessToken(accessToken),
+    title: project.title,
+    workflow_type: project.workflowType,
+    status: project.status,
+    created_at: project.createdAt,
+    updated_at: project.updatedAt,
+    data: project,
+  };
+}
+
 function rowToProject(row: ProjectRow): DramaProject {
   return normalizeStoredProject({
     ...row.data,
@@ -264,10 +287,6 @@ function mergeProjects(localProjects: DramaProject[], cloudProjects: DramaProjec
 
 function mergeGroups(groups: string[]) {
   return Array.from(new Set([DEFAULT_PROJECT_GROUP, ...groups.map(normalizeGroup).filter(Boolean)]));
-}
-
-function isMissingPhase2ColumnError(message: string) {
-  return /owner_id|mode|target_market|language|episode_count|episode_duration|current_phase|story_bible|universe_id|season_number|project_role|inheritance_settings|schema cache|PGRST204/i.test(message);
 }
 
 function normalizeGroup(group: string) {

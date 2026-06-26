@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy } from "lucide-react";
+import { Copy, Save, Sparkles } from "lucide-react";
 import { createProject, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { upsertProjectToSupabase } from "@/lib/supabase/projects";
@@ -352,6 +352,8 @@ const i18n = {
     saving: "Saving",
     saveToProjects: "Save to projects",
     savedToProjects: "Saved to project list.",
+    savedLocalOnly: "Saved locally. Cloud sync failed.",
+    cloudSyncFailed: "Cloud sync failed",
     saveToProjectsHint: "Saved songs appear on Dashboard and can be used as Universe sources.",
     copy: "Copy",
     lyrics: "Lyrics",
@@ -405,6 +407,8 @@ const i18n = {
     saving: "保存中",
     saveToProjects: "保存到项目列表",
     savedToProjects: "已保存到项目列表。",
+    savedLocalOnly: "已保存到本地，云端同步失败。",
+    cloudSyncFailed: "云端同步失败",
     saveToProjectsHint: "保存后会出现在工作台项目列表，也可作为 Universe 来源项目。",
     copy: "复制",
     lyrics: "歌词",
@@ -452,6 +456,7 @@ export default function SongWorkbenchPage() {
   const [savingProject, setSavingProject] = useState(false);
   const [error, setError] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
+  const [saveWarning, setSaveWarning] = useState("");
   const [revisionInstruction, setRevisionInstruction] = useState("");
   const [auditOpen, setAuditOpen] = useState(false);
   const [singerDraft, setSingerDraft] = useState<SingerProfile | null>(null);
@@ -657,8 +662,11 @@ export default function SongWorkbenchPage() {
         await upsertProjectToSupabase(project, { accessToken: session.access_token });
       }
       if (!options.silent) setSaveStatus(text.savedToProjects);
-    } catch {
-      setError(locale === "zh-CN" ? "歌曲项目已保存到本地，但同步到云端失败。" : "Song saved locally, but cloud sync failed.");
+      setSaveWarning("");
+    } catch (syncError) {
+      const detail = syncError instanceof Error ? syncError.message : "";
+      setSaveStatus(text.savedLocalOnly);
+      setSaveWarning(detail ? `${text.cloudSyncFailed}: ${detail}` : text.cloudSyncFailed);
     } finally {
       setSavingProject(false);
     }
@@ -775,6 +783,28 @@ export default function SongWorkbenchPage() {
       <section className="song-workbench-shell">
         {error ? <div className="notice error">{error}</div> : null}
 
+        <div className="dashboard-panel song-action-bar">
+          <div>
+            <span>{text.outputs}</span>
+            <h2>{form.title || text.titleField}</h2>
+            {saveWarning ? (
+              <small className="field-note song-save-warning">{saveWarning}</small>
+            ) : (
+              <small className="field-note">{saveStatus || text.saveToProjectsHint}</small>
+            )}
+          </div>
+          <div className="header-actions">
+            <button className="secondary-button" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
+              <Save size={15} />
+              {savingProject ? text.saving : text.saveToProjects}
+            </button>
+            <button className="primary-button" type="submit" form="song-workbench-form" disabled={generating}>
+              <Sparkles size={15} />
+              {generating ? text.generating : text.generate}
+            </button>
+          </div>
+        </div>
+
         <form id="song-workbench-form" className="dashboard-panel song-setup-panel" onSubmit={generateAll}>
           <div className="dashboard-panel-head">
             <div>
@@ -845,7 +875,6 @@ export default function SongWorkbenchPage() {
                         <input
                           type="checkbox"
                           checked={form.genres.includes(option)}
-                          onClick={(event) => updateGenreSelection(option, event.currentTarget.checked)}
                           onChange={(event) => updateGenreSelection(option, event.target.checked)}
                         />
                         {option}
@@ -927,15 +956,7 @@ export default function SongWorkbenchPage() {
           <div className="dashboard-panel-head">
             <div>
               <span>{text.outputs}</span>
-              {saveStatus ? <small className="field-note">{saveStatus}</small> : <small className="field-note">{text.saveToProjectsHint}</small>}
-            </div>
-            <div className="header-actions">
-              <button className="secondary-button" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
-                {savingProject ? text.saving : text.saveToProjects}
-              </button>
-              <button className="primary-button" type="submit" form="song-workbench-form" disabled={generating}>
-                {generating ? text.generating : text.generate}
-              </button>
+              <small className="field-note">{locale === "zh-CN" ? "歌词和提示词输出区" : "Lyrics and prompt outputs"}</small>
             </div>
           </div>
           <div className="song-output-grid">
