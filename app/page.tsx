@@ -5,15 +5,20 @@ import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { HeroSection } from "@/components/home/HeroSection";
 import { ContentSection } from "@/components/home/ContentSection";
+import { AuthModal } from "@/components/layout/AuthModal";
 import { TopNav } from "@/components/layout/TopNav";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+
+type AuthMode = "signin" | "signup";
 
 export default function LandingPage() {
   const router = useRouter();
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -35,15 +40,21 @@ export default function LandingPage() {
     router.push("/dashboard");
   }
 
+  function openAuth(mode: AuthMode) {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  }
+
   return (
     <main className="kiikis-site kiikis-landing-page">
       <TopNav
         session={session}
         onEnterRoom={enterWriterRoom}
-        onSignIn={enterWriterRoom}
-        onSignUp={enterWriterRoom}
+        onSignIn={() => openAuth("signin")}
+        onSignUp={() => openAuth("signup")}
         onSignOut={signOut}
       />
+      <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
       <HeroSection onStartCreating={enterWriterRoom} />
 
       <ContentSection

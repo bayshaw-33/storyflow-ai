@@ -162,14 +162,17 @@ export default function UniversesPage() {
     }
   }
 
-  const universeAccessPending = !os.planReady;
-  const noUniverseAccess = os.planReady && !os.access.universe;
-  const canWriteUniverse = os.planReady && os.access.universe;
+  const signedOut = !session;
+  const universeAccessPending = Boolean(session) && !os.planReady;
+  const noUniverseAccess = Boolean(session) && os.planReady && !os.access.universe;
+  const canWriteUniverse = Boolean(session) && os.planReady && os.access.universe;
   const activeCount = universes.filter((u) => u.status === "active").length;
   const totalPendingInbox = Object.values(universeSummaries).reduce((sum, item) => sum + item.pendingInbox, 0);
   const totalCanonFacts = Object.values(universeSummaries).reduce((sum, item) => sum + item.canonCount, 0);
   const totalLinkedProjects = Object.values(universeSummaries).reduce((sum, item) => sum + item.linkedProjects, 0);
-  const healthState = universeAccessPending
+  const healthState = signedOut
+    ? isZh ? "未登录" : "Signed out"
+    : universeAccessPending
     ? isZh ? "校验中" : "Checking"
     : noUniverseAccess
     ? isZh ? "待开通" : "Locked"
@@ -190,8 +193,18 @@ export default function UniversesPage() {
       value: totalPendingInbox,
     },
     {
-      title: isZh ? "3. Canon 沉淀" : "3. Canon memory",
+      title: isZh ? "3. 人工确认" : "3. Human decision",
+      body: isZh ? "用户可以 accept、edit accept 或 reject，避免 AI 静默改写 canon。" : "Users accept, edit-accept, or reject items so AI never rewrites canon silently.",
+      value: totalPendingInbox,
+    },
+    {
+      title: isZh ? "4. Canon 沉淀" : "4. Canon memory",
       body: isZh ? "用户确认后再写入 canon，用于长期 IP 复用和一致性检查。" : "User-approved facts become canon for long-term IP reuse and consistency checks.",
+      value: totalCanonFacts,
+    },
+    {
+      title: isZh ? "5. Locked 保护" : "5. Locked guard",
+      body: isZh ? "已锁定事实不能被后续项目继承或生成流程自动覆盖。" : "Locked facts cannot be overwritten by later inheritance or generation flows.",
       value: totalCanonFacts,
     },
   ];
@@ -215,13 +228,23 @@ export default function UniversesPage() {
       </section>
 
       <section className="universe-module-layout">
-        {universeAccessPending || noUniverseAccess ? (
+        {signedOut || universeAccessPending || noUniverseAccess ? (
           <section className="dashboard-panel universe-access-banner">
             <div>
-              <span>{isZh ? "Ultra 功能" : "Ultra feature"}</span>
-              <h2>{universeAccessPending ? (isZh ? "正在校验会员权限" : "Checking membership") : (isZh ? "当前为只读预览模式" : "Read-only preview mode")}</h2>
+              <span>{signedOut ? (isZh ? "账号功能" : "Account feature") : (isZh ? "Ultra 功能" : "Ultra feature")}</span>
+              <h2>
+                {signedOut
+                  ? isZh ? "登录后可查看和创建宇宙" : "Sign in to view and create Universes"
+                  : universeAccessPending
+                    ? isZh ? "正在校验会员权限" : "Checking membership"
+                    : isZh ? "当前为只读预览模式" : "Read-only preview mode"}
+              </h2>
               <p>
-                {universeAccessPending
+                {signedOut
+                  ? isZh
+                    ? "未登录用户可以预览 Universe Engine 的工作流说明，但不能创建宇宙、写入 Inbox 或确认 canon。"
+                    : "Signed-out users can preview the workflow, but cannot create Universes, write Inbox items, or confirm canon."
+                  : universeAccessPending
                   ? isZh
                     ? "正在读取账号套餐。校验完成前不会开放创建、Inbox 写入或 canon 确认操作。"
                     : "Reading account plan. Create, Inbox write, and canon confirmation stay disabled while checking."
@@ -230,8 +253,8 @@ export default function UniversesPage() {
                   : "Non-Ultra users can preview the workflow, source projects, and upgrade entry, but cannot create Universes, write Inbox items, or confirm canon."}
               </p>
             </div>
-            <Link className="primary-button" href="/subscription">
-              {isZh ? "升级 Ultra" : "Upgrade to Ultra"}
+            <Link className="primary-button" href={signedOut ? "/login" : "/subscription"}>
+              {signedOut ? (isZh ? "登录 / 注册" : "Sign in") : (isZh ? "升级 Ultra" : "Upgrade to Ultra")}
             </Link>
           </section>
         ) : null}
@@ -279,7 +302,11 @@ export default function UniversesPage() {
             </div>
           </div>
           <p className="subtle">
-            {noUniverseAccess
+            {signedOut
+              ? isZh
+                ? "登录后可读取云端宇宙、创建新宇宙，并将 AI 抽取结果送入 Inbox。"
+                : "Sign in to load cloud Universes, create new ones, and send AI extracts to Inbox."
+              : noUniverseAccess
               ? isZh
                 ? "当前账号暂未开通宇宙功能。"
                 : "Universe is not enabled for this account."
@@ -292,7 +319,11 @@ export default function UniversesPage() {
                   : "Use an existing project as the foundation. Extracted items should enter Inbox before canon."}
           </p>
           <div className="universe-module-actions">
-            {!canWriteUniverse ? (
+            {signedOut ? (
+              <Link className="primary-button" href="/login">
+                {isZh ? "登录 / 注册" : "Sign in"}
+              </Link>
+            ) : !canWriteUniverse ? (
               <Link className="primary-button" href="/subscription">
                 {universeAccessPending ? (isZh ? "校验中" : "Checking") : (isZh ? "查看套餐" : "View plans")}
               </Link>

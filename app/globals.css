@@ -83,6 +83,7 @@
      however large the logo currently is. Update this if the logo size
      changes again. */
   --nav-height: 132px;
+  --workspace-nav-offset: 128px;
 
   /* type */
   /* --font-display is the hero's serif headline face — used nowhere else,
@@ -467,6 +468,15 @@ input:focus, textarea:focus, select:focus {
 
 @media (max-width: 720px) {
   .kk-nav-vertical, .kk-nav-settings-corner { display: none; }
+}
+
+@media (min-width: 721px) {
+  .app-shell,
+  .workflow-shell,
+  .song-workbench-page,
+  .novel-workbench-page {
+    padding-left: var(--workspace-nav-offset);
+  }
 }
 
 /* language switch */
@@ -1033,6 +1043,15 @@ input:focus, textarea:focus, select:focus {
   align-self: flex-start;
   margin-top: var(--space-3);
   padding-left: 0;
+}
+.auth-route-card {
+  width: min(520px, calc(100% - 40px));
+  margin: var(--space-6) auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 .wizard-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -2552,6 +2571,19 @@ textarea.script-editor {
 .novel-tool-section .full {
   width: 100%;
   justify-content: center;
+}
+
+.novel-auth-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.novel-auth-notice .kk-text-button {
+  padding: 0;
+  color: var(--ink-primary);
 }
 
 .novel-tool-section {

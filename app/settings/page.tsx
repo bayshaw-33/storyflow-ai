@@ -5,6 +5,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { AuthModal } from "@/components/layout/AuthModal";
 import { DEFAULT_PLAN_ID, getPlanEntitlement, type PlanId } from "@/lib/billing/plans";
 import { STORAGE_KEY } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -28,12 +29,15 @@ type Credits = {
   periodEnd: string;
 };
 
+type AuthMode = "signin" | "signup";
+
 const copy = {
   "en-US": {
     kicker: "Settings",
     title: "Manage your profile.",
     subtitle: "Account identity, current plan, registration date, and creation credits.",
     signedOut: "Sign in to manage your profile.",
+    signIn: "Sign in",
     localProjects: "local projects",
     profile: "Profile",
     avatar: "Avatar",
@@ -67,6 +71,7 @@ const copy = {
     title: "管理你的个人资料。",
     subtitle: "账号身份、当前套餐、注册时间与创作积分。",
     signedOut: "请先登录后再管理个人资料。",
+    signIn: "登录",
     localProjects: "个本地项目",
     profile: "个人资料",
     avatar: "头像",
@@ -129,6 +134,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,7 +200,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [text.loadFailed, text.noProfile]);
+  }, [reloadKey, text.loadFailed, text.noProfile]);
 
   const planId = normalizePlan(profile?.plan);
   const plan = useMemo(() => getPlanEntitlement(planId), [planId]);
@@ -366,9 +374,22 @@ export default function SettingsPage() {
           </dl>
 
           <div className="settings-control-row">
-            <button className="primary-button" type="submit" disabled={loading || saving || !session}>
-              {saving ? text.saving : text.save}
-            </button>
+            {session ? (
+              <button className="primary-button" type="submit" disabled={loading || saving}>
+                {saving ? text.saving : text.save}
+              </button>
+            ) : (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setAuthOpen(true);
+                }}
+              >
+                {text.signIn}
+              </button>
+            )}
             <Link className="secondary-button" href="/subscription">{text.upgrade}</Link>
           </div>
         </form>
@@ -390,6 +411,14 @@ export default function SettingsPage() {
           <LanguageToggle />
         </article>
       </section>
+      <AuthModal
+        open={authOpen}
+        mode={authMode}
+        onClose={() => {
+          setAuthOpen(false);
+          setReloadKey((value) => value + 1);
+        }}
+      />
     </main>
   );
 }

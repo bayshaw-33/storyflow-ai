@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, BookOpen, Download, Link2, Lock, Plus, RefreshCcw, Save, Send, Sparkles, Unlock } from "lucide-react";
+import { AuthModal } from "@/components/layout/AuthModal";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   DEFAULT_PROJECT_GROUP,
@@ -49,6 +50,7 @@ const editableTasks: TaskType[] = [
 
 type MobilePanel = "setup" | "editor" | "ai";
 type Credits = { balance: number; monthlyLimit: number };
+type AuthMode = "signin" | "signup";
 
 const stepCopy: Record<TaskType, { zh: string; en: string; shortZh: string; shortEn: string }> = {
   market_analysis: { zh: "市场分析", en: "Market", shortZh: "市场", shortEn: "Market" },
@@ -117,6 +119,8 @@ function NovelWorkbenchContent() {
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
 
   const steps = useMemo(() => getWorkflowSteps("novel"), []);
   const activeChapter = useMemo(
@@ -489,6 +493,13 @@ function NovelWorkbenchContent() {
   }
 
   async function createScriptProjectFromNovel() {
+    if (!session?.access_token) {
+      setAuthMode("signin");
+      setAuthOpen(true);
+      setError(isZh ? "请先登录后再创建剧本项目。" : "Sign in before creating a script project.");
+      return;
+    }
+
     const scriptProject = createProject({
       title: `${project.title || "Novel"} 剧本改编`,
       workflowType: "creation",
@@ -509,7 +520,7 @@ function NovelWorkbenchContent() {
     });
 
     upsertProject(scriptProject);
-    if (session?.access_token) await upsertProjectToSupabase(scriptProject, { accessToken: session.access_token }).catch(() => null);
+    await upsertProjectToSupabase(scriptProject, { accessToken: session.access_token }).catch(() => null);
     router.push(`/projects/${scriptProject.id}?mode=creation`);
   }
 
@@ -688,7 +699,23 @@ function NovelWorkbenchContent() {
             </div>
           </div>
           {credits ? <small className="field-note">{isZh ? "剩余额度" : "Credits"}: {credits.balance}/{credits.monthlyLimit}</small> : null}
-          {aiDisabledReason ? <div className="notice warning">{aiDisabledReason}</div> : null}
+          {aiDisabledReason ? (
+            <div className="notice warning novel-auth-notice">
+              <span>{aiDisabledReason}</span>
+              {!session ? (
+                <button
+                  className="kk-text-button"
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("signin");
+                    setAuthOpen(true);
+                  }}
+                >
+                  {isZh ? "登录" : "Sign in"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="novel-action-grid">
             {editableTasks.map((task) => (
@@ -739,12 +766,13 @@ function NovelWorkbenchContent() {
           <div className="novel-tool-section">
             <strong>{isZh ? "小说转剧本" : "Novel to Script"}</strong>
             <p>{isZh ? "把当前 Novel Brief、Bible、角色和章节沉淀为剧本创作项目输入。" : "Create a script project from this novel's brief, bible, characters, and chapters."}</p>
-            <button className="primary-button full" type="button" onClick={() => void createScriptProjectFromNovel()}>
+            <button className="primary-button full" type="button" onClick={() => void createScriptProjectFromNovel()} disabled={!session}>
               <BookOpen size={16} /> {isZh ? "创建剧本项目" : "Create script project"}
             </button>
           </div>
         </aside>
       </section>
+      <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
     </main>
   );
 }

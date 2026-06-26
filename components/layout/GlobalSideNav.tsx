@@ -7,13 +7,6 @@ import { useI18n } from "@/lib/i18n/useI18n";
 export function GlobalSideNav() {
   const { t } = useI18n();
   const pathname = usePathname();
-  const hideOnWorkspace =
-    pathname.startsWith("/projects") ||
-    pathname.startsWith("/novel-workbench") ||
-    pathname.startsWith("/song-workbench") ||
-    pathname.startsWith("/viral-workbench");
-
-  if (hideOnWorkspace) return null;
 
   return (
     <>
