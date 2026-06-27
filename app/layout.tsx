@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { BRAND_NAME, TAGLINE_EN } from "@/lib/brand";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 import { OSProvider } from "@/lib/os/uiState";
 import { KKProvider } from "@/components/kk/KKProvider";
 import { GlobalSideNav } from "@/components/layout/GlobalSideNav";
+import { ThemeTimeSync } from "@/components/layout/ThemeTimeSync";
 import { DevBridge } from "@/components/dev/DevBridge";
 import "./globals.css";
 
-// Real Inter, self-hosted by Next.js at build time (no external request at
-// runtime). Weight 300 powers the restrained, non-bold headings used
-// everywhere outside the hero; 400/500/600 cover body text and emphasis.
-const inter = Inter({
+const geistSans = Geist({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
-  variable: "--font-inter",
+  variable: "--font-geist-sans",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
@@ -24,13 +27,33 @@ export const metadata: Metadata = {
   applicationName: BRAND_NAME,
 };
 
+const themeBootScript = `
+(() => {
+  try {
+    const stored = window.localStorage.getItem("kiikis_theme_mode");
+    const theme = stored === "dark" || stored === "light"
+      ? stored
+      : (new Date().getHours() >= 18 || new Date().getHours() < 7 ? "dark" : "light");
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  } catch {
+    document.documentElement.dataset.theme = "light";
+    document.documentElement.style.colorScheme = "light";
+  }
+})();
+`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body>
         <LanguageProvider>
           <OSProvider>
             <KKProvider>
+              <ThemeTimeSync />
               {children}
               <GlobalSideNav />
               <DevBridge />
