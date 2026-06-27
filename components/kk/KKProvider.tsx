@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { KK3D } from "@/components/kk/KK3D";
 import {
   type KKCardId,
@@ -39,22 +38,18 @@ export function useKK(): KKApi {
 const KKPresence = memo(function KKPresence({
   state,
   skinId,
-  onClick,
 }: {
   state: KKState;
   skinId: KKCardId;
-  onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <div
       className="kk-companion"
       data-state={state}
       aria-label={`KK ${state.toLowerCase()}`}
-      onClick={onClick}
     >
       <KK3D state={state} skinId={skinId} size="sm" />
-    </button>
+    </div>
   );
 });
 
@@ -62,7 +57,6 @@ const KKPresence = memo(function KKPresence({
 // presence layer (never more than one instance).
 export function KKProvider({ children }: { children: React.ReactNode }) {
   const os = useOS();
-  const router = useRouter();
   const [state, setState] = useState<KKState>("IDLE");
   const [equippedCardId, setEquippedCardId] = useState<KKCardId>(DEFAULT_KK_CARD_ID);
   const happyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,36 +132,12 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Full KK behaviour (blocking guide overlay) is gated to the ELITE layer.
-  const requestGuide = useCallback(() => {
-    if (os.access.fullKK) {
-      setGuide(true);
-    } else {
-      router.push("/dashboard");
-    }
-  }, [os.access.fullKK, setGuide, router]);
-
-  const isGuide = state === "GUIDE";
   const api = useMemo(() => ({ state, think, celebrate, setGuide }), [state, think, celebrate, setGuide]);
 
   return (
     <KKContext.Provider value={api}>
       {children}
-
-      {/* GUIDE: dim backdrop disables unrelated UI; click to exit. No tooltips. */}
-      {isGuide ? (
-        <div
-          className="kk-guide-layer"
-          role="dialog"
-          aria-label="KK guide"
-          onClick={() => setGuide(false)}
-        >
-          <KK3D className="kk-guide-overlay" state="GUIDE" skinId={equippedCardId} size="lg" />
-        </div>
-      ) : (
-        // Corner-anchored presence. 3D KK is rendered from DOM/CSS, not a PNG.
-        <KKPresence state={state} skinId={equippedCardId} onClick={requestGuide} />
-      )}
+      <KKPresence state={state} skinId={equippedCardId} />
     </KKContext.Provider>
   );
 }
