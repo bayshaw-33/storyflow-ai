@@ -3,9 +3,15 @@
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DesignAssetImage } from "@/components/design/DesignAssetImage";
+import type { AssetToken } from "@/lib/design/manifest";
+import {
+  DEFAULT_KK_CARD_ID,
+  getKKCard,
+  KK_EQUIPPED_SKIN_EVENT,
+  KK_EQUIPPED_SKIN_STORAGE_KEY,
+} from "@/lib/kk/cards";
 import { useOS } from "@/lib/os/uiState";
 import {
-  assetForState,
   canTransition,
   HAPPY_HOLD_MS,
   INACTIVITY_IDLE_MS,
@@ -32,9 +38,11 @@ export function useKK(): KKApi {
 
 const KKPresence = memo(function KKPresence({
   state,
+  skin,
   onClick,
 }: {
   state: KKState;
+  skin: AssetToken;
   onClick: () => void;
 }) {
   return (
@@ -45,7 +53,7 @@ const KKPresence = memo(function KKPresence({
       aria-label={`KK ${state.toLowerCase()}`}
       onClick={onClick}
     >
-      <DesignAssetImage token={assetForState(state)} alt="" draggable={false} />
+      <DesignAssetImage token={skin} alt="" draggable={false} />
     </button>
   );
 });
@@ -56,6 +64,7 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
   const os = useOS();
   const router = useRouter();
   const [state, setState] = useState<KKState>("IDLE");
+  const [equippedSkin, setEquippedSkin] = useState(() => getKKCard(DEFAULT_KK_CARD_ID).skin);
   const happyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -111,6 +120,24 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
     os.setKkState(state.toLowerCase() as "idle" | "thinking" | "happy" | "guide");
   }, [state, os]);
 
+  useEffect(() => {
+    const syncSkin = () => {
+      try {
+        setEquippedSkin(getKKCard(window.localStorage.getItem(KK_EQUIPPED_SKIN_STORAGE_KEY)).skin);
+      } catch {
+        setEquippedSkin(getKKCard(DEFAULT_KK_CARD_ID).skin);
+      }
+    };
+
+    syncSkin();
+    window.addEventListener("storage", syncSkin);
+    window.addEventListener(KK_EQUIPPED_SKIN_EVENT, syncSkin);
+    return () => {
+      window.removeEventListener("storage", syncSkin);
+      window.removeEventListener(KK_EQUIPPED_SKIN_EVENT, syncSkin);
+    };
+  }, []);
+
   // Full KK behaviour (blocking guide overlay) is gated to the ELITE layer.
   const requestGuide = useCallback(() => {
     if (os.access.fullKK) {
@@ -139,7 +166,7 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
         </div>
       ) : (
         // Corner-anchored presence. One image = one state. Click requests guide.
-        <KKPresence state={state} onClick={requestGuide} />
+        <KKPresence state={state} skin={equippedSkin} onClick={requestGuide} />
       )}
     </KKContext.Provider>
   );

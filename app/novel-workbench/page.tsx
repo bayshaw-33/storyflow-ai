@@ -123,6 +123,7 @@ function NovelWorkbenchContent() {
   const [universeBusy, setUniverseBusy] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   const steps = useMemo(() => getWorkflowSteps("novel"), []);
   const activeChapter = useMemo(
@@ -132,6 +133,8 @@ function NovelWorkbenchContent() {
   const activeContent = getActiveNovelContent(project, activeTask, activeChapter);
   const latestChapter = project.novelChapters[project.novelChapters.length - 1];
   const completedCount = steps.filter((step) => getStepContent(project, step.key).trim()).length;
+  const isChapterTask = activeTask === "novel_chapter_outline" || activeTask === "novel_chapter_draft" || activeTask === "novel_revision";
+  const secondaryTasks = editableTasks.filter((task) => task !== activeTask);
   const aiDisabledReason = !session?.access_token
     ? (isZh ? "登录后可使用 AI 生成。" : "Sign in to use AI generation.")
     : credits?.balance === 0
@@ -142,6 +145,7 @@ function NovelWorkbenchContent() {
     const supabase = getSupabaseBrowserClient();
     const projectId = searchParams.get("projectId");
     const forceNew = searchParams.get("new") === "1";
+    if (forceNew || !projectId) setSettingsModalOpen(true);
 
     void supabase?.auth.getSession().then(async ({ data }) => {
       setSession(data.session || null);
@@ -547,17 +551,77 @@ function NovelWorkbenchContent() {
     URL.revokeObjectURL(url);
   }
 
+  function renderSettingsFields() {
+    return (
+      <div className="novel-settings-form">
+        <label>
+          {isZh ? "标题" : "Title"}
+          <input value={project.title} onChange={(event) => updateProject({ title: event.target.value })} />
+        </label>
+        <label>
+          {isZh ? "小说类型" : "Novel Type"}
+          <select value={project.novelSettings.type} onChange={(event) => updateSettings({ type: event.target.value })}>
+            {settingOptions.type.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          {isZh ? "目标平台" : "Platform"}
+          <select value={project.novelSettings.targetPlatform} onChange={(event) => updateSettings({ targetPlatform: event.target.value })}>
+            {settingOptions.platform.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          {isZh ? "目标语言" : "Language"}
+          <select value={project.novelSettings.targetLanguage} onChange={(event) => updateSettings({ targetLanguage: event.target.value })}>
+            {settingOptions.language.map((option) => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          {isZh ? "目标字数" : "Target Words"}
+          <input
+            type="number"
+            min={10000}
+            step={10000}
+            value={project.novelSettings.targetWordCount}
+            onChange={(event) => updateSettings({ targetWordCount: Number(event.target.value) || 0 })}
+          />
+        </label>
+        <label>
+          {isZh ? "连载频率" : "Frequency"}
+          <input value={project.novelSettings.serializationFrequency} onChange={(event) => updateSettings({ serializationFrequency: event.target.value })} />
+        </label>
+        <label>
+          {isZh ? "目标读者" : "Target Reader"}
+          <input value={project.novelSettings.targetReader} onChange={(event) => updateSettings({ targetReader: event.target.value })} />
+        </label>
+        <label>
+          {isZh ? "留存钩子" : "Retention Hook"}
+          <input value={project.novelSettings.retentionHook} onChange={(event) => updateSettings({ retentionHook: event.target.value })} />
+        </label>
+        <label className="wide">
+          {isZh ? "故事创意" : "Story Idea"}
+          <textarea value={project.idea} onChange={(event) => updateProject({ idea: event.target.value })} />
+        </label>
+      </div>
+    );
+  }
+
   return (
     <main className="cosmic-page novel-workbench-page">
-      <section className="cosmic-title-band">
-        <button className="icon-button" type="button" onClick={() => router.push("/dashboard")} title={isZh ? "返回工作台" : "Back to dashboard"}>
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <span>{isZh ? "小说创作" : "Novel Creation"}</span>
-          <h1>{project.title || (isZh ? "未命名小说项目" : "Untitled Novel")}</h1>
+      <section className="novel-topbar">
+        <div className="novel-topbar-left">
+          <button className="icon-button" type="button" onClick={() => router.push("/dashboard")} title={isZh ? "返回工作台" : "Back to dashboard"}>
+            <ArrowLeft size={18} />
+          </button>
+          <div className="novel-title-block">
+            <span>{isZh ? "小说创作" : "Novel Creation"}</span>
+            <h1>{project.title || (isZh ? "未命名小说项目" : "Untitled Novel")}</h1>
+          </div>
         </div>
-        <div className="header-actions">
+        <div className="novel-topbar-actions">
+          <button className="secondary-button" type="button" onClick={() => setSettingsModalOpen(true)}>
+            {isZh ? "项目设定" : "Project settings"}
+          </button>
           <button className="secondary-button" type="button" onClick={downloadMarkdown}>
             <Download size={16} /> {isZh ? "导出" : "Export"}
           </button>
@@ -590,59 +654,23 @@ function NovelWorkbenchContent() {
         <aside className={mobilePanel === "setup" ? "dashboard-panel novel-sidebar is-mobile-active" : "dashboard-panel novel-sidebar"}>
           <div className="dashboard-panel-head">
             <div>
-              <span>{isZh ? "项目设定" : "SETUP"}</span>
-              <h2>{isZh ? "连载参数" : "Serial Settings"}</h2>
+              <span>{isZh ? "工作流" : "Workflow"}</span>
+              <h2>{isZh ? "小说流程" : "Novel Flow"}</h2>
             </div>
           </div>
 
-          <label>
-            {isZh ? "标题" : "Title"}
-            <input value={project.title} onChange={(event) => updateProject({ title: event.target.value })} />
-          </label>
-          <label>
-            {isZh ? "小说类型" : "Novel Type"}
-            <select value={project.novelSettings.type} onChange={(event) => updateSettings({ type: event.target.value })}>
-              {settingOptions.type.map((option) => <option key={option}>{option}</option>)}
-            </select>
-          </label>
-          <label>
-            {isZh ? "目标平台" : "Platform"}
-            <select value={project.novelSettings.targetPlatform} onChange={(event) => updateSettings({ targetPlatform: event.target.value })}>
-              {settingOptions.platform.map((option) => <option key={option}>{option}</option>)}
-            </select>
-          </label>
-          <label>
-            {isZh ? "目标语言" : "Language"}
-            <select value={project.novelSettings.targetLanguage} onChange={(event) => updateSettings({ targetLanguage: event.target.value })}>
-              {settingOptions.language.map((option) => <option key={option}>{option}</option>)}
-            </select>
-          </label>
-          <label>
-            {isZh ? "目标字数" : "Target Words"}
-            <input
-              type="number"
-              min={10000}
-              step={10000}
-              value={project.novelSettings.targetWordCount}
-              onChange={(event) => updateSettings({ targetWordCount: Number(event.target.value) || 0 })}
-            />
-          </label>
-          <label>
-            {isZh ? "连载频率" : "Frequency"}
-            <input value={project.novelSettings.serializationFrequency} onChange={(event) => updateSettings({ serializationFrequency: event.target.value })} />
-          </label>
-          <label>
-            {isZh ? "目标读者" : "Target Reader"}
-            <input value={project.novelSettings.targetReader} onChange={(event) => updateSettings({ targetReader: event.target.value })} />
-          </label>
-          <label>
-            {isZh ? "留存钩子" : "Retention Hook"}
-            <input value={project.novelSettings.retentionHook} onChange={(event) => updateSettings({ retentionHook: event.target.value })} />
-          </label>
-          <label>
-            {isZh ? "故事创意" : "Story Idea"}
-            <textarea value={project.idea} onChange={(event) => updateProject({ idea: event.target.value })} />
-          </label>
+          <details className="novel-settings-summary">
+            <summary>{isZh ? "项目设定" : "Project settings"}</summary>
+            <div className="novel-settings-chips">
+              <span>{project.novelSettings.type || (isZh ? "未选类型" : "No type")}</span>
+              <span>{project.novelSettings.targetPlatform || (isZh ? "未选平台" : "No platform")}</span>
+              <span>{project.novelSettings.targetLanguage || (isZh ? "未选语言" : "No language")}</span>
+            </div>
+            <p>{project.idea || (isZh ? "还没有填写故事创意。" : "No story idea yet.")}</p>
+            <button className="secondary-button full" type="button" onClick={() => setSettingsModalOpen(true)}>
+              {isZh ? "编辑项目设定" : "Edit settings"}
+            </button>
+          </details>
 
           <div className="novel-step-list">
             {steps.map((step) => {
@@ -670,7 +698,7 @@ function NovelWorkbenchContent() {
               <h2>{getStepLabel(activeTask, isZh)}</h2>
             </div>
             <div className="novel-editor-actions">
-              {activeChapter ? (
+              {isChapterTask && activeChapter ? (
                 <button className="icon-button subtle" type="button" onClick={toggleChapterLock} title={activeChapter.status === "locked" ? (isZh ? "解锁章节" : "Unlock chapter") : (isZh ? "锁定章节" : "Lock chapter")}>
                   {activeChapter.status === "locked" ? <Lock size={16} /> : <Unlock size={16} />}
                 </button>
@@ -686,22 +714,24 @@ function NovelWorkbenchContent() {
             placeholder={isZh ? "在这里编辑当前模块内容，或使用右侧 AI 工具生成。" : "Edit the active module here, or generate with AI tools on the right."}
           />
 
-          <div className="novel-chapter-strip">
-            <button className="novel-add-chapter-card" type="button" onClick={addChapter}>
-              <Plus size={16} />
-              <span>{isZh ? "新建章节" : "New chapter"}</span>
-            </button>
-            {(project.novelChapters.length ? project.novelChapters : []).map((chapter) => (
-              <button className={activeChapter?.id === chapter.id ? "active" : ""} type="button" key={chapter.id} onClick={() => selectChapter(chapter.id)}>
-                <strong>#{chapter.chapterNo}</strong>
-                <span>{chapter.title}{chapter.status === "locked" ? (isZh ? " · 已锁定" : " · Locked") : ""}</span>
-                <i>{chapter.wordCount} {isZh ? "字" : "words"}</i>
+          {isChapterTask ? (
+            <div className="novel-chapter-strip">
+              <button className="novel-add-chapter-card" type="button" onClick={addChapter}>
+                <Plus size={16} />
+                <span>{isZh ? "新建章节" : "New chapter"}</span>
               </button>
-            ))}
-            {!project.novelChapters.length ? (
-              <div className="novel-empty-chapters">{isZh ? "生成章节正文后，会在这里形成章节列表。" : "Generated chapter drafts will appear here."}</div>
-            ) : null}
-          </div>
+              {(project.novelChapters.length ? project.novelChapters : []).map((chapter) => (
+                <button className={activeChapter?.id === chapter.id ? "active" : ""} type="button" key={chapter.id} onClick={() => selectChapter(chapter.id)}>
+                  <strong>#{chapter.chapterNo}</strong>
+                  <span>{chapter.title}{chapter.status === "locked" ? (isZh ? " · 已锁定" : " · Locked") : ""}</span>
+                  <i>{chapter.wordCount} {isZh ? "字" : "words"}</i>
+                </button>
+              ))}
+              {!project.novelChapters.length ? (
+                <div className="novel-empty-chapters">{isZh ? "生成章节正文后，会在这里形成章节列表。" : "Generated chapter drafts will appear here."}</div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <aside className={mobilePanel === "ai" ? "dashboard-panel novel-ai-panel is-mobile-active" : "dashboard-panel novel-ai-panel"}>
@@ -730,17 +760,30 @@ function NovelWorkbenchContent() {
             </div>
           ) : null}
 
-          <div className="novel-action-grid">
-            {editableTasks.map((task) => (
-              <button className="secondary-button" type="button" key={task} onClick={() => void generate(task)} disabled={Boolean(generating) || Boolean(aiDisabledReason)}>
-                <Sparkles size={15} />
-                {generating === task ? (isZh ? "生成中" : "Generating") : getStepShort(task, isZh)}
-              </button>
-            ))}
+          <div className="novel-current-action">
+            <span>{isZh ? "当前步骤" : "Current step"}</span>
+            <strong>{getStepLabel(activeTask, isZh)}</strong>
+            <p>{isZh ? "优先基于中间编辑区当前内容继续生成或补全。" : "Generate from the active editor content and current project context."}</p>
+            <button className="primary-button full" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || (isChapterTask && activeChapter?.status === "locked")}>
+              <Sparkles size={16} />
+              {generating === activeTask ? (isZh ? "生成中" : "Generating") : getStepShort(activeTask, isZh)}
+            </button>
           </div>
 
-          <div className="novel-tool-section">
-            <strong>{isZh ? "按指令修改章节" : "Revise Chapter"}</strong>
+          <details className="novel-tool-section">
+            <summary>{isZh ? "其他生成动作" : "Other generation actions"}</summary>
+            <div className="novel-action-grid compact">
+              {secondaryTasks.map((task) => (
+                <button className="secondary-button" type="button" key={task} onClick={() => void generate(task)} disabled={Boolean(generating) || Boolean(aiDisabledReason)}>
+                  <Sparkles size={15} />
+                  {generating === task ? (isZh ? "生成中" : "Generating") : getStepShort(task, isZh)}
+                </button>
+              ))}
+            </div>
+          </details>
+
+          <details className="novel-tool-section" open={isChapterTask}>
+            <summary>{isZh ? "按指令修改章节" : "Revise Chapter"}</summary>
             <textarea
               value={revisionInstruction}
               onChange={(event) => setRevisionInstruction(event.target.value)}
@@ -749,10 +792,10 @@ function NovelWorkbenchContent() {
             <button className="primary-button full" type="button" onClick={() => void generate("novel_revision")} disabled={Boolean(generating) || Boolean(aiDisabledReason) || !revisionInstruction.trim() || activeChapter?.status === "locked"}>
               <RefreshCcw size={16} /> {isZh ? "应用修改" : "Apply Revision"}
             </button>
-          </div>
+          </details>
 
-          <div className="novel-tool-section">
-            <strong>{isZh ? "连续性与 Universe" : "Continuity & Universe"}</strong>
+          <details className="novel-tool-section">
+            <summary>{isZh ? "连续性与 Universe" : "Continuity & Universe"}</summary>
             <p>{latestChapter?.continuityNotes || project.novelContinuityNotes || (isZh ? "暂无连续性备注。" : "No continuity notes yet.")}</p>
             {project.universeId ? (
               <small className="field-note">Universe ID: {project.universeId}</small>
@@ -774,17 +817,36 @@ function NovelWorkbenchContent() {
             <button className="secondary-button full" type="button" onClick={() => void sendUniverseInbox()} disabled={!session || !project.universeId}>
               <Send size={16} /> {isZh ? "发送 Universe Inbox" : "Send Universe Inbox"}
             </button>
-          </div>
+          </details>
 
-          <div className="novel-tool-section">
-            <strong>{isZh ? "小说转剧本" : "Novel to Script"}</strong>
+          <details className="novel-tool-section">
+            <summary>{isZh ? "小说转剧本" : "Novel to Script"}</summary>
             <p>{isZh ? "把当前 Novel Brief、Bible、角色和章节沉淀为剧本创作项目输入。" : "Create a script project from this novel's brief, bible, characters, and chapters."}</p>
             <button className="primary-button full" type="button" onClick={() => void createScriptProjectFromNovel()} disabled={!session}>
               <BookOpen size={16} /> {isZh ? "创建剧本项目" : "Create script project"}
             </button>
-          </div>
+          </details>
         </aside>
       </section>
+      {settingsModalOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal wizard-modal novel-settings-modal">
+            <h2>{isZh ? "小说项目设定" : "Novel project settings"}</h2>
+            <p className="subtle">
+              {isZh ? "先确定类型、平台、语言和故事创意。进入工作台后，这些设定会收起到左侧项目设定菜单里。" : "Set the type, platform, language, and story idea first. These settings collapse into the left project menu inside the workbench."}
+            </p>
+            {renderSettingsFields()}
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setSettingsModalOpen(false)}>
+                {isZh ? "稍后再填" : "Later"}
+              </button>
+              <button className="primary-button" type="button" onClick={() => setSettingsModalOpen(false)}>
+                {isZh ? "进入创作" : "Start writing"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
     </main>
   );

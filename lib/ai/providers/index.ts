@@ -20,6 +20,11 @@ const deepSeekPreferredTasks = new Set<TaskType>([
   "final_script",
   "format_check",
   "song_workbench",
+  "novel_brief",
+  "novel_bible",
+  "novel_characters",
+  "novel_volume_outline",
+  "novel_chapter_outline",
   "novel_chapter_draft",
   "novel_revision",
   "novel_export",
@@ -56,10 +61,15 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
 function chooseProvider(taskType: TaskType, byoApi?: ByoApiConfig): AIProviderName {
   if (byoApi?.provider === "deepseek") return "deepseek";
   if (byoApi?.provider === "minimax") return "minimax";
+  if (isNovelTask(taskType)) return "deepseek";
   const mode = getProviderMode();
   if (mode === "deepseek") return "deepseek";
   if (mode === "minimax") return "minimax";
   return deepSeekPreferredTasks.has(taskType) ? "deepseek" : "minimax";
+}
+
+function isNovelTask(taskType: TaskType) {
+  return taskType.startsWith("novel_");
 }
 
 function getProviderMode(): ProviderMode {

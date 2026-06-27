@@ -1,9 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { CatMark } from "@/components/brand/CatMark";
+import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 import { useI18n } from "@/lib/i18n/useI18n";
+import {
+  DEFAULT_KK_CARD_ID,
+  getKKCard,
+  kkCardImage,
+  KK_CARDS,
+  KK_EQUIPPED_SKIN_EVENT,
+  KK_EQUIPPED_SKIN_STORAGE_KEY,
+  type KKCardId,
+} from "@/lib/kk/cards";
 
 const companions = [
   {
@@ -67,10 +78,26 @@ const companions = [
 export default function CompanionsPage() {
   const { locale, t } = useI18n();
   const language = locale === "zh-CN" ? "zh" : "en";
+  const [equippedCardId, setEquippedCardId] = useState<KKCardId>(DEFAULT_KK_CARD_ID);
+  const equippedCard = useMemo(() => getKKCard(equippedCardId), [equippedCardId]);
   const statusLabel = {
     active: language === "zh" ? "在线" : "Active",
     idle: language === "zh" ? "待命" : "Idle",
   };
+
+  useEffect(() => {
+    try {
+      setEquippedCardId(getKKCard(window.localStorage.getItem(KK_EQUIPPED_SKIN_STORAGE_KEY)).id);
+    } catch {
+      setEquippedCardId(DEFAULT_KK_CARD_ID);
+    }
+  }, []);
+
+  function equipCard(cardId: KKCardId) {
+    setEquippedCardId(cardId);
+    window.localStorage.setItem(KK_EQUIPPED_SKIN_STORAGE_KEY, cardId);
+    window.dispatchEvent(new Event(KK_EQUIPPED_SKIN_EVENT));
+  }
 
   return (
     <main className="cosmic-page">
@@ -103,6 +130,42 @@ export default function CompanionsPage() {
           <p>{t("companions.add.body")}</p>
           <button>{t("companions.add.unlock")}</button>
         </article>
+      </section>
+
+      <section className="kk-card-system-panel" aria-labelledby="kk-card-system-title">
+        <div className="dashboard-panel-head">
+          <div>
+            <span>{language === "zh" ? "KK 皮肤" : "KK Skins"}</span>
+            <h2 id="kk-card-system-title">{language === "zh" ? "卡片皮肤库" : "Card Skin Library"}</h2>
+          </div>
+        </div>
+        <div className="kk-card-system-layout">
+          <aside className="kk-card-preview">
+            <DesignAssetImage token={equippedCard.skin} alt={equippedCard.name} draggable={false} />
+            <div>
+              <span>{language === "zh" ? "当前装备" : "Equipped"}</span>
+              <strong>{equippedCard.name}</strong>
+              <small>{equippedCard.rarity}</small>
+            </div>
+          </aside>
+          <div className="kk-card-grid">
+            {KK_CARDS.map((card) => {
+              const equipped = card.id === equippedCardId;
+              return (
+                <article className={equipped ? "kk-skin-card is-equipped" : "kk-skin-card"} key={card.id}>
+                  <DesignAssetImage token={kkCardImage(card, language)} alt={card.name} draggable={false} />
+                  <div className="kk-skin-card-meta">
+                    <span>{card.rarity}{card.isLimited ? " · Limited" : ""}</span>
+                    <strong>{card.name}</strong>
+                    <button type="button" onClick={() => equipCard(card.id)} disabled={equipped}>
+                      {equipped ? (language === "zh" ? "已装备" : "Equipped") : (language === "zh" ? "装备" : "Equip")}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
       </section>
     </main>
   );

@@ -39,10 +39,20 @@ export const ASSET = {
   UNIVERSE_TIER_ICONS: `${UNIVERSE}/tier-icons.png`,
   UNIVERSE_PRICING_GLASS: `${UNIVERSE}/pricing-glass-texture.png`,
 
-  KK_IDLE: `${KK}/kk-idle.png`,
-  KK_THINKING: `${KK}/kk-thinking.png`,
-  KK_HAPPY: `${KK}/kk-happy.png`,
-  KK_GUIDE: `${KK}/kk-guide.png`,
+  KK_IDLE: `${KK}/kk_classic.png`,
+  KK_THINKING: `${KK}/kk_cyber_epic.png`,
+  KK_HAPPY: `${KK}/kk_classic.png`,
+  KK_GUIDE: `${KK}/kk_vampire_legend.png`,
+  KK_SKIN_CLASSIC_BRAVE: `${KK}/kk_classic.png`,
+  KK_SKIN_CYBER_EPIC: `${KK}/kk_cyber_epic.png`,
+  KK_SKIN_VAMPIRE_LEGEND: `${KK}/kk_vampire_legend.png`,
+  KK_CARD_CLASSIC_BRAVE_CN: `${KK}/kk_card_classic_brave_cn.png`,
+  KK_CARD_CLASSIC_BRAVE_EN: `${KK}/kk_card_classic_brave_en.png`,
+  KK_CARD_CYBER_EPIC_CN: `${KK}/kk_card_cyber_epic_cn.png`,
+  KK_CARD_CYBER_EPIC_EN: `${KK}/kk_card_cyber_epic_en.png`,
+  KK_CARD_VAMPIRE_LEGEND_CN: `${KK}/kk_card_vampire_legend_cn.png`,
+  KK_CARD_VAMPIRE_LEGEND_EN: `${KK}/kk_card_vampire_legend_en.png`,
+  KK_CARD_BACK: `${KK}/kk_card_back.png`,
 } as const;
 
 export type AssetToken = keyof typeof ASSET;
