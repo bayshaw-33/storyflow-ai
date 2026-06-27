@@ -114,7 +114,7 @@ export function WorkspaceModal({ open, onClose, isZh }: WorkspaceModalProps) {
         <section className="workspace-modal-workflows">
           <div className="workspace-modal-section-head">
             <span>{isZh ? "核心工作流优先" : "Core workflows first"}</span>
-            <small>{isZh ? "分镜和视频将在 Phase 0 Q2 开放" : "Storyboard and video open in Phase 0 Q2"}</small>
+            <small>{isZh ? "选择一个入口开始创作" : "Choose an entry point to start creating"}</small>
           </div>
           <WorkflowGrid isZh={isZh} onNavigate={onClose} />
         </section>
