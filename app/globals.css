@@ -2,7 +2,7 @@
    KIIKIS — globals.css
    Two visual languages, one file: the homepage HERO keeps its original
    cosmic starfield treatment untouched; every other surface in the product
-   (dashboard, pricing, companions, settings, project workspace, modals, the
+   (dashboard, pricing, KK, settings, project workspace, modals, the
    rest of the homepage below the hero) uses a Linear-inspired system —
    near-black neutral surfaces, hairline borders, soft non-glowing shadows,
    Inter at restrained weights, and the brand's cyan→blue identity expressed
@@ -1475,32 +1475,6 @@ input:focus, textarea:focus, select:focus {
 .universe-graph, .universe-engine, .creative-field { position: relative; min-height: 400px; }
 .universe-graph { height: 100vh; background: radial-gradient(ellipse at 50% 40%, #0d1525 0%, #060a14 100%); }
 
-/* ============================================================================
-   COMPANIONS
-   ============================================================================ */
-.companion-grid-page {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-6); max-width: 1200px; margin: 0 auto;
-  padding: 0 clamp(20px, 4vw, 40px);
-}
-.companion-card-page {
-  display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
-  padding: var(--space-8) var(--space-6);
-  border-radius: var(--radius-md);
-  background: var(--glass-fill); border: 1px solid var(--glass-border);
-  text-align: center;
-  cursor: pointer;
-  transition: transform var(--transition-base), border-color var(--transition-base);
-}
-.companion-card-page:hover { transform: translateY(-3px); border-color: var(--glass-border-hover); }
-.companion-card-portrait {
-  width: 88px; height: 88px; border-radius: 50%;
-  object-fit: cover; border: 2px solid var(--glass-border);
-}
-.add-companion {
-  display: flex; align-items: center; justify-content: center;
-  border-style: dashed; color: var(--ink-muted); min-height: 220px;
-}
 .kk-card-system-panel {
   display: flex;
   flex-direction: column;
@@ -3130,14 +3104,179 @@ textarea.script-editor {
   right: 24px; bottom: 24px;
   z-index: var(--z-overlay);
 }
-.kk-gravity-core, .kk-companion img {
-  width: 72px; height: 72px;
-  border-radius: var(--radius-md);
-  object-fit: cover;
+.kk-companion {
+  display: grid;
+  place-items: center;
+  width: 86px;
+  height: 86px;
+  border: 0;
+  background: transparent;
+  perspective: 520px;
+}
+.kk-gravity-core {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, var(--accent-blue), var(--bg-elevated));
   filter: drop-shadow(0 8px 24px rgba(0,0,0,0.4));
+}
+.kk-companion:hover .kk-3d-rig,
+.kk-gravity-core:hover { transform: rotateX(9deg) rotateY(-18deg) translateY(-3px) scale(1.04); }
+
+.kk-3d {
+  --kk-main: #8a5a36;
+  --kk-main-dark: #452813;
+  --kk-main-light: #d2a17a;
+  --kk-accent: #59d6ff;
+  --kk-eye: #111113;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  transform-style: preserve-3d;
+  perspective: 640px;
+}
+.kk-3d[data-size="sm"] { width: 82px; height: 82px; }
+.kk-3d[data-size="lg"] { width: min(360px, 64vw); height: min(360px, 64vw); }
+.kk-3d[data-skin="cyber_epic"] {
+  --kk-main: #2f6da8;
+  --kk-main-dark: #102f54;
+  --kk-main-light: #8ed7ff;
+  --kk-accent: #7cf4ff;
+}
+.kk-3d[data-skin="vampire_legend"] {
+  --kk-main: #6f2844;
+  --kk-main-dark: #210812;
+  --kk-main-light: #d08aa5;
+  --kk-accent: #ff5d85;
+}
+.kk-3d-shadow {
+  position: absolute;
+  bottom: 10%;
+  width: 58%;
+  height: 13%;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  filter: blur(10px);
+  transform: rotateX(70deg) translateZ(-36px);
+  animation: kk-shadow-pulse 3.8s ease-in-out infinite;
+}
+.kk-3d-rig {
+  position: relative;
+  width: 66%;
+  height: 74%;
+  transform-style: preserve-3d;
+  transform: rotateX(8deg) rotateY(-12deg);
+  animation: kk-float-3d 3.8s ease-in-out infinite;
   transition: transform var(--transition-base);
 }
-.kk-companion:hover img, .kk-gravity-core:hover { transform: translateY(-3px) scale(1.04); }
+.kk-3d-head,
+.kk-3d-body,
+.kk-3d-ear,
+.kk-3d-tail,
+.kk-3d-orb {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.kk-3d-head {
+  left: 18%;
+  top: 8%;
+  width: 64%;
+  height: 52%;
+  border-radius: 48% 52% 46% 54%;
+  background:
+    radial-gradient(circle at 32% 25%, var(--kk-main-light), transparent 28%),
+    radial-gradient(circle at 68% 72%, var(--kk-main-dark), transparent 42%),
+    linear-gradient(145deg, var(--kk-main-light), var(--kk-main) 46%, var(--kk-main-dark));
+  box-shadow: inset -14px -18px 24px rgba(0, 0, 0, 0.24), inset 10px 10px 18px rgba(255, 255, 255, 0.16), 0 18px 36px rgba(0, 0, 0, 0.22);
+  transform: translateZ(34px);
+  animation: kk-head-look 5.2s ease-in-out infinite;
+}
+.kk-3d-ear {
+  top: -2%;
+  width: 25%;
+  height: 34%;
+  border-radius: 80% 20% 70% 30%;
+  background: linear-gradient(145deg, var(--kk-main-light), var(--kk-main-dark));
+  box-shadow: inset -8px -8px 14px rgba(0, 0, 0, 0.22);
+}
+.kk-3d-ear-left { left: 18%; transform: rotate(-24deg) translateZ(18px); }
+.kk-3d-ear-right { right: 18%; transform: rotate(24deg) scaleX(-1) translateZ(18px); }
+.kk-3d-body {
+  left: 31%;
+  top: 52%;
+  width: 38%;
+  height: 36%;
+  border-radius: 46% 46% 42% 42%;
+  background: linear-gradient(145deg, var(--kk-main-light), var(--kk-main) 46%, var(--kk-main-dark));
+  box-shadow: inset -10px -14px 18px rgba(0, 0, 0, 0.20), 0 16px 24px rgba(0, 0, 0, 0.18);
+  transform: translateZ(14px);
+  animation: kk-breathe 2.4s ease-in-out infinite;
+}
+.kk-3d-face {
+  position: absolute;
+  inset: 25% 17% 18%;
+  transform: translateZ(28px);
+}
+.kk-3d-eye {
+  position: absolute;
+  top: 20%;
+  width: 14%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--kk-eye) 34%);
+  animation: kk-blink 5.8s infinite;
+}
+.kk-3d-eye-left { left: 24%; }
+.kk-3d-eye-right { right: 24%; }
+.kk-3d-nose {
+  position: absolute;
+  left: 45%;
+  top: 45%;
+  width: 10%;
+  height: 8%;
+  border-radius: 50%;
+  background: #151515;
+}
+.kk-3d-mouth {
+  position: absolute;
+  left: 43%;
+  top: 57%;
+  width: 16%;
+  height: 9%;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.62);
+  border-radius: 0 0 999px 999px;
+}
+.kk-3d-tail {
+  right: 16%;
+  top: 57%;
+  width: 34%;
+  height: 30%;
+  border: 8px solid var(--kk-main-dark);
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  transform: rotate(18deg) translateZ(-12px);
+  transform-origin: 18% 78%;
+  animation: kk-tail-sway 1.8s ease-in-out infinite;
+}
+.kk-3d-orb {
+  right: 8%;
+  top: 12%;
+  width: 16%;
+  height: 16%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, #fff, var(--kk-accent) 42%, transparent 72%);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--kk-accent), transparent 38%);
+  transform: translateZ(58px);
+  animation: kk-orb-drift 2.2s ease-in-out infinite;
+}
+.kk-3d[data-state="thinking"] .kk-3d-orb,
+.kk-3d[data-state="guide"] .kk-3d-orb { animation-duration: 0.9s; }
+.kk-3d[data-state="happy"] .kk-3d-rig { animation-name: kk-happy-bounce; animation-duration: 1.35s; }
+.kk-3d[data-state="guide"] .kk-3d-rig { animation-name: kk-guide-hover; animation-duration: 2.2s; }
+.kk-3d[data-state="thinking"] .kk-3d-head { animation-duration: 2.2s; }
 
 /* guide overlay (ELITE blocking guide) */
 .kk-guide-layer, .kk-guide-overlay {
@@ -3146,7 +3285,50 @@ textarea.script-editor {
   background: rgba(5, 9, 20, 0.7); backdrop-filter: blur(6px);
   pointer-events: none;
 }
-.kk-guide-overlay img { max-width: 320px; }
+.kk-guide-overlay {
+  position: relative;
+  inset: auto;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+@keyframes kk-float-3d {
+  0%, 100% { transform: rotateX(8deg) rotateY(-12deg) translateY(0); }
+  50% { transform: rotateX(11deg) rotateY(13deg) translateY(-7px); }
+}
+@keyframes kk-happy-bounce {
+  0%, 100% { transform: rotateX(8deg) rotateY(-12deg) translateY(0) scale(1); }
+  35% { transform: rotateX(11deg) rotateY(16deg) translateY(-12px) scale(1.06); }
+  70% { transform: rotateX(8deg) rotateY(-8deg) translateY(-4px) scale(0.99); }
+}
+@keyframes kk-guide-hover {
+  0%, 100% { transform: rotateX(8deg) rotateY(-18deg) translateY(0) scale(1); }
+  50% { transform: rotateX(14deg) rotateY(18deg) translateY(-10px) scale(1.04); }
+}
+@keyframes kk-head-look {
+  0%, 100% { transform: translateZ(34px) rotateY(-4deg); }
+  50% { transform: translateZ(34px) rotateY(7deg); }
+}
+@keyframes kk-breathe {
+  0%, 100% { transform: translateZ(14px) scaleY(1); }
+  50% { transform: translateZ(14px) scaleY(1.05); }
+}
+@keyframes kk-tail-sway {
+  0%, 100% { transform: rotate(10deg) translateZ(-12px); }
+  50% { transform: rotate(34deg) translateZ(-12px); }
+}
+@keyframes kk-orb-drift {
+  0%, 100% { transform: translateZ(58px) translateY(0) scale(1); opacity: 0.82; }
+  50% { transform: translateZ(64px) translateY(-8px) scale(1.12); opacity: 1; }
+}
+@keyframes kk-shadow-pulse {
+  0%, 100% { transform: rotateX(70deg) translateZ(-36px) scale(1); opacity: 0.6; }
+  50% { transform: rotateX(70deg) translateZ(-36px) scale(0.86); opacity: 0.38; }
+}
+@keyframes kk-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.12); }
+}
 
 /* universe badges (overlay only) */
 .universe-badges { display: inline-flex; gap: 6px; }

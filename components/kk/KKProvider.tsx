@@ -2,9 +2,9 @@
 
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DesignAssetImage } from "@/components/design/DesignAssetImage";
-import type { AssetToken } from "@/lib/design/manifest";
+import { KK3D } from "@/components/kk/KK3D";
 import {
+  type KKCardId,
   DEFAULT_KK_CARD_ID,
   getKKCard,
   KK_EQUIPPED_SKIN_EVENT,
@@ -38,11 +38,11 @@ export function useKK(): KKApi {
 
 const KKPresence = memo(function KKPresence({
   state,
-  skin,
+  skinId,
   onClick,
 }: {
   state: KKState;
-  skin: AssetToken;
+  skinId: KKCardId;
   onClick: () => void;
 }) {
   return (
@@ -53,7 +53,7 @@ const KKPresence = memo(function KKPresence({
       aria-label={`KK ${state.toLowerCase()}`}
       onClick={onClick}
     >
-      <DesignAssetImage token={skin} alt="" draggable={false} />
+      <KK3D state={state} skinId={skinId} size="sm" />
     </button>
   );
 });
@@ -64,7 +64,7 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
   const os = useOS();
   const router = useRouter();
   const [state, setState] = useState<KKState>("IDLE");
-  const [equippedSkin, setEquippedSkin] = useState(() => getKKCard(DEFAULT_KK_CARD_ID).skin);
+  const [equippedCardId, setEquippedCardId] = useState<KKCardId>(DEFAULT_KK_CARD_ID);
   const happyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -123,9 +123,9 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const syncSkin = () => {
       try {
-        setEquippedSkin(getKKCard(window.localStorage.getItem(KK_EQUIPPED_SKIN_STORAGE_KEY)).skin);
+        setEquippedCardId(getKKCard(window.localStorage.getItem(KK_EQUIPPED_SKIN_STORAGE_KEY)).id);
       } catch {
-        setEquippedSkin(getKKCard(DEFAULT_KK_CARD_ID).skin);
+        setEquippedCardId(DEFAULT_KK_CARD_ID);
       }
     };
 
@@ -162,11 +162,11 @@ export function KKProvider({ children }: { children: React.ReactNode }) {
           aria-label="KK guide"
           onClick={() => setGuide(false)}
         >
-          <DesignAssetImage className="kk-guide-overlay" token="KK_GUIDE" alt="KK guide" draggable={false} />
+          <KK3D className="kk-guide-overlay" state="GUIDE" skinId={equippedCardId} size="lg" />
         </div>
       ) : (
-        // Corner-anchored presence. One image = one state. Click requests guide.
-        <KKPresence state={state} skin={equippedSkin} onClick={requestGuide} />
+        // Corner-anchored presence. 3D KK is rendered from DOM/CSS, not a PNG.
+        <KKPresence state={state} skinId={equippedCardId} onClick={requestGuide} />
       )}
     </KKContext.Provider>
   );

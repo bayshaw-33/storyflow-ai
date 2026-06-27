@@ -129,14 +129,14 @@ export default function LandingPage() {
       />
 
       <ContentSection
-        id="companions"
-        kicker="COMPANIONS"
-        titleZh="召唤你的创作搭档"
-        titleEn="Summon Your Creative Companions"
-        subtitleZh={"Lyra 故事架构师、Arlo 世界观设计、Vale 对白专家、Muse 情绪语调、KK 创作搭档\n组建你自己的 AI 创作团队"}
-        subtitleEn="Lyra the Story Architect, Arlo the Worldbuilder, Vale the Dialogue Expert, Muse for Mood & Tone, and KK the Creative Companion."
-        ctaLabel={isZh ? "查看伙伴" : "Meet Companions"}
-        ctaHref="/companions"
+        id="kk"
+        kicker="KK"
+        titleZh="你的动态 3D 创作搭档"
+        titleEn="Your Dynamic 3D Creative Companion"
+        subtitleZh={"KK 会常驻工作台，跟随创作状态切换待命、思考、完成和引导动作\n不再是一张静态图片，而是一个动态角色系统"}
+        subtitleEn="KK lives in the workspace, switching between idle, thinking, success, and guide states as a dynamic 3D character."
+        ctaLabel={isZh ? "查看 KK" : "Open KK"}
+        ctaHref="/kk"
         bgImageZh="radial-gradient(ellipse at 40% 70%, #100d2a 0%, #060a14 100%)"
         bgImageEn="radial-gradient(ellipse at 40% 70%, #100d2a 0%, #060a14 100%)"
         align="right"

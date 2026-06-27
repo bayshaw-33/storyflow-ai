@@ -1,21 +1,7 @@
-// KIIKIS KK — Companion state machine core.
-// KK is a stateful entity, not an image. Exactly one state at a time.
-
-import type { AssetToken } from "@/lib/design/manifest";
+// KIIKIS KK — state machine core.
+// KK is a stateful 3D runtime entity, not an image. Exactly one state at a time.
 
 export type KKState = "IDLE" | "THINKING" | "HAPPY" | "GUIDE";
-
-// Each state resolves to exactly one asset; unknown states fall back to idle.
-const STATE_ASSET: Record<KKState, AssetToken> = {
-  IDLE: "KK_IDLE",
-  THINKING: "KK_THINKING",
-  HAPPY: "KK_HAPPY",
-  GUIDE: "KK_GUIDE",
-};
-
-export function assetForState(state: KKState): AssetToken {
-  return STATE_ASSET[state] ?? "KK_IDLE";
-}
 
 // Deterministic transitions (no random switching). A transition that is not
 // listed for the current state is rejected (the state holds).

@@ -9,7 +9,6 @@ export type KKCard = {
   rarity: KKRarity;
   image_cn: AssetToken;
   image_en: AssetToken;
-  skin: AssetToken;
   isLimited: boolean;
 };
 
@@ -24,7 +23,6 @@ export const KK_CARDS: KKCard[] = [
     rarity: "classic",
     image_cn: "KK_CARD_CLASSIC_BRAVE_CN",
     image_en: "KK_CARD_CLASSIC_BRAVE_EN",
-    skin: "KK_SKIN_CLASSIC_BRAVE",
     isLimited: false,
   },
   {
@@ -33,7 +31,6 @@ export const KK_CARDS: KKCard[] = [
     rarity: "epic",
     image_cn: "KK_CARD_CYBER_EPIC_CN",
     image_en: "KK_CARD_CYBER_EPIC_EN",
-    skin: "KK_SKIN_CYBER_EPIC",
     isLimited: false,
   },
   {
@@ -42,7 +39,6 @@ export const KK_CARDS: KKCard[] = [
     rarity: "legendary",
     image_cn: "KK_CARD_VAMPIRE_LEGEND_CN",
     image_en: "KK_CARD_VAMPIRE_LEGEND_EN",
-    skin: "KK_SKIN_VAMPIRE_LEGEND",
     isLimited: true,
   },
 ];

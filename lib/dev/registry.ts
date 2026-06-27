@@ -45,8 +45,16 @@ export const ComponentRegistry: Record<string, ComponentMeta> = {
     stateBindings: ["os.selectedNode", "os.access.universe"],
   },
   KK: {
-    dependencies: ["kk/state", "useOS", "DesignAssetImage"],
-    assets: ["KK_IDLE", "KK_THINKING", "KK_HAPPY", "KK_GUIDE"],
+    dependencies: ["kk/state", "useOS", "KK3D"],
+    assets: [
+      "KK_CARD_BACK",
+      "KK_CARD_CLASSIC_BRAVE_CN",
+      "KK_CARD_CLASSIC_BRAVE_EN",
+      "KK_CARD_CYBER_EPIC_CN",
+      "KK_CARD_CYBER_EPIC_EN",
+      "KK_CARD_VAMPIRE_LEGEND_CN",
+      "KK_CARD_VAMPIRE_LEGEND_EN",
+    ],
     stateBindings: ["kkState", "os.activeSystem", "os.access.fullKK"],
   },
   Pricing: {
