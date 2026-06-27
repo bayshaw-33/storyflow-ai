@@ -531,6 +531,9 @@ export default function ViralWorkbenchPage() {
           <h1>{ui.title}</h1>
         </div>
         <div className="header-actions">
+          <Link className="secondary-button" href="/universes">
+            Universe
+          </Link>
           <span className="save-state"><Save size={15} /> {statusText}</span>
         </div>
       </header>

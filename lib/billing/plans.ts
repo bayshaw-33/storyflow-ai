@@ -18,6 +18,7 @@ export type PlanEntitlement = {
   maxProjects: number;
   badge?: string;
   includes: string[];
+  includesEn?: string[];
   features: {
     universe: boolean;
     modularWorkbench: boolean;
@@ -50,6 +51,12 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "短剧 / 歌曲工作流",
       "Viral Creation 爆款工具",
     ],
+    includesEn: [
+      "3,000 KK coins at signup",
+      "Up to 2 projects",
+      "Drama and song workflows",
+      "Viral Creation tool",
+    ],
     features: {
       universe: false,
       modularWorkbench: false,
@@ -80,6 +87,13 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "全部工作流解锁",
       "Viral Creation 爆款工具",
       "🥚 史诗级 KK 蛋 ×1（订阅赠送）",
+    ],
+    includesEn: [
+      "30,000 KK coins / month",
+      "Up to 50 projects",
+      "All workflows unlocked",
+      "Viral Creation tool",
+      "Epic KK Egg x1 with subscription",
     ],
     features: {
       universe: false,
@@ -114,6 +128,15 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "Viral Creation 爆款工具",
       "🥚 史诗级 KK 蛋 ×1（订阅赠送）",
     ],
+    includesEn: [
+      "10,000 KK coins / month",
+      "Up to 50 projects",
+      "All workflows unlocked",
+      "Modular workbench customization",
+      "BYO API",
+      "Viral Creation tool",
+      "Epic KK Egg x1 with subscription",
+    ],
     features: {
       universe: false,
       modularWorkbench: true,
@@ -147,6 +170,16 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "Universe Engine（IP 宇宙系统）",
       "Viral Creation 爆款工具",
       "🥚 传说级 KK 蛋 ×1（订阅赠送）",
+    ],
+    includesEn: [
+      "99,000 KK coins / month",
+      "Unlimited projects",
+      "All workflows unlocked",
+      "Modular workbench customization",
+      "BYO API",
+      "Universe Engine",
+      "Viral Creation tool",
+      "Legendary KK Egg x1 with subscription",
     ],
     features: {
       universe: true,

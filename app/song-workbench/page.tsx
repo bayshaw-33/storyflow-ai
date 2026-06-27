@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Copy, Save, Sparkles } from "lucide-react";
+import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectFromSupabase, readProjectsFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
@@ -687,6 +689,7 @@ export default function SongWorkbenchPage() {
             stylePrompt.trim() ? `Existing style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Existing composition prompt:\n${compositionPrompt}` : "",
           ].filter(Boolean).join("\n\n"),
+          byoApi: readByoApiConfig(),
         }),
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
@@ -803,6 +806,7 @@ export default function SongWorkbenchPage() {
             stylePrompt.trim() ? `Current style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Current composition prompt:\n${compositionPrompt}` : "",
           ].filter(Boolean).join("\n\n"),
+          byoApi: readByoApiConfig(),
         }),
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
@@ -892,6 +896,9 @@ export default function SongWorkbenchPage() {
             )}
           </div>
           <div className="header-actions">
+            <Link className="secondary-button" href="/universes">
+              Universe
+            </Link>
             <button className="secondary-button" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
               <Save size={15} />
               {savingProject ? text.saving : text.saveToProjects}

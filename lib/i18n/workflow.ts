@@ -6,7 +6,7 @@ export function localizeWorkflowStep(locale: Locale, step: WorkflowStep): Workfl
   const lockedLabels: Partial<Record<TaskType, { short: string; label: string }>> = {
     market_analysis: { short: "Logline", label: "Logline" },
     script_import: { short: "Logline", label: "Logline" },
-    brief: { short: "Outline", label: "Outline" },
+    brief: { short: "Story", label: "Story Outline" },
     structure_model: { short: "World", label: "World" },
     characters: { short: "Characters", label: "Characters" },
     beat_cards: { short: "Beats", label: "Beat Cards" },

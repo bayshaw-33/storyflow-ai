@@ -68,6 +68,7 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
 
   const providerResult = await callRoutedProvider({
     taskType: payload.taskType,
+    byoApi: payload.byoApi,
     messages: [
       {
         role: "system",

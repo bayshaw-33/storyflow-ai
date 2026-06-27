@@ -14,13 +14,16 @@ const tierCopy = {
   "en-US": {
     kicker: "Pricing",
     title: "Choose the room that matches your production rhythm.",
-    subtitle: "No payment flow is connected in this round. Your selection updates the active profile plan.",
+    subtitle: "Paid tiers open Stripe Checkout when billing is configured. Staging can still update the active profile plan for QA.",
     select: "Choose tier",
     selected: "Current tier",
     signingIn: "Sign in to choose a tier.",
     saving: "Saving",
+    redirecting: "Opening checkout",
     saved: "Plan updated.",
+    stagingSaved: "Billing is not configured here, so the profile plan was updated for staging QA.",
     error: "Could not update your plan. Please try again.",
+    checkoutError: "Could not open checkout. Please try again.",
     missingProfile: "Profile was not found for this account.",
     betaLabel: "Beta",
     originalPrice: "Original",
@@ -33,13 +36,16 @@ const tierCopy = {
   "zh-CN": {
     kicker: "定价",
     title: "选择与你创作节奏匹配的工作间。",
-    subtitle: "本轮暂不接入真实支付。选择档位后，会更新当前账号的 profile plan。",
+    subtitle: "付费档位会在支付配置完成后打开 Stripe Checkout；Staging 环境仍可更新当前账号档位用于测试。",
     select: "选择档位",
     selected: "当前档位",
     signingIn: "请先登录后再选择档位。",
     saving: "保存中",
+    redirecting: "正在打开支付",
     saved: "套餐已更新。",
+    stagingSaved: "当前环境未配置支付，已更新 profile plan 供 Staging 测试。",
     error: "套餐更新失败，请重试。",
+    checkoutError: "支付页面打开失败，请重试。",
     missingProfile: "未找到当前账号的个人资料。",
     betaLabel: "公测价",
     originalPrice: "原价",
@@ -85,6 +91,7 @@ const MonetizationTier = memo(function MonetizationTier({
   const isFree = plan.monthlyPrice === 0;
 
   const disabled = saving;
+  const includes = isZh ? plan.includes : plan.includesEn || plan.includes;
 
   return (
     <div
@@ -126,7 +133,7 @@ const MonetizationTier = memo(function MonetizationTier({
       </div>
 
       <div className="workflow-template-meta" aria-label={copy.included}>
-        {plan.includes.map((item) => (
+        {includes.map((item) => (
           <span key={item}>{item}</span>
         ))}
       </div>
@@ -151,6 +158,27 @@ export function MonetizationLayer() {
     [],
   );
 
+  const updateProfilePlan = useCallback(async (tier: TierDef, userId: string) => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) throw new Error("missing-supabase-client");
+
+    const { data, error } = await supabase
+      .from("storyflow_profiles")
+      .update({
+        plan: tier.planId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .select("plan")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error("missing-profile");
+
+    setSelected(tier.id);
+    window.localStorage.setItem("kiikis_plan_id", tier.planId);
+  }, []);
+
   const selectTier = useCallback(async (tier: TierDef) => {
     setSavingTier(tier.id);
     setMessage(null);
@@ -166,31 +194,43 @@ export function MonetizationLayer() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("storyflow_profiles")
-        .update({
-          plan: tier.planId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id)
-        .select("plan")
-        .maybeSingle();
+      if (tier.planId !== "free") {
+        const response = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${sessionData.session?.access_token}`,
+          },
+          body: JSON.stringify({ tierId: tier.id, annual }),
+        });
+        const payload = await response.json().catch(() => null) as { success?: boolean; url?: string; code?: string; error?: string } | null;
 
-      if (error) throw error;
-      if (!data) {
-        setMessage({ tone: "error", text: copy.missingProfile });
+        if (response.ok && payload?.success && payload.url) {
+          setMessage({ tone: "success", text: copy.redirecting });
+          window.location.assign(payload.url);
+          return;
+        }
+
+        if (response.status !== 501 || payload?.code !== "BILLING_NOT_CONFIGURED") {
+          throw new Error(payload?.error || "checkout-error");
+        }
+
+        await updateProfilePlan(tier, user.id);
+        setMessage({ tone: "success", text: copy.stagingSaved });
         return;
       }
 
-      setSelected(tier.id);
-      window.localStorage.setItem("kiikis_plan_id", tier.planId);
+      await updateProfilePlan(tier, user.id);
       setMessage({ tone: "success", text: copy.saved });
-    } catch {
-      setMessage({ tone: "error", text: copy.error });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error && error.message === "missing-profile" ? copy.missingProfile : copy.error,
+      });
     } finally {
       setSavingTier(null);
     }
-  }, [copy]);
+  }, [annual, copy, updateProfilePlan]);
 
   return (
     <>

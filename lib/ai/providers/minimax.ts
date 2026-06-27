@@ -5,6 +5,9 @@ type MiniMaxOptions = {
   temperature?: number;
   timeoutMs?: number;
   maxTokens?: number;
+  apiKeyOverride?: string;
+  modelOverride?: string;
+  baseUrlOverride?: string;
 };
 
 export async function callMiniMax({
@@ -12,16 +15,19 @@ export async function callMiniMax({
   temperature = 0.75,
   timeoutMs = 120000,
   maxTokens = 12000,
+  apiKeyOverride,
+  modelOverride,
+  baseUrlOverride,
 }: MiniMaxOptions): Promise<AIProviderResult> {
-  const apiKey = getMiniMaxApiKey();
-  const model = process.env.MINIMAX_MODEL || "MiniMax-M3";
-  const baseUrl = process.env.MINIMAX_API_BASE_URL || (isTokenPlanKey(apiKey) ? "https://api.minimaxi.com/v1/chat/completions" : "https://api.minimax.io/v1/chat/completions");
+  const apiKey = apiKeyOverride || getMiniMaxApiKey();
+  const model = modelOverride || process.env.MINIMAX_MODEL || "MiniMax-M3";
+  const baseUrl = baseUrlOverride || process.env.MINIMAX_API_BASE_URL || (isTokenPlanKey(apiKey) ? "https://api.minimaxi.com/v1/chat/completions" : "https://api.minimax.io/v1/chat/completions");
 
   if (!apiKey) {
     throw new Error("MISSING_MINIMAX_API_KEY");
   }
 
-  if (isTokenPlanKey(apiKey) && !process.env.MINIMAX_API_BASE_URL) {
+  if (isTokenPlanKey(apiKey) && !baseUrlOverride && !process.env.MINIMAX_API_BASE_URL) {
     return callMiniMaxAnthropic({
       apiKey,
       model,

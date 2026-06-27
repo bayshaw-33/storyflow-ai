@@ -5,6 +5,8 @@ type DeepSeekOptions = {
   temperature?: number;
   timeoutMs?: number;
   maxTokens?: number;
+  apiKeyOverride?: string;
+  modelOverride?: string;
 };
 
 export async function callDeepSeek({
@@ -12,9 +14,11 @@ export async function callDeepSeek({
   temperature = 0.75,
   timeoutMs = 90000,
   maxTokens = 8192,
+  apiKeyOverride,
+  modelOverride,
 }: DeepSeekOptions): Promise<AIProviderResult> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  const apiKey = apiKeyOverride || process.env.DEEPSEEK_API_KEY;
+  const model = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");

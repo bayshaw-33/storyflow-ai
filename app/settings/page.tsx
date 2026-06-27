@@ -12,6 +12,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const PLAN_STORAGE_KEY = "kiikis_plan_id";
+const BYO_API_STORAGE_KEY = "kiikis_byo_api_config";
 const PLAN_IDS: PlanId[] = ["free", "elite", "pro", "ultra"];
 
 type Profile = {
@@ -30,6 +31,23 @@ type Credits = {
 };
 
 type AuthMode = "signin" | "signup";
+type ByoApiSettings = {
+  provider: "auto" | "deepseek" | "minimax";
+  deepseekApiKey: string;
+  deepseekModel: string;
+  minimaxApiKey: string;
+  minimaxModel: string;
+  minimaxBaseUrl: string;
+};
+
+const EMPTY_BYO_API: ByoApiSettings = {
+  provider: "auto",
+  deepseekApiKey: "",
+  deepseekModel: "",
+  minimaxApiKey: "",
+  minimaxModel: "",
+  minimaxBaseUrl: "",
+};
 
 const copy = {
   "en-US": {
@@ -65,6 +83,23 @@ const copy = {
     noProfile: "No profile row was found for this account.",
     upgrade: "Change plan",
     notConnected: "Not connected",
+    apiKeys: "API Keys",
+    apiKeysHint: "For Pro and Ultra. Keys are stored on this device and sent only with AI generation requests.",
+    apiProvider: "Provider routing",
+    apiProviderAuto: "Auto",
+    apiProviderDeepSeek: "DeepSeek",
+    apiProviderMiniMax: "MiniMax",
+    deepseekKey: "DeepSeek API Key",
+    deepseekModel: "DeepSeek model",
+    minimaxKey: "MiniMax API Key",
+    minimaxModel: "MiniMax model",
+    minimaxBaseUrl: "MiniMax base URL",
+    optional: "Optional",
+    saveApiKeys: "Save API keys",
+    clearApiKeys: "Clear keys",
+    apiKeysSaved: "API keys saved on this device.",
+    apiKeysCleared: "API keys cleared.",
+    apiKeysLocked: "Upgrade to Pro or Ultra to use BYO API.",
   },
   "zh-CN": {
     kicker: "设置",
@@ -99,6 +134,23 @@ const copy = {
     noProfile: "当前账号未找到个人资料记录。",
     upgrade: "更换套餐",
     notConnected: "未连接",
+    apiKeys: "API Keys",
+    apiKeysHint: "Pro 和 Ultra 可用。Key 只保存在当前设备，并仅在 AI 生成请求中发送。",
+    apiProvider: "供应商路由",
+    apiProviderAuto: "自动",
+    apiProviderDeepSeek: "DeepSeek",
+    apiProviderMiniMax: "MiniMax",
+    deepseekKey: "DeepSeek API Key",
+    deepseekModel: "DeepSeek 模型",
+    minimaxKey: "MiniMax API Key",
+    minimaxModel: "MiniMax 模型",
+    minimaxBaseUrl: "MiniMax Base URL",
+    optional: "可选",
+    saveApiKeys: "保存 API Key",
+    clearApiKeys: "清除 Key",
+    apiKeysSaved: "API Key 已保存在当前设备。",
+    apiKeysCleared: "API Key 已清除。",
+    apiKeysLocked: "升级到 Pro 或 Ultra 后可使用自接 API。",
   },
 };
 
@@ -137,6 +189,7 @@ export default function SettingsPage() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [reloadKey, setReloadKey] = useState(0);
+  const [byoApi, setByoApi] = useState<ByoApiSettings>(EMPTY_BYO_API);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +198,7 @@ export default function SettingsPage() {
       setLoading(true);
       setMessage(null);
       setProjectCount(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").length);
+      setByoApi(readByoApiSettings());
 
       const supabase = getSupabaseBrowserClient();
       if (!supabase) {
@@ -204,6 +258,7 @@ export default function SettingsPage() {
 
   const planId = normalizePlan(profile?.plan);
   const plan = useMemo(() => getPlanEntitlement(planId), [planId]);
+  const canUseByoApi = Boolean(session && plan.features.byoApi);
   const email = profile?.email || session?.user.email || "-";
   const registeredAt = formatDate(profile?.created_at, locale);
   const updatedAt = formatDate(profile?.updated_at, locale);
@@ -303,6 +358,29 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function saveApiKeys() {
+    if (!canUseByoApi) {
+      setMessage({ tone: "error", text: text.apiKeysLocked });
+      return;
+    }
+
+    localStorage.setItem(BYO_API_STORAGE_KEY, JSON.stringify({
+      provider: byoApi.provider,
+      deepseekApiKey: byoApi.deepseekApiKey.trim(),
+      deepseekModel: byoApi.deepseekModel.trim(),
+      minimaxApiKey: byoApi.minimaxApiKey.trim(),
+      minimaxModel: byoApi.minimaxModel.trim(),
+      minimaxBaseUrl: byoApi.minimaxBaseUrl.trim(),
+    }));
+    setMessage({ tone: "success", text: text.apiKeysSaved });
+  }
+
+  function clearApiKeys() {
+    localStorage.removeItem(BYO_API_STORAGE_KEY);
+    setByoApi(EMPTY_BYO_API);
+    setMessage({ tone: "success", text: text.apiKeysCleared });
   }
 
   return (
@@ -406,6 +484,79 @@ export default function SettingsPage() {
           </dl>
         </article>
 
+        <article className="settings-card api-settings-card">
+          <span>{text.apiKeys}</span>
+          <p className="field-note">{canUseByoApi ? text.apiKeysHint : text.apiKeysLocked}</p>
+          <label>
+            {text.apiProvider}
+            <select
+              value={byoApi.provider}
+              disabled={!canUseByoApi}
+              onChange={(event) => setByoApi((current) => ({ ...current, provider: event.target.value as ByoApiSettings["provider"] }))}
+            >
+              <option value="auto">{text.apiProviderAuto}</option>
+              <option value="deepseek">{text.apiProviderDeepSeek}</option>
+              <option value="minimax">{text.apiProviderMiniMax}</option>
+            </select>
+          </label>
+          <label>
+            {text.deepseekKey}
+            <input
+              type="password"
+              value={byoApi.deepseekApiKey}
+              disabled={!canUseByoApi}
+              placeholder="sk-..."
+              onChange={(event) => setByoApi((current) => ({ ...current, deepseekApiKey: event.target.value }))}
+            />
+          </label>
+          <label>
+            {text.deepseekModel} <small>{text.optional}</small>
+            <input
+              value={byoApi.deepseekModel}
+              disabled={!canUseByoApi}
+              placeholder="deepseek-v4-flash"
+              onChange={(event) => setByoApi((current) => ({ ...current, deepseekModel: event.target.value }))}
+            />
+          </label>
+          <label>
+            {text.minimaxKey}
+            <input
+              type="password"
+              value={byoApi.minimaxApiKey}
+              disabled={!canUseByoApi}
+              placeholder="MiniMax API key"
+              onChange={(event) => setByoApi((current) => ({ ...current, minimaxApiKey: event.target.value }))}
+            />
+          </label>
+          <label>
+            {text.minimaxModel} <small>{text.optional}</small>
+            <input
+              value={byoApi.minimaxModel}
+              disabled={!canUseByoApi}
+              placeholder="MiniMax-M3"
+              onChange={(event) => setByoApi((current) => ({ ...current, minimaxModel: event.target.value }))}
+            />
+          </label>
+          <label>
+            {text.minimaxBaseUrl} <small>{text.optional}</small>
+            <input
+              type="url"
+              value={byoApi.minimaxBaseUrl}
+              disabled={!canUseByoApi}
+              placeholder="https://api.minimax.io/v1/chat/completions"
+              onChange={(event) => setByoApi((current) => ({ ...current, minimaxBaseUrl: event.target.value }))}
+            />
+          </label>
+          <div className="settings-control-row">
+            <button className="primary-button" type="button" disabled={!canUseByoApi} onClick={saveApiKeys}>
+              {text.saveApiKeys}
+            </button>
+            <button className="secondary-button" type="button" onClick={clearApiKeys}>
+              {text.clearApiKeys}
+            </button>
+          </div>
+        </article>
+
         <article className="settings-card">
           <span>{text.language}</span>
           <LanguageToggle />
@@ -421,4 +572,21 @@ export default function SettingsPage() {
       />
     </main>
   );
+}
+
+function readByoApiSettings(): ByoApiSettings {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BYO_API_STORAGE_KEY) || "null") as Partial<ByoApiSettings> | null;
+    if (!parsed) return EMPTY_BYO_API;
+    return {
+      provider: parsed.provider === "deepseek" || parsed.provider === "minimax" ? parsed.provider : "auto",
+      deepseekApiKey: parsed.deepseekApiKey || "",
+      deepseekModel: parsed.deepseekModel || "",
+      minimaxApiKey: parsed.minimaxApiKey || "",
+      minimaxModel: parsed.minimaxModel || "",
+      minimaxBaseUrl: parsed.minimaxBaseUrl || "",
+    };
+  } catch {
+    return EMPTY_BYO_API;
+  }
 }

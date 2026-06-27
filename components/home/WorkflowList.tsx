@@ -13,7 +13,7 @@ const workflowEntries = [
     titleZh: "小说创作",
     description: "Long-form arcs, chapter engines, canon, and serialized pacing.",
     descriptionZh: "长篇故事线、章节推进、设定连续性与连载节奏。",
-    steps: 12,
+    steps: 8,
     difficulty: "Deep",
     difficultyZh: "深入",
     mode: null,

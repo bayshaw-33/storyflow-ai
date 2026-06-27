@@ -52,6 +52,17 @@ export type GenerateOptions = {
   chapterNo?: number;
 };
 
+export type ByoApiProvider = "auto" | "deepseek" | "minimax";
+
+export type ByoApiConfig = {
+  provider?: ByoApiProvider;
+  deepseekApiKey?: string;
+  deepseekModel?: string;
+  minimaxApiKey?: string;
+  minimaxModel?: string;
+  minimaxBaseUrl?: string;
+};
+
 export type GeneratePayload = {
   taskType: TaskType;
   projectId?: string;
@@ -65,6 +76,7 @@ export type GeneratePayload = {
   benchmarkLink?: string;
   idea?: string;
   allSteps?: Partial<Record<TaskType, string>>;
+  byoApi?: ByoApiConfig;
 };
 
 export const taskNames: Record<TaskType, string> = {

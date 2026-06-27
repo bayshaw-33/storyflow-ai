@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { generateAIContent, isTaskType, type GenerateFailure } from "@/lib/ai/generate";
 import { getProviderStatus } from "@/lib/ai/providers";
-import type { GeneratePayload } from "@/lib/ai/prompts";
+import type { ByoApiConfig, GeneratePayload } from "@/lib/ai/prompts";
+import { getPlanEntitlement } from "@/lib/billing/plans";
 import {
   authenticateRequest,
   completeGenerationTask,
@@ -10,6 +11,7 @@ import {
   estimateCreditCost,
   failGenerationTask,
   refundCredits,
+  serviceFetch,
 } from "@/lib/supabase/server";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -53,22 +55,26 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
   const creditCost = estimateCreditCost(body.taskType);
   let taskId: string | null = null;
+  const recordPayload = stripByoApi(body);
 
   try {
+    const byoApi = await resolveByoApi(body.byoApi, user.id);
+    const generationPayload = byoApi ? { ...recordPayload, byoApi } : recordPayload;
+
     if (creditCost > 0) await consumeCredits(user.id, creditCost);
 
     taskId = await createGenerationTask({
       userId: user.id,
-      payload: body,
+      payload: recordPayload,
       status: "running",
     });
 
-    const result = await generateAIContent(body);
+    const result = await generateAIContent(generationPayload);
 
     await completeGenerationTask({
       taskId,
       userId: user.id,
-      payload: body,
+      payload: recordPayload,
       output: result.output,
       provider: result.meta.provider,
       model: result.meta.model,
@@ -115,6 +121,45 @@ function failure(error: string, status: number) {
   return NextResponse.json(response, { status });
 }
 
+function stripByoApi(payload: GeneratePayload): GeneratePayload {
+  if (!payload.byoApi) return payload;
+  const { byoApi: _byoApi, ...safePayload } = payload;
+  return safePayload;
+}
+
+async function resolveByoApi(config: ByoApiConfig | undefined, userId: string): Promise<ByoApiConfig | null> {
+  if (!config) return null;
+
+  const cleanConfig: ByoApiConfig = {
+    provider: config.provider || "auto",
+    deepseekApiKey: config.deepseekApiKey?.trim() || undefined,
+    deepseekModel: config.deepseekModel?.trim() || undefined,
+    minimaxApiKey: config.minimaxApiKey?.trim() || undefined,
+    minimaxModel: config.minimaxModel?.trim() || undefined,
+    minimaxBaseUrl: config.minimaxBaseUrl?.trim() || undefined,
+  };
+
+  const hasKey = Boolean(cleanConfig.deepseekApiKey || cleanConfig.minimaxApiKey);
+  if (!hasKey) return null;
+
+  const rows = await serviceFetch<Array<{ plan: string | null }>>(
+    `/rest/v1/storyflow_profiles?user_id=eq.${encodeURIComponent(userId)}&select=plan&limit=1`,
+  );
+  const plan = getPlanEntitlement(rows[0]?.plan);
+  if (!plan.features.byoApi) {
+    throw new Error("BYO_API_PLAN_REQUIRED");
+  }
+
+  if (cleanConfig.provider === "deepseek" && !cleanConfig.deepseekApiKey) {
+    throw new Error("MISSING_BYO_DEEPSEEK_API_KEY");
+  }
+  if (cleanConfig.provider === "minimax" && !cleanConfig.minimaxApiKey) {
+    throw new Error("MISSING_BYO_MINIMAX_API_KEY");
+  }
+
+  return cleanConfig;
+}
+
 function toFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
@@ -132,6 +177,18 @@ function toFriendlyError(error: unknown) {
 
   if (message === "INSUFFICIENT_CREDITS") {
     return "本月 AI 额度已用完，暂时不能继续生成。";
+  }
+
+  if (message === "BYO_API_PLAN_REQUIRED") {
+    return "当前套餐暂不支持自接 API，请升级到 Pro 或 Ultra 后再使用。";
+  }
+
+  if (message === "MISSING_BYO_DEEPSEEK_API_KEY") {
+    return "已选择 DeepSeek 自接 API，但未填写 DeepSeek API Key。";
+  }
+
+  if (message === "MISSING_BYO_MINIMAX_API_KEY") {
+    return "已选择 MiniMax 自接 API，但未填写 MiniMax API Key。";
   }
 
   if (message.includes("SUPABASE_SERVICE_ERROR")) {

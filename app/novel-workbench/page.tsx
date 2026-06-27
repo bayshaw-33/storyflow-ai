@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, BookOpen, Download, Link2, Lock, Plus, RefreshCcw, Save, Send, Sparkles, Unlock } from "lucide-react";
 import { AuthModal } from "@/components/layout/AuthModal";
+import { readByoApiConfig } from "@/lib/ai/byoClient";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   DEFAULT_PROJECT_GROUP,
@@ -37,6 +38,7 @@ const settingOptions = {
   platform: ["WebNovel / Dreame", "GoodNovel", "Radish", "中文网文", "多平台"],
   language: ["英文", "中文", "西班牙语", "法语", "日语", "韩语"],
 };
+const AI_GENERATION_TIMEOUT_MS = 75_000;
 
 const editableTasks: TaskType[] = [
   "novel_brief",
@@ -331,6 +333,9 @@ function NovelWorkbenchContent() {
     }
 
     setGenerating(taskType);
+    setStatus(isZh ? "正在生成…" : "Generating…");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), AI_GENERATION_TIMEOUT_MS);
     try {
       const response = await fetch("/api/ai/generate", {
         method: "POST",
@@ -338,6 +343,7 @@ function NovelWorkbenchContent() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           taskType,
           projectId: project.id,
@@ -364,6 +370,7 @@ function NovelWorkbenchContent() {
             novel_chapter_outline: project.novelChapterOutline,
             novel_chapter_draft: project.novelChapterDraft,
           },
+          byoApi: readByoApiConfig(),
         }),
       });
       const data = await response.json();
@@ -386,8 +393,13 @@ function NovelWorkbenchContent() {
         setCredits({ ...credits, balance: Math.max(0, credits.balance - (taskType === "novel_chapter_draft" || taskType === "novel_revision" ? 2 : taskType === "novel_export" ? 0 : 1)) });
       }
     } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : (isZh ? "生成失败。" : "Generation failed."));
+      if (generateError instanceof Error && generateError.name === "AbortError") {
+        setError(isZh ? "AI 生成超时，请稍后重试。当前内容已保留。" : "AI generation timed out. Current content is preserved.");
+      } else {
+        setError(generateError instanceof Error ? generateError.message : (isZh ? "生成失败。" : "Generation failed."));
+      }
     } finally {
+      window.clearTimeout(timeout);
       setGenerating(null);
     }
   }
@@ -499,6 +511,7 @@ function NovelWorkbenchContent() {
       setError(isZh ? "请先登录后再创建剧本项目。" : "Sign in before creating a script project.");
       return;
     }
+    setStatus(isZh ? "正在创建剧本项目…" : "Creating script project…");
 
     const scriptProject = createProject({
       title: `${project.title || "Novel"} 剧本改编`,
@@ -568,9 +581,9 @@ function NovelWorkbenchContent() {
       </nav>
 
       <section className="novel-workbench-shell">
-        {(error || status || cloudWarning) ? (
-          <div className={error ? "notice error" : cloudWarning ? "notice warning" : "notice success"}>
-            {error || cloudWarning || status}
+        {(error || status || cloudWarning || generating) ? (
+          <div className={error ? "notice error" : cloudWarning || generating ? "notice warning" : "notice success"}>
+            {error || cloudWarning || (generating ? (isZh ? "正在生成，请勿关闭页面…" : "Generating. Keep this page open…") : status)}
           </div>
         ) : null}
 

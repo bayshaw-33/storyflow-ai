@@ -133,8 +133,8 @@ export default function LandingPage() {
         kicker="COMPANIONS"
         titleZh="召唤你的创作搭档"
         titleEn="Summon Your Creative Companions"
-        subtitleZh={"故事架构师、角色设计师、剧本医生、市场分析师、视觉导演\n组建你自己的 AI 创作团队"}
-        subtitleEn="Story Architect, Character Designer, Script Doctor, Market Analyst, Visual Director."
+        subtitleZh={"Lyra 故事架构师、Arlo 世界观设计、Vale 对白专家、Muse 情绪语调、KK 创作搭档\n组建你自己的 AI 创作团队"}
+        subtitleEn="Lyra the Story Architect, Arlo the Worldbuilder, Vale the Dialogue Expert, Muse for Mood & Tone, and KK the Creative Companion."
         ctaLabel={isZh ? "查看伙伴" : "Meet Companions"}
         ctaHref="/companions"
         bgImageZh="radial-gradient(ellipse at 40% 70%, #100d2a 0%, #060a14 100%)"

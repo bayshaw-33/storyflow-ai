@@ -1,4 +1,4 @@
-import type { TaskType } from "../prompts";
+import type { ByoApiConfig, TaskType } from "../prompts";
 import { callDeepSeek } from "./deepseek";
 import { callMiniMax, getMiniMaxApiKey } from "./minimax";
 import type { AIMessage, AIProviderName, AIProviderResult, AIUsage } from "./types";
@@ -11,6 +11,7 @@ type ProviderCallOptions = {
   taskType: TaskType;
   messages: AIMessage[];
   temperature?: number;
+  byoApi?: ByoApiConfig;
 };
 
 const deepSeekPreferredTasks = new Set<TaskType>([
@@ -40,7 +41,7 @@ export function getProviderStatus() {
 }
 
 export async function callRoutedProvider(options: ProviderCallOptions): Promise<AIProviderResult> {
-  const provider = chooseProvider(options.taskType);
+  const provider = chooseProvider(options.taskType, options.byoApi);
 
   try {
     return await callProvider(provider, options);
@@ -52,7 +53,9 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
   }
 }
 
-function chooseProvider(taskType: TaskType): AIProviderName {
+function chooseProvider(taskType: TaskType, byoApi?: ByoApiConfig): AIProviderName {
+  if (byoApi?.provider === "deepseek") return "deepseek";
+  if (byoApi?.provider === "minimax") return "minimax";
   const mode = getProviderMode();
   if (mode === "deepseek") return "deepseek";
   if (mode === "minimax") return "minimax";
@@ -74,13 +77,23 @@ async function callProvider(provider: AIProviderName, options: ProviderCallOptio
     return callDeepSeek({
       messages: options.messages,
       temperature: options.temperature,
+      apiKeyOverride: cleanSecret(options.byoApi?.deepseekApiKey),
+      modelOverride: options.byoApi?.deepseekModel?.trim() || undefined,
     });
   }
 
   return callMiniMax({
     messages: options.messages,
     temperature: options.temperature,
+    apiKeyOverride: cleanSecret(options.byoApi?.minimaxApiKey),
+    modelOverride: options.byoApi?.minimaxModel?.trim() || undefined,
+    baseUrlOverride: options.byoApi?.minimaxBaseUrl?.trim() || undefined,
   });
+}
+
+function cleanSecret(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 function isMissingProviderKey(error: unknown) {

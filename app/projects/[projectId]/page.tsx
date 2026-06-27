@@ -23,6 +23,7 @@ import {
   UserPlus,
   WandSparkles,
 } from "lucide-react";
+import { readByoApiConfig } from "@/lib/ai/byoClient";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   buildStoryBibleSummary,
@@ -964,6 +965,7 @@ export default function WorkflowPage() {
         benchmarkLink: baseProject.benchmarkLink,
         idea: baseProject.idea,
         allSteps: previousStepContent(baseProject, step),
+        byoApi: readByoApiConfig(),
       }),
     });
 
