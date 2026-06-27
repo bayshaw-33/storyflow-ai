@@ -7,6 +7,11 @@ import { HeroSection } from "@/components/home/HeroSection";
 import { ContentSection } from "@/components/home/ContentSection";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { TopNav } from "@/components/layout/TopNav";
+import {
+  hasWorkspaceModalPostLoginAction,
+  requestWorkspaceModalAfterLogin,
+  useWorkspaceModal,
+} from "@/hooks/use-workspace-modal";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -15,6 +20,7 @@ type AuthMode = "signin" | "signup";
 export default function LandingPage() {
   const router = useRouter();
   const { locale } = useI18n();
+  const { openModal } = useWorkspaceModal();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -30,6 +36,12 @@ export default function LandingPage() {
     return () => listener?.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (session && hasWorkspaceModalPostLoginAction()) {
+      openModal();
+    }
+  }, [session, openModal]);
+
   async function signOut() {
     const supabase = getSupabaseBrowserClient();
     await supabase?.auth.signOut();
@@ -38,6 +50,16 @@ export default function LandingPage() {
 
   function enterWriterRoom() {
     router.push("/dashboard");
+  }
+
+  function enterWorkspaceModal() {
+    if (session) {
+      openModal();
+      return;
+    }
+
+    requestWorkspaceModalAfterLogin();
+    openAuth("signin");
   }
 
   function openAuth(mode: AuthMode) {
@@ -55,7 +77,7 @@ export default function LandingPage() {
         onSignOut={signOut}
       />
       <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
-      <HeroSection onStartCreating={enterWriterRoom} />
+      <HeroSection onStartCreating={enterWorkspaceModal} />
 
       <ContentSection
         id="section-1"

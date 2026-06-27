@@ -7,6 +7,7 @@ import { KKProvider } from "@/components/kk/KKProvider";
 import { GlobalSideNav } from "@/components/layout/GlobalSideNav";
 import { ThemeTimeSync } from "@/components/layout/ThemeTimeSync";
 import { DevBridge } from "@/components/dev/DevBridge";
+import { WorkspaceModalProvider } from "@/components/modal/workspace-modal-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -53,10 +54,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <LanguageProvider>
           <OSProvider>
             <KKProvider>
-              <ThemeTimeSync />
-              {children}
-              <GlobalSideNav />
-              <DevBridge />
+              <WorkspaceModalProvider>
+                <ThemeTimeSync />
+                {children}
+                <GlobalSideNav />
+                <DevBridge />
+              </WorkspaceModalProvider>
             </KKProvider>
           </OSProvider>
         </LanguageProvider>
