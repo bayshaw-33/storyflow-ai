@@ -17,7 +17,7 @@
 `storyflow_projects`
 - `id`: 项目 ID，前端已有 UUID 或 demo ID。
 - `user_id`: Supabase Auth 用户 ID。
-- `workflow_type`: `creation` / `continuation` / `song` / `viral` / `novel`。
+- `workflow_type`: `creation` / `continuation` / `song` / `viral` / `novel` / `storyboard` / `video`。
 - `project_group`: 首页左侧分组。
 - `status`: `draft` / `generating` / `ready` / `error`。
 - `data`: 完整 `DramaProject` JSON。
@@ -61,6 +61,81 @@
 `storyflow_assets` / `storyflow_exports`
 - 预留角色图、关系图、分镜图、Word/PDF/MD 导出文件。
 
+## 演员库、团队共享与项目形象版本（规划）
+
+本节用于下一阶段 schema 和 API 落地。当前不要求前端绕过 API 直接写表，也不允许 AI 抽取内容直接写入 Universe canon。
+
+`storyflow_teams`
+- `id`: 团队 ID。
+- `owner_id`: 团队拥有者 Supabase Auth 用户 ID。
+- `name`: 团队名称。
+- `created_at` / `updated_at`: 创建和更新时间。
+
+`storyflow_team_members`
+- `id`: 成员记录 ID。
+- `team_id`: 所属团队。
+- `user_id`: Supabase Auth 用户 ID。
+- `role`: `owner` / `admin` / `editor` / `viewer`。
+- `status`: `active` / `invited` / `removed`。
+- `created_at` / `updated_at`: 创建和更新时间。
+
+`storyflow_actor_profiles`
+- `id`: 虚拟演员 ID。
+- `owner_id`: 创建者 Supabase Auth 用户 ID。
+- `team_id`: 可选，团队共享演员所属团队。
+- `visibility`: `private` / `team`。
+- `name`: 演员名称。
+- `bio`: 演员简介。
+- `age_range`: 年龄感。
+- `gender_expression`: 性别表达。
+- `ethnicity_style`: 族裔 / 地域气质。
+- `face_description`: 脸型与五官描述。
+- `hair_description`: 发型与发质描述。
+- `body_description`: 体型与比例描述。
+- `temperament`: 气质关键词 JSON。
+- `playable_roles`: 可出演类型 JSON。
+- `base_prompt`: 演员基础提示词。
+- `negative_prompt`: 禁止元素提示词。
+- `avatar_asset_id`: 演员基础头像资产。
+- `reference_sheet_asset_id`: 演员基础角色参考表资产。
+- `status`: `draft` / `ready` / `archived`。
+- `created_at` / `updated_at`: 创建和更新时间。
+
+`storyflow_character_appearance_variants`
+- `id`: 项目形象版本 ID。
+- `project_id`: 所属项目。
+- `universe_id`: 可选，关联 Universe。
+- `actor_id`: 选用的虚拟演员。
+- `universe_entity_id`: 可选，关联 Universe 角色实体。
+- `character_name`: 项目内角色名。
+- `project_style`: 项目画风。
+- `costume_direction`: 服装与妆造方向。
+- `prompt_pack`: 三视图、参考表、分镜调用等提示词 JSON。
+- `front_asset_id`: 单张定妆图资产。
+- `three_view_asset_id`: 三视图资产。
+- `reference_sheet_asset_id`: 项目角色参考表资产。
+- `status`: `draft` / `approved` / `archived`。
+- `created_at` / `updated_at`: 创建和更新时间。
+
+`storyflow_assets` 新增建议类型：
+- `actor_avatar`: 演员库基础头像。
+- `actor_reference_sheet`: 演员库基础角色参考表。
+- `actor_three_view`: 演员库基础三视图。
+- `project_character_reference`: 项目内角色参考表。
+- `project_character_three_view`: 项目内角色三视图。
+- `scene_concept`: 分镜前置美术设计场景图。
+- `storyboard_frame`: 分镜帧图。
+
+权限规则：
+- 演员库第一版只支持虚拟演员，不支持真实演员肖像授权流程。
+- `private` 演员仅创建者可见。
+- `team` 演员按团队成员角色授权查看或使用。
+- `viewer` 可查看团队演员、Universe 和项目资产。
+- `editor` 可创建项目、提交 Universe Inbox、创建项目形象版本。
+- `admin` / `owner` 可管理团队演员、共享 Universe 和 Inbox 审核。
+- 项目形象版本不能自动覆盖演员基础形象，也不能自动覆盖 Universe 角色 canon。
+- AI 提取的角色、地点、关系、事件、规则和 canon fact 必须先进入 Inbox。
+
 ## API
 
 `GET /api/account/credits`
@@ -87,6 +162,74 @@
 - Header: `Authorization: Bearer <supabase_access_token>`
 - 生成人物关系图，失败时保留本地 SVG 兜底。
 
+`GET /api/actors`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 返回当前用户可见的个人演员和团队演员。
+
+`POST /api/actors`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 创建虚拟演员资料，支持 `private` 或 `team` 可见性。
+
+`PATCH /api/actors`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 更新虚拟演员资料、提示词、可见性和状态。
+
+`DELETE /api/actors?id=<actorId>`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 归档或删除虚拟演员，不能破坏已存在项目形象版本引用。
+
+`POST /api/actors/generate-prompt`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 根据演员资料生成 `base_prompt` 和 `negative_prompt`。
+
+`POST /api/actors/generate-avatar`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 通过 MiniMax 生成虚拟演员头像，写入生成任务和资产记录。
+
+`POST /api/actors/generate-reference-sheet`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 基于文字资料或上传头像生成角色参考表，写入生成任务和资产记录。
+
+`GET /api/projects/[projectId]/appearance-variants`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 返回项目内演员饰演角色的形象版本。
+
+`POST /api/projects/[projectId]/appearance-variants`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 创建项目形象版本，可关联 `actor_id` 和 `universe_entity_id`。
+
+`PATCH /api/projects/[projectId]/appearance-variants`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 更新项目画风、妆造、提示词和生成资产引用。
+
+`GET /api/teams`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 返回用户所属团队和角色。
+
+`POST /api/teams`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 创建团队，创建者成为 `owner`。
+
+`PATCH /api/teams`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 更新团队资料，要求 `admin` 或 `owner`。
+
+`POST /api/teams/invite`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 邀请成员加入团队，要求 `admin` 或 `owner`。
+
+`PATCH /api/teams/members`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 更新团队成员角色或状态，要求 `admin` 或 `owner`。
+
+`PATCH /api/universe/share`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 将 Universe 绑定或解绑团队共享范围，要求 Universe owner 或团队 admin / owner。
+
+`GET /api/universe/access?universeId=<id>`
+- Header: `Authorization: Bearer <supabase_access_token>`
+- 返回当前用户对指定 Universe 的权限：`none` / `read` / `write` / `admin`。
+
 ## Codex2 可以继续开发
 
 1. 在 `storyflow_project_steps` 上实现 5 阶段视图。
@@ -94,4 +237,5 @@
 3. 在 `storyflow_generations` 上做 DramaScore 历史对比。
 4. 在 `storyflow_assets` / `storyflow_exports` 上做正式交付包上传和下载。
 5. 使用 `phase_key` 把现有 14 步收纳为 5 阶段，不需要删除原有步骤。
+6. 按 `PRD-actor-library-team-universe.md` 落地团队、演员库、项目形象版本和分镜预生产流程。
 
