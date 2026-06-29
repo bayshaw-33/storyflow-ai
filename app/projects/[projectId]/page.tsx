@@ -519,7 +519,7 @@ export default function WorkflowPage() {
           ? { ...demoProject(), id: params.projectId, updatedAt: new Date().toISOString() }
           : requestedWorkflow === "continuation"
             ? createContinuationProject({ id: params.projectId, title: `${template || "Continuation"} Draft`, idea: `Initialized from template: ${template}` })
-            : createProject({ id: params.projectId, title: `${template || "New"} Draft`, genre: template || "Short Drama", idea: `Initialized from template: ${template}` });
+            : createProject({ id: params.projectId, title: `${template || "New"} Draft`, genre: template || "Script", idea: `Initialized from template: ${template}` });
 
         setProject(created);
         setLoadState("ready");
@@ -1421,7 +1421,7 @@ export default function WorkflowPage() {
           <h1>{t("workspace.notFound.title")}</h1>
           <p>{t("workspace.notFound.body")}</p>
           <div className="modal-actions">
-            <Link className="secondary-button" href="/dashboard">Back to dashboard</Link>
+            <Link className="secondary-button" href="/dashboard">Back to Workspace</Link>
             <button
               className="primary-button"
               type="button"

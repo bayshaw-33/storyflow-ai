@@ -82,10 +82,10 @@ export default function LandingPage() {
       <ContentSection
         id="section-1"
         kicker="KIIKIS"
-        titleZh="短剧、歌曲、爆款视频、小说"
-        titleEn="Short Drama · Music · Viral Video · Fiction"
-        subtitleZh="所有创作类型，一个平台。AI 全程协作，从灵感到交付。"
-        subtitleEn="Short drama, music, viral video, novels — all your creative work, one platform."
+        titleZh="小说 · 剧本 · 分镜 · 视频 · 歌曲"
+        titleEn="Novel · Script · Storyboard · Video · Song"
+        subtitleZh="五个工作流。一个宇宙。无限 IP。"
+        subtitleEn="Five workflows. One Universe. Infinite IP."
         bgImageZh="url('/design/hero/section-1-ch.png')"
         bgImageEn="url('/design/hero/section-1-en.png')"
         align="left"
@@ -95,10 +95,10 @@ export default function LandingPage() {
       <ContentSection
         id="platform"
         kicker="KIIKIS"
-        titleZh="创作者的 AI 宇宙"
-        titleEn="The AI Universe for Creators"
-        subtitleZh="短剧、歌曲、爆款视频、小说——所有创作，一个平台。AI 全程协作，从灵感到交付。"
-        subtitleEn="Short drama, music, viral video, novels — all your creative work, one platform."
+        titleZh="以宇宙为核心的超级创作工作台"
+        titleEn="The Universe-First Creative Workbench"
+        subtitleZh="五大专业工作流——小说、剧本、分镜、视频、歌曲——每个都能独立运转，通过 Universe 联动后势不可挡。角色一次定义，所有作品自动继承。"
+        subtitleEn="Five professional workflows — Novel, Script, Storyboard, Video, Song — each powerful alone, unstoppable when linked through a shared Universe. Build your characters once. Let them live everywhere."
         bgImageZh="url('/design/hero/section-2-ch.png')"
         bgImageEn="url('/design/hero/section-2-en.png')"
         align="right"
@@ -107,12 +107,12 @@ export default function LandingPage() {
 
       <ContentSection
         id="workflows"
-        kicker="WORKFLOWS"
-        titleZh="为每种创作，配一套完整的流水线"
-        titleEn="A Complete Pipeline for Every Creative Form"
-        subtitleZh={"短剧工作流 · 歌曲创作 · 爆款视频结构拆解 · 小说连载\n选择你的赛道，AI 带你跑完全程"}
-        subtitleEn="Short Drama · Song Creation · Viral Video · Serialized Fiction"
-        ctaLabel={isZh ? "开始创作" : "Start Creating"}
+        kicker={isZh ? "五大工作流" : "THE FIVE WORKFLOWS"}
+        titleZh="每种格式，每种形式，一个互联的宇宙。"
+        titleEn="Every Format. Every Form. One Connected Universe."
+        subtitleZh={"小说 · 剧本 · 分镜 · 视频 · 歌曲\n选择任意入口开始，Universe 会把资产沉淀并联动起来。"}
+        subtitleEn="Novel · Script · Storyboard · Video · Song"
+        ctaLabel={isZh ? "探索全部工作流" : "Explore All Workflows"}
         ctaHref="/dashboard"
         bgImageZh="url('/design/hero/section-3-ch.png')"
         bgImageEn="url('/design/hero/section-3-en.png')"
@@ -123,10 +123,10 @@ export default function LandingPage() {
       <ContentSection
         id="workspace"
         kicker="WORKSPACE"
-        titleZh="你的工作台，按你的方式运转"
-        titleEn="Your Workspace, Your Rules"
-        subtitleZh={"模块自由组合，接入你自己的 AI API\nPRO 用户完全掌控创作环境，打造专属工作流"}
-        subtitleEn="Modular layout, BYO API. PRO users own their entire creative environment."
+        titleZh="你的工作台。你的规则。你的 AI。"
+        titleEn="Your Workbench. Your Rules. Your AI."
+        subtitleZh={"模块化布局。自带 API Key。在不同工作流之间无缝切换，上下文不丢失。\nPRO 创作者掌控创作环境的每一个角落。"}
+        subtitleEn="Modular layout. Bring your own API keys. Switch between workflows without losing context. PRO creators own every corner of their creative environment."
         ctaLabel={isZh ? "了解 PRO" : "Learn PRO"}
         ctaHref="/subscription"
         bgImageZh="url('/design/hero/section-4-ch.png')"
@@ -137,12 +137,12 @@ export default function LandingPage() {
 
       <ContentSection
         id="universe"
-        kicker="UNIVERSE ENGINE"
-        titleZh="建立你自己的故事宇宙"
-        titleEn="Build Your Own Story Universe"
-        subtitleZh={"角色、世界观、时间线、Canon 规则——一次建立，所有项目共享继承\n创作不再从零开始，你的 IP 永久生长"}
-        subtitleEn="Characters, worlds, timelines, canon rules — build once, inherit everywhere."
-        ctaLabel={isZh ? "探索宇宙" : "Explore Universe"}
+        kicker={isZh ? "宇宙 · 核心" : "UNIVERSE · THE CORE"}
+        titleZh="一个宇宙。所有故事自动继承。"
+        titleEn="One Universe. Every Story Inherits It."
+        subtitleZh={"一次定义角色、世界观、时间线和正史规则——此后你创作的每部小说、剧本、分镜、视频和歌曲都自动继承它们。\n你的 IP 宇宙随项目生长，而非互相矛盾。"}
+        subtitleEn="Define your characters, worlds, timelines, and canon rules once — then every novel, script, storyboard, video, and song you create inherits them automatically. Your IP universe grows with every project, not against it."
+        ctaLabel={isZh ? "建造你的宇宙" : "Build Your Universe"}
         ctaHref="/universes"
         bgImageZh="radial-gradient(ellipse at 50% 30%, #0d1040 0%, #060a14 100%)"
         bgImageEn="radial-gradient(ellipse at 50% 30%, #0d1040 0%, #060a14 100%)"
@@ -153,11 +153,11 @@ export default function LandingPage() {
       <ContentSection
         id="join"
         kicker="JOIN KIIKIS"
-        titleZh="开始点亮你的第一颗星球"
-        titleEn="Light Up Your First Planet"
-        subtitleZh={"免费注册获得 3,000 创作额度\n邀请好友各得 5,000 创作额度（最多3位）\n更多高级工作流可在订阅页解锁"}
-        subtitleEn={"Sign up free: 3,000 creation credits.\nInvite friends: 5,000 credits each (up to 3).\nUnlock more advanced workflows on the subscription page."}
-        ctaLabel={isZh ? "免费开始" : "Start Free"}
+        titleZh="你的宇宙，今天启航"
+        titleEn="Your Universe Starts Today"
+        subtitleZh={"免费注册即获 3,000 创作积分，开始搭建。\n邀请一位创作者好友，每位奖励 5,000 积分（最多 3 位）。\n随时升级，解锁五大创作格式的高级工作流。"}
+        subtitleEn={"Sign up free — get 3,000 creation credits to start building.\nInvite a creator friend and earn 5,000 more credits per referral (up to 3 friends).\nUpgrade anytime to unlock advanced workflows across all five creative formats."}
+        ctaLabel={isZh ? "免费开始建造" : "Start Building Free"}
         ctaHref="/dashboard"
         bgImageZh="radial-gradient(ellipse at 50% 50%, #0d1a2a 0%, #060a14 100%)"
         bgImageEn="radial-gradient(ellipse at 50% 50%, #0d1a2a 0%, #060a14 100%)"

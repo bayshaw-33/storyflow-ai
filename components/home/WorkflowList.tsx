@@ -30,7 +30,7 @@ export function WorkflowList({ onSelectWorkflow }: WorkflowListProps) {
       <div className="dashboard-panel-head">
         <div>
           <span>{isZh ? "工作流" : "WORKFLOWS"}</span>
-          <h2 id="dashboard-workflows-title">{isZh ? "选择下一个故事入口" : "Templates for the next world"}</h2>
+          <h2 id="dashboard-workflows-title">{isZh ? "选择一个宇宙入口" : "Choose a Universe entry point"}</h2>
         </div>
       </div>
       <div className="workflow-template-grid">

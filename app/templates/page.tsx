@@ -9,10 +9,10 @@ import { useI18n } from "@/lib/i18n/useI18n";
 const templates = [
   {
     id: "short_drama",
-    title: "Short Drama Creation",
-    titleZh: "短剧创作",
-    description: "Vertical episodes, high-density turns, hooks, and delivery package.",
-    descriptionZh: "竖屏分集、高密度反转、钩子和交付包。",
+    title: "Script Creation",
+    titleZh: "剧本创作",
+    description: "Scene outlines, hooks, and production-ready scripts.",
+    descriptionZh: "场景大纲、钩子和可直接投产的剧本。",
     steps: "9 steps",
     difficulty: "Focused",
     idea: "A high-stakes short drama built around betrayal, reversal, and a strong episode hook.",
@@ -104,8 +104,8 @@ export default function TemplatesPage() {
 
       <section className="cosmic-title-band">
         <span>{isZh ? "模板 / 工作流" : "TEMPLATES / WORKFLOWS"}</span>
-        <h1>{isZh ? "选择一个清晰的创作入口。" : "Start from the right workflow."}</h1>
-        <p>{isZh ? "模板会创建一个本地草稿项目，并打开工作台。" : "Templates create a local draft project and open the workspace."}</p>
+        <h1>{isZh ? "选择一个宇宙入口。" : "Start from the right Universe entry."}</h1>
+        <p>{isZh ? "模板会创建一个本地草稿项目，并打开工作台。" : "Templates create a local draft project and open the Workspace."}</p>
       </section>
 
       <section className="template-page-grid">

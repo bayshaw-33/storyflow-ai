@@ -101,7 +101,7 @@ export function ProjectList({
       <div className="dashboard-panel-head">
         <div>
           <span>{isZh ? "项目世界" : "PROJECT WORLDS"}</span>
-          <h2 id="dashboard-projects-title">{isZh ? "你的故事星球" : "Your story planets"}</h2>
+          <h2 id="dashboard-projects-title">{isZh ? "你的项目" : "Your projects"}</h2>
         </div>
         <button className="ghost-button" type="button" onClick={onAddGroup}>
           {isZh ? "新分组" : "New group"}

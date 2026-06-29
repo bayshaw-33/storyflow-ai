@@ -120,7 +120,7 @@ const copy = {
     },
   },
   en: {
-    back: "Back to dashboard",
+    back: "Back to Workspace",
     kicker: "Viral Creation",
     title: "Viral Creation",
     localSaved: "Local autosave",
@@ -346,7 +346,7 @@ export default function ViralWorkbenchPage() {
       await upsertProjectToSupabase(dashboardProject, { accessToken: session.access_token });
       setViralStubProjectId(dashboardProject.id);
     } catch {
-      setError(language === "zh" ? "视频已上传，但同步到 Dashboard 失败。" : "Video uploaded, but Dashboard sync failed.");
+      setError(language === "zh" ? "视频已上传，但同步到工作台失败。" : "Video uploaded, but Workspace sync failed.");
     }
   }
 
@@ -369,7 +369,7 @@ export default function ViralWorkbenchPage() {
       upsertProject(dashboardProject);
       await upsertProjectToSupabase(dashboardProject, { accessToken: session.access_token });
     } catch {
-      setError(language === "zh" ? "分析已完成，但 Dashboard 标题同步失败。" : "Analysis complete, but Dashboard title sync failed.");
+      setError(language === "zh" ? "分析已完成，但工作台标题同步失败。" : "Analysis complete, but Workspace title sync failed.");
     }
   }
 

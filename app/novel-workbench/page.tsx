@@ -318,7 +318,7 @@ function NovelWorkbenchContent() {
     } catch {
       setCloudWarning(isZh ? "已保存到本地，但同步到云端失败。" : "Saved locally, but cloud sync failed.");
     }
-    setStatus(isZh ? "已保存到项目列表。" : "Saved to project list.");
+    setStatus(isZh ? "已保存到工作台。" : "Saved to Workspace.");
   }
 
   async function generate(taskType: TaskType) {
@@ -612,7 +612,7 @@ function NovelWorkbenchContent() {
     <main className="cosmic-page novel-workbench-page">
       <section className="novel-topbar">
         <div className="novel-topbar-left">
-          <button className="icon-button" type="button" onClick={() => router.push("/dashboard")} title={isZh ? "返回工作台" : "Back to dashboard"}>
+          <button className="icon-button" type="button" onClick={() => router.push("/dashboard")} title={isZh ? "返回工作台" : "Back to Workspace"}>
             <ArrowLeft size={18} />
           </button>
           <div className="novel-title-block">
@@ -628,7 +628,7 @@ function NovelWorkbenchContent() {
             <Download size={16} /> {isZh ? "导出" : "Export"}
           </button>
           <button className="primary-button" type="button" onClick={() => void saveProject()}>
-            <Save size={16} /> {isZh ? "保存到项目列表" : "Save to projects"}
+            <Save size={16} /> {isZh ? "保存到工作台" : "Save to Workspace"}
           </button>
         </div>
       </section>

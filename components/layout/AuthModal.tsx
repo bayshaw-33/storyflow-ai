@@ -25,7 +25,8 @@ function resetRedirectUrl() {
 }
 
 export function AuthModal({ open, mode, onClose }: AuthModalProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const isZh = locale === "zh-CN";
   const [view, setView] = useState<AuthView>("auth");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -110,7 +111,7 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
         {view === "auth" ? (
           <>
             <div className="auth-modal-heading">
-              <h2>{BRAND_NAME}</h2>
+              <h2>{mode === "signup" ? t("landing.hero.primary") : BRAND_NAME}</h2>
               <p>{t("auth.cloudSaveHint")}</p>
             </div>
             <form
@@ -151,7 +152,7 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
                 {t("auth.cancel")}
               </button>
               <button className="primary-button" onClick={submitAuth} disabled={busy}>
-                {mode === "signup" ? t("auth.signUp") : t("auth.signIn")}
+                {mode === "signup" ? (isZh ? "建造我的宇宙" : "Build My Universe") : t("auth.signIn")}
               </button>
             </div>
           </>

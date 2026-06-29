@@ -22,24 +22,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "KIIKIS - AI Creative Workspace",
+  title: "KIIKIS — The Universe-First Creative Workbench",
   description: TAGLINE_EN,
   applicationName: BRAND_NAME,
+  openGraph: {
+    title: "KIIKIS — The Universe-First Creative Workbench",
+    description: TAGLINE_EN,
+    siteName: "KIIKIS",
+  },
 };
 
 const themeBootScript = `
 (() => {
-  try {
-    const stored = window.localStorage.getItem("kiikis_theme_mode");
-    const theme = stored === "dark" || stored === "light"
-      ? stored
-      : (new Date().getHours() >= 18 || new Date().getHours() < 7 ? "dark" : "light");
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-  } catch {
-    document.documentElement.dataset.theme = "light";
-    document.documentElement.style.colorScheme = "light";
-  }
+  document.documentElement.dataset.theme = "dark";
+  document.documentElement.style.colorScheme = "dark";
 })();
 `;
 

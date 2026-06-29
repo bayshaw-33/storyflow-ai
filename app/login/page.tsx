@@ -53,14 +53,26 @@ function LoginContent() {
       </header>
       <section className="cosmic-title-band">
         <span>{isZh ? "账号" : "Account"}</span>
-        <h1>{isZh ? "登录 Kiikis" : "Sign in to Kiikis"}</h1>
-        <p>{isZh ? "登录后可同步项目、使用 AI 额度并访问会员功能。" : "Sign in to sync projects, use AI credits, and access member features."}</p>
+        <h1>
+          {authMode === "signup"
+            ? isZh ? "今天就开始你的第一个宇宙" : "Start Your First Universe Today"
+            : isZh ? "欢迎回到你的宇宙" : "Welcome Back To Your Universe"}
+        </h1>
+        <p>
+          {authMode === "signup"
+            ? isZh
+              ? "免费开始。3,000 创作积分等候领取。五个工作流。一个共享宇宙。"
+              : "Free to start. 3,000 creation credits waiting. Five workflows. One shared Universe."
+            : isZh
+              ? "从上次中断的地方继续。你的角色、项目和草稿都在这里等你。"
+              : "Pick up where you left. Your characters, projects, and drafts are waiting."}
+        </p>
       </section>
       <section className="dashboard-panel auth-route-card">
         {session ? (
           <>
             <strong>{session.user.email}</strong>
-            <Link className="primary-button" href="/dashboard">{isZh ? "进入工作台" : "Open dashboard"}</Link>
+            <Link className="primary-button" href="/dashboard">{isZh ? "打开工作台" : "Open Workspace"}</Link>
           </>
         ) : (
           <>
@@ -72,7 +84,7 @@ function LoginContent() {
                 setAuthOpen(true);
               }}
             >
-              {isZh ? "登录" : "Sign in"}
+              {isZh ? "登录" : "Sign In"}
             </button>
             <button
               className="secondary-button"
@@ -82,7 +94,7 @@ function LoginContent() {
                 setAuthOpen(true);
               }}
             >
-              {isZh ? "注册" : "Create account"}
+              {isZh ? "建造我的宇宙" : "Build My Universe"}
             </button>
           </>
         )}
