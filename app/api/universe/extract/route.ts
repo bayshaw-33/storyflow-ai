@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import type { DramaProject } from "@/lib/projects";
+import type { CreativePackage } from "@/lib/universe/creative-package";
 import { extractUniverseInboxItems } from "@/lib/ai/universe";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
-  let body: { universeId?: string; project?: DramaProject };
+  let body: { universeId?: string; project?: DramaProject; creativePackage?: CreativePackage };
 
   try {
     body = await request.json();
@@ -12,8 +13,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Invalid JSON body." }, { status: 400 });
   }
 
-  if (!body.universeId || !body.project?.id) {
-    return NextResponse.json({ success: false, error: "universeId and project are required." }, { status: 400 });
+  if (!body.universeId || (!body.project?.id && !body.creativePackage?.id)) {
+    return NextResponse.json({ success: false, error: "universeId and project or creativePackage are required." }, { status: 400 });
   }
 
   let user;
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   const items = await extractUniverseInboxItems({
     universeId: body.universeId,
     project: body.project,
+    creativePackage: body.creativePackage,
     userId: user.id,
   });
 

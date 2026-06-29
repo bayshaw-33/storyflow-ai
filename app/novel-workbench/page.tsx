@@ -28,6 +28,7 @@ import {
   createUniverseFromProject,
   DEFAULT_INHERITANCE_SETTINGS,
   listUniverses,
+  saveInboxItems,
   upsertUniverseProjectLink,
   type Universe,
 } from "@/lib/universe";
@@ -433,6 +434,7 @@ function NovelWorkbenchContent() {
       setError(data?.error || (isZh ? "发送失败。" : "Failed to send Universe Inbox."));
       return;
     }
+    await saveInboxItems(data.items || [], { accessToken: session.access_token });
     setStatus(isZh ? `已发送 ${data.items?.length || 0} 条候选项到 Universe Inbox。` : `Sent ${data.items?.length || 0} candidates to Universe Inbox.`);
   }
 

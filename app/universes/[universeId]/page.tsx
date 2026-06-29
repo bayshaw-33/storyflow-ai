@@ -20,13 +20,22 @@ import {
   getUniverseBundle,
   readUniverseEntitlement,
   rejectInboxItem,
+  saveInboxItems,
   type UniverseBundle,
   type UniverseInboxItem,
   type UniverseProjectRole,
   upsertUniverseProjectLink,
 } from "@/lib/universe";
 
-type TabKey = "overview" | "characters" | "relationships" | "timeline" | "facts" | "inbox" | "projects" | "checks";
+type TabKey = "overview" | "characters" | "relationships" | "timeline" | "facts" | "assets" | "inbox" | "projects" | "checks";
+
+type UniverseAssetRow = {
+  title: string;
+  type: string;
+  url: string;
+  prompt: string;
+  source: string;
+};
 
 export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
@@ -123,6 +132,8 @@ export default function UniverseDetailPage() {
         body: JSON.stringify({ universeId: params.universeId, project }),
       });
       if (!res.ok) throw new Error(await res.text().catch(() => ""));
+      const data = await res.json().catch(() => ({}));
+      await saveInboxItems(data.items || [], { accessToken: session?.access_token });
       await refresh();
       setStatus("Inbox updated with extracted candidates.");
     } catch {
@@ -217,6 +228,7 @@ export default function UniverseDetailPage() {
     { key: "relationships", label: "Relationships", count: bundle?.relationships.length },
     { key: "timeline", label: "Timeline", count: bundle?.timeline.length },
     { key: "facts", label: "Canon Facts", count: bundle?.canonFacts.length },
+    { key: "assets", label: "Assets", count: bundle ? getAcceptedAssets(bundle).length : 0 },
     { key: "inbox", label: "Inbox", count: bundle?.inbox.filter((item) => item.status === "pending").length },
     { key: "projects", label: "Linked Projects", count: bundle?.links.length },
     { key: "checks", label: "Canon Checks", count: bundle?.reports.length },
@@ -248,6 +260,7 @@ export default function UniverseDetailPage() {
   const locations = bundle.entities.filter((item) => item.type === "location");
   const pendingInbox = bundle.inbox.filter((item) => item.status === "pending");
   const hasLinks = bundle.links.length > 0;
+  const acceptedAssets = getAcceptedAssets(bundle);
 
   return (
     <main className="app-shell universe-shell">
@@ -304,6 +317,7 @@ export default function UniverseDetailPage() {
               <strong>{characters.length}<span>Characters</span></strong>
               <strong>{bundle.canonFacts.length}<span>Facts</span></strong>
               <strong>{bundle.timeline.length}<span>Events</span></strong>
+              <strong>{acceptedAssets.length}<span>Assets</span></strong>
               <strong>{pendingInbox.length}<span>Inbox</span></strong>
             </div>
           </article>
@@ -314,6 +328,16 @@ export default function UniverseDetailPage() {
       {activeTab === "relationships" ? <ListSection items={bundle.relationships} render={(item) => ({ title: item.relationship_type, body: item.summary, meta: item.status })} /> : null}
       {activeTab === "timeline" ? <ListSection items={bundle.timeline} render={(item) => ({ title: item.title, body: item.description, meta: item.date_label || item.status })} /> : null}
       {activeTab === "facts" ? <ListSection items={bundle.canonFacts} render={(item) => ({ title: item.fact_text, body: item.source_location_text || "", meta: `${item.importance}${item.is_locked ? " / locked" : ""}` })} /> : null}
+      {activeTab === "assets" ? (
+        <ListSection
+          items={acceptedAssets}
+          render={(item) => ({
+            title: item.title,
+            body: [item.prompt, item.url].filter(Boolean).join("\n"),
+            meta: `${item.type}${item.source ? ` · ${item.source}` : ""}`,
+          })}
+        />
+      ) : null}
 
       {activeTab === "projects" ? (
         <ListSection
@@ -493,6 +517,25 @@ function ListSection<T>({ items, render }: { items: T[]; render: (item: T) => { 
       })}
     </section>
   );
+}
+
+function getAcceptedAssets(bundle: UniverseBundle): UniverseAssetRow[] {
+  return bundle.snapshots.flatMap((snapshot) => {
+    const assets = Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets : [];
+    return assets
+      .filter((asset): asset is Record<string, unknown> => Boolean(asset) && typeof asset === "object" && !Array.isArray(asset))
+      .map((asset, index) => ({
+        title: stringValue(asset.title) || `${snapshot.title} asset ${index + 1}`,
+        type: stringValue(asset.type) || "asset",
+        url: stringValue(asset.url),
+        prompt: stringValue(asset.prompt),
+        source: snapshot.title,
+      }));
+  });
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function downloadBlob(filename: string, content: string, type: string) {

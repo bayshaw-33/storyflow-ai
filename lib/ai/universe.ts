@@ -1,10 +1,13 @@
 import type { DramaProject } from "@/lib/projects";
 import type { CanonCheckIssue, CanonCheckReport, UniverseBundle, UniverseInboxItem } from "@/lib/universe";
+import type { CreativePackage } from "@/lib/universe/creative-package";
+import { creativePackageToSourceText } from "@/lib/universe/creative-package";
 import { callMiniMax } from "@/lib/ai/providers/minimax";
 
 type ExtractInput = {
   universeId: string;
-  project: DramaProject;
+  project?: DramaProject;
+  creativePackage?: CreativePackage;
   userId: string;
 };
 
@@ -15,7 +18,7 @@ type CanonCheckInput = {
 };
 
 export async function extractUniverseInboxItems(input: ExtractInput): Promise<UniverseInboxItem[]> {
-  const sourceText = buildProjectSourceText(input.project);
+  const sourceText = buildExtractionSourceText(input);
   const prompt = [
     "Extract candidate IP universe updates from this StoryFlow project.",
     "Return strict JSON with arrays: characters, locations, organizations, relationships, timeline_events, canon_facts, state_changes, unresolved_threads.",
@@ -108,7 +111,7 @@ function normalizeExtractedJson(parsed: Record<string, unknown>, input: ExtractI
       id: createId(),
       universe_id: input.universeId,
       user_id: input.userId,
-      project_id: input.project.id,
+      project_id: getInputProjectId(input),
       item_type,
       title,
       proposed_payload: raw,
@@ -134,16 +137,20 @@ function normalizeExtractedJson(parsed: Record<string, unknown>, input: ExtractI
 }
 
 function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
+  if (input.creativePackage && !input.project) return heuristicCreativePackageInboxItems(input);
+
   const now = new Date().toISOString();
   const items: UniverseInboxItem[] = [];
-  const characters = input.project.characterCards.slice(0, 12);
+  const project = input.project;
+  if (!project) return items;
+  const characters = project.characterCards.slice(0, 12);
 
   for (const card of characters) {
     items.push({
       id: createId(),
       universe_id: input.universeId,
       user_id: input.userId,
-      project_id: input.project.id,
+      project_id: project.id,
       item_type: "character",
       title: card.name || "Unnamed character",
       proposed_payload: {
@@ -166,14 +173,14 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
   }
 
   const factTexts = [
-    input.project.storyBible?.lockedCanon,
-    input.project.storyBible?.confirmedFacts,
-    input.project.brief,
-    input.project.outline,
-    input.project.novelBible,
-    input.project.novelBrief,
-    input.project.novelVolumeOutline,
-    input.project.novelContinuityNotes,
+    project.storyBible?.lockedCanon,
+    project.storyBible?.confirmedFacts,
+    project.brief,
+    project.outline,
+    project.novelBible,
+    project.novelBrief,
+    project.novelVolumeOutline,
+    project.novelContinuityNotes,
   ]
     .filter(Boolean)
     .join("\n")
@@ -187,7 +194,7 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
       id: createId(),
       universe_id: input.universeId,
       user_id: input.userId,
-      project_id: input.project.id,
+      project_id: project.id,
       item_type: "canon_fact",
       title: line.slice(0, 80),
       proposed_payload: {
@@ -209,19 +216,131 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
     id: createId(),
     universe_id: input.universeId,
     user_id: input.userId,
-    project_id: input.project.id,
+    project_id: project.id,
     item_type: "state_change",
-    title: `${input.project.title} ending state`,
+    title: `${project.title} ending state`,
     proposed_payload: {
-      title: `${input.project.title} ending state`,
-      summary: input.project.finalScript || input.project.novelChapterDraft || input.project.outline || input.project.storyBible?.mainConflict || "",
-      season_number: input.project.seasonNumber || 1,
+      title: `${project.title} ending state`,
+      summary: project.finalScript || project.novelChapterDraft || project.outline || project.storyBible?.mainConflict || "",
+      season_number: project.seasonNumber || 1,
       character_states: characters.map((card) => ({ name: card.name, state: card.arc || card.goal })),
-      relationship_states: input.project.relationshipDiagram,
-      unresolved_threads: input.project.novelContinuityNotes || input.project.storyBible?.confirmedFacts || "",
+      relationship_states: project.relationshipDiagram,
+      unresolved_threads: project.novelContinuityNotes || project.storyBible?.confirmedFacts || "",
     },
-    source_excerpt: [input.project.novelVolumeOutline, input.project.novelChapterDraft, input.project.outline, input.project.finalScript].filter(Boolean).join("\n\n").slice(0, 800),
+    source_excerpt: [project.novelVolumeOutline, project.novelChapterDraft, project.outline, project.finalScript].filter(Boolean).join("\n\n").slice(0, 800),
     confidence: 0.6,
+    status: "pending",
+    reviewed_at: null,
+    created_at: now,
+    updated_at: now,
+  });
+
+  return items;
+}
+
+function heuristicCreativePackageInboxItems(input: ExtractInput): UniverseInboxItem[] {
+  const pkg = input.creativePackage;
+  if (!pkg) return [];
+  const now = new Date().toISOString();
+  const items: UniverseInboxItem[] = [];
+  const projectId = getInputProjectId(input);
+
+  for (const character of (pkg.characters || []).slice(0, 20)) {
+    if (!character.name?.trim()) continue;
+    items.push({
+      id: createId(),
+      universe_id: input.universeId,
+      user_id: input.userId,
+      project_id: projectId,
+      item_type: "character",
+      title: character.name,
+      proposed_payload: {
+        name: character.name,
+        summary: character.summary || character.role || "",
+        role: character.role || "",
+        appearance: character.appearance || "",
+        project_variant: character.projectVariant || null,
+        source_workflow: pkg.workflowType,
+        source_package_id: pkg.id,
+      },
+      source_excerpt: [character.summary, character.appearance].filter(Boolean).join("\n").slice(0, 500),
+      confidence: 0.7,
+      status: "pending",
+      reviewed_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  for (const location of (pkg.locations || []).slice(0, 20)) {
+    if (!location.name?.trim()) continue;
+    items.push({
+      id: createId(),
+      universe_id: input.universeId,
+      user_id: input.userId,
+      project_id: projectId,
+      item_type: "location",
+      title: location.name,
+      proposed_payload: {
+        name: location.name,
+        summary: location.summary || location.visualNotes || "",
+        visual_notes: location.visualNotes || "",
+        source_workflow: pkg.workflowType,
+        source_package_id: pkg.id,
+      },
+      source_excerpt: [location.summary, location.visualNotes].filter(Boolean).join("\n").slice(0, 500),
+      confidence: 0.7,
+      status: "pending",
+      reviewed_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  for (const fact of (pkg.canonFacts || []).filter(Boolean).slice(0, 16)) {
+    items.push({
+      id: createId(),
+      universe_id: input.universeId,
+      user_id: input.userId,
+      project_id: projectId,
+      item_type: "canon_fact",
+      title: fact.slice(0, 80),
+      proposed_payload: {
+        fact_text: fact,
+        category: pkg.workflowType === "storyboard" || pkg.workflowType === "video" ? "production_rule" : "character",
+        importance: "medium",
+        is_locked: false,
+        source_workflow: pkg.workflowType,
+        source_package_id: pkg.id,
+      },
+      source_excerpt: fact,
+      confidence: 0.64,
+      status: "pending",
+      reviewed_at: null,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  items.push({
+    id: createId(),
+    universe_id: input.universeId,
+    user_id: input.userId,
+    project_id: projectId,
+    item_type: "state_change",
+    title: `${pkg.title} ${pkg.workflowType} package`,
+    proposed_payload: {
+      title: pkg.title,
+      summary: pkg.summary || "",
+      workflow_type: pkg.workflowType,
+      package_id: pkg.id,
+      source_project_id: pkg.sourceProjectId || null,
+      scenes: pkg.scenes || [],
+      assets: pkg.assets || [],
+      metadata: pkg.metadata || {},
+    },
+    source_excerpt: creativePackageToSourceText(pkg).slice(0, 900),
+    confidence: 0.68,
     status: "pending",
     reviewed_at: null,
     created_at: now,
@@ -329,6 +448,16 @@ function buildProjectSourceText(project: DramaProject) {
     "Novel chapters:",
     (project.novelChapters || []).map((chapter) => `#${chapter.chapterNo} ${chapter.title}\n${chapter.outline}\n${chapter.draft}\n${chapter.continuityNotes}`).join("\n\n"),
   ].filter(Boolean).join("\n\n");
+}
+
+function buildExtractionSourceText(input: ExtractInput) {
+  if (input.creativePackage) return creativePackageToSourceText(input.creativePackage);
+  if (input.project) return buildProjectSourceText(input.project);
+  return "";
+}
+
+function getInputProjectId(input: ExtractInput) {
+  return input.project?.id || input.creativePackage?.sourceProjectId || input.creativePackage?.id || null;
 }
 
 function buildCanonContext(bundle: UniverseBundle) {
