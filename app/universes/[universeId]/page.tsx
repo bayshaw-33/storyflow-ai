@@ -324,7 +324,7 @@ export default function UniverseDetailPage() {
         </section>
       ) : null}
 
-      {activeTab === "characters" ? <ListSection items={characters} render={(item) => ({ title: item.name, body: item.summary, meta: item.status })} /> : null}
+      {activeTab === "characters" ? <ListSection items={characters} render={(item) => ({ title: item.name, body: formatCharacterBody(item.details_json, item.summary), meta: item.status })} /> : null}
       {activeTab === "relationships" ? <ListSection items={bundle.relationships} render={(item) => ({ title: item.relationship_type, body: item.summary, meta: item.status })} /> : null}
       {activeTab === "timeline" ? <ListSection items={bundle.timeline} render={(item) => ({ title: item.title, body: item.description, meta: item.date_label || item.status })} /> : null}
       {activeTab === "facts" ? <ListSection items={bundle.canonFacts} render={(item) => ({ title: item.fact_text, body: item.source_location_text || "", meta: `${item.importance}${item.is_locked ? " / locked" : ""}` })} /> : null}
@@ -532,6 +532,24 @@ function getAcceptedAssets(bundle: UniverseBundle): UniverseAssetRow[] {
         source: snapshot.title,
       }));
   });
+}
+
+function formatCharacterBody(details: Record<string, unknown>, summary: string) {
+  const variants = Array.isArray(details.appearance_variants)
+    ? details.appearance_variants.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const variantLines = variants.slice(0, 4).map((variant) => {
+    const workflow = stringValue(variant.source_workflow) || "project";
+    const title = stringValue(variant.title) || "appearance variant";
+    const appearance = stringValue(variant.appearance);
+    return `- ${workflow}: ${title}${appearance ? ` / ${appearance}` : ""}`;
+  });
+
+  return [
+    summary,
+    variants.length ? `Appearance variants: ${variants.length}` : "",
+    ...variantLines,
+  ].filter(Boolean).join("\n");
 }
 
 function stringValue(value: unknown) {

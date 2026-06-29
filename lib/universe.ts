@@ -391,19 +391,26 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
   const userId = item.user_id || getUserIdFromAccessToken(options.accessToken) || null;
 
   if (item.item_type === "character" || item.item_type === "location" || item.item_type === "rule") {
+    const entityName = stringValue(payload.name) || item.title;
+    const existingCharacter = item.item_type === "character"
+      ? await findExistingCharacterEntity(item.universe_id, entityName, options)
+      : null;
+    const nextDetails = item.item_type === "character"
+      ? mergeCharacterVariant(existingCharacter?.details_json || {}, payload, item, now)
+      : payload;
     const entity: UniverseEntity = {
-      id: createId(),
+      id: existingCharacter?.id || createId(),
       universe_id: item.universe_id,
       user_id: userId,
       type: item.item_type === "rule" ? "rule" : item.item_type,
-      name: stringValue(payload.name) || item.title,
-      summary: stringValue(payload.summary) || stringValue(payload.description) || item.source_excerpt,
-      details_json: payload,
-      status: "canon",
-      tags: arrayValue(payload.tags),
-      source_project_id: item.project_id || null,
-      source_step_id: stringValue(payload.source_step_id) || null,
-      created_at: now,
+      name: entityName,
+      summary: stringValue(payload.summary) || stringValue(payload.description) || existingCharacter?.summary || item.source_excerpt,
+      details_json: nextDetails,
+      status: existingCharacter?.status || "canon",
+      tags: Array.from(new Set([...(existingCharacter?.tags || []), ...arrayValue(payload.tags)])),
+      source_project_id: existingCharacter?.source_project_id || item.project_id || null,
+      source_step_id: stringValue(payload.source_step_id) || existingCharacter?.source_step_id || null,
+      created_at: existingCharacter?.created_at || now,
       updated_at: now,
     };
     upsertLocalItem(UNIVERSE_ENTITY_STORAGE_KEY, entity);
@@ -527,6 +534,88 @@ export function buildProjectLink(params: {
     created_at: now,
     updated_at: now,
   };
+}
+
+async function findExistingCharacterEntity(universeId: string, name: string, options: SupabaseOptions = {}) {
+  const normalizedName = name.trim().toLowerCase();
+  if (!normalizedName) return null;
+
+  const localMatch = readLocalList<UniverseEntity>(UNIVERSE_ENTITY_STORAGE_KEY).find(
+    (entity) =>
+      entity.universe_id === universeId &&
+      entity.type === "character" &&
+      entity.name.trim().toLowerCase() === normalizedName,
+  );
+  if (localMatch) return localMatch;
+
+  if (isSupabaseConfigured() && options.accessToken) {
+    const rows = await supabaseFetch<UniverseEntity[]>(
+      `${tableUrl(TABLES.entities)}?universe_id=eq.${encodeURIComponent(universeId)}&type=eq.character&name=eq.${encodeURIComponent(name)}&select=*&limit=1`,
+      {},
+      options,
+    ).catch(() => null);
+    if (rows?.[0]) return rows[0];
+  }
+
+  return null;
+}
+
+function mergeCharacterVariant(
+  existingDetails: Record<string, unknown>,
+  payload: Record<string, unknown>,
+  item: UniverseInboxItem,
+  now: string,
+) {
+  const variant = buildCharacterAppearanceVariant(payload, item, now);
+  const variants = arrayRecordValue(existingDetails.appearance_variants);
+  const nextVariants = variant
+    ? upsertVariant(variants, variant)
+    : variants;
+
+  return {
+    ...existingDetails,
+    ...payload,
+    appearance_variants: nextVariants,
+  };
+}
+
+function buildCharacterAppearanceVariant(payload: Record<string, unknown>, item: UniverseInboxItem, now: string) {
+  const projectVariant = recordValue(payload.project_variant);
+  const appearance = stringValue(payload.appearance) || stringValue(payload.visual_notes) || stringValue(projectVariant.appearance);
+  const visualAssets = arrayRecordValue(payload.visual_assets).length
+    ? arrayRecordValue(payload.visual_assets)
+    : arrayRecordValue(projectVariant.visual_assets);
+  const prompt = stringValue(projectVariant.prompt) || stringValue(payload.prompt) || stringValue(payload.style_prompt);
+  const sourceWorkflow = stringValue(payload.source_workflow) || stringValue(projectVariant.source_workflow);
+  const sourcePackageId = stringValue(payload.source_package_id) || stringValue(projectVariant.source_package_id);
+
+  if (!appearance && !visualAssets.length && !prompt && !sourceWorkflow && !sourcePackageId && !item.project_id) return null;
+
+  return {
+    id: stringValue(projectVariant.id) || `variant-${item.id}`,
+    source_project_id: item.project_id || stringValue(projectVariant.source_project_id) || null,
+    source_workflow: sourceWorkflow || "project",
+    source_package_id: sourcePackageId || null,
+    title: stringValue(projectVariant.title) || `${item.title} project variant`,
+    appearance,
+    prompt,
+    visual_assets: visualAssets,
+    created_at: stringValue(projectVariant.created_at) || now,
+    updated_at: now,
+  };
+}
+
+function upsertVariant(variants: Array<Record<string, unknown>>, variant: Record<string, unknown>) {
+  const variantId = stringValue(variant.id);
+  const sourceProjectId = stringValue(variant.source_project_id);
+  const sourceWorkflow = stringValue(variant.source_workflow);
+  const index = variants.findIndex((item) => {
+    if (variantId && stringValue(item.id) === variantId) return true;
+    return Boolean(sourceProjectId && sourceWorkflow && stringValue(item.source_project_id) === sourceProjectId && stringValue(item.source_workflow) === sourceWorkflow);
+  });
+
+  if (index === -1) return [variant, ...variants];
+  return variants.map((item, itemIndex) => (itemIndex === index ? { ...item, ...variant } : item));
 }
 
 export function buildInheritedStoryBible(bundle: UniverseBundle, settings: UniverseInheritanceSettings): StoryBible {
@@ -737,6 +826,16 @@ function numberValue(value: unknown) {
 
 function arrayValue(value: unknown) {
   return Array.isArray(value) ? value.map(String) : [];
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function arrayRecordValue(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
 }
 
 function normalizeCanonCategory(value: string): CanonFact["category"] {

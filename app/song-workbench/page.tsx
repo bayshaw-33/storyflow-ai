@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, Save, Sparkles } from "lucide-react";
+import { Copy, Save, Send, Sparkles } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectFromSupabase, readProjectsFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { getUniverseBundle, listUniverses, saveInboxItems, type Universe, type UniverseBundle } from "@/lib/universe";
+import type { CreativePackage } from "@/lib/universe/creative-package";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 type SongProjectType =
@@ -456,6 +458,11 @@ export default function SongWorkbenchPage() {
   const [audit, setAudit] = useState<AuditResult | null>(null);
   const [versions, setVersions] = useState<SongVersion[]>([]);
   const [sourceProjects, setSourceProjects] = useState<DramaProject[]>([]);
+  const [universes, setUniverses] = useState<Universe[]>([]);
+  const [selectedUniverseId, setSelectedUniverseId] = useState("");
+  const [universeBundle, setUniverseBundle] = useState<UniverseBundle | null>(null);
+  const [universeBusy, setUniverseBusy] = useState(false);
+  const [universeStatus, setUniverseStatus] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [songProjectId, setSongProjectId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -527,6 +534,7 @@ export default function SongWorkbenchPage() {
       if (data.audit) setAudit(data.audit);
       if (data.versions) setVersions(data.versions);
       if (data.songProjectId) setSongProjectId(data.songProjectId);
+      if (data.selectedUniverseId) setSelectedUniverseId(data.selectedUniverseId);
       loadedEntryRef.current = "draft";
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -550,11 +558,35 @@ export default function SongWorkbenchPage() {
   }, [session?.access_token]);
 
   useEffect(() => {
+    void listUniverses({ accessToken: session?.access_token })
+      .then((items) => {
+        setUniverses(items);
+        setSelectedUniverseId((current) => current || items[0]?.id || "");
+      })
+      .catch(() => null);
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    const sourceUniverseId = sourceProjects.find((project) => project.id === form.sourceProjectId)?.universeId || "";
+    if (sourceUniverseId) setSelectedUniverseId(sourceUniverseId);
+  }, [form.sourceProjectId, sourceProjects]);
+
+  useEffect(() => {
+    if (!selectedUniverseId) {
+      setUniverseBundle(null);
+      return;
+    }
+    void getUniverseBundle(selectedUniverseId, { accessToken: session?.access_token })
+      .then((bundle) => setUniverseBundle(bundle))
+      .catch(() => setUniverseBundle(null));
+  }, [selectedUniverseId, session?.access_token]);
+
+  useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId }),
+      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId }),
     );
-  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId]);
+  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId]);
 
   function resetSongWorkbench() {
     setForm(initialForm);
@@ -570,6 +602,9 @@ export default function SongWorkbenchPage() {
     setSaveWarning("");
     setRevisionInstruction("");
     setAuditOpen(false);
+    setSelectedUniverseId("");
+    setUniverseBundle(null);
+    setUniverseStatus("");
   }
 
   function applySongProject(project: DramaProject) {
@@ -581,6 +616,7 @@ export default function SongWorkbenchPage() {
     setAudit(snapshot.audit);
     setVersions([]);
     setSongProjectId(project.id);
+    setSelectedUniverseId(project.universeId || "");
     setError("");
     setSaveStatus("");
     setSaveWarning("");
@@ -685,6 +721,7 @@ export default function SongWorkbenchPage() {
           input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject),
           context: [
             selectedSourceProject ? `Source story project for OST/theme song:\n${summarizeSourceProject(selectedSourceProject)}` : "",
+            universeBundle ? `Universe context for OST/theme song:\n${summarizeUniverseBundle(universeBundle)}` : "",
             lyrics.trim() ? `Existing lyrics to improve or replace:\n${lyrics}` : "",
             stylePrompt.trim() ? `Existing style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Existing composition prompt:\n${compositionPrompt}` : "",
@@ -752,6 +789,7 @@ export default function SongWorkbenchPage() {
       options.compositionPrompt ?? compositionPrompt,
       options.audit ?? audit,
       selectedSourceProject,
+      selectedUniverseId || selectedSourceProject?.universeId || null,
     );
     setSavingProject(true);
     setError("");
@@ -769,6 +807,126 @@ export default function SongWorkbenchPage() {
       setSaveWarning(detail ? `${text.cloudSyncFailed}: ${detail}` : text.cloudSyncFailed);
     } finally {
       setSavingProject(false);
+    }
+  }
+
+  function importUniverseBackground() {
+    if (!universeBundle) {
+      setUniverseStatus(locale === "zh-CN" ? "请先选择可用的 Universe。" : "Select an available Universe first.");
+      return;
+    }
+
+    const seed = buildUniverseSongSeed(universeBundle);
+    setForm((current) => ({
+      ...current,
+      sourceProjectId: current.sourceProjectId,
+      projectType: current.projectType === "original_song" ? "ost_theme" : current.projectType,
+      title: current.title || `${universeBundle.universe.name} OST`,
+      concept: [current.concept, seed].filter(Boolean).join("\n\n"),
+      genres: current.genres.length ? current.genres : ["Cinematic Pop"],
+      instruments: current.instruments.length ? current.instruments : ["piano", "strings", "cinematic percussion"],
+    }));
+    setUniverseStatus(locale === "zh-CN" ? "已导入 Universe 背景到歌曲创意。" : "Universe background imported into the song concept.");
+  }
+
+  function buildSongCreativePackage(universeId = selectedUniverseId || selectedSourceProject?.universeId || null): CreativePackage {
+    const now = new Date().toISOString();
+    const title = form.title.trim() || (locale === "zh-CN" ? "未命名歌曲" : "Untitled Song");
+    const sourceSummary = selectedSourceProject ? summarizeSourceProject(selectedSourceProject) : universeBundle ? summarizeUniverseBundle(universeBundle) : "";
+    const characters = selectedSourceProject?.characterCards.slice(0, 12).map((card) => ({
+      name: card.name || "Unnamed character",
+      role: card.role,
+      summary: [card.identity, card.goal, card.arc].filter(Boolean).join(" / "),
+      projectVariant: {
+        id: `song-character-${card.id || card.name || crypto.randomUUID()}`,
+        title: `${title} musical theme`,
+        source_workflow: "song",
+        source_package_id: `song-package-${songProjectId || title}`,
+        prompt: [form.primaryEmotion, stylePrompt, compositionPrompt].filter(Boolean).join("\n"),
+      },
+    })) || [];
+
+    return {
+      id: `song-package-${songProjectId || crypto.randomUUID()}`,
+      workflowType: "song",
+      title,
+      summary: form.concept || lyrics.slice(0, 600) || sourceSummary.slice(0, 600),
+      language: form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage,
+      universeId,
+      sourceProjectId: songProjectId || selectedSourceProject?.id || null,
+      sourceProjectTitle: selectedSourceProject?.title || null,
+      characters,
+      assets: [
+        {
+          id: `lyrics-${songProjectId || title}`,
+          type: "document",
+          title: `${title} lyrics`,
+          prompt: lyrics,
+          metadata: { auditStatus: audit?.status || "not_reviewed" },
+        },
+        {
+          id: `style-${songProjectId || title}`,
+          type: "prompt",
+          title: `${title} style prompt`,
+          prompt: stylePrompt,
+          metadata: { genres: normalizedGenres(form), instruments: normalizedInstruments(form) },
+        },
+        {
+          id: `composition-${songProjectId || title}`,
+          type: "prompt",
+          title: `${title} composition prompt`,
+          prompt: compositionPrompt,
+          metadata: { groove: form.groove, key: form.key, structure: form.structure },
+        },
+      ],
+      canonFacts: [
+        `Song asset for ${universeBundle?.universe.name || selectedSourceProject?.title || title}: ${title}`,
+        `Song mood: ${form.primaryEmotion}`,
+        normalizedGenres(form).length ? `Song genre: ${normalizedGenres(form).join(", ")}` : "",
+      ].filter(Boolean),
+      sourceText: [form.concept, sourceSummary, lyrics, stylePrompt, compositionPrompt].filter(Boolean).join("\n\n"),
+      metadata: {
+        projectType: form.projectType,
+        outputLanguage: form.outputLanguage,
+        audit,
+        sourceUniverseName: universeBundle?.universe.name || null,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  async function sendSongToUniverse() {
+    if (!session?.access_token) {
+      setUniverseStatus(locale === "zh-CN" ? "请先登录后再发送 Universe Inbox。" : "Please sign in before sending to Universe Inbox.");
+      return;
+    }
+    const universeId = selectedUniverseId || selectedSourceProject?.universeId || "";
+    if (!universeId) {
+      setUniverseStatus(locale === "zh-CN" ? "请先选择或关联 Universe。" : "Select or link a Universe first.");
+      return;
+    }
+
+    setUniverseBusy(true);
+    setUniverseStatus(locale === "zh-CN" ? "正在发送歌曲包到 Universe Inbox..." : "Sending song package to Universe Inbox...");
+    try {
+      await saveSongProjectToList({ silent: true });
+      const response = await fetch("/api/universe/extract", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ universeId, creativePackage: buildSongCreativePackage(universeId) }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || (locale === "zh-CN" ? "发送失败。" : "Failed to send."));
+      await saveInboxItems(data.items || [], { accessToken: session.access_token });
+      setUniverseStatus(locale === "zh-CN" ? `已发送 ${data.items?.length || 0} 条候选项到 Inbox。` : `Sent ${data.items?.length || 0} candidates to Inbox.`);
+    } catch (universeError) {
+      setUniverseStatus(universeError instanceof Error ? universeError.message : (locale === "zh-CN" ? "发送失败。" : "Failed to send."));
+    } finally {
+      setUniverseBusy(false);
     }
   }
 
@@ -994,6 +1152,34 @@ export default function SongWorkbenchPage() {
               </p>
             </div>
           ) : null}
+
+          <div className="song-source-panel">
+            <span>Universe</span>
+            <strong>{universeBundle?.universe.name || (locale === "zh-CN" ? "未选择 Universe" : "No Universe selected")}</strong>
+            {universes.length ? (
+              <label>
+                {locale === "zh-CN" ? "选择 Universe" : "Select Universe"}
+                <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>
+                  <option value="">{locale === "zh-CN" ? "不关联 Universe" : "No Universe"}</option>
+                  {universes.map((universe) => (
+                    <option key={universe.id} value={universe.id}>{universe.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p>{locale === "zh-CN" ? "暂无可用 Universe。可先从小说、剧本或分镜创建。" : "No Universe yet. Create one from novel, script, or storyboard first."}</p>
+            )}
+            <div className="simple-action-row">
+              <button className="secondary-button" type="button" onClick={importUniverseBackground} disabled={!universeBundle}>
+                {locale === "zh-CN" ? "导入背景" : "Import background"}
+              </button>
+              <button className="primary-button" type="button" onClick={() => void sendSongToUniverse()} disabled={universeBusy || !session || !selectedUniverseId}>
+                <Send size={15} />
+                {locale === "zh-CN" ? "发送 Inbox" : "Send Inbox"}
+              </button>
+            </div>
+            {universeStatus ? <small className="field-note">{universeStatus}</small> : null}
+          </div>
 
           <details className="song-control-group">
             <summary>{text.genres}</summary>
@@ -1282,6 +1468,7 @@ function buildSongProjectSnapshot(
   compositionPrompt: string,
   audit: AuditResult | null,
   sourceProject: DramaProject | null,
+  universeIdOverride: string | null = null,
 ): DramaProject {
   const now = new Date().toISOString();
   const title = form.title.trim() || "未命名歌曲";
@@ -1301,13 +1488,13 @@ function buildSongProjectSnapshot(
     brief: content,
     finalScript: lyrics,
     deliveryPackage: content,
-    universeId: sourceProject?.universeId || null,
-    projectRole: sourceProject?.universeId ? "other" : null,
-    inheritanceSettings: sourceProject ? {
-      sourceProjectId: sourceProject.id,
-      sourceProjectTitle: sourceProject.title,
+    universeId: universeIdOverride || sourceProject?.universeId || null,
+    projectRole: universeIdOverride || sourceProject?.universeId ? "other" : null,
+    inheritanceSettings: sourceProject || universeIdOverride ? {
+      sourceProjectId: sourceProject?.id || null,
+      sourceProjectTitle: sourceProject?.title || null,
       purpose: "ost_theme_song",
-      inheritUniverse: Boolean(sourceProject.universeId),
+      inheritUniverse: Boolean(universeIdOverride || sourceProject?.universeId),
     } : null,
     status: lyrics.trim() || stylePrompt.trim() || compositionPrompt.trim() ? "ready" : "draft",
     updatedAt: now,
@@ -1431,6 +1618,28 @@ function summarizeSourceProject(project: DramaProject) {
     project.storyBible?.logline ? `Logline: ${project.storyBible.logline}` : "",
     project.storyBible?.mainConflict ? `Main conflict: ${project.storyBible.mainConflict}` : "",
     project.storyBible?.characterRelationships ? `Characters: ${project.storyBible.characterRelationships.slice(0, 400)}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+function buildUniverseSongSeed(bundle: UniverseBundle) {
+  return [
+    `Create an OST/theme song for Universe "${bundle.universe.name}".`,
+    bundle.universe.description ? `Universe premise: ${bundle.universe.description}` : "",
+    bundle.universe.tone ? `Tone: ${bundle.universe.tone}` : "",
+    bundle.entities.filter((item) => item.type === "character").slice(0, 6).map((item) => `Character: ${item.name} - ${item.summary}`).join("\n"),
+    bundle.canonFacts.slice(0, 8).map((fact) => `Canon: ${fact.fact_text}`).join("\n"),
+    bundle.snapshots.slice(0, 3).map((snapshot) => `State: ${snapshot.title} - ${snapshot.summary}`).join("\n"),
+    "Write around the core emotional hook, the recurring IP motif, and the protagonist's unresolved desire.",
+  ].filter(Boolean).join("\n");
+}
+
+function summarizeUniverseBundle(bundle: UniverseBundle) {
+  return [
+    `Universe: ${bundle.universe.name}`,
+    bundle.universe.description,
+    bundle.universe.tone ? `Tone: ${bundle.universe.tone}` : "",
+    bundle.entities.filter((item) => item.type === "character").slice(0, 8).map((item) => `Character: ${item.name} - ${item.summary}`).join("\n"),
+    bundle.canonFacts.slice(0, 10).map((fact) => `Canon: ${fact.fact_text}`).join("\n"),
   ].filter(Boolean).join("\n");
 }
 
