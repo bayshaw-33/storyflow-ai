@@ -38,16 +38,6 @@ const templates = [
     idea: "A viral video structure remake project prepared for video analysis and same-structure rewriting.",
   },
   {
-    id: "mv_concept",
-    title: "MV Concept",
-    titleZh: "MV 概念",
-    description: "Music video story frames, mood, visual metaphors, and direction.",
-    descriptionZh: "音乐视频故事画面、情绪、视觉隐喻和方向。",
-    steps: "6 steps",
-    difficulty: "Beta",
-    idea: "A cinematic music video concept with emotional beats and visual metaphors.",
-  },
-  {
     id: "custom",
     title: "Custom Workflow",
     titleZh: "自定义工作流",

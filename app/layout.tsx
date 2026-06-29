@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { BRAND_NAME, TAGLINE_EN } from "@/lib/brand";
 import { LanguageProvider } from "@/lib/i18n/LanguageProvider";
 import { OSProvider } from "@/lib/os/uiState";
-import { KKProvider } from "@/components/kk/KKProvider";
 import { GlobalSideNav } from "@/components/layout/GlobalSideNav";
 import { ThemeTimeSync } from "@/components/layout/ThemeTimeSync";
 import { DevBridge } from "@/components/dev/DevBridge";
@@ -53,14 +52,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <LanguageProvider>
           <OSProvider>
-            <KKProvider>
-              <WorkspaceModalProvider>
-                <ThemeTimeSync />
-                {children}
-                <GlobalSideNav />
-                <DevBridge />
-              </WorkspaceModalProvider>
-            </KKProvider>
+            <WorkspaceModalProvider>
+              <ThemeTimeSync />
+              {children}
+              <GlobalSideNav />
+              <DevBridge />
+            </WorkspaceModalProvider>
           </OSProvider>
         </LanguageProvider>
       </body>

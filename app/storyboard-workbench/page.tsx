@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowRight, Download, Plus, Save, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, Download, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -55,6 +55,16 @@ type WeakLink = {
   targetTool: string;
   type: "reference" | "inspiration" | "derived";
   strength: number;
+};
+
+type WorkspaceEntryDraft = {
+  workflowId?: string;
+  projectTitle?: string;
+  prompt?: string;
+  file?: {
+    name?: string;
+    textPreview?: string;
+  } | null;
 };
 
 function createId(prefix: string) {
@@ -127,6 +137,53 @@ function splitScriptIntoScenes(script: string): Scene[] {
   });
 }
 
+function readWorkspaceEntryDraft(workflowId: string): WorkspaceEntryDraft | null {
+  try {
+    const keyed = localStorage.getItem(`kiikis_workspace_entry_draft:${workflowId}`);
+    const generic = localStorage.getItem("kiikis_workspace_entry_draft");
+    const raw = keyed || generic;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkspaceEntryDraft;
+    if (parsed.workflowId && parsed.workflowId !== workflowId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function coerceImportedScenes(value: unknown): Scene[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const scenes = value.map((sceneValue, sceneIndex) => {
+    const scene = (sceneValue || {}) as Partial<Scene>;
+    const shots = Array.isArray(scene.shots)
+      ? scene.shots.map((shotValue, shotIndex) => {
+          const shot = (shotValue || {}) as Partial<Shot> & { prompt?: string };
+          return {
+            ...createShot(shotIndex + 1, shot.text || shot.prompt || ""),
+            id: typeof shot.id === "string" ? shot.id : createId("shot"),
+            frame: shot.frame || "Medium shot",
+            action: shot.action || "",
+            camera: shot.camera || "Static camera",
+            duration: shot.duration || "5s",
+            continuity: shot.continuity || "",
+            visualPrompt: shot.visualPrompt || shot.prompt || "",
+          };
+        })
+      : [createShot(1)];
+
+    return {
+      id: typeof scene.id === "string" ? scene.id : createId("scene"),
+      title: scene.title || `Scene ${sceneIndex + 1}`,
+      location: scene.location || "",
+      intention: scene.intention || "",
+      shots: shots.length ? shots : [createShot(1)],
+    };
+  });
+
+  return scenes.length ? scenes : null;
+}
+
 export default function StoryboardWorkbenchPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -137,6 +194,7 @@ export default function StoryboardWorkbenchPage() {
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
   const [universeStatus, setUniverseStatus] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState("");
   const selectedScene = state.scenes.find((scene) => scene.id === selectedSceneId) || state.scenes[0];
 
   const videoReadyShots = useMemo<VideoReadyShot[]>(
@@ -159,6 +217,19 @@ export default function StoryboardWorkbenchPage() {
       supabase?.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession)) || {};
 
     return () => listener?.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const draft = readWorkspaceEntryDraft("storyboard");
+    if (!draft) return;
+
+    const script = [draft.prompt, draft.file?.textPreview].filter(Boolean).join("\n\n");
+    setUploadedFileName(draft.file?.name || "");
+    setState((current) => ({
+      ...current,
+      projectTitle: draft.projectTitle || current.projectTitle,
+      script: script || current.script,
+    }));
   }, []);
 
   useEffect(() => {
@@ -237,6 +308,41 @@ export default function StoryboardWorkbenchPage() {
     const scenes = splitScriptIntoScenes(state.script);
     setState((current) => ({ ...current, scenes }));
     setSelectedSceneId(scenes[0].id);
+  }
+
+  async function importStoryboardFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadedFileName(file.name);
+    if (!file.type.startsWith("text/") && !/\.(txt|md|json|csv)$/i.test(file.name)) {
+      updateState("script", state.script || `${isZh ? "已选择文件" : "Selected file"}: ${file.name}`);
+      return;
+    }
+
+    const text = await file.text();
+    let nextScript = text;
+    let nextScenes: Scene[] | null = null;
+    let nextTitle = state.projectTitle;
+
+    if (/\.json$/i.test(file.name)) {
+      try {
+        const parsed = JSON.parse(text) as Partial<StoryboardState>;
+        nextScript = typeof parsed.script === "string" ? parsed.script : text;
+        nextTitle = typeof parsed.projectTitle === "string" ? parsed.projectTitle : nextTitle;
+        nextScenes = coerceImportedScenes(parsed.scenes);
+      } catch {
+        nextScript = text;
+      }
+    }
+
+    setState((current) => ({
+      ...current,
+      projectTitle: nextTitle || current.projectTitle,
+      script: nextScript,
+      scenes: nextScenes || current.scenes,
+    }));
+    if (nextScenes?.[0]) setSelectedSceneId(nextScenes[0].id);
   }
 
   function buildStoryboardPackage(universeId = selectedUniverseId || null): CreativePackage {
@@ -414,6 +520,17 @@ export default function StoryboardWorkbenchPage() {
               onChange={(event) => updateState("projectTitle", event.target.value)}
               placeholder={isZh ? "例如：狼人复仇短剧" : "e.g. Werewolf revenge short"}
             />
+          </label>
+          <label className="studio-file-drop">
+            <input
+              className="visually-hidden-input"
+              type="file"
+              accept=".txt,.md,.json,.csv"
+              onChange={(event) => void importStoryboardFile(event)}
+            />
+            <UploadCloud size={18} />
+            <span>{isZh ? "上传剧本 / 分镜文件" : "Upload script / storyboard file"}</span>
+            <small>{uploadedFileName || (isZh ? "支持 TXT、Markdown、JSON" : "TXT, Markdown, JSON supported")}</small>
           </label>
           <label className="studio-field">
             {isZh ? "剧本" : "Script"}

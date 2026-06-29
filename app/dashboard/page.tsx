@@ -31,14 +31,32 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ProjectList } from "@/components/home/ProjectList";
 import { WorkflowList } from "@/components/home/WorkflowList";
-import { useKK } from "@/components/kk/KKProvider";
 import { TopNav } from "@/components/layout/TopNav";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { useI18n } from "@/lib/i18n/useI18n";
 
+type WorkspaceEntryDraft = {
+  workflowId?: string;
+  projectTitle?: string;
+  prompt?: string;
+};
+
+function readScriptWorkspaceDraft(): WorkspaceEntryDraft | null {
+  try {
+    const keyed = localStorage.getItem("kiikis_workspace_entry_draft:script");
+    const generic = localStorage.getItem("kiikis_workspace_entry_draft");
+    const raw = keyed || generic;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkspaceEntryDraft;
+    if (parsed.workflowId && parsed.workflowId !== "script") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export default function ProjectListPage() {
   const router = useRouter();
-  const kk = useKK();
   const { locale, t } = useI18n();
   const isZh = locale === "zh-CN";
   const [projects, setProjects] = useState<DramaProject[]>([]);
@@ -50,6 +68,7 @@ export default function ProjectListPage() {
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardError, setWizardError] = useState("");
+  const [wizardEntryDraft, setWizardEntryDraft] = useState<WorkspaceEntryDraft | null>(null);
   const [wizardData, setWizardData] = useState({
     title: "",
     workflowType: "creation" as Extract<WorkflowType, "creation" | "continuation">,
@@ -79,6 +98,14 @@ export default function ProjectListPage() {
     return () => {
       listener?.subscription.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("setup") === "1" && params.get("workflow") === "script") {
+      openWizard("creation", readScriptWorkspaceDraft());
+      window.history.replaceState(null, "", "/dashboard");
+    }
   }, []);
 
   useEffect(() => {
@@ -144,9 +171,10 @@ export default function ProjectListPage() {
     session?.user.email?.split("@")[0] ||
     (isZh ? "作者" : "Writer");
 
-  function openWizard(type: Extract<WorkflowType, "creation" | "continuation">) {
+  function openWizard(type: Extract<WorkflowType, "creation" | "continuation">, entryDraft: WorkspaceEntryDraft | null = null) {
     setWizardError("");
-    setWizardData((current) => ({ ...current, workflowType: type, title: "" }));
+    setWizardEntryDraft(entryDraft);
+    setWizardData((current) => ({ ...current, workflowType: type, title: entryDraft?.projectTitle || "" }));
     setWizardOpen(true);
   }
 
@@ -157,8 +185,6 @@ export default function ProjectListPage() {
       return;
     }
 
-    kk.think(); // user committed a request -> THINKING
-
     const base = {
       title,
       market: wizardData.market,
@@ -166,8 +192,9 @@ export default function ProjectListPage() {
       targetLanguage: wizardData.targetLanguage,
       episodeCount: wizardData.episodeCount,
       episodeDuration: wizardData.episodeDuration,
+      idea: wizardEntryDraft?.prompt || "",
       storyBible: {
-        logline: "",
+        logline: wizardEntryDraft?.prompt || "",
         sellingPoint: "",
         targetMarket: wizardData.market,
         genreType: wizardData.genre,
@@ -187,7 +214,6 @@ export default function ProjectListPage() {
     upsertProject(project);
     void upsertProjectToSupabase(project, { accessToken: session?.access_token });
     setWizardOpen(false);
-    kk.celebrate(); // project created -> HAPPY
     router.push(`/projects/${project.id}?mode=${wizardData.workflowType}`);
   }
 
@@ -328,7 +354,7 @@ export default function ProjectListPage() {
             </div>
           </header>
 
-          <WorkflowList onSelectWorkflow={openWizard} onOpenSongWorkbench={() => router.push("/song-workbench?new=1")} />
+          <WorkflowList onSelectWorkflow={openWizard} />
           <ProjectList
             groupedProjects={groupedProjects}
             groups={groups}

@@ -151,27 +151,12 @@ export default function LandingPage() {
       />
 
       <ContentSection
-        id="kk"
-        kicker="KK"
-        titleZh="你的动态 3D 创作搭档"
-        titleEn="Your Dynamic 3D Creative Companion"
-        subtitleZh={"KK 会常驻工作台，跟随创作状态切换待命、思考、完成和引导动作\n不再是一张静态图片，而是一个动态角色系统"}
-        subtitleEn="KK lives in the workspace, switching between idle, thinking, success, and guide states as a dynamic 3D character."
-        ctaLabel={isZh ? "查看 KK" : "Open KK"}
-        ctaHref="/kk"
-        bgImageZh="radial-gradient(ellipse at 40% 70%, #100d2a 0%, #060a14 100%)"
-        bgImageEn="radial-gradient(ellipse at 40% 70%, #100d2a 0%, #060a14 100%)"
-        align="right"
-        lightBg={false}
-      />
-
-      <ContentSection
         id="join"
         kicker="JOIN KIIKIS"
         titleZh="开始点亮你的第一颗星球"
         titleEn="Light Up Your First Planet"
-        subtitleZh={"免费注册获得 3,000 KK币 + 专属宠物蛋\n邀请好友各得 5,000 KK币（最多3位）\n成功邀请3位好友，解锁限定 KK 蛋"}
-        subtitleEn={"Sign up free: 3,000 KK coins + exclusive pet egg.\nInvite friends: 5,000 KK coins each (up to 3).\nInvite 3 friends: unlock a limited KK egg."}
+        subtitleZh={"免费注册获得 3,000 创作额度\n邀请好友各得 5,000 创作额度（最多3位）\n更多高级工作流可在订阅页解锁"}
+        subtitleEn={"Sign up free: 3,000 creation credits.\nInvite friends: 5,000 credits each (up to 3).\nUnlock more advanced workflows on the subscription page."}
         ctaLabel={isZh ? "免费开始" : "Start Free"}
         ctaHref="/dashboard"
         bgImageZh="radial-gradient(ellipse at 50% 50%, #0d1a2a 0%, #060a14 100%)"

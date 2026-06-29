@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Download, Loader2, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Download, Loader2, Play, Plus, RefreshCw, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { listUniverses, saveInboxItems, type Universe } from "@/lib/universe";
@@ -51,6 +51,17 @@ type StoryboardExport = {
       duration?: string;
     }>;
   }>;
+};
+
+type WorkspaceEntryDraft = {
+  workflowId?: string;
+  projectTitle?: string;
+  prompt?: string;
+  file?: {
+    name?: string;
+    type?: string;
+    textPreview?: string;
+  } | null;
 };
 
 type MiniMaxResponse = {
@@ -125,6 +136,20 @@ function shotsFromStoryboard(raw: string | null): VideoShot[] {
   }
 }
 
+function readWorkspaceEntryDraft(workflowId: string): WorkspaceEntryDraft | null {
+  try {
+    const keyed = localStorage.getItem(`kiikis_workspace_entry_draft:${workflowId}`);
+    const generic = localStorage.getItem("kiikis_workspace_entry_draft");
+    const raw = keyed || generic;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkspaceEntryDraft;
+    if (parsed.workflowId && parsed.workflowId !== workflowId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -149,6 +174,7 @@ export default function VideoWorkbenchPage() {
   const [sourceStoryboardId, setSourceStoryboardId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
   const [universeStatus, setUniverseStatus] = useState("");
+  const [uploadedSourceName, setUploadedSourceName] = useState("");
 
   const completedCount = useMemo(() => state.shots.filter((shot) => shot.status === "done").length, [state.shots]);
   const pendingCount = state.shots.length - completedCount;
@@ -182,6 +208,29 @@ export default function VideoWorkbenchPage() {
   }, []);
 
   useEffect(() => {
+    const draft = readWorkspaceEntryDraft("video");
+    if (!draft) return;
+
+    setUploadedSourceName(draft.file?.name || "");
+    setSourceStoryboardTitle(draft.projectTitle || "");
+
+    const importedShots = shotsFromStoryboard(draft.file?.textPreview || null);
+    if (importedShots.length) {
+      setImportedCount(importedShots.length);
+      setState((current) => ({ ...current, shots: importedShots }));
+      return;
+    }
+
+    const prompt = draft.prompt || draft.file?.name || "";
+    if (prompt) {
+      setState((current) => ({
+        ...current,
+        shots: [createShot(prompt, draft.projectTitle || "")],
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
     void listUniverses({ accessToken: session?.access_token })
       .then((items) => {
         setUniverses(items);
@@ -210,6 +259,38 @@ export default function VideoWorkbenchPage() {
 
   function exportJson() {
     console.log(JSON.stringify(state));
+  }
+
+  async function importVideoSourceFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadedSourceName(file.name);
+
+    if (file.type.startsWith("video/")) {
+      const videoUrl = URL.createObjectURL(file);
+      const shot = createShot(file.name, file.name);
+      shot.status = "done";
+      shot.videoUrl = videoUrl;
+      shot.sourceText = file.name;
+      setState((current) => ({ ...current, shots: [...current.shots.filter((item) => item.prompt.trim()), shot] }));
+      return;
+    }
+
+    if (!file.type.startsWith("text/") && !/\.(txt|md|json|csv)$/i.test(file.name)) {
+      setState((current) => ({ ...current, shots: [createShot(file.name, file.name)] }));
+      return;
+    }
+
+    const text = await file.text();
+    const importedShots = shotsFromStoryboard(text);
+    if (importedShots.length) {
+      setImportedCount(importedShots.length);
+      setState((current) => ({ ...current, shots: importedShots }));
+      return;
+    }
+
+    setState((current) => ({ ...current, shots: [createShot(text.slice(0, 4000), file.name)] }));
   }
 
   function buildVideoPackage(universeId = selectedUniverseId || null): CreativePackage {
@@ -421,6 +502,18 @@ export default function VideoWorkbenchPage() {
               {isZh ? "新增" : "Add"}
             </button>
           </div>
+
+          <label className="studio-file-drop">
+            <input
+              className="visually-hidden-input"
+              type="file"
+              accept=".txt,.md,.json,.csv,video/*"
+              onChange={(event) => void importVideoSourceFile(event)}
+            />
+            <UploadCloud size={18} />
+            <span>{isZh ? "上传分镜 / 视频文件" : "Upload storyboard / video file"}</span>
+            <small>{uploadedSourceName || (isZh ? "支持分镜 JSON、文本和 video/*" : "Storyboard JSON, text, and video/* supported")}</small>
+          </label>
 
           <div className="studio-shot-list">
             {state.shots.map((shot, index) => (

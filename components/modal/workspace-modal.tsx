@@ -109,7 +109,7 @@ export function WorkspaceModal({ open, onClose, isZh }: WorkspaceModalProps) {
           </button>
         </header>
 
-        <InputBox isZh={isZh} />
+        <InputBox isZh={isZh} onNavigate={onClose} />
 
         <section className="workspace-modal-workflows">
           <div className="workspace-modal-section-head">

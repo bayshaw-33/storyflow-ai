@@ -1150,7 +1150,7 @@ input:focus, textarea:focus, select:focus {
   max-height: min(860px, calc(100vh - 48px));
   overflow: auto;
   display: grid;
-  grid-template-rows: auto minmax(210px, 0.36fr) minmax(360px, 0.64fr);
+  grid-template-rows: auto auto minmax(320px, 1fr);
   gap: clamp(16px, 2.2vw, 24px);
   padding: clamp(24px, 3vw, 36px);
   border-radius: var(--radius-lg);
@@ -1194,20 +1194,38 @@ input:focus, textarea:focus, select:focus {
 }
 .workspace-modal-close:hover { background: var(--button-secondary-hover); }
 .workspace-modal-input-box {
-  min-height: 210px;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
-.workspace-modal-input-box span {
+.workspace-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.workspace-entry-head span,
+.workspace-entry-hint {
   color: var(--ink-secondary);
   font-size: 13px;
   font-weight: 600;
 }
+.workspace-entry-head select,
+.workspace-entry-toolbar input {
+  min-height: 40px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-primary);
+  background: var(--input-bg);
+  font: inherit;
+}
+.workspace-entry-head select {
+  min-width: 180px;
+  padding: 0 12px;
+}
 .workspace-modal-input-box textarea {
   width: 100%;
-  height: 100%;
-  min-height: 176px;
+  min-height: 150px;
   resize: vertical;
   padding: clamp(18px, 2vw, 24px);
   border-radius: var(--radius-md);
@@ -1222,6 +1240,58 @@ input:focus, textarea:focus, select:focus {
   outline: 2px solid rgba(0, 107, 255, 0.28);
   outline-offset: 2px;
   border-color: rgba(0, 107, 255, 0.46);
+}
+.workspace-entry-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+.workspace-entry-toolbar input {
+  width: 100%;
+  padding: 0 12px;
+}
+.workspace-entry-upload,
+.workspace-entry-start {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.workspace-entry-upload {
+  max-width: 210px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-border);
+  color: var(--ink-primary);
+  background: var(--button-secondary-bg);
+}
+.workspace-entry-upload span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workspace-entry-start {
+  padding: 0 16px;
+  color: #fff;
+  background: var(--button-primary-bg);
+}
+.workspace-entry-hint {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.visually-hidden-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 .workspace-modal-workflows {
   display: flex;
@@ -1307,7 +1377,7 @@ input:focus, textarea:focus, select:focus {
   .workspace-modal {
     width: min(900px, 100%);
     padding: 24px;
-    grid-template-rows: auto minmax(180px, 0.34fr) minmax(330px, 0.66fr);
+    grid-template-rows: auto auto minmax(330px, 1fr);
   }
   .workspace-workflow-grid { gap: 12px; }
   .workspace-workflow-card {
@@ -1326,12 +1396,23 @@ input:focus, textarea:focus, select:focus {
     border-radius: 0;
     border-left: 0;
     border-right: 0;
-    grid-template-rows: auto minmax(190px, 34vh) 1fr;
+    grid-template-rows: auto auto 1fr;
     padding: 18px;
   }
   .workspace-modal-header h2 { font-size: 1.45rem; }
-  .workspace-modal-input-box { min-height: 190px; }
-  .workspace-modal-input-box textarea { min-height: 150px; }
+  .workspace-modal-input-box textarea { min-height: 140px; }
+  .workspace-entry-head,
+  .workspace-entry-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .workspace-entry-head select,
+  .workspace-entry-upload,
+  .workspace-entry-start {
+    width: 100%;
+    max-width: none;
+  }
   .workspace-modal-section-head {
     flex-direction: column;
     gap: 6px;
@@ -2183,6 +2264,39 @@ input:focus, textarea:focus, select:focus {
   padding: 12px;
   resize: vertical;
   line-height: 1.55;
+}
+.studio-file-drop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  padding: 14px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-primary);
+  background: color-mix(in srgb, var(--input-bg), var(--accent-blue) 4%);
+  cursor: pointer;
+  transition: border-color var(--transition-base), background var(--transition-base);
+}
+.studio-file-drop:hover {
+  border-color: rgba(0, 107, 255, 0.46);
+  background: color-mix(in srgb, var(--input-bg), var(--accent-blue) 8%);
+}
+.studio-file-drop svg {
+  grid-row: span 2;
+  color: #006BFF;
+}
+.studio-file-drop span {
+  font-size: 13px;
+  font-weight: 650;
+}
+.studio-file-drop small {
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .studio-script-input {
   min-height: 280px !important;

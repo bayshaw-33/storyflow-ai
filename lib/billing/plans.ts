@@ -24,7 +24,6 @@ export type PlanEntitlement = {
     modularWorkbench: boolean;
     byoApi: boolean;
     viralCreation: boolean;
-    kkEgg: "epic" | "legendary" | null;
   };
 };
 
@@ -62,7 +61,6 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       modularWorkbench: false,
       byoApi: false,
       viralCreation: true,
-      kkEgg: null,
     },
   },
   {
@@ -86,21 +84,18 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "最多 50 个项目",
       "全部工作流解锁",
       "Viral Creation 爆款工具",
-      "🥚 史诗级 KK 蛋 ×1（订阅赠送）",
     ],
     includesEn: [
       "30,000 KK coins / month",
       "Up to 50 projects",
       "All workflows unlocked",
       "Viral Creation tool",
-      "Epic KK Egg x1 with subscription",
     ],
     features: {
       universe: false,
       modularWorkbench: false,
       byoApi: false,
       viralCreation: true,
-      kkEgg: "epic",
     },
   },
   {
@@ -126,7 +121,6 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "模块化工作台自定义",
       "自接 API（BYO API）",
       "Viral Creation 爆款工具",
-      "🥚 史诗级 KK 蛋 ×1（订阅赠送）",
     ],
     includesEn: [
       "10,000 KK coins / month",
@@ -135,14 +129,12 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "Modular workbench customization",
       "BYO API",
       "Viral Creation tool",
-      "Epic KK Egg x1 with subscription",
     ],
     features: {
       universe: false,
       modularWorkbench: true,
       byoApi: true,
       viralCreation: true,
-      kkEgg: "epic",
     },
   },
   {
@@ -169,7 +161,6 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "自接 API（BYO API）",
       "Universe Engine（IP 宇宙系统）",
       "Viral Creation 爆款工具",
-      "🥚 传说级 KK 蛋 ×1（订阅赠送）",
     ],
     includesEn: [
       "99,000 KK coins / month",
@@ -179,14 +170,12 @@ export const PLAN_ENTITLEMENTS: PlanEntitlement[] = [
       "BYO API",
       "Universe Engine",
       "Viral Creation tool",
-      "Legendary KK Egg x1 with subscription",
     ],
     features: {
       universe: true,
       modularWorkbench: true,
       byoApi: true,
       viralCreation: true,
-      kkEgg: "legendary",
     },
   },
 ];
