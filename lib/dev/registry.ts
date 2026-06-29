@@ -14,7 +14,16 @@ export type ComponentMeta = {
 export const ComponentRegistry: Record<string, ComponentMeta> = {
   HeroSection: {
     dependencies: ["useI18n", "HERO_STACK", "DesignAssetImage"],
-    assets: ["HERO_BACKDROP", "HERO_ENVIRONMENT", "HERO_STARFIELD", "HERO_NEBULA", "HERO_ATMOSPHERE", "HERO_MAIN"],
+    assets: [
+      "HERO_MAIN",
+      "HERO_SECTION_1",
+      "HERO_SECTION_2",
+      "HERO_SECTION_3",
+      "HERO_SECTION_4",
+      "HERO_SECTION_5",
+      "HERO_SECTION_6",
+      "HERO_SECTION_7",
+    ],
     stateBindings: ["i18n.locale"],
   },
   Workspace: {

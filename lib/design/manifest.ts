@@ -10,12 +10,14 @@ const UNIVERSE = "/design/universe";
 const KK = "/design/kk";
 
 export const ASSET = {
-  HERO_BACKDROP: `${HERO}/deep-space-background.png`,
-  HERO_ENVIRONMENT: `${HERO}/hero-environment.png`,
-  HERO_STARFIELD: `${HERO}/starfield.png`,
-  HERO_NEBULA: `${HERO}/nebula.png`,
-  HERO_ATMOSPHERE: `${HERO}/atmosphere-cyan.png`,
   HERO_MAIN: `${HERO}/hero-main.png`,
+  HERO_SECTION_1: `${HERO}/section-1.png`,
+  HERO_SECTION_2: `${HERO}/section-2.png`,
+  HERO_SECTION_3: `${HERO}/section-3.png`,
+  HERO_SECTION_4: `${HERO}/section-4.png`,
+  HERO_SECTION_5: `${HERO}/section-5.png`,
+  HERO_SECTION_6: `${HERO}/section-6.png`,
+  HERO_SECTION_7: `${HERO}/section-7.png`,
 
   LOGO_PRIMARY: `${LOGO}/logo-transparent.png`,
   LOGO_ICON: `${LOGO}/logo-icon.png`,
@@ -63,15 +65,10 @@ export function assetUrl(token: AssetToken): string {
 }
 
 export function isHeroPriorityAsset(token: AssetToken): boolean {
-  return token === "HERO_MAIN" || token === "HERO_BACKDROP";
+  return token === "HERO_MAIN";
 }
 
 export const HERO_STACK: { token: AssetToken; layer: LayerName }[] = [
-  { token: "HERO_BACKDROP", layer: "background" },
-  { token: "HERO_ENVIRONMENT", layer: "depth" },
-  { token: "HERO_STARFIELD", layer: "overlay" },
-  { token: "HERO_NEBULA", layer: "overlay" },
-  { token: "HERO_ATMOSPHERE", layer: "overlay" },
   { token: "HERO_MAIN", layer: "foreground" },
 ];
 

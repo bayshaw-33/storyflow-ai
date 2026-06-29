@@ -14,8 +14,13 @@ import {
 } from "@/hooks/use-workspace-modal";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { assetUrl } from "@/lib/design/manifest";
 
 type AuthMode = "signin" | "signup";
+
+function heroBg(token: Parameters<typeof assetUrl>[0]) {
+  return `url('${assetUrl(token)}')`;
+}
 
 export default function LandingPage() {
   const router = useRouter();
@@ -86,8 +91,8 @@ export default function LandingPage() {
         titleEn="Novel · Script · Storyboard · Video · Song"
         subtitleZh="五个工作流。一个宇宙。无限 IP。"
         subtitleEn="Five workflows. One Universe. Infinite IP."
-        bgImageZh="url('/design/hero/section-1-ch.png')"
-        bgImageEn="url('/design/hero/section-1-en.png')"
+        bgImageZh={heroBg("HERO_SECTION_1")}
+        bgImageEn={heroBg("HERO_SECTION_1")}
         align="left"
         lightBg={false}
       />
@@ -99,8 +104,8 @@ export default function LandingPage() {
         titleEn="The Universe-First Creative Workbench"
         subtitleZh="五大专业工作流——小说、剧本、分镜、视频、歌曲——每个都能独立运转，通过 Universe 联动后势不可挡。角色一次定义，所有作品自动继承。"
         subtitleEn="Five professional workflows — Novel, Script, Storyboard, Video, Song — each powerful alone, unstoppable when linked through a shared Universe. Build your characters once. Let them live everywhere."
-        bgImageZh="url('/design/hero/section-2-ch.png')"
-        bgImageEn="url('/design/hero/section-2-en.png')"
+        bgImageZh={heroBg("HERO_SECTION_2")}
+        bgImageEn={heroBg("HERO_SECTION_2")}
         align="right"
         lightBg={false}
       />
@@ -114,8 +119,8 @@ export default function LandingPage() {
         subtitleEn="Novel · Script · Storyboard · Video · Song"
         ctaLabel={isZh ? "探索全部工作流" : "Explore All Workflows"}
         ctaHref="/dashboard"
-        bgImageZh="url('/design/hero/section-3-ch.png')"
-        bgImageEn="url('/design/hero/section-3-en.png')"
+        bgImageZh={heroBg("HERO_SECTION_3")}
+        bgImageEn={heroBg("HERO_SECTION_3")}
         align="left"
         lightBg={false}
       />
@@ -129,9 +134,24 @@ export default function LandingPage() {
         subtitleEn="Modular layout. Bring your own API keys. Switch between workflows without losing context. PRO creators own every corner of their creative environment."
         ctaLabel={isZh ? "了解 PRO" : "Learn PRO"}
         ctaHref="/subscription"
-        bgImageZh="url('/design/hero/section-4-ch.png')"
-        bgImageEn="url('/design/hero/section-4-en.png')"
+        bgImageZh={heroBg("HERO_SECTION_4")}
+        bgImageEn={heroBg("HERO_SECTION_4")}
         align="right"
+        lightBg={false}
+      />
+
+      <ContentSection
+        id="actors"
+        kicker={isZh ? "演员 · 角色资产" : "ACTORS · CHARACTER ASSETS"}
+        titleZh="先确定谁来演，再确定角色如何出现。"
+        titleEn="Cast the actor. Shape the role."
+        subtitleZh="虚拟演员保存在演员库，角色 canon 留在 Universe，项目形象版本沉淀在具体作品中。"
+        subtitleEn="Virtual actors live in the Actor Library, canon stays in Universe, and project-specific appearances stay with each production."
+        ctaLabel={isZh ? "打开演员库" : "Open Actor Library"}
+        ctaHref="/actors"
+        bgImageZh={heroBg("HERO_SECTION_5")}
+        bgImageEn={heroBg("HERO_SECTION_5")}
+        align="left"
         lightBg={false}
       />
 
@@ -144,8 +164,8 @@ export default function LandingPage() {
         subtitleEn="Define your characters, worlds, timelines, and canon rules once — then every novel, script, storyboard, video, and song you create inherits them automatically. Your IP universe grows with every project, not against it."
         ctaLabel={isZh ? "建造你的宇宙" : "Build Your Universe"}
         ctaHref="/universes"
-        bgImageZh="radial-gradient(ellipse at 50% 30%, #0d1040 0%, #060a14 100%)"
-        bgImageEn="radial-gradient(ellipse at 50% 30%, #0d1040 0%, #060a14 100%)"
+        bgImageZh={heroBg("HERO_SECTION_6")}
+        bgImageEn={heroBg("HERO_SECTION_6")}
         align="left"
         lightBg={false}
       />
@@ -159,8 +179,8 @@ export default function LandingPage() {
         subtitleEn={"Sign up free — get 3,000 creation credits to start building.\nInvite a creator friend and earn 5,000 more credits per referral (up to 3 friends).\nUpgrade anytime to unlock advanced workflows across all five creative formats."}
         ctaLabel={isZh ? "免费开始建造" : "Start Building Free"}
         ctaHref="/dashboard"
-        bgImageZh="radial-gradient(ellipse at 50% 50%, #0d1a2a 0%, #060a14 100%)"
-        bgImageEn="radial-gradient(ellipse at 50% 50%, #0d1a2a 0%, #060a14 100%)"
+        bgImageZh={heroBg("HERO_SECTION_7")}
+        bgImageEn={heroBg("HERO_SECTION_7")}
         align="center"
         lightBg={false}
       />

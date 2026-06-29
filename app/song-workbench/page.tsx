@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, Save, Send, Sparkles } from "lucide-react";
+import { Copy, RefreshCw, Save, Send, Sparkles } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -466,6 +466,7 @@ export default function SongWorkbenchPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [songProjectId, setSongProjectId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [error, setError] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
@@ -622,6 +623,45 @@ export default function SongWorkbenchPage() {
     setSaveWarning("");
     setRevisionInstruction("");
     setAuditOpen(false);
+  }
+
+  async function refreshSongWorkbench() {
+    setRefreshing(true);
+    setError("");
+    setSaveWarning("");
+    try {
+      const localProjects = readProjectsFromStorage();
+      const localSourceProjects = localProjects.filter((project) => project.workflowType !== "song");
+      let cloudProjects: DramaProject[] = [];
+
+      if (session?.access_token) {
+        cloudProjects = await readProjectsFromSupabase({ accessToken: session.access_token }).catch(() => []);
+      }
+
+      setSourceProjects(mergeSourceProjects(localSourceProjects, cloudProjects.filter((project) => project.workflowType !== "song")));
+
+      const nextUniverses = await listUniverses({ accessToken: session?.access_token }).catch(() => universes);
+      setUniverses(nextUniverses);
+      if (!selectedUniverseId && nextUniverses[0]) setSelectedUniverseId(nextUniverses[0].id);
+
+      if (songProjectId) {
+        const localSong = localProjects.find((project) => project.id === songProjectId);
+        const cloudSong = session?.access_token
+          ? await readProjectFromSupabase(songProjectId, { accessToken: session.access_token }).catch(() => null)
+          : null;
+        const nextSong = cloudSong || localSong;
+        if (nextSong) applySongProject(nextSong);
+      } else if (selectedUniverseId) {
+        const bundle = await getUniverseBundle(selectedUniverseId, { accessToken: session?.access_token }).catch(() => null);
+        setUniverseBundle(bundle);
+      }
+
+      setSaveStatus(locale === "zh-CN" ? "歌曲工作台已刷新。" : "Song workbench refreshed.");
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : locale === "zh-CN" ? "刷新失败。" : "Refresh failed.");
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   const selectedSingers = useMemo(
@@ -1057,6 +1097,10 @@ export default function SongWorkbenchPage() {
             <Link className="secondary-button" href="/universes">
               Universe
             </Link>
+            <button className="secondary-button" type="button" onClick={() => void refreshSongWorkbench()} disabled={refreshing || generating || savingProject}>
+              <RefreshCw size={15} className={refreshing ? "spin" : ""} />
+              {locale === "zh-CN" ? "刷新" : "Refresh"}
+            </button>
             <button className="secondary-button" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
               <Save size={15} />
               {savingProject ? text.saving : text.saveToProjects}

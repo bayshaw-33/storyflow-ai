@@ -677,13 +677,18 @@ input:focus, textarea:focus, select:focus {
   pointer-events: none;
   user-select: none;
 }
-.hero-root .layer-backdrop   { z-index: 1; }
-.hero-root .layer-env        { z-index: 2; }
-.hero-root .layer-starfield  { z-index: 3; opacity: 0.9; mix-blend-mode: screen; }
-.hero-root .layer-nebula     { z-index: 4; opacity: 0.8; mix-blend-mode: screen; }
-.hero-root .layer-atmo       { z-index: 5; opacity: 0.85; mix-blend-mode: screen; }
-.hero-root .layer-main       { z-index: 6; object-fit: cover; }
+.hero-root .layer-main       { z-index: 1; object-fit: cover; }
 .hero-root .layer-ui         { z-index: var(--z-ui); }
+.hero-root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(5, 5, 9, 0.18), rgba(5, 5, 9, 0.44)),
+    radial-gradient(circle at 50% 48%, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.42));
+}
 
 /* hero copy — centred */
 .hero-content,
@@ -1624,6 +1629,16 @@ input:focus, textarea:focus, select:focus {
   background-image: none;
   background-color: #050509;
 }
+.content-section.has-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 5, 9, 0.68), rgba(5, 5, 9, 0.18) 42%, rgba(5, 5, 9, 0.52)),
+    linear-gradient(180deg, rgba(5, 5, 9, 0.24), rgba(5, 5, 9, 0.38));
+}
 .content-section-inner {
   position: relative;
   z-index: 2;
@@ -1643,21 +1658,8 @@ input:focus, textarea:focus, select:focus {
 .content-section.has-image .content-section-inner {
   z-index: 2;
 }
-#platform .content-section-inner {
+.content-section.align-right .content-section-inner {
   text-align: right;
-}
-#platform .content-section-kicker,
-#platform .content-section-title,
-#platform .content-section-subtitle,
-#workspace .content-section-kicker,
-#workspace .content-section-title,
-#workspace .content-section-subtitle {
-  color: #111214;
-  text-shadow: none;
-}
-#platform .content-section-subtitle,
-#workspace .content-section-subtitle {
-  color: #2f3237;
 }
 .content-section-media {
   position: absolute;
