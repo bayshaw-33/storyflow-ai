@@ -49,6 +49,17 @@ type ViralVersion = {
 };
 
 type TaskStatus = "idle" | "queued" | "running" | "completed" | "failed";
+type WorkspaceEntryDraft = {
+  workflowId?: string;
+  projectTitle?: string;
+  prompt?: string;
+  file?: {
+    name?: string;
+    type?: string;
+    size?: number;
+    textPreview?: string;
+  } | null;
+};
 
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 const VIRAL_BUCKET = "viral-assets";
@@ -67,7 +78,7 @@ const copy = {
     rewritePlaceholder: "描述你的改写方向，例如：保留结构，换成宠物赛道，主角是一只会拆家的柯基...",
     attachmentLabel: "改写附件",
     outputKicker: "结构分析",
-    outputTitle: "F1-F6 输出",
+    outputTitle: "爆款结构输出",
     emptyTitle: "上传视频后点击「分析爆款结构」开始",
     emptyBody: "系统会先拆解开场钩子、主体节奏、动作节点、结果呈现和记忆点，再生成同结构改写。",
     aiKicker: "AI 工具",
@@ -96,13 +107,20 @@ const copy = {
     loaded: "已载入",
     imageAttachment: "图片附件",
     documentAttachment: "文档附件",
+    taskStatusLabels: {
+      idle: "等待上传或分析",
+      queued: "已进入队列",
+      running: "AI 正在处理",
+      completed: "任务完成",
+      failed: "任务失败，可重试",
+    },
     labels: {
-      f1: "F1 开场钩子",
-      f2: "F2 主体结构",
-      f3: "F3 动作节点",
-      f4: "F4 结果呈现",
-      f5: "F5 记忆点",
-      f6: "F6 同结构改写",
+      f1: "开场钩子",
+      f2: "主体节奏",
+      f3: "动作与转折",
+      f4: "结果呈现",
+      f5: "记忆点公式",
+      f6: "同结构改写分镜",
       hookDuration: "前3秒结构",
       hookType: "钩子类型",
       emotion: "情绪触发",
@@ -133,7 +151,7 @@ const copy = {
     rewritePlaceholder: "Describe the remake direction, e.g. keep the structure but switch to the pet niche...",
     attachmentLabel: "Remake attachment",
     outputKicker: "Structure analysis",
-    outputTitle: "F1-F6 Output",
+    outputTitle: "Viral Structure Output",
     emptyTitle: "Upload a video, then click “Analyze viral structure” to begin",
     emptyBody: "Kiikis will break down the hook, rhythm, action nodes, result reveal, and memory points before generating a same-structure remake.",
     aiKicker: "AI Tools",
@@ -162,13 +180,20 @@ const copy = {
     loaded: "Loaded",
     imageAttachment: "Image attachment",
     documentAttachment: "Document attachment",
+    taskStatusLabels: {
+      idle: "Waiting for upload or analysis",
+      queued: "Queued",
+      running: "AI is processing",
+      completed: "Task complete",
+      failed: "Task failed, retry available",
+    },
     labels: {
-      f1: "F1 Opening Hook",
-      f2: "F2 Body Structure",
-      f3: "F3 Action Nodes",
-      f4: "F4 Result Reveal",
-      f5: "F5 Memory Points",
-      f6: "F6 Same-Structure Remake",
+      f1: "Opening Hook",
+      f2: "Body Rhythm",
+      f3: "Action and Turn",
+      f4: "Result Reveal",
+      f5: "Memory Formula",
+      f6: "Same-Structure Storyboard",
       hookDuration: "First-three-second structure",
       hookType: "Hook type",
       emotion: "Emotion trigger",
@@ -225,6 +250,33 @@ export default function ViralWorkbenchPage() {
 
     return () => listener?.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queryProjectId = params.get("projectId") || "";
+    const dashboardProjectId = params.get("dashboardProjectId") || "";
+    if (queryProjectId) {
+      const normalizedProjectId = queryProjectId.startsWith("viral-") ? queryProjectId.slice("viral-".length) : queryProjectId;
+      setProjectId(normalizedProjectId);
+      setViralStubProjectId(dashboardProjectId || `viral-${normalizedProjectId}`);
+      setStatusText(ui.loaded);
+    }
+
+    const draft = readWorkspaceEntryDraft("viral");
+    if (!draft) return;
+    const draftInput = [
+      draft.prompt?.trim(),
+      draft.file?.textPreview ? `${draft.file.name || "Attached file"}\n${draft.file.textPreview}` : "",
+    ].filter(Boolean).join("\n\n");
+    if (draftInput) setRewriteInput((current) => current || draftInput);
+    if (draft.file?.name && !queryProjectId) {
+      setStatusText(`${ui.loaded} ${draft.file.name}`);
+    }
+  }, [ui.loaded]);
+
+  useEffect(() => {
+    if (session?.access_token && projectId) void loadVersions();
+  }, [projectId, session?.access_token]);
 
   useEffect(() => {
     if (!videoFile) {
@@ -671,7 +723,7 @@ export default function ViralWorkbenchPage() {
 
           <div className="song-tool-section">
             <span>{ui.taskStatus}</span>
-            <p className={taskStatus === "failed" ? "error" : "subtle"}>{taskStatus}</p>
+            <p className={taskStatus === "failed" ? "error" : "subtle"}>{ui.taskStatusLabels[taskStatus]}</p>
             {taskStatus === "failed" ? (
               <button className="secondary-button" type="button" onClick={analysisResult ? remakeStructure : analyzeVideo}>{ui.retry}</button>
             ) : null}
@@ -783,6 +835,20 @@ function inferViralTitle(analysis: ViralAnalysis, fileName: string) {
   const formula = analysis.f5_memory?.formula?.trim();
   if (formula) return formula.length > 48 ? `${formula.slice(0, 48)}...` : formula;
   return fileName.replace(/\.[^/.]+$/, "") || "未命名爆款创作";
+}
+
+function readWorkspaceEntryDraft(workflowId: string): WorkspaceEntryDraft | null {
+  try {
+    const keyed = localStorage.getItem(`kiikis_workspace_entry_draft:${workflowId}`);
+    const generic = localStorage.getItem("kiikis_workspace_entry_draft");
+    const raw = keyed || generic;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkspaceEntryDraft;
+    if (parsed.workflowId && parsed.workflowId !== workflowId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 async function readJsonResponse<T extends { error?: string }>(response: Response): Promise<T> {

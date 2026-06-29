@@ -3010,7 +3010,7 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-5);
   border: 1px dashed var(--glass-border-hover);
   border-radius: var(--radius-md);
-  background: #FAFAFA;
+  background: var(--glass-fill);
   cursor: pointer;
 }
 .viral-upload-box input {
@@ -3028,7 +3028,7 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-4);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FFFFFF;
+  background: var(--glass-fill-strong);
 }
 .viral-file-card video {
   width: 100%;
@@ -3647,7 +3647,7 @@ textarea.script-editor {
   min-height: 54px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  background: #FFFFFF;
+  background: var(--glass-fill);
   color: var(--ink-primary);
   text-align: left;
   padding: 8px 10px;
@@ -3656,7 +3656,7 @@ textarea.script-editor {
 .novel-step-button:hover,
 .novel-step-button.active {
   border-color: var(--glass-border-hover);
-  background: #FAFAFA;
+  background: var(--glass-fill-strong);
 }
 
 .novel-step-button span,
@@ -3664,6 +3664,21 @@ textarea.script-editor {
   color: var(--ink-muted);
   font-size: 12px;
   font-style: normal;
+}
+
+.novel-step-button .novel-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 30px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-primary);
+  background: rgba(255, 255, 255, 0.05);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .novel-step-button strong {
@@ -3704,7 +3719,7 @@ textarea.script-editor {
   min-height: 72px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  background: #FFFFFF;
+  background: var(--glass-fill);
   color: var(--ink-primary);
   padding: 10px;
   text-align: left;
@@ -3718,7 +3733,7 @@ textarea.script-editor {
 
 .novel-chapter-strip button.active {
   border-color: var(--glass-border-hover);
-  background: #FAFAFA;
+  background: var(--glass-fill-strong);
 }
 
 .novel-add-chapter-card {
@@ -3787,6 +3802,64 @@ textarea.script-editor {
 .novel-tool-section .full {
   width: 100%;
   justify-content: center;
+}
+
+.novel-action-sequence {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: var(--space-3);
+}
+
+.novel-action-button {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-fill);
+  color: var(--ink-primary);
+  text-align: left;
+}
+
+.novel-action-button:hover:not(:disabled) {
+  border-color: var(--glass-border-hover);
+  background: var(--glass-fill-strong);
+}
+
+.novel-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.novel-action-button > span {
+  grid-row: span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 107, 255, 0.14);
+  color: var(--ink-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.novel-action-button strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.novel-action-button small {
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .novel-auth-notice {
@@ -4938,6 +5011,13 @@ textarea.script-editor {
 .actors-auth-panel p {
   max-width: 520px;
   color: var(--ink-secondary);
+}
+
+.actors-storage-notice {
+  min-height: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .actors-panel-head {

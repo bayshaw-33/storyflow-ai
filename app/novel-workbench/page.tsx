@@ -41,19 +41,31 @@ const settingOptions = {
 };
 const AI_GENERATION_TIMEOUT_MS = 75_000;
 
-const editableTasks: TaskType[] = [
+type MobilePanel = "setup" | "editor" | "ai";
+type Credits = { balance: number; monthlyLimit: number };
+type AuthMode = "signin" | "signup";
+type WorkspaceEntryDraft = {
+  workflowId?: string;
+  projectTitle?: string;
+  prompt?: string;
+  file?: {
+    name?: string;
+    type?: string;
+    size?: number;
+    textPreview?: string;
+  } | null;
+};
+
+const novelActionTasks: TaskType[] = [
   "novel_brief",
   "novel_bible",
   "novel_characters",
   "novel_volume_outline",
   "novel_chapter_outline",
   "novel_chapter_draft",
+  "novel_revision",
   "novel_export",
 ];
-
-type MobilePanel = "setup" | "editor" | "ai";
-type Credits = { balance: number; monthlyLimit: number };
-type AuthMode = "signin" | "signup";
 
 const stepCopy: Record<TaskType, { zh: string; en: string; shortZh: string; shortEn: string }> = {
   market_analysis: { zh: "市场分析", en: "Market", shortZh: "市场", shortEn: "Market" },
@@ -135,18 +147,30 @@ function NovelWorkbenchContent() {
   const latestChapter = project.novelChapters[project.novelChapters.length - 1];
   const completedCount = steps.filter((step) => getStepContent(project, step.key).trim()).length;
   const isChapterTask = activeTask === "novel_chapter_outline" || activeTask === "novel_chapter_draft" || activeTask === "novel_revision";
-  const secondaryTasks = editableTasks.filter((task) => task !== activeTask);
+  const secondaryTasks = novelActionTasks.filter((task) => task !== activeTask);
   const aiDisabledReason = !session?.access_token
     ? (isZh ? "登录后可使用 AI 生成。" : "Sign in to use AI generation.")
     : credits?.balance === 0
       ? (isZh ? "本月 AI 额度已用完。" : "Monthly AI credits are used up.")
       : "";
+  const activeBlockedReason = getNovelTaskBlockedReason(activeTask, project, activeChapter, revisionInstruction, isZh);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     const projectId = searchParams.get("projectId");
     const forceNew = searchParams.get("new") === "1";
-    if (forceNew || !projectId) setSettingsModalOpen(true);
+    if (forceNew || !projectId) {
+      const draft = readWorkspaceEntryDraft("novel");
+      if (draft) {
+        setProject((current) => ({
+          ...current,
+          title: draft.projectTitle?.trim() || current.title,
+          idea: [draft.prompt?.trim(), draft.file?.textPreview ? `${draft.file.name || "Attached file"}\n${draft.file.textPreview}` : ""].filter(Boolean).join("\n\n") || current.idea,
+          updatedAt: new Date().toISOString(),
+        }));
+      }
+      setSettingsModalOpen(true);
+    }
 
     void supabase?.auth.getSession().then(async ({ data }) => {
       setSession(data.session || null);
@@ -327,6 +351,11 @@ function NovelWorkbenchContent() {
 
     if (aiDisabledReason) {
       setError(aiDisabledReason);
+      return;
+    }
+    const blockedReason = getNovelTaskBlockedReason(taskType, project, activeChapter, revisionInstruction, isZh);
+    if (blockedReason) {
+      setError(blockedReason);
       return;
     }
     const accessToken = session?.access_token;
@@ -675,7 +704,7 @@ function NovelWorkbenchContent() {
           </details>
 
           <div className="novel-step-list">
-            {steps.map((step) => {
+            {steps.map((step, index) => {
               const done = getStepContent(project, step.key).trim();
               return (
                 <button
@@ -684,9 +713,9 @@ function NovelWorkbenchContent() {
                   key={step.key}
                   onClick={() => setActiveTask(step.key)}
                 >
-                  <span>{getStepShort(step.key, isZh)}</span>
+                  <span className="novel-step-number">{String(index + 1).padStart(2, "0")}</span>
                   <strong>{getStepLabel(step.key, isZh)}</strong>
-                  <i>{done ? (isZh ? "已生成" : "Done") : (isZh ? "待处理" : "Pending")}</i>
+                  <i>{done ? (isZh ? "已生成" : "Done") : (isZh ? "待生成" : "To generate")}</i>
                 </button>
               );
             })}
@@ -764,23 +793,35 @@ function NovelWorkbenchContent() {
 
           <div className="novel-current-action">
             <span>{isZh ? "当前步骤" : "Current step"}</span>
-            <strong>{getStepLabel(activeTask, isZh)}</strong>
-            <p>{isZh ? "优先基于中间编辑区当前内容继续生成或补全。" : "Generate from the active editor content and current project context."}</p>
-            <button className="primary-button full" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || (isChapterTask && activeChapter?.status === "locked")}>
+            <strong>{getActionNumber(activeTask)} · {getStepLabel(activeTask, isZh)}</strong>
+            <p>{activeBlockedReason || (isZh ? "优先基于中间编辑区当前内容继续生成或补全。" : "Generate from the active editor content and current project context.")}</p>
+            <button className="primary-button full" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(activeBlockedReason) || (isChapterTask && activeChapter?.status === "locked")} title={activeBlockedReason || undefined}>
               <Sparkles size={16} />
               {generating === activeTask ? (isZh ? "生成中" : "Generating") : getStepShort(activeTask, isZh)}
             </button>
           </div>
 
           <details className="novel-tool-section">
-            <summary>{isZh ? "其他生成动作" : "Other generation actions"}</summary>
-            <div className="novel-action-grid compact">
-              {secondaryTasks.map((task) => (
-                <button className="secondary-button" type="button" key={task} onClick={() => void generate(task)} disabled={Boolean(generating) || Boolean(aiDisabledReason)}>
-                  <Sparkles size={15} />
-                  {generating === task ? (isZh ? "生成中" : "Generating") : getStepShort(task, isZh)}
-                </button>
-              ))}
+            <summary>{isZh ? "完整 AI 生成序列" : "Full AI generation sequence"}</summary>
+            <div className="novel-action-sequence">
+              {secondaryTasks.map((task) => {
+                const blocked = getNovelTaskBlockedReason(task, project, activeChapter, revisionInstruction, isZh);
+                const done = getStepContent(project, task).trim() || (task === "novel_chapter_draft" && activeChapter?.draft.trim()) || (task === "novel_chapter_outline" && activeChapter?.outline.trim());
+                return (
+                  <button
+                    className="novel-action-button"
+                    type="button"
+                    key={task}
+                    onClick={() => void generate(task)}
+                    disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(blocked)}
+                    title={blocked || undefined}
+                  >
+                    <span>{getActionNumber(task)}</span>
+                    <strong>{getStepShort(task, isZh)}</strong>
+                    <small>{blocked || (done ? (isZh ? "已生成，可重新生成" : "Done, can regenerate") : (isZh ? "可生成" : "Ready"))}</small>
+                  </button>
+                );
+              })}
             </div>
           </details>
 
@@ -791,7 +832,7 @@ function NovelWorkbenchContent() {
               onChange={(event) => setRevisionInstruction(event.target.value)}
               placeholder={isZh ? "例如：增强狼人男主的危险感，结尾改成身份暴露。" : "Example: make the Alpha lead more dangerous and end with identity exposure."}
             />
-            <button className="primary-button full" type="button" onClick={() => void generate("novel_revision")} disabled={Boolean(generating) || Boolean(aiDisabledReason) || !revisionInstruction.trim() || activeChapter?.status === "locked"}>
+            <button className="primary-button full" type="button" onClick={() => void generate("novel_revision")} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(getNovelTaskBlockedReason("novel_revision", project, activeChapter, revisionInstruction, isZh)) || activeChapter?.status === "locked"} title={getNovelTaskBlockedReason("novel_revision", project, activeChapter, revisionInstruction, isZh) || undefined}>
               <RefreshCcw size={16} /> {isZh ? "应用修改" : "Apply Revision"}
             </button>
           </details>
@@ -860,6 +901,55 @@ function getStepLabel(taskType: TaskType, isZh: boolean) {
 
 function getStepShort(taskType: TaskType, isZh: boolean) {
   return isZh ? stepCopy[taskType].shortZh : stepCopy[taskType].shortEn;
+}
+
+function getActionNumber(taskType: TaskType) {
+  const index = novelActionTasks.indexOf(taskType);
+  return index >= 0 ? String(index + 1).padStart(2, "0") : "--";
+}
+
+function getNovelTaskBlockedReason(
+  taskType: TaskType,
+  project: DramaProject,
+  activeChapter: NovelChapter | null,
+  revisionInstruction: string,
+  isZh: boolean,
+) {
+  const ideaReady = Boolean(project.idea.trim() || project.novelBrief.trim());
+  const chapterOutline = activeChapter?.outline || project.novelChapterOutline;
+  const chapterDraft = activeChapter?.draft || project.novelChapterDraft;
+
+  if (taskType === "novel_bible" && !ideaReady) {
+    return isZh ? "请先填写故事创意或生成小说 Brief。" : "Add a story idea or generate the novel brief first.";
+  }
+  if (taskType === "novel_characters" && !project.novelBible.trim() && !project.novelBrief.trim()) {
+    return isZh ? "请先生成 Bible 或 Brief，再生成角色卡。" : "Generate the bible or brief before cast cards.";
+  }
+  if (taskType === "novel_volume_outline" && !project.novelBible.trim()) {
+    return isZh ? "请先生成小说 Bible，再生成分卷大纲。" : "Generate the novel bible before the volume outline.";
+  }
+  if (taskType === "novel_chapter_outline" && !project.novelVolumeOutline.trim()) {
+    return isZh ? "请先生成分卷大纲，再生成章节大纲。" : "Generate the volume outline before chapter outlines.";
+  }
+  if (taskType === "novel_chapter_draft" && !chapterOutline.trim()) {
+    return isZh ? "请先生成或填写当前章节大纲。" : "Generate or write the current chapter outline first.";
+  }
+  if (taskType === "novel_revision") {
+    if (!chapterDraft.trim()) return isZh ? "请先生成或填写章节正文。" : "Generate or write the chapter draft first.";
+    if (!revisionInstruction.trim()) return isZh ? "请先输入修改指令。" : "Enter revision instructions first.";
+  }
+  if (taskType === "novel_export") {
+    const hasAnyNovelContent = [
+      project.novelBrief,
+      project.novelBible,
+      project.novelCharacters,
+      project.novelVolumeOutline,
+      project.novelChapterOutline,
+      project.novelChapterDraft,
+    ].some((value) => value.trim());
+    if (!hasAnyNovelContent) return isZh ? "请先生成至少一个小说模块。" : "Generate at least one novel module first.";
+  }
+  return "";
 }
 
 function getActiveNovelContent(project: DramaProject, taskType: TaskType, activeChapter: NovelChapter | null) {
@@ -1010,4 +1100,18 @@ function buildNovelContext(project: DramaProject, activeChapter: NovelChapter | 
     activeChapter ? `当前章节：第 ${activeChapter.chapterNo} 章 ${activeChapter.title}\n${activeChapter.outline}\n${activeChapter.continuityNotes}` : "",
     latestChapter ? `上一章：第 ${latestChapter.chapterNo} 章 ${latestChapter.title}\n${latestChapter.continuityNotes || latestChapter.endingHook}` : "",
   ].filter(Boolean).join("\n\n");
+}
+
+function readWorkspaceEntryDraft(workflowId: string): WorkspaceEntryDraft | null {
+  try {
+    const keyed = localStorage.getItem(`kiikis_workspace_entry_draft:${workflowId}`);
+    const generic = localStorage.getItem("kiikis_workspace_entry_draft");
+    const raw = keyed || generic;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorkspaceEntryDraft;
+    if (parsed.workflowId && parsed.workflowId !== workflowId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }

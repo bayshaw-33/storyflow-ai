@@ -27,6 +27,14 @@ type AssetRow = {
 const TEAM_WRITE_ROLES = new Set<TeamRole>(["owner", "admin", "editor"]);
 const TEAM_ADMIN_ROLES = new Set<TeamRole>(["owner", "admin"]);
 
+export type ActorLibraryStorageMode = "structured" | "project_snapshot";
+
+export type ActorLibraryResult = {
+  actors: ActorProfile[];
+  storageMode: ActorLibraryStorageMode;
+  warning?: string;
+};
+
 export async function listTeamsForUser(userId: string) {
   ensureServiceRole();
   try {
@@ -83,25 +91,42 @@ export async function createTeamForUser(userId: string, name: string) {
   return { ...team, role: "owner" as TeamRole };
 }
 
-export async function listActorsForUser(userId: string): Promise<ActorProfile[]> {
+export async function listActorLibraryForUser(userId: string): Promise<ActorLibraryResult> {
   ensureServiceRole();
   try {
-    const memberships = await listMemberships(userId);
-    const teamIds = memberships.map((item) => item.team_id);
-    const filters = [`owner_id=eq.${encodeURIComponent(userId)}`];
-    if (teamIds.length) {
-      filters.push(`and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`);
-    }
-
-    const actors = await serviceFetch<ActorProfile[]>(
-      `/rest/v1/storyflow_actor_profiles?or=(${filters.join(",")})&status=neq.archived&select=*&order=updated_at.desc`,
-    );
-
-    return hydrateActorAssets(actors);
+    return {
+      actors: await listStructuredActorsForUser(userId),
+      storageMode: "structured",
+    };
   } catch (error) {
-    if (isActorSchemaUnavailable(error)) return listFallbackActors(userId);
+    if (isActorSchemaUnavailable(error)) {
+      return {
+        actors: await listFallbackActors(userId),
+        storageMode: "project_snapshot",
+        warning: "Actor structured tables are not available. Using storyflow_projects fallback storage.",
+      };
+    }
     throw error;
   }
+}
+
+export async function listActorsForUser(userId: string): Promise<ActorProfile[]> {
+  return (await listActorLibraryForUser(userId)).actors;
+}
+
+async function listStructuredActorsForUser(userId: string) {
+  const memberships = await listMemberships(userId);
+  const teamIds = memberships.map((item) => item.team_id);
+  const filters = [`owner_id=eq.${encodeURIComponent(userId)}`];
+  if (teamIds.length) {
+    filters.push(`and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`);
+  }
+
+  const actors = await serviceFetch<ActorProfile[]>(
+    `/rest/v1/storyflow_actor_profiles?or=(${filters.join(",")})&status=neq.archived&select=*&order=updated_at.desc`,
+  );
+
+  return hydrateActorAssets(actors);
 }
 
 export async function getActorForUser(userId: string, actorId: string) {
@@ -442,7 +467,7 @@ async function assertTeamRole(userId: string, teamId: string, allowed: Set<TeamR
 
 async function hydrateActorAssets(actors: ActorProfile[]) {
   const assetIds = actors.flatMap((actor) => [actor.avatar_asset_id, actor.reference_sheet_asset_id].filter(Boolean) as string[]);
-  if (!assetIds.length) return actors;
+  if (!assetIds.length) return actors.map(markStructuredActor);
 
   const assets = await serviceFetch<AssetRow[]>(
     `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,public_url,asset_type,metadata`,
@@ -450,10 +475,17 @@ async function hydrateActorAssets(actors: ActorProfile[]) {
   const byId = new Map(assets.map((asset) => [asset.id, asset]));
 
   return actors.map((actor) => ({
-    ...actor,
+    ...markStructuredActor(actor),
     avatar_url: actor.avatar_asset_id ? byId.get(actor.avatar_asset_id)?.public_url || null : null,
     reference_sheet_url: actor.reference_sheet_asset_id ? byId.get(actor.reference_sheet_asset_id)?.public_url || null : null,
   }));
+}
+
+function markStructuredActor(actor: ActorProfile): ActorProfile {
+  return {
+    ...actor,
+    storage_source: actor.storage_source || "structured",
+  };
 }
 
 async function createActorAsset(params: {

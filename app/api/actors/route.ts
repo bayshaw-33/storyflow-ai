@@ -4,15 +4,15 @@ import { authenticateRequest } from "@/lib/supabase/server";
 import {
   archiveActorForUser,
   createActorForUser,
-  listActorsForUser,
+  listActorLibraryForUser,
   updateActorForUser,
 } from "@/lib/supabase/actors";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
-    const actors = await listActorsForUser(user.id);
-    return ok({ actors });
+    const library = await listActorLibraryForUser(user.id);
+    return ok(library);
   } catch (error) {
     return apiError(error, "读取演员库失败。");
   }
