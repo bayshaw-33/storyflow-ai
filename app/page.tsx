@@ -113,7 +113,7 @@ export default function LandingPage() {
       <ContentSection
         id="workflows"
         kicker={isZh ? "五大工作流" : "THE FIVE WORKFLOWS"}
-        titleZh="每种格式，每种形式，一个互联的宇宙。"
+        titleZh="每种格式，每种形式，一个互联宇宙"
         titleEn="Every Format. Every Form. One Connected Universe."
         subtitleZh={"小说 · 剧本 · 分镜 · 视频 · 歌曲\n选择任意入口开始，Universe 会把资产沉淀并联动起来。"}
         subtitleEn="Novel · Script · Storyboard · Video · Song"
@@ -158,7 +158,7 @@ export default function LandingPage() {
       <ContentSection
         id="universe"
         kicker={isZh ? "宇宙 · 核心" : "UNIVERSE · THE CORE"}
-        titleZh="一个宇宙。所有故事自动继承。"
+        titleZh="一个宇宙，所有故事自动继承"
         titleEn="One Universe. Every Story Inherits It."
         subtitleZh={"一次定义角色、世界观、时间线和正史规则——此后你创作的每部小说、剧本、分镜、视频和歌曲都自动继承它们。\n你的 IP 宇宙随项目生长，而非互相矛盾。"}
         subtitleEn="Define your characters, worlds, timelines, and canon rules once — then every novel, script, storyboard, video, and song you create inherits them automatically. Your IP universe grows with every project, not against it."
@@ -173,7 +173,7 @@ export default function LandingPage() {
       <ContentSection
         id="join"
         kicker="JOIN KIIKIS"
-        titleZh="你的宇宙，今天启航"
+        titleZh="今天进入你的宇宙"
         titleEn="Your Universe Starts Today"
         subtitleZh={"免费注册即获 3,000 创作积分，开始搭建。\n邀请一位创作者好友，每位奖励 5,000 积分（最多 3 位）。\n随时升级，解锁五大创作格式的高级工作流。"}
         subtitleEn={"Sign up free — get 3,000 creation credits to start building.\nInvite a creator friend and earn 5,000 more credits per referral (up to 3 friends).\nUpgrade anytime to unlock advanced workflows across all five creative formats."}

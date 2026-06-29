@@ -29,22 +29,28 @@ const TEAM_ADMIN_ROLES = new Set<TeamRole>(["owner", "admin"]);
 
 export async function listTeamsForUser(userId: string) {
   ensureServiceRole();
-  const memberships = await listMemberships(userId);
-  const teamIds = memberships.map((item) => item.team_id);
-  if (!teamIds.length) return [];
+  try {
+    const memberships = await listMemberships(userId);
+    const teamIds = memberships.map((item) => item.team_id);
+    if (!teamIds.length) return [];
 
-  const teams = await serviceFetch<Team[]>(
-    `/rest/v1/storyflow_teams?id=in.(${teamIds.map(encodeURIComponent).join(",")})&select=*&order=updated_at.desc`,
-  );
+    const teams = await serviceFetch<Team[]>(
+      `/rest/v1/storyflow_teams?id=in.(${teamIds.map(encodeURIComponent).join(",")})&select=*&order=updated_at.desc`,
+    );
 
-  return teams.map((team) => ({
-    ...team,
-    role: memberships.find((item) => item.team_id === team.id)?.role || "viewer",
-  }));
+    return teams.map((team) => ({
+      ...team,
+      role: memberships.find((item) => item.team_id === team.id)?.role || "viewer",
+    }));
+  } catch (error) {
+    if (isActorSchemaUnavailable(error)) return [];
+    throw error;
+  }
 }
 
 export async function createTeamForUser(userId: string, name: string) {
   ensureServiceRole();
+  await assertActorSchemaAvailable();
   const now = new Date().toISOString();
   const team: Team = {
     id: crypto.randomUUID(),
@@ -79,38 +85,53 @@ export async function createTeamForUser(userId: string, name: string) {
 
 export async function listActorsForUser(userId: string): Promise<ActorProfile[]> {
   ensureServiceRole();
-  const memberships = await listMemberships(userId);
-  const teamIds = memberships.map((item) => item.team_id);
-  const filters = [`owner_id=eq.${encodeURIComponent(userId)}`];
-  if (teamIds.length) {
-    filters.push(`and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`);
+  try {
+    const memberships = await listMemberships(userId);
+    const teamIds = memberships.map((item) => item.team_id);
+    const filters = [`owner_id=eq.${encodeURIComponent(userId)}`];
+    if (teamIds.length) {
+      filters.push(`and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`);
+    }
+
+    const actors = await serviceFetch<ActorProfile[]>(
+      `/rest/v1/storyflow_actor_profiles?or=(${filters.join(",")})&status=neq.archived&select=*&order=updated_at.desc`,
+    );
+
+    return hydrateActorAssets(actors);
+  } catch (error) {
+    if (isActorSchemaUnavailable(error)) return listFallbackActors(userId);
+    throw error;
   }
-
-  const actors = await serviceFetch<ActorProfile[]>(
-    `/rest/v1/storyflow_actor_profiles?or=(${filters.join(",")})&status=neq.archived&select=*&order=updated_at.desc`,
-  );
-
-  return hydrateActorAssets(actors);
 }
 
 export async function getActorForUser(userId: string, actorId: string) {
   ensureServiceRole();
-  const rows = await serviceFetch<ActorProfile[]>(
-    `/rest/v1/storyflow_actor_profiles?id=eq.${encodeURIComponent(actorId)}&status=neq.archived&select=*&limit=1`,
-  );
-  const actor = rows[0];
-  if (!actor) throw new Error("ACTOR_NOT_FOUND");
-  await assertCanReadActor(userId, actor);
-  return (await hydrateActorAssets([actor]))[0];
+  try {
+    const rows = await serviceFetch<ActorProfile[]>(
+      `/rest/v1/storyflow_actor_profiles?id=eq.${encodeURIComponent(actorId)}&status=neq.archived&select=*&limit=1`,
+    );
+    const actor = rows[0];
+    if (!actor) throw new Error("ACTOR_NOT_FOUND");
+    await assertCanReadActor(userId, actor);
+    return (await hydrateActorAssets([actor]))[0];
+  } catch (error) {
+    if (isActorSchemaUnavailable(error) || isNotFound(error)) return getFallbackActor(userId, actorId);
+    throw error;
+  }
 }
 
 export async function createActorForUser(userId: string, input: ActorProfileInput) {
   ensureServiceRole();
   const normalized = normalizeActorInput(input);
   if (!normalized.name) throw new Error("ACTOR_NAME_REQUIRED");
-  if (normalized.visibility === "team") {
-    if (!normalized.team_id) throw new Error("TEAM_REQUIRED");
-    await assertTeamRole(userId, normalized.team_id, TEAM_WRITE_ROLES);
+  try {
+    if (normalized.visibility === "team") {
+      if (!normalized.team_id) throw new Error("TEAM_REQUIRED");
+      await assertTeamRole(userId, normalized.team_id, TEAM_WRITE_ROLES);
+    }
+  } catch (error) {
+    if (isActorSchemaUnavailable(error)) return createFallbackActor(userId, input);
+    throw error;
   }
 
   const now = new Date().toISOString();
@@ -146,22 +167,31 @@ export async function createActorForUser(userId: string, input: ActorProfileInpu
       assetType: "actor_avatar",
       publicUrl: input.uploaded_avatar_data_url,
       metadata: { source: "uploaded_avatar" },
+    }).catch((error) => {
+      if (isActorSchemaUnavailable(error)) return null;
+      throw error;
     });
-    row.avatar_asset_id = asset.id;
+    row.avatar_asset_id = asset?.id || null;
     row.status = "ready";
   }
 
-  await serviceFetch("/rest/v1/storyflow_actor_profiles", {
-    method: "POST",
-    body: JSON.stringify(row),
-  });
+  try {
+    await serviceFetch("/rest/v1/storyflow_actor_profiles", {
+      method: "POST",
+      body: JSON.stringify(row),
+    });
 
-  return (await hydrateActorAssets([row]))[0];
+    return (await hydrateActorAssets([row]))[0];
+  } catch (error) {
+    if (isActorSchemaUnavailable(error)) return createFallbackActor(userId, input);
+    throw error;
+  }
 }
 
 export async function updateActorForUser(userId: string, actorId: string, input: ActorProfileInput) {
   ensureServiceRole();
   const actor = await getActorForUser(userId, actorId);
+  if (actor.storage_source === "project_snapshot") return updateFallbackActor(userId, actorId, input);
   await assertCanEditActor(userId, actor);
   const normalized = normalizeActorInput({ ...actor, ...input });
   if (!normalized.name) throw new Error("ACTOR_NAME_REQUIRED");
@@ -213,6 +243,7 @@ export async function updateActorForUser(userId: string, actorId: string, input:
 export async function archiveActorForUser(userId: string, actorId: string) {
   ensureServiceRole();
   const actor = await getActorForUser(userId, actorId);
+  if (actor.storage_source === "project_snapshot") return archiveFallbackActor(userId, actorId);
   await assertCanEditActor(userId, actor);
   await serviceFetch(`/rest/v1/storyflow_actor_profiles?id=eq.${encodeURIComponent(actorId)}`, {
     method: "PATCH",
@@ -224,6 +255,13 @@ export async function archiveActorForUser(userId: string, actorId: string) {
 export async function saveActorPrompt(userId: string, actorId: string | null, input: ActorProfileInput) {
   ensureServiceRole();
   const actor = actorId ? await getActorForUser(userId, actorId) : normalizeActorInput(input);
+  if (actorId && (actor as ActorProfile).storage_source === "project_snapshot") {
+    const merged = { ...actor, ...normalizeActorInput(input) };
+    const basePrompt = buildActorBasePrompt(merged);
+    const negativePrompt = buildActorNegativePrompt(merged);
+    await updateFallbackActor(userId, actorId, { ...input, base_prompt: basePrompt, negative_prompt: negativePrompt });
+    return { basePrompt, negativePrompt };
+  }
   if (actorId) await assertCanEditActor(userId, actor as ActorProfile);
   const merged = { ...actor, ...normalizeActorInput(input) };
   const basePrompt = buildActorBasePrompt(merged);
@@ -254,6 +292,28 @@ export async function saveGeneratedActorImage(params: {
 }) {
   ensureServiceRole();
   const actor = await getActorForUser(params.userId, params.actorId);
+  if (actor.storage_source === "project_snapshot") {
+    const actorPatch: Partial<ActorProfile> = {
+      status: "ready",
+      updated_at: new Date().toISOString(),
+    };
+    if (params.assetType === "actor_avatar") actorPatch.avatar_url = params.imageUrl;
+    if (params.assetType === "actor_reference_sheet") actorPatch.reference_sheet_url = params.imageUrl;
+    const updated = await updateFallbackActor(params.userId, params.actorId, actorPatch as ActorProfileInput);
+    return {
+      asset: {
+        id: crypto.randomUUID(),
+        user_id: params.userId,
+        project_id: null,
+        asset_type: params.assetType,
+        public_url: params.imageUrl,
+        storage_path: null,
+        metadata: { prompt: params.prompt, provider: params.provider, model: params.model, fallback: true },
+        created_at: new Date().toISOString(),
+      },
+      actor: updated,
+    };
+  }
   await assertCanEditActor(params.userId, actor);
   const asset = await createActorAsset({
     userId: params.userId,
@@ -420,10 +480,20 @@ async function createActorAsset(params: {
     created_at: now,
   };
 
-  await serviceFetch("/rest/v1/storyflow_assets", {
-    method: "POST",
-    body: JSON.stringify(asset),
-  });
+  try {
+    await serviceFetch("/rest/v1/storyflow_assets", {
+      method: "POST",
+      body: JSON.stringify(asset),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!message.includes("team_id") && !message.includes("PGRST204") && !message.includes("42703")) throw error;
+    const { team_id: _teamId, ...legacyAsset } = asset;
+    await serviceFetch("/rest/v1/storyflow_assets", {
+      method: "POST",
+      body: JSON.stringify(legacyAsset),
+    });
+  }
 
   return asset;
 }
@@ -476,6 +546,187 @@ async function recordVisualGeneration(params: {
       created_at: now,
     }),
   });
+}
+
+type ActorLibrarySnapshot = {
+  actors?: ActorProfile[];
+};
+
+type ActorLibraryProjectRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  workflow_type: string;
+  project_group: string;
+  status: string;
+  data: ActorLibrarySnapshot;
+  created_at?: string;
+  updated_at?: string;
+};
+
+async function listFallbackActors(userId: string) {
+  const snapshot = await readFallbackActorLibrary(userId);
+  return (snapshot.actors || [])
+    .filter((actor) => actor.status !== "archived")
+    .map(markFallbackActor)
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
+
+async function getFallbackActor(userId: string, actorId: string) {
+  const actor = (await listFallbackActors(userId)).find((item) => item.id === actorId);
+  if (!actor) throw new Error("ACTOR_NOT_FOUND");
+  return actor;
+}
+
+async function createFallbackActor(userId: string, input: ActorProfileInput) {
+  const normalized = normalizeActorInput({ ...input, visibility: "private", team_id: null });
+  if (!normalized.name) throw new Error("ACTOR_NAME_REQUIRED");
+  const snapshot = await readFallbackActorLibrary(userId);
+  const now = new Date().toISOString();
+  const actor = markFallbackActor({
+    id: crypto.randomUUID(),
+    owner_id: userId,
+    team_id: null,
+    visibility: "private",
+    name: normalized.name,
+    bio: normalized.bio,
+    age_range: normalized.age_range,
+    gender_expression: normalized.gender_expression,
+    ethnicity_style: normalized.ethnicity_style,
+    face_description: normalized.face_description,
+    hair_description: normalized.hair_description,
+    body_description: normalized.body_description,
+    temperament: normalized.temperament,
+    playable_roles: normalized.playable_roles,
+    base_prompt: normalized.base_prompt || buildActorBasePrompt(normalized),
+    negative_prompt: normalized.negative_prompt || buildActorNegativePrompt(normalized),
+    avatar_asset_id: null,
+    reference_sheet_asset_id: null,
+    avatar_url: input.uploaded_avatar_data_url?.startsWith("data:image/") ? input.uploaded_avatar_data_url : null,
+    reference_sheet_url: null,
+    status: input.uploaded_avatar_data_url?.startsWith("data:image/") ? "ready" : "draft",
+    created_at: now,
+    updated_at: now,
+  });
+
+  await writeFallbackActorLibrary(userId, {
+    actors: [actor, ...(snapshot.actors || []).filter((item) => item.id !== actor.id)],
+  });
+
+  return actor;
+}
+
+async function updateFallbackActor(userId: string, actorId: string, input: ActorProfileInput) {
+  const snapshot = await readFallbackActorLibrary(userId);
+  const actors = snapshot.actors || [];
+  const current = actors.find((item) => item.id === actorId);
+  if (!current) throw new Error("ACTOR_NOT_FOUND");
+
+  const normalized = normalizeActorInput({ ...current, ...input, visibility: "private", team_id: null });
+  const raw = input as Partial<ActorProfile>;
+  const updated = markFallbackActor({
+    ...current,
+    team_id: null,
+    visibility: "private",
+    name: normalized.name || current.name,
+    bio: normalized.bio,
+    age_range: normalized.age_range,
+    gender_expression: normalized.gender_expression,
+    ethnicity_style: normalized.ethnicity_style,
+    face_description: normalized.face_description,
+    hair_description: normalized.hair_description,
+    body_description: normalized.body_description,
+    temperament: normalized.temperament,
+    playable_roles: normalized.playable_roles,
+    base_prompt: normalized.base_prompt || current.base_prompt,
+    negative_prompt: normalized.negative_prompt || current.negative_prompt,
+    avatar_url: raw.avatar_url || (input.uploaded_avatar_data_url?.startsWith("data:image/") ? input.uploaded_avatar_data_url : current.avatar_url),
+    reference_sheet_url: raw.reference_sheet_url || current.reference_sheet_url,
+    status: raw.status || current.status,
+    updated_at: new Date().toISOString(),
+  });
+
+  await writeFallbackActorLibrary(userId, {
+    actors: actors.map((actor) => (actor.id === actorId ? updated : actor)),
+  });
+
+  return updated;
+}
+
+async function archiveFallbackActor(userId: string, actorId: string) {
+  const actor = await updateFallbackActor(userId, actorId, { status: "archived" } as ActorProfileInput);
+  return { id: actor.id, status: actor.status };
+}
+
+async function readFallbackActorLibrary(userId: string): Promise<ActorLibrarySnapshot> {
+  const rows = await serviceFetch<ActorLibraryProjectRow[]>(
+    `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(fallbackActorProjectId(userId))}&user_id=eq.${encodeURIComponent(userId)}&select=id,user_id,title,workflow_type,project_group,status,data&limit=1`,
+  );
+  return rows[0]?.data || { actors: [] };
+}
+
+async function writeFallbackActorLibrary(userId: string, snapshot: ActorLibrarySnapshot) {
+  const now = new Date().toISOString();
+  const row: ActorLibraryProjectRow = {
+    id: fallbackActorProjectId(userId),
+    user_id: userId,
+    title: "Actor Library",
+    workflow_type: "actor_library",
+    project_group: "系统资产",
+    status: "ready",
+    data: {
+      actors: (snapshot.actors || []).map((actor) => markFallbackActor(actor)),
+    },
+    updated_at: now,
+  };
+
+  await serviceFetch("/rest/v1/storyflow_projects?on_conflict=id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify(row),
+  });
+}
+
+function fallbackActorProjectId(userId: string) {
+  return `actor-library:${userId}`;
+}
+
+function markFallbackActor(actor: ActorProfile): ActorProfile {
+  return {
+    ...actor,
+    team_id: null,
+    visibility: "private",
+    storage_source: "project_snapshot",
+  };
+}
+
+async function assertActorSchemaAvailable() {
+  try {
+    await serviceFetch("/rest/v1/storyflow_actor_profiles?select=id&limit=1");
+  } catch (error) {
+    if (isActorSchemaUnavailable(error)) throw new Error("ACTOR_SCHEMA_UNAVAILABLE");
+    throw error;
+  }
+}
+
+function isActorSchemaUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return (
+    message.includes("storyflow_actor_profiles") ||
+    message.includes("storyflow_team_members") ||
+    message.includes("storyflow_teams") ||
+    message.includes("storyflow_character_appearance_variants") ||
+    message.includes("Could not find") ||
+    message.includes("PGRST205") ||
+    message.includes("PGRST204") ||
+    message.includes("42P01") ||
+    message.includes("42703") ||
+    message.includes("ACTOR_SCHEMA_UNAVAILABLE")
+  );
+}
+
+function isNotFound(error: unknown) {
+  return error instanceof Error && error.message === "ACTOR_NOT_FOUND";
 }
 
 function ensureServiceRole() {

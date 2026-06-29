@@ -46,6 +46,7 @@ export type ActorProfile = {
   updated_at: string;
   avatar_url?: string | null;
   reference_sheet_url?: string | null;
+  storage_source?: "structured" | "project_snapshot";
 };
 
 export type ActorProfileInput = {

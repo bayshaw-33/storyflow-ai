@@ -27,7 +27,7 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
           {isZh ? (
             <>
               <span className="hero-line">每一个宇宙，</span>
-              <span className="hero-line">都始于一个念头。</span>
+              <span className="hero-line">都始于一个念头 ×</span>
             </>
           ) : (
             <>
@@ -38,7 +38,7 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
         </h1>
         <p>
           {isZh
-            ? "写小说。构剧本。画分镜。剪视频。作曲子。都在一个宇宙里——由你来建造。"
+            ? "写小说 × 构剧本 × 画分镜 × 剪视频 × 作曲子。都在一个宇宙里，由你来建造。"
             : "Write the novel. Shape the script. Frame the storyboard. Cut the video. Compose the song. All in one Universe — yours to build."}
         </p>
         <div className="hero-actions">
