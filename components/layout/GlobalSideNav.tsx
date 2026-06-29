@@ -14,6 +14,7 @@ export function GlobalSideNav() {
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>{t("nav.home")}</Link>
         <Link href="/dashboard" aria-current={pathname === "/dashboard" ? "page" : undefined}>{t("nav.dashboard")}</Link>
         <Link href="/universes" aria-current={pathname === "/universes" ? "page" : undefined}>{t("nav.universe")}</Link>
+        <Link href="/actors" aria-current={pathname === "/actors" ? "page" : undefined}>{t("nav.actors")}</Link>
         <Link href="/subscription" aria-current={pathname === "/subscription" ? "page" : undefined}>{t("nav.pricing")}</Link>
       </nav>
       <div className="kk-nav-settings-corner">
