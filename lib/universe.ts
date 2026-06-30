@@ -19,6 +19,7 @@ export type UniverseProjectRole = "main_season" | "spin_off" | "prequel" | "adap
 export type Universe = {
   id: string;
   user_id?: string | null;
+  team_id?: string | null;
   name: string;
   description: string;
   genre: string;
@@ -310,6 +311,7 @@ export async function getUniverseBundle(universeId: string, options: SupabaseOpt
 export async function createUniverseFromProject(params: {
   project: DramaProject;
   form: Pick<Universe, "name" | "description" | "genre" | "default_language" | "target_markets" | "tone">;
+  teamId?: string | null;
   accessToken?: string | null;
 }) {
   const now = new Date().toISOString();
@@ -317,6 +319,7 @@ export async function createUniverseFromProject(params: {
   const universe: Universe = {
     id: createId(),
     user_id: userId || null,
+    team_id: params.teamId || null,
     name: params.form.name.trim() || `${params.project.title} Universe`,
     description: params.form.description.trim(),
     genre: params.form.genre || params.project.genre,
@@ -325,7 +328,7 @@ export async function createUniverseFromProject(params: {
     tone: params.form.tone || "",
     status: "active",
     access_level: "studio_annual",
-    metadata: { source: "project_upgrade" },
+    metadata: { source: "project_upgrade", sharing: params.teamId ? "team" : "private" },
     created_at: now,
     updated_at: now,
   };

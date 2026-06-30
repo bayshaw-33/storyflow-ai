@@ -650,9 +650,11 @@ export default function StoryboardWorkbenchPage() {
         <div className="studio-flow-row" aria-label="workflow">
           <span>{isZh ? "剧本" : "Script"}</span>
           <ArrowRight size={14} />
-          <span>{isZh ? "场景" : "Scenes"}</span>
+          <span>{isZh ? "美术设计" : "Art design"}</span>
           <ArrowRight size={14} />
-          <span>{isZh ? "镜头" : "Shots"}</span>
+          <span>{isZh ? "角色/场景" : "Cast/Scenes"}</span>
+          <ArrowRight size={14} />
+          <span>{isZh ? "分镜" : "Shots"}</span>
           <ArrowRight size={14} />
           <span>{isZh ? "视频" : "Video"}</span>
         </div>
@@ -699,6 +701,23 @@ export default function StoryboardWorkbenchPage() {
               onChange={(event) => updateState("visualStyle", event.target.value)}
             />
           </label>
+          <div className="studio-art-pack" aria-label={isZh ? "美术设计包" : "Art design pack"}>
+            <article>
+              <span>01</span>
+              <strong>{isZh ? "确定画风" : "Lock style"}</strong>
+              <p>{state.visualStyle || (isZh ? "先确认整体视觉基调。" : "Define the visual tone first.")}</p>
+            </article>
+            <article>
+              <span>02</span>
+              <strong>{isZh ? "角色形象" : "Character looks"}</strong>
+              <p>{isZh ? "角色三视图和参考表确认后，再进入分镜。" : "Confirm three-views and reference sheets before shots."}</p>
+            </article>
+            <article>
+              <span>03</span>
+              <strong>{isZh ? "场景图" : "Scene images"}</strong>
+              <p>{isZh ? "关键空间和光线氛围先沉淀为场景资产。" : "Key spaces and lighting become scene assets first."}</p>
+            </article>
+          </div>
           <label className="studio-field">
             {isZh ? "画幅" : "Aspect ratio"}
             <select value={state.aspectRatio} onChange={(event) => updateState("aspectRatio", event.target.value as StoryboardState["aspectRatio"])}>

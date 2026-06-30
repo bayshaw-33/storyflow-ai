@@ -401,6 +401,7 @@ export default function UniverseDetailPage() {
               <span>{bundle.universe.default_language}</span>
               <span>{bundle.universe.target_markets.join(", ") || "Markets TBD"}</span>
               <span>{bundle.universe.access_level}</span>
+              <span>{bundle.universe.team_id ? "Team shared" : "Private"}</span>
             </div>
           </article>
           <article className="universe-panel">

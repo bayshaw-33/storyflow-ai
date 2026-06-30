@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMiniMaxApiKey } from "@/lib/ai/providers/minimax";
+import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
 import { authenticateRequest } from "@/lib/supabase/server";
 
 type MiniMaxVideoRequest = {
@@ -12,6 +13,11 @@ type MiniMaxVideoRequest = {
 };
 
 type MiniMaxVideoStatus = "draft" | "queued" | "running" | "done" | "error";
+type MiniMaxVideoConfig = {
+  apiKey: string;
+  model?: string;
+  baseUrl?: string;
+};
 
 export async function POST(request: Request) {
   let body: MiniMaxVideoRequest;
@@ -22,8 +28,16 @@ export async function POST(request: Request) {
     return failure("请求格式不正确，请提交 JSON。", 400);
   }
 
+  let minimaxConfig: MiniMaxVideoConfig;
+
   try {
-    await authenticateRequest(request);
+    const user = await authenticateRequest(request);
+    const savedConfig = await resolveSavedApiConfig(user.id, "minimax").catch(() => null);
+    minimaxConfig = {
+      apiKey: savedConfig?.minimaxApiKey || getMiniMaxApiKey(),
+      model: savedConfig?.minimaxModel,
+      baseUrl: savedConfig?.minimaxBaseUrl,
+    };
   } catch {
     return failure("请先登录后再调用 MiniMax 视频生成。", 401);
   }
@@ -33,16 +47,17 @@ export async function POST(request: Request) {
       if (!body.prompt?.trim()) return failure("缺少视频 prompt。", 400);
       const result = await createVideoTask({
         prompt: body.prompt.trim(),
-        model: body.model?.trim() || process.env.MINIMAX_VIDEO_MODEL || "MiniMax-Hailuo-02",
+        model: body.model?.trim() || minimaxConfig.model || process.env.MINIMAX_VIDEO_MODEL || "MiniMax-Hailuo-02",
         duration: Number.parseInt(body.duration || "5", 10) || 5,
         resolution: body.resolution?.trim() || "768P",
+        config: minimaxConfig,
       });
       return NextResponse.json({ success: true, ...result });
     }
 
     if (body.action === "status") {
       if (!body.taskId?.trim()) return failure("缺少 taskId。", 400);
-      const result = await queryVideoTask(body.taskId.trim());
+      const result = await queryVideoTask(body.taskId.trim(), minimaxConfig);
       return NextResponse.json({ success: true, ...result });
     }
 
@@ -57,13 +72,15 @@ async function createVideoTask({
   model,
   duration,
   resolution,
+  config,
 }: {
   prompt: string;
   model: string;
   duration: number;
   resolution: string;
+  config: MiniMaxVideoConfig;
 }) {
-  const data = await miniMaxFetch(getVideoGenerationUrl(), {
+  const data = await miniMaxFetch(getVideoGenerationUrl(config), {
     method: "POST",
     body: JSON.stringify({
       model,
@@ -72,7 +89,7 @@ async function createVideoTask({
       resolution,
       prompt_optimizer: true,
     }),
-  });
+  }, config);
 
   const taskId = getString(data, ["task_id", "taskId", "data.task_id", "data.taskId"]);
   if (!taskId) throw new Error("EMPTY_MINIMAX_VIDEO_TASK_ID");
@@ -80,26 +97,26 @@ async function createVideoTask({
   return { taskId, status: "queued" as MiniMaxVideoStatus, model };
 }
 
-async function queryVideoTask(taskId: string) {
-  const queryUrl = new URL(getVideoQueryUrl());
+async function queryVideoTask(taskId: string, config: MiniMaxVideoConfig) {
+  const queryUrl = new URL(getVideoQueryUrl(config));
   queryUrl.searchParams.set("task_id", taskId);
-  const data = await miniMaxFetch(queryUrl.toString(), { method: "GET" });
+  const data = await miniMaxFetch(queryUrl.toString(), { method: "GET" }, config);
   const rawStatus = getString(data, ["status", "task_status", "data.status", "data.task_status"]);
   const status = normalizeStatus(rawStatus);
   const fileId = getString(data, ["file_id", "fileId", "data.file_id", "data.fileId"]);
 
   if (status === "done" && fileId) {
-    const videoUrl = await retrieveVideoUrl(fileId);
+    const videoUrl = await retrieveVideoUrl(fileId, config);
     return { taskId, status, fileId, videoUrl };
   }
 
   return { taskId, status, fileId };
 }
 
-async function retrieveVideoUrl(fileId: string) {
-  const retrieveUrl = new URL(getFileRetrieveUrl());
+async function retrieveVideoUrl(fileId: string, config: MiniMaxVideoConfig) {
+  const retrieveUrl = new URL(getFileRetrieveUrl(config));
   retrieveUrl.searchParams.set("file_id", fileId);
-  const data = await miniMaxFetch(retrieveUrl.toString(), { method: "GET" });
+  const data = await miniMaxFetch(retrieveUrl.toString(), { method: "GET" }, config);
   const videoUrl = getString(data, [
     "download_url",
     "downloadUrl",
@@ -114,8 +131,8 @@ async function retrieveVideoUrl(fileId: string) {
   return videoUrl;
 }
 
-async function miniMaxFetch(url: string, init: RequestInit) {
-  const apiKey = getMiniMaxApiKey();
+async function miniMaxFetch(url: string, init: RequestInit, config: MiniMaxVideoConfig) {
+  const apiKey = config.apiKey;
   if (!apiKey) throw new Error("MISSING_MINIMAX_API_KEY");
 
   const controller = new AbortController();
@@ -147,22 +164,23 @@ async function miniMaxFetch(url: string, init: RequestInit) {
   return response.json();
 }
 
-function getMiniMaxBaseUrl() {
-  const apiKey = getMiniMaxApiKey();
+function getMiniMaxBaseUrl(config: MiniMaxVideoConfig) {
+  const apiKey = config.apiKey;
+  if (config.baseUrl) return config.baseUrl.replace(/\/$/, "");
   if (process.env.MINIMAX_VIDEO_API_BASE_URL) return process.env.MINIMAX_VIDEO_API_BASE_URL.replace(/\/$/, "");
   return apiKey.startsWith("sk-cp-") ? "https://api.minimaxi.com/v1" : "https://api.minimax.io/v1";
 }
 
-function getVideoGenerationUrl() {
-  return process.env.MINIMAX_VIDEO_GENERATION_URL || `${getMiniMaxBaseUrl()}/video_generation`;
+function getVideoGenerationUrl(config: MiniMaxVideoConfig) {
+  return process.env.MINIMAX_VIDEO_GENERATION_URL || `${getMiniMaxBaseUrl(config)}/video_generation`;
 }
 
-function getVideoQueryUrl() {
-  return process.env.MINIMAX_VIDEO_QUERY_URL || `${getMiniMaxBaseUrl()}/query/video_generation`;
+function getVideoQueryUrl(config: MiniMaxVideoConfig) {
+  return process.env.MINIMAX_VIDEO_QUERY_URL || `${getMiniMaxBaseUrl(config)}/query/video_generation`;
 }
 
-function getFileRetrieveUrl() {
-  return process.env.MINIMAX_FILE_RETRIEVE_URL || `${getMiniMaxBaseUrl()}/files/retrieve`;
+function getFileRetrieveUrl(config: MiniMaxVideoConfig) {
+  return process.env.MINIMAX_FILE_RETRIEVE_URL || `${getMiniMaxBaseUrl(config)}/files/retrieve`;
 }
 
 function normalizeStatus(status: string): MiniMaxVideoStatus {

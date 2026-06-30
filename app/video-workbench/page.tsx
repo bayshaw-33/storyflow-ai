@@ -629,7 +629,9 @@ export default function VideoWorkbenchPage() {
           <h1>{isZh ? "分镜到 MiniMax 视频" : "Storyboard to MiniMax video"}</h1>
         </div>
         <div className="studio-flow-row">
-          <span>{isZh ? "Shots" : "Shots"}</span>
+          <span>{isZh ? "导入分镜" : "Import storyboard"}</span>
+          <span>{isZh ? "镜头队列" : "Shot queue"}</span>
+          <span>{isZh ? "生成预览" : "Preview"}</span>
           <span>{state.model}</span>
           <span>{completedCount}/{state.shots.length}</span>
         </div>
@@ -638,12 +640,20 @@ export default function VideoWorkbenchPage() {
       {importedCount > 0 ? (
         <section className="dashboard-panel simple-continuity-banner">
           <div>
-            <strong>{isZh ? "已从分镜工作台导入本地草稿" : "Imported from Storyboard local draft"}</strong>
+            <strong>{isZh ? "继续自分镜工作台" : "Continue from Storyboard"}</strong>
             <span>{isZh ? "镜头已自动进入视频队列，可逐条修改 prompt 后生成。" : "Shots are ready in the video queue. Edit prompts before generation."}</span>
           </div>
           <span className="simple-count-pill">{importedCount} shots</span>
         </section>
-      ) : null}
+      ) : (
+        <section className="dashboard-panel simple-continuity-banner muted">
+          <div>
+            <strong>{isZh ? "可从分镜工作台导入" : "Ready for storyboard import"}</strong>
+            <span>{isZh ? "上传分镜 JSON 或从分镜工作台发送后，镜头会进入队列。" : "Upload storyboard JSON or send from Storyboard Workbench to populate the queue."}</span>
+          </div>
+          <span className="simple-count-pill">{state.shots.length} shots</span>
+        </section>
+      )}
 
       {error ? <section className="dashboard-panel studio-error">{error}</section> : null}
 

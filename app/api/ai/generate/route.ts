@@ -3,6 +3,7 @@ import { generateAIContent, isTaskType, type GenerateFailure } from "@/lib/ai/ge
 import { getProviderStatus } from "@/lib/ai/providers";
 import type { ByoApiConfig, GeneratePayload } from "@/lib/ai/prompts";
 import { getPlanEntitlement } from "@/lib/billing/plans";
+import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
 import {
   authenticateRequest,
   completeGenerationTask,
@@ -128,7 +129,9 @@ function stripByoApi(payload: GeneratePayload): GeneratePayload {
 }
 
 async function resolveByoApi(config: ByoApiConfig | undefined, userId: string): Promise<ByoApiConfig | null> {
-  if (!config) return null;
+  if (!config) {
+    return resolveSavedApiConfig(userId).catch(() => null);
+  }
 
   const cleanConfig: ByoApiConfig = {
     provider: config.provider || "auto",
@@ -140,7 +143,7 @@ async function resolveByoApi(config: ByoApiConfig | undefined, userId: string): 
   };
 
   const hasKey = Boolean(cleanConfig.deepseekApiKey || cleanConfig.minimaxApiKey);
-  if (!hasKey) return null;
+  if (!hasKey) return resolveSavedApiConfig(userId, cleanConfig.provider).catch(() => null);
 
   const rows = await serviceFetch<Array<{ plan: string | null }>>(
     `/rest/v1/storyflow_profiles?user_id=eq.${encodeURIComponent(userId)}&select=plan&limit=1`,

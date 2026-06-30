@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { AuthModal } from "@/components/layout/AuthModal";
+import type { TeamRole } from "@/lib/actors";
 import { DEFAULT_PLAN_ID, getPlanEntitlement, type PlanId } from "@/lib/billing/plans";
 import { STORAGE_KEY } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -38,6 +39,25 @@ type ByoApiSettings = {
   minimaxApiKey: string;
   minimaxModel: string;
   minimaxBaseUrl: string;
+};
+
+type ApiConnectionSummary = {
+  id: string;
+  team_id?: string | null;
+  scope: "personal" | "team";
+  provider: "deepseek" | "minimax";
+  model?: string | null;
+  base_url?: string | null;
+  label: string;
+  status: "active" | "disabled";
+  key_hint: string;
+  updated_at: string;
+};
+
+type TeamOption = {
+  id: string;
+  name: string;
+  role?: TeamRole;
 };
 
 const EMPTY_BYO_API: ByoApiSettings = {
@@ -84,7 +104,7 @@ const copy = {
     upgrade: "Change plan",
     notConnected: "Not connected",
     apiKeys: "API Keys",
-    apiKeysHint: "For Pro and Ultra. Keys are stored on this device and sent only with AI generation requests.",
+    apiKeysHint: "Connect personal or team provider keys. Team keys can be shared by studio members.",
     apiProvider: "Provider routing",
     apiProviderAuto: "Auto",
     apiProviderDeepSeek: "DeepSeek",
@@ -97,9 +117,18 @@ const copy = {
     optional: "Optional",
     saveApiKeys: "Save API keys",
     clearApiKeys: "Clear keys",
-    apiKeysSaved: "API keys saved on this device.",
+    apiKeysSaved: "API connection saved.",
     apiKeysCleared: "API keys cleared.",
     apiKeysLocked: "Upgrade to Pro or Ultra to use BYO API.",
+    apiScope: "Scope",
+    apiScopePersonal: "Personal",
+    apiScopeTeam: "Team shared",
+    apiTeam: "Team",
+    apiLabel: "Label",
+    apiKey: "API Key",
+    apiConnections: "Saved connections",
+    noApiConnections: "No cloud API connections yet.",
+    deleteConnection: "Disable",
   },
   "zh-CN": {
     kicker: "设置",
@@ -135,7 +164,7 @@ const copy = {
     upgrade: "更换套餐",
     notConnected: "未连接",
     apiKeys: "API Keys",
-    apiKeysHint: "Pro 和 Ultra 可用。Key 只保存在当前设备，并仅在 AI 生成请求中发送。",
+    apiKeysHint: "可接入个人或团队供应商 Key。团队 Key 可供同团队工作室成员共用。",
     apiProvider: "供应商路由",
     apiProviderAuto: "自动",
     apiProviderDeepSeek: "DeepSeek",
@@ -148,9 +177,18 @@ const copy = {
     optional: "可选",
     saveApiKeys: "保存 API Key",
     clearApiKeys: "清除 Key",
-    apiKeysSaved: "API Key 已保存在当前设备。",
+    apiKeysSaved: "API 连接已保存。",
     apiKeysCleared: "API Key 已清除。",
     apiKeysLocked: "升级到 Pro 或 Ultra 后可使用自接 API。",
+    apiScope: "范围",
+    apiScopePersonal: "个人",
+    apiScopeTeam: "团队共享",
+    apiTeam: "团队",
+    apiLabel: "连接名称",
+    apiKey: "API Key",
+    apiConnections: "已保存连接",
+    noApiConnections: "暂无云端 API 连接。",
+    deleteConnection: "停用",
   },
 };
 
@@ -190,6 +228,11 @@ export default function SettingsPage() {
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [reloadKey, setReloadKey] = useState(0);
   const [byoApi, setByoApi] = useState<ByoApiSettings>(EMPTY_BYO_API);
+  const [apiScope, setApiScope] = useState<"personal" | "team">("personal");
+  const [apiTeamId, setApiTeamId] = useState("");
+  const [apiLabel, setApiLabel] = useState("");
+  const [apiConnections, setApiConnections] = useState<ApiConnectionSummary[]>([]);
+  const [teams, setTeams] = useState<TeamOption[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,6 +290,24 @@ export default function SettingsPage() {
         if (!cancelled) setCredits(null);
       }
 
+      try {
+        const [connectionsResponse, teamsResponse] = await Promise.all([
+          fetch("/api/api-connections", { headers: { Authorization: `Bearer ${nextSession.access_token}` } }),
+          fetch("/api/teams", { headers: { Authorization: `Bearer ${nextSession.access_token}` } }),
+        ]);
+        const connectionsPayload = await connectionsResponse.json().catch(() => null);
+        const teamsPayload = await teamsResponse.json().catch(() => null);
+        if (!cancelled) {
+          setApiConnections(Array.isArray(connectionsPayload?.connections) ? connectionsPayload.connections : []);
+          setTeams(Array.isArray(teamsPayload?.teams) ? teamsPayload.teams : []);
+        }
+      } catch {
+        if (!cancelled) {
+          setApiConnections([]);
+          setTeams([]);
+        }
+      }
+
       if (!cancelled) setLoading(false);
     }
 
@@ -258,7 +319,7 @@ export default function SettingsPage() {
 
   const planId = normalizePlan(profile?.plan);
   const plan = useMemo(() => getPlanEntitlement(planId), [planId]);
-  const canUseByoApi = Boolean(session && plan.features.byoApi);
+  const canUseByoApi = Boolean(session);
   const email = profile?.email || session?.user.email || "-";
   const registeredAt = formatDate(profile?.created_at, locale);
   const updatedAt = formatDate(profile?.updated_at, locale);
@@ -360,27 +421,79 @@ export default function SettingsPage() {
     }
   }
 
-  function saveApiKeys() {
-    if (!canUseByoApi) {
+  async function saveApiKeys() {
+    if (!canUseByoApi || !session) {
       setMessage({ tone: "error", text: text.apiKeysLocked });
       return;
     }
 
-    localStorage.setItem(BYO_API_STORAGE_KEY, JSON.stringify({
-      provider: byoApi.provider,
-      deepseekApiKey: byoApi.deepseekApiKey.trim(),
-      deepseekModel: byoApi.deepseekModel.trim(),
-      minimaxApiKey: byoApi.minimaxApiKey.trim(),
-      minimaxModel: byoApi.minimaxModel.trim(),
-      minimaxBaseUrl: byoApi.minimaxBaseUrl.trim(),
-    }));
-    setMessage({ tone: "success", text: text.apiKeysSaved });
+    const provider = byoApi.provider === "minimax" ? "minimax" : "deepseek";
+    const apiKey = provider === "deepseek" ? byoApi.deepseekApiKey.trim() : byoApi.minimaxApiKey.trim();
+    if (!apiKey) {
+      setMessage({ tone: "error", text: provider === "deepseek" ? text.deepseekKey : text.minimaxKey });
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/api-connections", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          scope: apiScope,
+          team_id: apiScope === "team" ? apiTeamId : null,
+          provider,
+          api_key: apiKey,
+          model: provider === "deepseek" ? byoApi.deepseekModel.trim() : byoApi.minimaxModel.trim(),
+          base_url: provider === "minimax" ? byoApi.minimaxBaseUrl.trim() : "",
+          label: apiLabel.trim(),
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "save failed");
+
+      localStorage.setItem(BYO_API_STORAGE_KEY, JSON.stringify({
+        provider: byoApi.provider,
+        deepseekApiKey: byoApi.deepseekApiKey.trim(),
+        deepseekModel: byoApi.deepseekModel.trim(),
+        minimaxApiKey: byoApi.minimaxApiKey.trim(),
+        minimaxModel: byoApi.minimaxModel.trim(),
+        minimaxBaseUrl: byoApi.minimaxBaseUrl.trim(),
+      }));
+      setApiConnections((current) => [payload.connection, ...current.filter((item) => item.id !== payload.connection.id)]);
+      setApiLabel("");
+      setMessage({ tone: "success", text: text.apiKeysSaved });
+    } catch {
+      setMessage({ tone: "error", text: text.saveFailed });
+    }
   }
 
   function clearApiKeys() {
     localStorage.removeItem(BYO_API_STORAGE_KEY);
     setByoApi(EMPTY_BYO_API);
     setMessage({ tone: "success", text: text.apiKeysCleared });
+  }
+
+  async function disableApiConnection(id: string) {
+    if (!session) return;
+    try {
+      const response = await fetch("/api/api-connections", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) throw new Error("disable failed");
+      setApiConnections((current) => current.filter((item) => item.id !== id));
+      setMessage({ tone: "success", text: text.apiKeysCleared });
+    } catch {
+      setMessage({ tone: "error", text: text.saveFailed });
+    }
   }
 
   return (
@@ -488,6 +601,43 @@ export default function SettingsPage() {
           <span>{text.apiKeys}</span>
           <p className="field-note">{canUseByoApi ? text.apiKeysHint : text.apiKeysLocked}</p>
           <label>
+            {text.apiScope}
+            <select
+              value={apiScope}
+              disabled={!canUseByoApi}
+              onChange={(event) => setApiScope(event.target.value === "team" ? "team" : "personal")}
+            >
+              <option value="personal">{text.apiScopePersonal}</option>
+              <option value="team">{text.apiScopeTeam}</option>
+            </select>
+          </label>
+          {apiScope === "team" ? (
+            <label>
+              {text.apiTeam}
+              <select
+                value={apiTeamId}
+                disabled={!canUseByoApi}
+                onChange={(event) => setApiTeamId(event.target.value)}
+              >
+                <option value="">{text.apiTeam}</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name} {team.role ? `(${team.role})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label>
+            {text.apiLabel} <small>{text.optional}</small>
+            <input
+              value={apiLabel}
+              disabled={!canUseByoApi}
+              placeholder={byoApi.provider === "minimax" ? "Studio MiniMax" : "Studio DeepSeek"}
+              onChange={(event) => setApiLabel(event.target.value)}
+            />
+          </label>
+          <label>
             {text.apiProvider}
             <select
               value={byoApi.provider}
@@ -554,6 +704,22 @@ export default function SettingsPage() {
             <button className="secondary-button" type="button" onClick={clearApiKeys}>
               {text.clearApiKeys}
             </button>
+          </div>
+          <div className="api-connection-list">
+            <strong>{text.apiConnections}</strong>
+            {apiConnections.length === 0 ? <p className="field-note">{text.noApiConnections}</p> : null}
+            {apiConnections.map((connection) => (
+              <article key={connection.id}>
+                <div>
+                  <span>{connection.scope === "team" ? text.apiScopeTeam : text.apiScopePersonal}</span>
+                  <strong>{connection.label || connection.provider}</strong>
+                  <small>{connection.provider} · {connection.model || text.optional} · {connection.key_hint}</small>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => disableApiConnection(connection.id)}>
+                  {text.deleteConnection}
+                </button>
+              </article>
+            ))}
           </div>
         </article>
 

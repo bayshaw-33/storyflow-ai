@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
+import type { TeamRole } from "@/lib/actors";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import {
   createUniverseFromProject,
@@ -21,12 +22,19 @@ import { useI18n } from "@/lib/i18n/useI18n";
 
 type CreateForm = {
   projectId: string;
+  teamId: string;
   name: string;
   description: string;
   genre: string;
   default_language: string;
   target_markets: string;
   tone: string;
+};
+
+type TeamOption = {
+  id: string;
+  name: string;
+  role?: TeamRole;
 };
 
 type UniverseSummary = {
@@ -46,6 +54,7 @@ type UniverseSummary = {
 
 const EMPTY_FORM: CreateForm = {
   projectId: "",
+  teamId: "",
   name: "",
   description: "",
   genre: "",
@@ -64,6 +73,7 @@ export default function UniversesPage() {
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [universeSummaries, setUniverseSummaries] = useState<Record<string, UniverseSummary>>({});
   const [projects, setProjects] = useState<DramaProject[]>([]);
+  const [teams, setTeams] = useState<TeamOption[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
@@ -83,6 +93,15 @@ export default function UniversesPage() {
           listUniverses({ accessToken }),
           accessToken ? readProjectsFromSupabase({ accessToken }).catch(() => []) : Promise.resolve([]),
         ]);
+        if (accessToken) {
+          const teamResponse = await fetch("/api/teams", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }).catch(() => null);
+          const teamPayload = teamResponse?.ok ? await teamResponse.json().catch(() => null) : null;
+          setTeams(Array.isArray(teamPayload?.teams) ? teamPayload.teams : []);
+        } else {
+          setTeams([]);
+        }
         setUniverses(rows);
         setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
 
@@ -96,6 +115,7 @@ export default function UniversesPage() {
       } catch (loadIssue) {
         setLoadError(loadIssue instanceof Error ? loadIssue.message : "Universe load failed.");
         setProjects(getUniverseSourceProjects(readProjectsFromStorage()));
+        setTeams([]);
       } finally {
         setLoading(false);
       }
@@ -152,36 +172,36 @@ export default function UniversesPage() {
 
   const assetCards = [
     {
+      title: isZh ? "项目资产" : "Project assets",
+      body: isZh
+        ? "小说、剧本、分镜、视频、歌曲和爆款内容都作为来源项目或生产资产进入同一资产视图。"
+        : "Novels, scripts, storyboards, videos, songs, and viral references stay visible as source projects or production assets.",
+      value: totals.linkedProjects,
+      meta: isZh ? `${totals.productionAssets} 个生产资产` : `${totals.productionAssets} production assets`,
+    },
+    {
       title: isZh ? "角色资产" : "Character assets",
       body: isZh
-        ? "展示角色完整设定、关系定位和未来可扩展的项目形象版本。"
-        : "Full character sheets, relationship role, and future project-specific appearance variants.",
+        ? "管理 canon 角色设定、关系、locked facts，并保留项目形象版本入口。"
+        : "Canon character sheets, relationships, locked facts, and entry points for project appearance versions.",
       value: totals.characters,
-      meta: isZh ? `${totals.relationships} 条关系` : `${totals.relationships} relationships`,
+      meta: isZh ? `${totals.relationships} 条关系 · ${totals.lockedCanon} locked` : `${totals.relationships} relationships · ${totals.lockedCanon} locked`,
     },
     {
-      title: isZh ? "世界与场景" : "World and locations",
+      title: isZh ? "场景资产" : "Scene assets",
       body: isZh
-        ? "保存地点、组织、世界规则和可复用场景，让剧本、分镜和视频继承同一空间逻辑。"
-        : "Locations, organizations, world rules, and reusable scenes that keep every workflow spatially consistent.",
-      value: totals.locations + totals.organizations + totals.rules,
-      meta: isZh ? `${totals.locations} 地点 · ${totals.rules} 规则` : `${totals.locations} locations · ${totals.rules} rules`,
+        ? "地点、房间、城市与关键空间会沉淀为可被剧本、分镜和视频继承的空间资产。"
+        : "Locations, rooms, cities, and key spaces become reusable scene assets for scripts, storyboards, and video.",
+      value: totals.locations + totals.organizations,
+      meta: isZh ? `${totals.locations} 地点 · ${totals.organizations} 组织` : `${totals.locations} locations · ${totals.organizations} organizations`,
     },
     {
-      title: isZh ? "正史与时间线" : "Canon and timeline",
+      title: isZh ? "故事资产" : "Story assets",
       body: isZh
-        ? "只展示用户确认后的事实；locked canon 不允许被后续项目自动覆盖。"
-        : "Only user-confirmed facts belong here; locked canon cannot be overwritten by downstream projects.",
-      value: totals.canon,
-      meta: isZh ? `${totals.lockedCanon} 条 locked` : `${totals.lockedCanon} locked`,
-    },
-    {
-      title: isZh ? "生产资产" : "Production assets",
-      body: isZh
-        ? "分镜包、视频片段、歌曲/OST、参考图等交付资产保留在项目中，同时可作为 Universe 可调用资产。"
-        : "Storyboard packs, video clips, songs, OSTs, reference images, and other deliverables stay project-owned while callable from Universe.",
-      value: totals.productionAssets,
-      meta: isZh ? `${totals.linkedProjects} 个来源项目` : `${totals.linkedProjects} source projects`,
+        ? "时间线、事件、伏笔和世界规则只在用户确认后进入 canon，后续项目按权限继承。"
+        : "Timeline, events, foreshadowing, and world rules become canon only after user confirmation.",
+      value: totals.timelines + totals.rules + totals.canon,
+      meta: isZh ? `${totals.timelines} 时间线 · ${totals.rules} 规则` : `${totals.timelines} timeline · ${totals.rules} rules`,
     },
     {
       title: "Inbox",
@@ -263,6 +283,7 @@ export default function UniversesPage() {
             .filter(Boolean),
           tone: createForm.tone.trim(),
         },
+        teamId: createForm.teamId || null,
         accessToken: session?.access_token ?? null,
       });
       router.push(`/universes/${universe.id}`);
@@ -496,6 +517,18 @@ export default function UniversesPage() {
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.title || project.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                {isZh ? "共享团队" : "Shared team"}
+                <select value={createForm.teamId} onChange={(event) => setCreateForm((current) => ({ ...current, teamId: event.target.value }))}>
+                  <option value="">{isZh ? "仅自己可见" : "Private to me"}</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} {team.role ? `(${team.role})` : ""}
                     </option>
                   ))}
                 </select>
