@@ -898,7 +898,7 @@ input:focus, textarea:focus, select:focus {
   height: 34px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  background: #FFFFFF;
+  background: var(--input-bg);
   color: var(--ink-primary);
   padding: 0 8px;
 }
@@ -2871,7 +2871,7 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-3);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FFFFFF;
+  background: var(--glass-fill);
   color: var(--ink-primary);
   overflow: hidden;
 }
@@ -4611,7 +4611,7 @@ textarea.script-editor {
 .universe-node.node-feature {
   width: 32px;
   height: 32px;
-  background: #FFFFFF;
+  background: var(--glass-fill-strong);
   border-color: #DFEFFF;
 }
 .universe-node.is-active,
@@ -4692,7 +4692,7 @@ textarea.script-editor {
   justify-content: space-between;
   gap: var(--space-4);
   border-color: var(--glass-border);
-  background: #FFFFFF;
+  background: var(--glass-fill);
 }
 .universe-access-banner div {
   min-width: 0;
@@ -4766,13 +4766,13 @@ textarea.script-editor {
   padding: var(--space-4);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FFFFFF;
+  background: var(--glass-fill);
   color: inherit;
   text-decoration: none;
 }
 .universe-record-card:hover {
   border-color: var(--glass-border-hover);
-  background: #FAFAFA;
+  background: var(--glass-fill-strong);
 }
 .universe-record-card > span,
 .universe-source-list article > span {
@@ -4808,7 +4808,7 @@ textarea.script-editor {
   padding: var(--space-3);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FFFFFF;
+  background: var(--glass-fill);
 }
 .universe-workflow-grid article > strong {
   grid-row: span 2;
@@ -5297,7 +5297,7 @@ textarea.script-editor {
   padding: var(--space-5);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FFFFFF;
+  background: var(--glass-fill);
   box-shadow: var(--glow-blue);
   backdrop-filter: none;
 }
@@ -5460,6 +5460,7 @@ select optgroup {
 
 .content-section-subtitle,
 .hero-copy > p {
+  white-space: pre-line;
   word-break: keep-all;
   overflow-wrap: normal;
   text-wrap: pretty;
