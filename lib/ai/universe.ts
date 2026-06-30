@@ -177,6 +177,9 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
     project.storyBible?.confirmedFacts,
     project.brief,
     project.outline,
+    project.storyboardScript,
+    project.deliveryPackage,
+    project.finalScript,
     project.novelBible,
     project.novelBrief,
     project.novelVolumeOutline,
@@ -221,13 +224,22 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
     title: `${project.title} ending state`,
     proposed_payload: {
       title: `${project.title} ending state`,
-      summary: project.finalScript || project.novelChapterDraft || project.outline || project.storyBible?.mainConflict || "",
+      summary: project.finalScript || project.deliveryPackage || project.storyboardScript || project.novelChapterDraft || project.outline || project.storyBible?.mainConflict || "",
+      workflow_type: project.workflowType,
       season_number: project.seasonNumber || 1,
       character_states: characters.map((card) => ({ name: card.name, state: card.arc || card.goal })),
       relationship_states: project.relationshipDiagram,
       unresolved_threads: project.novelContinuityNotes || project.storyBible?.confirmedFacts || "",
+      production_assets: extractProjectProductionAssets(project),
     },
-    source_excerpt: [project.novelVolumeOutline, project.novelChapterDraft, project.outline, project.finalScript].filter(Boolean).join("\n\n").slice(0, 800),
+    source_excerpt: [
+      project.deliveryPackage,
+      project.storyboardScript,
+      project.novelVolumeOutline,
+      project.novelChapterDraft,
+      project.outline,
+      project.finalScript,
+    ].filter(Boolean).join("\n\n").slice(0, 800),
     confidence: 0.6,
     status: "pending",
     reviewed_at: null,
@@ -236,6 +248,47 @@ function heuristicInboxItems(input: ExtractInput): UniverseInboxItem[] {
   });
 
   return items;
+}
+
+function extractProjectProductionAssets(project: DramaProject) {
+  const assets: Array<Record<string, unknown>> = [];
+
+  const storyboardState = parseObject(project.storyboardScript);
+  const storyboardScenes = Array.isArray(storyboardState?.scenes) ? storyboardState.scenes : [];
+  if (storyboardScenes.length) {
+    assets.push({
+      type: "storyboard",
+      title: `${project.title} storyboard`,
+      scene_count: storyboardScenes.length,
+      source_workflow: project.workflowType,
+    });
+  }
+
+  const deliveryPayload = parseObject(project.deliveryPackage);
+  const deliveryState = deliveryPayload && typeof deliveryPayload.state === "object" && deliveryPayload.state && !Array.isArray(deliveryPayload.state)
+    ? deliveryPayload.state as Record<string, unknown>
+    : null;
+  const videoShots = Array.isArray(deliveryState?.shots) ? deliveryState.shots : [];
+  if (videoShots.length) {
+    assets.push({
+      type: "video",
+      title: `${project.title} video queue`,
+      shot_count: videoShots.length,
+      completed_count: videoShots.filter((shot: unknown) => Boolean(shot) && typeof shot === "object" && stringValue((shot as Record<string, unknown>).status) === "done").length,
+      source_workflow: project.workflowType,
+    });
+  }
+
+  if (project.workflowType === "song" && (project.finalScript || project.deliveryPackage || project.brief)) {
+    assets.push({
+      type: "audio",
+      title: `${project.title} song package`,
+      has_lyrics: Boolean(project.finalScript),
+      source_workflow: "song",
+    });
+  }
+
+  return assets;
 }
 
 function heuristicCreativePackageInboxItems(input: ExtractInput): UniverseInboxItem[] {
@@ -419,12 +472,17 @@ function normalizeSeverity(value: unknown): CanonCheckIssue["severity"] {
 function buildProjectSourceText(project: DramaProject) {
   return [
     `Title: ${project.title}`,
+    `Workflow: ${project.workflowType}`,
     `Market: ${project.market}`,
     `Genre: ${project.genre}`,
     "Story Bible:",
     JSON.stringify(project.storyBible || {}, null, 2),
     "Idea:",
     project.idea,
+    "Imported source:",
+    project.importedScript,
+    "Brief:",
+    project.brief,
     "Characters:",
     project.characters,
     "Relationship diagram:",
@@ -437,6 +495,14 @@ function buildProjectSourceText(project: DramaProject) {
     project.continuationScript,
     "Final script:",
     project.finalScript || project.finalScriptForeign || project.finalScriptChinese,
+    "Storyboard package:",
+    project.storyboardScript,
+    "Storyboard episodes:",
+    (project.storyboardEpisodes || []).map((episode) => `# ${episode.title}\n${episode.content}`).join("\n\n"),
+    "Delivery package:",
+    project.deliveryPackage,
+    "Format check:",
+    project.formatCheck,
     "Novel brief:",
     project.novelBrief,
     "Novel bible:",
@@ -502,6 +568,11 @@ function arrayObjects(value: unknown): Array<Record<string, unknown>> {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function parseObject(value: string) {
+  if (!value.trim()) return null;
+  return tryParse(value);
 }
 
 function clampConfidence(value: number) {
