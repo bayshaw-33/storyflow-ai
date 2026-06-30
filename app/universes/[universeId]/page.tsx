@@ -562,17 +562,33 @@ function ListSection<T>({ items, render }: { items: T[]; render: (item: T) => { 
 
 function getAcceptedAssets(bundle: UniverseBundle): UniverseAssetRow[] {
   return bundle.snapshots.flatMap((snapshot) => {
-    const assets = Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets : [];
+    const assets = [
+      ...(Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets : []),
+      ...(Array.isArray(snapshot.state_json.production_assets) ? snapshot.state_json.production_assets : []),
+    ];
     return assets
       .filter((asset): asset is Record<string, unknown> => Boolean(asset) && typeof asset === "object" && !Array.isArray(asset))
       .map((asset, index) => ({
         title: stringValue(asset.title) || `${snapshot.title} asset ${index + 1}`,
         type: stringValue(asset.type) || "asset",
         url: stringValue(asset.url),
-        prompt: stringValue(asset.prompt),
+        prompt: stringValue(asset.prompt) || formatAssetMetadata(asset),
         source: snapshot.title,
       }));
   });
+}
+
+function formatAssetMetadata(asset: Record<string, unknown>) {
+  const pairs = [
+    ["scenes", asset.scene_count],
+    ["shots", asset.shot_count],
+    ["done", asset.completed_count],
+    ["workflow", asset.source_workflow],
+  ]
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([label, value]) => `${label}: ${String(value)}`);
+
+  return pairs.join(" · ");
 }
 
 function buildProjectFromUniverse(input: {

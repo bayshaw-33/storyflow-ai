@@ -304,7 +304,7 @@ export async function getUniverseBundle(universeId: string, options: SupabaseOpt
     listByUniverse<CanonCheckReport>(TABLES.reports, CANON_REPORT_STORAGE_KEY, universeId, options),
   ]);
 
-  return { universe, entities, relationships, timeline, canonFacts, snapshots, inbox, links, reports };
+  return { universe, entities, relationships, timeline, canonFacts, snapshots, inbox, links: dedupeUniverseProjectLinks(links), reports };
 }
 
 export async function createUniverseFromProject(params: {
@@ -524,7 +524,7 @@ export function buildProjectLink(params: {
 }): UniverseProjectLink {
   const now = new Date().toISOString();
   return {
-    id: createId(),
+    id: `universe-project-link-${stableIdSegment(params.universeId)}-${stableIdSegment(params.projectId)}`,
     universe_id: params.universeId,
     project_id: params.projectId,
     user_id: params.userId || null,
@@ -534,6 +534,21 @@ export function buildProjectLink(params: {
     created_at: now,
     updated_at: now,
   };
+}
+
+function dedupeUniverseProjectLinks(links: UniverseProjectLink[]) {
+  const byProject = new Map<string, UniverseProjectLink>();
+  for (const link of links) {
+    const existing = byProject.get(link.project_id);
+    if (!existing || link.updated_at.localeCompare(existing.updated_at) > 0) {
+      byProject.set(link.project_id, link);
+    }
+  }
+  return Array.from(byProject.values()).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
+
+function stableIdSegment(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
 async function findExistingCharacterEntity(universeId: string, name: string, options: SupabaseOptions = {}) {

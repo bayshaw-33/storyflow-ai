@@ -544,14 +544,14 @@ export default function SongWorkbenchPage() {
   }, [session?.access_token]);
 
   useEffect(() => {
-    const localProjects = readProjectsFromStorage().filter((project) => project.workflowType !== "song" && project.workflowType !== "viral");
+    const localProjects = readProjectsFromStorage().filter(isSongSourceProject);
     setSourceProjects(localProjects);
 
     if (!session?.access_token) return;
 
     void readProjectsFromSupabase({ accessToken: session.access_token })
       .then((cloudProjects) => {
-        setSourceProjects(mergeSourceProjects(localProjects, cloudProjects.filter((project) => project.workflowType !== "song" && project.workflowType !== "viral")));
+        setSourceProjects(mergeSourceProjects(localProjects, cloudProjects.filter(isSongSourceProject)));
       })
       .catch(() => {
         setSourceProjects(localProjects);
@@ -631,14 +631,14 @@ export default function SongWorkbenchPage() {
     setSaveWarning("");
     try {
       const localProjects = readProjectsFromStorage();
-      const localSourceProjects = localProjects.filter((project) => project.workflowType !== "song");
+      const localSourceProjects = localProjects.filter(isSongSourceProject);
       let cloudProjects: DramaProject[] = [];
 
       if (session?.access_token) {
         cloudProjects = await readProjectsFromSupabase({ accessToken: session.access_token }).catch(() => []);
       }
 
-      setSourceProjects(mergeSourceProjects(localSourceProjects, cloudProjects.filter((project) => project.workflowType !== "song")));
+      setSourceProjects(mergeSourceProjects(localSourceProjects, cloudProjects.filter(isSongSourceProject)));
 
       const nextUniverses = await listUniverses({ accessToken: session?.access_token }).catch(() => universes);
       setUniverses(nextUniverses);
@@ -1638,6 +1638,10 @@ function mergeSourceProjects(localProjects: DramaProject[], cloudProjects: Drama
     }
   }
   return Array.from(byId.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function isSongSourceProject(project: DramaProject) {
+  return project.workflowType !== "song" && project.workflowType !== "viral";
 }
 
 function buildSourceProjectSongConcept(project: DramaProject) {

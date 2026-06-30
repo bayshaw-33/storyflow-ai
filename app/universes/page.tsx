@@ -605,10 +605,15 @@ function summarizeUniverse(bundle: UniverseBundle | null): UniverseSummary {
     linkedWorkflowCount: new Set(bundle.links.map((link) => link.project_role)).size,
     timelineCount: bundle.timeline.length,
     productionAssetCount: bundle.snapshots.reduce((count, snapshot) => {
-      const assets = Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets.length : 0;
-      return count + assets;
+      return count + countSnapshotAssets(snapshot.state_json);
     }, 0),
   };
+}
+
+function countSnapshotAssets(state: Record<string, unknown>) {
+  const assets = Array.isArray(state.assets) ? state.assets.length : 0;
+  const productionAssets = Array.isArray(state.production_assets) ? state.production_assets.length : 0;
+  return assets + productionAssets;
 }
 
 function countEntities(bundle: UniverseBundle) {
