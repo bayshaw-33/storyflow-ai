@@ -633,6 +633,8 @@ function sum(items: UniverseSummary[], key: keyof UniverseSummary) {
 function workflowLabel(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "novel") return isZh ? "小说" : "Novel";
+  if (project.workflowType === "storyboard") return isZh ? "分镜" : "Storyboard";
+  if (project.workflowType === "video") return isZh ? "视频" : "Video";
   if (project.workflowType === "continuation") return isZh ? "续写剧本" : "Continuation Script";
   return isZh ? "剧本" : "Script";
 }

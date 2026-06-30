@@ -28,6 +28,7 @@ type ProjectListProps = {
 };
 
 function getProjectStatus(project: DramaProject, completed: number, total: number) {
+  if ((project.workflowType === "storyboard" || project.workflowType === "video") && project.status === "ready") return "Ready";
   if (total > 0 && completed >= total) return "Lit";
   if (project.finalScript?.trim()) return "Final Script";
   if (project.status === "generating" || completed > 0) return "In Progress";
@@ -38,6 +39,7 @@ function localizeStatus(status: string, isZh: boolean) {
   if (!isZh) return status;
   if (status === "Lit") return "已点亮";
   if (status === "Final Script") return "最终剧本";
+  if (status === "Ready") return "已保存";
   if (status === "In Progress") return "进行中";
   return "草稿";
 }
@@ -51,6 +53,8 @@ function getWorkflowBadge(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
   if (project.workflowType === "novel") return isZh ? "小说" : "Novel";
+  if (project.workflowType === "storyboard") return isZh ? "分镜" : "Storyboard";
+  if (project.workflowType === "video") return isZh ? "视频" : "Video";
   return isZh ? "短剧" : "Drama";
 }
 
@@ -59,11 +63,15 @@ function getWorkflowDetail(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
   if (project.workflowType === "novel") return isZh ? "小说创作" : "Novel Creation";
+  if (project.workflowType === "storyboard") return isZh ? "分镜创作" : "Storyboard Creation";
+  if (project.workflowType === "video") return isZh ? "视频创作" : "Video Creation";
   return isZh ? "原创" : "Original";
 }
 
 function getProjectHref(project: DramaProject) {
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
+  if (project.workflowType === "storyboard") return `/storyboard-workbench?projectId=${encodeURIComponent(project.id)}`;
+  if (project.workflowType === "video") return `/video-workbench?projectId=${encodeURIComponent(project.id)}`;
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${encodeURIComponent(project.id)}`;

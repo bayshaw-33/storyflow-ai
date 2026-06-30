@@ -6,6 +6,8 @@ import type { Session } from "@supabase/supabase-js";
 import { ArrowRight, Download, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
+import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import {
   buildProjectLink,
   listUniverses,
@@ -184,9 +186,59 @@ function coerceImportedScenes(value: unknown): Scene[] | null {
   return scenes.length ? scenes : null;
 }
 
+function storyboardStateFromProject(project: DramaProject): StoryboardState {
+  try {
+    const parsed = JSON.parse(project.storyboardScript || project.deliveryPackage || "") as Partial<StoryboardState>;
+    const scenes = coerceImportedScenes(parsed.scenes);
+    return {
+      id: project.id,
+      projectTitle: parsed.projectTitle || project.title || "",
+      script: typeof parsed.script === "string" ? parsed.script : project.importedScript || project.idea || "",
+      visualStyle: parsed.visualStyle || project.storyBible.languageStyle || initialState.visualStyle,
+      aspectRatio: parsed.aspectRatio === "16:9" || parsed.aspectRatio === "1:1" ? parsed.aspectRatio : "9:16",
+      scenes: scenes || initialState.scenes.map((scene) => ({ ...scene, id: createId("scene") })),
+    };
+  } catch {
+    return {
+      ...initialState,
+      id: project.id,
+      projectTitle: project.title || "",
+      script: project.importedScript || project.idea || project.storyboardScript || "",
+      visualStyle: project.storyBible.languageStyle || initialState.visualStyle,
+    };
+  }
+}
+
+function storyboardStateToMarkdown(state: StoryboardState) {
+  return [
+    `# ${state.projectTitle || "Untitled Storyboard"}`,
+    "",
+    `Visual style: ${state.visualStyle}`,
+    `Aspect ratio: ${state.aspectRatio}`,
+    "",
+    "## Script",
+    state.script,
+    "",
+    "## Scenes",
+    ...state.scenes.map((scene, sceneIndex) => [
+      `### Scene ${sceneIndex + 1}: ${scene.title}`,
+      scene.location ? `Location: ${scene.location}` : "",
+      scene.intention ? `Intention: ${scene.intention}` : "",
+      ...scene.shots.map((shot, shotIndex) => [
+        `- Shot ${shotIndex + 1}: ${shot.text || shot.visualPrompt || "Untitled shot"}`,
+        shot.frame ? `  - Frame: ${shot.frame}` : "",
+        shot.camera ? `  - Camera: ${shot.camera}` : "",
+        shot.duration ? `  - Duration: ${shot.duration}` : "",
+        shot.visualPrompt ? `  - Prompt: ${shot.visualPrompt}` : "",
+      ].filter(Boolean).join("\n")),
+    ].filter(Boolean).join("\n")),
+  ].filter(Boolean).join("\n");
+}
+
 export default function StoryboardWorkbenchPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
+  const [projectId, setProjectId] = useState("");
   const [state, setState] = useState<StoryboardState>(initialState);
   const [selectedSceneId, setSelectedSceneId] = useState(initialState.scenes[0].id);
   const [session, setSession] = useState<Session | null>(null);
@@ -195,6 +247,8 @@ export default function StoryboardWorkbenchPage() {
   const [universeBusy, setUniverseBusy] = useState(false);
   const [universeStatus, setUniverseStatus] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState("");
+  const [savingProject, setSavingProject] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
   const selectedScene = state.scenes.find((scene) => scene.id === selectedSceneId) || state.scenes[0];
 
   const videoReadyShots = useMemo<VideoReadyShot[]>(
@@ -220,6 +274,10 @@ export default function StoryboardWorkbenchPage() {
   }, []);
 
   useEffect(() => {
+    setProjectId(new URLSearchParams(window.location.search).get("projectId") || "");
+  }, []);
+
+  useEffect(() => {
     const draft = readWorkspaceEntryDraft("storyboard");
     if (!draft) return;
 
@@ -231,6 +289,34 @@ export default function StoryboardWorkbenchPage() {
       script: script || current.script,
     }));
   }, []);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+
+    async function loadProject() {
+      const localProject = readProjectsFromStorage().find((project) => project.id === projectId);
+      if (localProject && !cancelled) {
+        const nextState = storyboardStateFromProject(localProject);
+        setState(nextState);
+        setSelectedSceneId(nextState.scenes[0]?.id || "");
+        setSelectedUniverseId(localProject.universeId || "");
+      }
+
+      if (!session?.access_token) return;
+      const cloudProject = await readProjectFromSupabase(projectId, { accessToken: session.access_token }).catch(() => null);
+      if (!cloudProject || cancelled) return;
+      const nextState = storyboardStateFromProject(cloudProject);
+      setState(nextState);
+      setSelectedSceneId(nextState.scenes[0]?.id || "");
+      setSelectedUniverseId(cloudProject.universeId || "");
+    }
+
+    void loadProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, session?.access_token]);
 
   useEffect(() => {
     void listUniverses({ accessToken: session?.access_token })
@@ -392,6 +478,69 @@ export default function StoryboardWorkbenchPage() {
     };
   }
 
+  function buildStoryboardProject(universeId = selectedUniverseId || null): DramaProject {
+    const title = state.projectTitle.trim() || (isZh ? "未命名分镜项目" : "Untitled Storyboard Project");
+    const now = new Date().toISOString();
+    return createProject({
+      id: state.id,
+      workflowType: "storyboard",
+      title,
+      genre: "分镜创作",
+      targetLanguage: isZh ? "中文" : "English",
+      idea: state.script.slice(0, 4000),
+      importedScript: state.script,
+      storyboardScript: JSON.stringify(state, null, 2),
+      storyboardEpisodes: state.scenes.map((scene, index) => ({
+        id: scene.id,
+        title: scene.title || `Scene ${index + 1}`,
+        content: scene.shots.map((shot, shotIndex) => `Shot ${shotIndex + 1}: ${buildVideoPrompt(state, scene, shot)}`).join("\n\n"),
+      })),
+      deliveryPackage: storyboardStateToMarkdown(state),
+      universeId,
+      projectRole: universeId ? "adaptation" : null,
+      inheritanceSettings: universeId ? {
+        sourceWorkflow: "storyboard",
+        aspectRatio: state.aspectRatio,
+        shotCount: videoReadyShots.length,
+      } : null,
+      status: videoReadyShots.length > 0 ? "ready" : "draft",
+      updatedAt: now,
+    });
+  }
+
+  async function saveStoryboardProjectToList(options: { universeId?: string | null; silent?: boolean } = {}) {
+    const universeId = options.universeId === undefined ? selectedUniverseId || null : options.universeId;
+    const project = buildStoryboardProject(universeId);
+    setSavingProject(true);
+    if (!options.silent) setSaveStatus(isZh ? "正在保存分镜项目..." : "Saving storyboard project...");
+    try {
+      upsertProject(project);
+      if (session?.access_token) {
+        await upsertProjectToSupabase(project, { accessToken: session.access_token });
+        if (universeId) {
+          await upsertUniverseProjectLink(
+            buildProjectLink({
+              universeId,
+              projectId: project.id,
+              userId: session.user.id,
+              projectRole: "adaptation",
+            }),
+            { accessToken: session.access_token },
+          );
+        }
+      }
+      if (!options.silent) setSaveStatus(isZh ? "已保存到项目列表。" : "Saved to project list.");
+      return project;
+    } catch (error) {
+      if (!options.silent) {
+        setSaveStatus(error instanceof Error ? error.message : (isZh ? "云端保存失败，已保留本地项目。" : "Cloud save failed. Local project is preserved."));
+      }
+      return project;
+    } finally {
+      setSavingProject(false);
+    }
+  }
+
   function saveVideoReference() {
     const exportState = { ...state, universeId: selectedUniverseId || null, videoReadyShots, creativePackage: buildStoryboardPackage() };
     const link: WeakLink = {
@@ -448,6 +597,7 @@ export default function StoryboardWorkbenchPage() {
       );
       setUniverses((current) => [universe, ...current.filter((item) => item.id !== universe.id)]);
       setSelectedUniverseId(universe.id);
+      await saveStoryboardProjectToList({ universeId: universe.id, silent: true });
       setUniverseStatus(isZh ? "Universe 已创建并关联当前分镜。" : "Universe created and linked to this storyboard.");
     } catch (error) {
       setUniverseStatus(error instanceof Error ? error.message : (isZh ? "创建 Universe 失败。" : "Universe creation failed."));
@@ -469,6 +619,7 @@ export default function StoryboardWorkbenchPage() {
     setUniverseBusy(true);
     setUniverseStatus(isZh ? "正在发送到 Universe Inbox..." : "Sending to Universe Inbox...");
     try {
+      await saveStoryboardProjectToList({ universeId: selectedUniverseId, silent: true });
       const response = await fetch("/api/universe/extract", {
         method: "POST",
         headers: {
@@ -681,6 +832,10 @@ export default function StoryboardWorkbenchPage() {
             ))}
           </div>
           <div className="simple-action-row">
+            <button className="secondary-button" type="button" onClick={() => void saveStoryboardProjectToList()} disabled={savingProject}>
+              <Save size={16} />
+              {savingProject ? (isZh ? "保存中" : "Saving") : (isZh ? "保存到项目列表" : "Save Project")}
+            </button>
             <button className="secondary-button" type="button" onClick={exportJson}>
               <Download size={16} />
               {isZh ? "导出 JSON" : "Export JSON"}
@@ -690,6 +845,7 @@ export default function StoryboardWorkbenchPage() {
               {isZh ? "发送到视频工作台" : "Send to Video"}
             </Link>
           </div>
+          {saveStatus ? <small className="field-note">{saveStatus}</small> : null}
           <div className="studio-universe-box">
             <div className="studio-section-head">
               <span>Universe</span>

@@ -1,7 +1,7 @@
 import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
-export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel";
+export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel" | "storyboard" | "video";
 export type StepVersionSource = "ai" | "manual" | "demo" | "optimize" | "restore";
 export type ProjectRole = "main_season" | "spin_off" | "prequel" | "adaptation" | "localization" | "other";
 
@@ -415,6 +415,7 @@ export const novelWorkflowPhases: WorkflowPhase[] = [
 export function getWorkflowSteps(projectOrType?: DramaProject | WorkflowType) {
   const workflowType = typeof projectOrType === "string" ? projectOrType : projectOrType?.workflowType;
   if (workflowType === "novel") return novelWorkflowSteps;
+  if (workflowType === "storyboard" || workflowType === "video") return [];
   return workflowType === "continuation" ? continuationWorkflowSteps : creationWorkflowSteps;
 }
 

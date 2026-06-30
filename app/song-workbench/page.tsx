@@ -544,14 +544,14 @@ export default function SongWorkbenchPage() {
   }, [session?.access_token]);
 
   useEffect(() => {
-    const localProjects = readProjectsFromStorage().filter((project) => project.workflowType !== "song");
+    const localProjects = readProjectsFromStorage().filter((project) => project.workflowType !== "song" && project.workflowType !== "viral");
     setSourceProjects(localProjects);
 
     if (!session?.access_token) return;
 
     void readProjectsFromSupabase({ accessToken: session.access_token })
       .then((cloudProjects) => {
-        setSourceProjects(mergeSourceProjects(localProjects, cloudProjects.filter((project) => project.workflowType !== "song")));
+        setSourceProjects(mergeSourceProjects(localProjects, cloudProjects.filter((project) => project.workflowType !== "song" && project.workflowType !== "viral")));
       })
       .catch(() => {
         setSourceProjects(localProjects);

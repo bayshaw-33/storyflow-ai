@@ -2,10 +2,12 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Download, Loader2, Play, Plus, RefreshCw, Trash2, UploadCloud } from "lucide-react";
+import { Download, Loader2, Play, Plus, RefreshCw, Save, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { listUniverses, saveInboxItems, type Universe } from "@/lib/universe";
+import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
+import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { buildProjectLink, listUniverses, saveInboxItems, upsertUniverseProjectLink, type Universe } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
 
 type VideoStatus = "draft" | "queued" | "running" | "done" | "error";
@@ -160,10 +162,61 @@ function mapResolution(aspectRatio: VideoShot["aspectRatio"]) {
   return "768P";
 }
 
+function videoProjectPayloadFromProject(project: DramaProject) {
+  try {
+    return JSON.parse(project.deliveryPackage || "{}") as {
+      state?: VideoState;
+      sourceStoryboardTitle?: string;
+      sourceStoryboardId?: string;
+      selectedUniverseId?: string;
+      uploadedSourceName?: string;
+    };
+  } catch {
+    return {};
+  }
+}
+
+function videoStateFromProject(project: DramaProject): VideoState {
+  const payload = videoProjectPayloadFromProject(project);
+  if (payload.state?.shots?.length) {
+    return {
+      model: payload.state.model || defaultModel,
+      shots: payload.state.shots.map((shot) => ({
+        ...createShot(shot.prompt || "", shot.sceneTitle || ""),
+        ...shot,
+        status: shot.status || "draft",
+      })),
+    };
+  }
+  return {
+    model: defaultModel,
+    shots: [createShot(project.idea || project.storyboardScript || "", project.title || "")],
+  };
+}
+
+function videoStateToMarkdown(state: VideoState, title: string) {
+  return [
+    `# ${title || "Untitled Video Project"}`,
+    "",
+    `Model: ${state.model}`,
+    "",
+    ...state.shots.map((shot, index) => [
+      `## Shot ${index + 1}: ${shot.sceneTitle || "Untitled"}`,
+      `Status: ${shot.status}`,
+      shot.duration ? `Duration: ${shot.duration}` : "",
+      shot.aspectRatio ? `Aspect ratio: ${shot.aspectRatio}` : "",
+      shot.prompt ? `Prompt: ${shot.prompt}` : "",
+      shot.videoUrl ? `Video: ${shot.videoUrl}` : "",
+    ].filter(Boolean).join("\n")),
+  ].filter(Boolean).join("\n");
+}
+
 export default function VideoWorkbenchPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
+  const [projectId, setProjectId] = useState("");
   const [session, setSession] = useState<Session | null>(null);
+  const [videoProjectId, setVideoProjectId] = useState(createId("video-project"));
   const [state, setState] = useState<VideoState>({ model: defaultModel, shots: [createShot()] });
   const [importedCount, setImportedCount] = useState(0);
   const [busyShotId, setBusyShotId] = useState("");
@@ -175,6 +228,8 @@ export default function VideoWorkbenchPage() {
   const [universeBusy, setUniverseBusy] = useState(false);
   const [universeStatus, setUniverseStatus] = useState("");
   const [uploadedSourceName, setUploadedSourceName] = useState("");
+  const [savingProject, setSavingProject] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
 
   const completedCount = useMemo(() => state.shots.filter((shot) => shot.status === "done").length, [state.shots]);
   const pendingCount = state.shots.length - completedCount;
@@ -186,6 +241,10 @@ export default function VideoWorkbenchPage() {
       supabase?.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession)) || {};
 
     return () => listener?.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    setProjectId(new URLSearchParams(window.location.search).get("projectId") || "");
   }, []);
 
   useEffect(() => {
@@ -231,6 +290,27 @@ export default function VideoWorkbenchPage() {
   }, []);
 
   useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+
+    async function loadProject() {
+      const localProject = readProjectsFromStorage().find((project) => project.id === projectId);
+      if (localProject && !cancelled) {
+        applyVideoProject(localProject);
+      }
+
+      if (!session?.access_token) return;
+      const cloudProject = await readProjectFromSupabase(projectId, { accessToken: session.access_token }).catch(() => null);
+      if (cloudProject && !cancelled) applyVideoProject(cloudProject);
+    }
+
+    void loadProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, session?.access_token]);
+
+  useEffect(() => {
     void listUniverses({ accessToken: session?.access_token })
       .then((items) => {
         setUniverses(items);
@@ -244,6 +324,16 @@ export default function VideoWorkbenchPage() {
       ...current,
       shots: current.shots.map((shot) => (shot.id === id ? { ...shot, ...patch } : shot)),
     }));
+  }
+
+  function applyVideoProject(project: DramaProject) {
+    const payload = videoProjectPayloadFromProject(project);
+    setVideoProjectId(project.id);
+    setState(videoStateFromProject(project));
+    setSelectedUniverseId(project.universeId || payload.selectedUniverseId || "");
+    setSourceStoryboardTitle(payload.sourceStoryboardTitle || project.title || "");
+    setSourceStoryboardId(payload.sourceStoryboardId || "");
+    setUploadedSourceName(payload.uploadedSourceName || "");
   }
 
   function addShot() {
@@ -343,6 +433,72 @@ export default function VideoWorkbenchPage() {
     };
   }
 
+  function buildVideoProject(universeId = selectedUniverseId || null): DramaProject {
+    const title = sourceStoryboardTitle || uploadedSourceName || (isZh ? "未命名视频项目" : "Untitled Video Project");
+    const markdown = videoStateToMarkdown(state, title);
+    return createProject({
+      id: videoProjectId,
+      workflowType: "video",
+      title,
+      genre: "视频创作",
+      targetLanguage: isZh ? "中文" : "English",
+      idea: state.shots.map((shot, index) => `Shot ${index + 1}: ${shot.prompt}`).join("\n\n").slice(0, 4000),
+      importedScript: state.shots.map((shot) => shot.sourceText).filter(Boolean).join("\n\n"),
+      storyboardScript: markdown,
+      deliveryPackage: JSON.stringify({
+        state,
+        sourceStoryboardTitle,
+        sourceStoryboardId,
+        selectedUniverseId: universeId,
+        uploadedSourceName,
+      }, null, 2),
+      universeId,
+      projectRole: universeId ? "adaptation" : null,
+      inheritanceSettings: universeId ? {
+        sourceWorkflow: "video",
+        sourceStoryboardId: sourceStoryboardId || null,
+        model: state.model,
+        completedCount,
+        totalShots: state.shots.length,
+      } : null,
+      status: completedCount > 0 ? "ready" : "draft",
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function saveVideoProjectToList(options: { universeId?: string | null; silent?: boolean } = {}) {
+    const universeId = options.universeId === undefined ? selectedUniverseId || null : options.universeId;
+    const project = buildVideoProject(universeId);
+    setSavingProject(true);
+    if (!options.silent) setSaveStatus(isZh ? "正在保存视频项目..." : "Saving video project...");
+    try {
+      upsertProject(project);
+      if (session?.access_token) {
+        await upsertProjectToSupabase(project, { accessToken: session.access_token });
+        if (universeId) {
+          await upsertUniverseProjectLink(
+            buildProjectLink({
+              universeId,
+              projectId: project.id,
+              userId: session.user.id,
+              projectRole: "adaptation",
+            }),
+            { accessToken: session.access_token },
+          );
+        }
+      }
+      if (!options.silent) setSaveStatus(isZh ? "已保存到项目列表。" : "Saved to project list.");
+      return project;
+    } catch (nextError) {
+      if (!options.silent) {
+        setSaveStatus(nextError instanceof Error ? nextError.message : (isZh ? "云端保存失败，已保留本地项目。" : "Cloud save failed. Local project is preserved."));
+      }
+      return project;
+    } finally {
+      setSavingProject(false);
+    }
+  }
+
   async function sendVideoToUniverse() {
     if (!session?.access_token) {
       setUniverseStatus(isZh ? "请先登录后再发送 Universe Inbox。" : "Please sign in before sending to Universe Inbox.");
@@ -356,6 +512,7 @@ export default function VideoWorkbenchPage() {
     setUniverseBusy(true);
     setUniverseStatus(isZh ? "正在发送视频包到 Universe Inbox..." : "Sending video package to Universe Inbox...");
     try {
+      await saveVideoProjectToList({ universeId: selectedUniverseId, silent: true });
       const response = await fetch("/api/universe/extract", {
         method: "POST",
         headers: {
@@ -574,11 +731,16 @@ export default function VideoWorkbenchPage() {
               {busyShotId ? <Loader2 className="spin-icon" size={16} /> : <Play size={16} />}
               {isZh ? "批量生成" : "Generate all"}
             </button>
+            <button className="secondary-button" type="button" onClick={() => void saveVideoProjectToList()} disabled={savingProject}>
+              <Save size={16} />
+              {savingProject ? (isZh ? "保存中" : "Saving") : (isZh ? "保存到项目列表" : "Save Project")}
+            </button>
             <button className="secondary-button" type="button" onClick={exportJson}>
               <Download size={16} />
               {isZh ? "导出 JSON" : "Export JSON"}
             </button>
           </div>
+          {saveStatus ? <small className="field-note">{saveStatus}</small> : null}
 
           <div className="studio-queue-list">
             {state.shots.map((shot, index) => (
