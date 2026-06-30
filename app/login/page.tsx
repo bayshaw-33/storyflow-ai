@@ -96,6 +96,9 @@ function LoginContent() {
             >
               {isZh ? "建造我的宇宙" : "Build My Universe"}
             </button>
+            <Link className="secondary-button" href="/dashboard?guest=1">
+              {isZh ? "访客预览工作台" : "Preview as Guest"}
+            </Link>
           </>
         )}
       </section>

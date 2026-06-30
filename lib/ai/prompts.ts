@@ -52,15 +52,20 @@ export type GenerateOptions = {
   chapterNo?: number;
 };
 
-export type ByoApiProvider = "auto" | "deepseek" | "minimax";
+export type ByoApiProvider = "auto" | "deepseek" | "minimax" | "custom";
 
 export type ByoApiConfig = {
   provider?: ByoApiProvider;
+  connectionId?: string;
   deepseekApiKey?: string;
   deepseekModel?: string;
   minimaxApiKey?: string;
   minimaxModel?: string;
   minimaxBaseUrl?: string;
+  customProviderName?: string;
+  customApiKey?: string;
+  customModel?: string;
+  customBaseUrl?: string;
 };
 
 export type GeneratePayload = {

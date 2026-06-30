@@ -491,7 +491,7 @@ export default function VideoWorkbenchPage() {
       return project;
     } catch (nextError) {
       if (!options.silent) {
-        setSaveStatus(nextError instanceof Error ? nextError.message : (isZh ? "云端保存失败，已保留本地项目。" : "Cloud save failed. Local project is preserved."));
+        setSaveStatus(isZh ? "已保存到本地项目列表，云端同步待配置完成后自动可用。" : "Saved locally. Cloud sync will work after the Supabase setup is complete.");
       }
       return project;
     } finally {

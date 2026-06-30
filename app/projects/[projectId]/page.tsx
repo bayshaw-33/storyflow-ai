@@ -138,7 +138,7 @@ function getRequirement(project: DramaProject, taskType: TaskType) {
   if (taskType === "final_script") return project.localization.trim() && project.qualityEvaluation.trim() ? "" : "请先完成本土化和评估。";
   if (taskType === "format_check") return getSelectedFinalScript(project).trim() ? "" : "请先生成最终剧本。";
   if (taskType === "storyboard_script") return project.formatCheck.trim() || getSelectedFinalScript(project).trim() ? "" : "请先完成格式检查。";
-  if (taskType === "final_delivery") return project.storyboardEpisodes.length || project.storyboardScript.trim() ? "" : "请先生成分镜。";
+  if (taskType === "final_delivery") return getSelectedFinalScript(project).trim() || project.formatCheck.trim() ? "" : "请先完成最终剧本或格式检查。";
 
   const previousKey = getPreviousKey(project, taskType);
   if (!previousKey) return "";
@@ -965,7 +965,7 @@ export default function WorkflowPage() {
         benchmarkLink: baseProject.benchmarkLink,
         idea: baseProject.idea,
         allSteps: previousStepContent(baseProject, step),
-        byoApi: readByoApiConfig(),
+        byoApi: readByoApiConfig("script"),
       }),
     });
 
@@ -1461,7 +1461,7 @@ export default function WorkflowPage() {
   const selectedGenreIsOther = !GENRE_OPTIONS.includes(project.genre) || project.genre === "其他";
   const selectedMarketIsOther = !MARKET_OPTIONS.includes(project.market) || project.market === "其他";
   const scriptRange = CHINESE_SCRIPT_RANGE_OPTIONS.find((option) => option.value === project.chineseScriptRange);
-  const showDownloadPanel = activeStep === "final_script" || activeStep === "storyboard_script" || activeStep === "final_delivery";
+  const showDownloadPanel = activeStep === "final_script" || activeStep === "final_delivery";
   const finalScriptContent = getSelectedFinalScript(project);
   const storyboardContent = storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript;
   const deliveryContent = buildDeliveryMarkdown(project, true);
@@ -1470,14 +1470,13 @@ export default function WorkflowPage() {
     { title: "最终剧本-中文", content: project.finalScriptChinese, landscape: false },
     { title: "最终剧本-外文", content: project.finalScriptForeign, landscape: false },
     { title: "最终剧本-双语", content: project.finalScriptBilingual, landscape: false },
-    { title: "分镜", content: storyboardContent, landscape: true },
     { title: "完整交付包", content: deliveryContent, landscape: false },
   ];
   const downloadTitle =
-    activeStep === "storyboard_script" ? "分镜头脚本" : activeStep === "final_delivery" ? "最终交付包" : "最终剧本";
+    activeStep === "final_delivery" ? "最终交付包" : "最终剧本";
   const downloadContent =
-    activeStep === "storyboard_script" ? storyboardContent : activeStep === "final_delivery" ? deliveryContent : finalScriptContent;
-  const downloadLandscape = activeStep === "storyboard_script";
+    activeStep === "final_delivery" ? deliveryContent : finalScriptContent;
+  const downloadLandscape = false;
 
   return (
     <main className="workflow-shell">

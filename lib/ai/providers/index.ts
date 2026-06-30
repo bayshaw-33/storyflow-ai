@@ -1,4 +1,5 @@
 import type { ByoApiConfig, TaskType } from "../prompts";
+import { callCustomProvider } from "./custom";
 import { callDeepSeek } from "./deepseek";
 import { callMiniMax, getMiniMaxApiKey } from "./minimax";
 import type { AIMessage, AIProviderName, AIProviderResult, AIUsage } from "./types";
@@ -61,6 +62,7 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
 function chooseProvider(taskType: TaskType, byoApi?: ByoApiConfig): AIProviderName {
   if (byoApi?.provider === "deepseek") return "deepseek";
   if (byoApi?.provider === "minimax") return "minimax";
+  if (byoApi?.provider === "custom") return "custom";
   if (isNovelTask(taskType)) return "deepseek";
   const mode = getProviderMode();
   if (mode === "deepseek") return "deepseek";
@@ -79,6 +81,7 @@ function getProviderMode(): ProviderMode {
 }
 
 function getFallbackProvider(provider: AIProviderName): AIProviderName {
+  if (provider === "custom") return "deepseek";
   return provider === "deepseek" ? "minimax" : "deepseek";
 }
 
@@ -89,6 +92,17 @@ async function callProvider(provider: AIProviderName, options: ProviderCallOptio
       temperature: options.temperature,
       apiKeyOverride: cleanSecret(options.byoApi?.deepseekApiKey),
       modelOverride: options.byoApi?.deepseekModel?.trim() || undefined,
+    });
+  }
+
+  if (provider === "custom") {
+    return callCustomProvider({
+      messages: options.messages,
+      temperature: options.temperature,
+      apiKey: cleanSecret(options.byoApi?.customApiKey) || "",
+      model: options.byoApi?.customModel?.trim() || "",
+      baseUrl: options.byoApi?.customBaseUrl?.trim() || "",
+      providerName: options.byoApi?.customProviderName?.trim() || "Custom",
     });
   }
 
@@ -108,5 +122,5 @@ function cleanSecret(value: string | undefined) {
 
 function isMissingProviderKey(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  return message === "MISSING_DEEPSEEK_API_KEY" || message === "MISSING_MINIMAX_API_KEY";
+  return message === "MISSING_DEEPSEEK_API_KEY" || message === "MISSING_MINIMAX_API_KEY" || message === "MISSING_CUSTOM_API_KEY";
 }

@@ -76,7 +76,7 @@ create table if not exists public.storyflow_api_connections (
   user_id uuid not null references auth.users(id) on delete cascade,
   team_id uuid references public.storyflow_teams(id) on delete cascade,
   scope text not null default 'personal' check (scope in ('personal','team')),
-  provider text not null check (provider in ('deepseek','minimax')),
+  provider text not null,
   api_key text not null,
   model text,
   base_url text,
@@ -94,6 +94,8 @@ create index if not exists storyflow_appearance_variants_actor_idx on public.sto
 create index if not exists storyflow_universes_team_idx on public.storyflow_universes (team_id, status, updated_at desc);
 create index if not exists storyflow_api_connections_user_idx on public.storyflow_api_connections (user_id, status, updated_at desc);
 create index if not exists storyflow_api_connections_team_idx on public.storyflow_api_connections (team_id, status, updated_at desc);
+
+alter table public.storyflow_api_connections drop constraint if exists storyflow_api_connections_provider_check;
 
 alter table public.storyflow_teams enable row level security;
 alter table public.storyflow_team_members enable row level security;

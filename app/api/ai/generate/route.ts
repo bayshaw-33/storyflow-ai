@@ -3,7 +3,7 @@ import { generateAIContent, isTaskType, type GenerateFailure } from "@/lib/ai/ge
 import { getProviderStatus } from "@/lib/ai/providers";
 import type { ByoApiConfig, GeneratePayload } from "@/lib/ai/prompts";
 import { getPlanEntitlement } from "@/lib/billing/plans";
-import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
+import { resolveSavedApiConfig, resolveSavedApiConfigById } from "@/lib/supabase/api-connections";
 import {
   authenticateRequest,
   completeGenerationTask,
@@ -133,16 +133,25 @@ async function resolveByoApi(config: ByoApiConfig | undefined, userId: string): 
     return resolveSavedApiConfig(userId).catch(() => null);
   }
 
+  if (config.connectionId?.trim()) {
+    return resolveSavedApiConfigById(userId, config.connectionId.trim()).catch(() => null);
+  }
+
   const cleanConfig: ByoApiConfig = {
     provider: config.provider || "auto",
+    connectionId: config.connectionId?.trim() || undefined,
     deepseekApiKey: config.deepseekApiKey?.trim() || undefined,
     deepseekModel: config.deepseekModel?.trim() || undefined,
     minimaxApiKey: config.minimaxApiKey?.trim() || undefined,
     minimaxModel: config.minimaxModel?.trim() || undefined,
     minimaxBaseUrl: config.minimaxBaseUrl?.trim() || undefined,
+    customProviderName: config.customProviderName?.trim() || undefined,
+    customApiKey: config.customApiKey?.trim() || undefined,
+    customModel: config.customModel?.trim() || undefined,
+    customBaseUrl: config.customBaseUrl?.trim() || undefined,
   };
 
-  const hasKey = Boolean(cleanConfig.deepseekApiKey || cleanConfig.minimaxApiKey);
+  const hasKey = Boolean(cleanConfig.deepseekApiKey || cleanConfig.minimaxApiKey || cleanConfig.customApiKey);
   if (!hasKey) return resolveSavedApiConfig(userId, cleanConfig.provider).catch(() => null);
 
   const rows = await serviceFetch<Array<{ plan: string | null }>>(
@@ -158,6 +167,9 @@ async function resolveByoApi(config: ByoApiConfig | undefined, userId: string): 
   }
   if (cleanConfig.provider === "minimax" && !cleanConfig.minimaxApiKey) {
     throw new Error("MISSING_BYO_MINIMAX_API_KEY");
+  }
+  if (cleanConfig.provider === "custom" && (!cleanConfig.customApiKey || !cleanConfig.customBaseUrl || !cleanConfig.customModel)) {
+    throw new Error("MISSING_BYO_CUSTOM_API_CONFIG");
   }
 
   return cleanConfig;
@@ -194,6 +206,10 @@ function toFriendlyError(error: unknown) {
     return "已选择 MiniMax 自接 API，但未填写 MiniMax API Key。";
   }
 
+  if (message === "MISSING_BYO_CUSTOM_API_CONFIG") {
+    return "已选择自定义 API，但 API Key、Base URL 或模型名称不完整。";
+  }
+
   if (message.includes("SUPABASE_SERVICE_ERROR")) {
     return "云端任务记录或额度更新失败，请检查 Supabase 表结构和 RLS 配置。";
   }
@@ -204,6 +220,10 @@ function toFriendlyError(error: unknown) {
 
   if (message === "MISSING_MINIMAX_API_KEY") {
     return "MiniMax 尚未完成服务端配置，请先配置 MINIMAX_API_KEY，或将 AI_PROVIDER 临时设为 deepseek。";
+  }
+
+  if (message === "MISSING_CUSTOM_API_KEY" || message === "MISSING_CUSTOM_BASE_URL" || message === "MISSING_CUSTOM_MODEL") {
+    return "自定义 API 配置不完整，请在设置页补全 Key、Base URL 和模型。";
   }
 
   if (message.includes("DEEPSEEK_API_ERROR:401") || message.includes("DEEPSEEK_API_ERROR:403")) {

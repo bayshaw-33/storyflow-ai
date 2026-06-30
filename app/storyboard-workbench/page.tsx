@@ -42,6 +42,9 @@ type StoryboardState = {
   projectTitle: string;
   script: string;
   visualStyle: string;
+  artStylePreset: string;
+  characterDesign: string;
+  sceneDesign: string;
   aspectRatio: "9:16" | "16:9" | "1:1";
   scenes: Scene[];
 };
@@ -91,6 +94,9 @@ const initialState: StoryboardState = {
   projectTitle: "",
   script: "",
   visualStyle: "cinematic short drama, realistic lighting, high emotional tension",
+  artStylePreset: "realistic-drama",
+  characterDesign: "",
+  sceneDesign: "",
   aspectRatio: "9:16",
   scenes: [
     {
@@ -103,9 +109,38 @@ const initialState: StoryboardState = {
   ],
 };
 
+const artStylePresets = [
+  {
+    id: "realistic-drama",
+    zh: "现实短剧",
+    en: "Realistic drama",
+    prompt: "cinematic short drama, realistic lighting, handheld intimacy, high emotional tension",
+  },
+  {
+    id: "premium-romance",
+    zh: "高质感甜宠",
+    en: "Premium romance",
+    prompt: "premium vertical romance drama, soft key light, polished wardrobe, clean luxury interiors",
+  },
+  {
+    id: "dark-fantasy",
+    zh: "暗黑幻想",
+    en: "Dark fantasy",
+    prompt: "dark fantasy drama, moonlit contrast, gothic atmosphere, dramatic shadows, supernatural tension",
+  },
+  {
+    id: "comic-cinematic",
+    zh: "漫剧电影感",
+    en: "Comic cinematic",
+    prompt: "cinematic manhua adaptation, expressive faces, strong silhouettes, stylized lighting, vivid panels",
+  },
+];
+
 function buildVideoPrompt(state: StoryboardState, scene: Scene, shot: Shot) {
   return [
     state.visualStyle,
+    state.characterDesign ? `Character design: ${state.characterDesign}.` : "",
+    state.sceneDesign ? `Scene design: ${state.sceneDesign}.` : "",
     `Aspect ratio ${state.aspectRatio}.`,
     scene.location ? `Location: ${scene.location}.` : "",
     scene.intention ? `Scene intention: ${scene.intention}.` : "",
@@ -195,6 +230,9 @@ function storyboardStateFromProject(project: DramaProject): StoryboardState {
       projectTitle: parsed.projectTitle || project.title || "",
       script: typeof parsed.script === "string" ? parsed.script : project.importedScript || project.idea || "",
       visualStyle: parsed.visualStyle || project.storyBible.languageStyle || initialState.visualStyle,
+      artStylePreset: parsed.artStylePreset || initialState.artStylePreset,
+      characterDesign: parsed.characterDesign || project.characters || "",
+      sceneDesign: parsed.sceneDesign || "",
       aspectRatio: parsed.aspectRatio === "16:9" || parsed.aspectRatio === "1:1" ? parsed.aspectRatio : "9:16",
       scenes: scenes || initialState.scenes.map((scene) => ({ ...scene, id: createId("scene") })),
     };
@@ -205,6 +243,9 @@ function storyboardStateFromProject(project: DramaProject): StoryboardState {
       projectTitle: project.title || "",
       script: project.importedScript || project.idea || project.storyboardScript || "",
       visualStyle: project.storyBible.languageStyle || initialState.visualStyle,
+      artStylePreset: initialState.artStylePreset,
+      characterDesign: project.characters || "",
+      sceneDesign: "",
     };
   }
 }
@@ -214,6 +255,8 @@ function storyboardStateToMarkdown(state: StoryboardState) {
     `# ${state.projectTitle || "Untitled Storyboard"}`,
     "",
     `Visual style: ${state.visualStyle}`,
+    state.characterDesign ? `Character design: ${state.characterDesign}` : "",
+    state.sceneDesign ? `Scene design: ${state.sceneDesign}` : "",
     `Aspect ratio: ${state.aspectRatio}`,
     "",
     "## Script",
@@ -464,7 +507,13 @@ export default function StoryboardWorkbenchPage() {
           type: "storyboard",
           title: `${title} storyboard package`,
           prompt: state.visualStyle,
-          metadata: { aspectRatio: state.aspectRatio, shotCount: videoReadyShots.length },
+          metadata: {
+            aspectRatio: state.aspectRatio,
+            shotCount: videoReadyShots.length,
+            artStylePreset: state.artStylePreset,
+            characterDesign: state.characterDesign,
+            sceneDesign: state.sceneDesign,
+          },
         },
       ],
       canonFacts: [
@@ -472,7 +521,7 @@ export default function StoryboardWorkbenchPage() {
         ...state.scenes.map((scene) => scene.intention).filter(Boolean).map((item) => `Scene intention: ${item}`),
       ].filter(Boolean),
       sourceText: state.script,
-      metadata: { aspectRatio: state.aspectRatio, videoReadyShots },
+      metadata: { aspectRatio: state.aspectRatio, videoReadyShots, artStylePreset: state.artStylePreset, characterDesign: state.characterDesign, sceneDesign: state.sceneDesign },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -533,7 +582,7 @@ export default function StoryboardWorkbenchPage() {
       return project;
     } catch (error) {
       if (!options.silent) {
-        setSaveStatus(error instanceof Error ? error.message : (isZh ? "云端保存失败，已保留本地项目。" : "Cloud save failed. Local project is preserved."));
+        setSaveStatus(isZh ? "已保存到本地项目列表，云端同步待配置完成后自动可用。" : "Saved locally. Cloud sync will work after the Supabase setup is complete.");
       }
       return project;
     } finally {
@@ -702,21 +751,41 @@ export default function StoryboardWorkbenchPage() {
             />
           </label>
           <div className="studio-art-pack" aria-label={isZh ? "美术设计包" : "Art design pack"}>
-            <article>
-              <span>01</span>
-              <strong>{isZh ? "确定画风" : "Lock style"}</strong>
-              <p>{state.visualStyle || (isZh ? "先确认整体视觉基调。" : "Define the visual tone first.")}</p>
-            </article>
-            <article>
-              <span>02</span>
-              <strong>{isZh ? "角色形象" : "Character looks"}</strong>
-              <p>{isZh ? "角色三视图和参考表确认后，再进入分镜。" : "Confirm three-views and reference sheets before shots."}</p>
-            </article>
-            <article>
-              <span>03</span>
-              <strong>{isZh ? "场景图" : "Scene images"}</strong>
-              <p>{isZh ? "关键空间和光线氛围先沉淀为场景资产。" : "Key spaces and lighting become scene assets first."}</p>
-            </article>
+            <div className="studio-art-presets">
+              {artStylePresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={state.artStylePreset === preset.id ? "active" : ""}
+                  onClick={() => {
+                    setState((current) => ({
+                      ...current,
+                      artStylePreset: preset.id,
+                      visualStyle: preset.prompt,
+                    }));
+                  }}
+                >
+                  <span>{preset.id === "realistic-drama" ? "01" : preset.id === "premium-romance" ? "02" : preset.id === "dark-fantasy" ? "03" : "04"}</span>
+                  <strong>{isZh ? preset.zh : preset.en}</strong>
+                </button>
+              ))}
+            </div>
+            <label className="studio-field">
+              {isZh ? "角色形象设计" : "Character appearance design"}
+              <textarea
+                value={state.characterDesign}
+                onChange={(event) => updateState("characterDesign", event.target.value)}
+                placeholder={isZh ? "输入主要角色的年龄、气质、服装、发型、色彩和参考表要求。" : "Describe age, vibe, wardrobe, hair, palette, and reference sheet needs."}
+              />
+            </label>
+            <label className="studio-field">
+              {isZh ? "场景图设计" : "Scene concept design"}
+              <textarea
+                value={state.sceneDesign}
+                onChange={(event) => updateState("sceneDesign", event.target.value)}
+                placeholder={isZh ? "输入关键空间、时代、地域、光线、道具和氛围。" : "Describe key spaces, period, region, lighting, props, and mood."}
+              />
+            </label>
           </div>
           <label className="studio-field">
             {isZh ? "画幅" : "Aspect ratio"}

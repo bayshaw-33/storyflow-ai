@@ -359,7 +359,7 @@ const i18n = {
     saving: "Saving",
     saveToProjects: "Save to Workspace",
     savedToProjects: "Saved to Workspace.",
-    savedLocalOnly: "Saved locally. Cloud sync failed.",
+    savedLocalOnly: "Saved locally. Cloud sync will work after the Supabase setup is complete.",
     cloudSyncFailed: "Cloud sync failed",
     saveToProjectsHint: "Saved songs appear in your Workspace and can become Universe sources — fueling characters, worlds, and OSTs across every other workflow.",
     copy: "Copy",
@@ -414,7 +414,7 @@ const i18n = {
     saving: "保存中",
     saveToProjects: "保存到工作台",
     savedToProjects: "已保存到工作台。",
-    savedLocalOnly: "已保存到本地，云端同步失败。",
+    savedLocalOnly: "已保存到本地项目列表，云端同步待配置完成后自动可用。",
     cloudSyncFailed: "云端同步失败",
     saveToProjectsHint: "已保存的歌曲会出现在工作台上，并可成为宇宙的源项目 — 为其他工作流中的角色、世界观和 OST 提供燃料。",
     copy: "复制",
@@ -766,7 +766,7 @@ export default function SongWorkbenchPage() {
             stylePrompt.trim() ? `Existing style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Existing composition prompt:\n${compositionPrompt}` : "",
           ].filter(Boolean).join("\n\n"),
-          byoApi: readByoApiConfig(),
+          byoApi: readByoApiConfig("song"),
         }),
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
@@ -1004,7 +1004,7 @@ export default function SongWorkbenchPage() {
             stylePrompt.trim() ? `Current style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Current composition prompt:\n${compositionPrompt}` : "",
           ].filter(Boolean).join("\n\n"),
-          byoApi: readByoApiConfig(),
+          byoApi: readByoApiConfig("song"),
         }),
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);

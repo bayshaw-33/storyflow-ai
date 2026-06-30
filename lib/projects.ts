@@ -294,7 +294,6 @@ export const creationWorkflowSteps: WorkflowStep[] = [
   { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
   { key: "format_check", field: "formatCheck", label: "格式检查 / Hollywood & Asian", short: "格式" },
-  { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
   { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
 ];
 
@@ -311,7 +310,6 @@ export const continuationWorkflowSteps: WorkflowStep[] = [
   { key: "quality_evaluation", field: "qualityEvaluation", label: "诊断评估 / 计时删减", short: "评估" },
   { key: "final_script", field: "finalScript", label: "最终剧本", short: "最终剧本" },
   { key: "format_check", field: "formatCheck", label: "格式检查 / Hollywood & Asian", short: "格式" },
-  { key: "storyboard_script", field: "storyboardEpisodes", label: "分集分镜", short: "分镜" },
   { key: "final_delivery", field: "deliveryPackage", label: "最终交付", short: "交付" },
 ];
 
@@ -367,10 +365,10 @@ export const workflowPhases: WorkflowPhase[] = [
   },
   {
     key: "storyboard_delivery",
-    title: "分镜与交付",
-    englishTitle: "Storyboard & Delivery",
-    description: "最终剧本、分集分镜、视觉提示词、导出面板和交付包。",
-    stepKeys: ["storyboard_script", "final_delivery"],
+    title: "交付",
+    englishTitle: "Delivery",
+    description: "最终剧本、格式检查、导出面板和交付包。分镜已迁移到独立分镜工作台。",
+    stepKeys: ["final_delivery"],
   },
 ];
 
@@ -583,9 +581,6 @@ export function buildDeliveryMarkdown(project: DramaProject, deliveryOnly = true
     "",
     "## 最终剧本：双语版本",
     project.finalScriptBilingual || "未生成",
-    "",
-    "## 分镜",
-    storyboardEpisodesToMarkdown(project.storyboardEpisodes) || project.storyboardScript || "未生成",
     "",
   ];
 

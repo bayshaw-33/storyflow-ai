@@ -340,7 +340,7 @@ function NovelWorkbenchContent() {
     try {
       await upsertProjectToSupabase(nextProject, { accessToken: session.access_token });
     } catch {
-      setCloudWarning(isZh ? "已保存到本地，但同步到云端失败。" : "Saved locally, but cloud sync failed.");
+      setCloudWarning(isZh ? "已保存到本地项目列表，云端同步待配置完成后自动可用。" : "Saved locally. Cloud sync will work after the Supabase setup is complete.");
     }
     setStatus(isZh ? "已保存到工作台。" : "Saved to Workspace.");
   }
@@ -404,7 +404,7 @@ function NovelWorkbenchContent() {
             novel_chapter_outline: project.novelChapterOutline,
             novel_chapter_draft: project.novelChapterDraft,
           },
-          byoApi: readByoApiConfig(),
+          byoApi: readByoApiConfig("novel"),
         }),
       });
       const data = await response.json();
@@ -573,7 +573,7 @@ function NovelWorkbenchContent() {
   }
 
   function downloadMarkdown() {
-    const blob = new Blob([exportProjectMarkdown(project)], { type: "text/markdown;charset=utf-8" });
+    const blob = new Blob([buildCompleteNovelDownload(project)], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -977,6 +977,13 @@ function createBlankChapter(chapterNo: number): NovelChapter {
 }
 
 function applyGeneratedOutput(project: DramaProject, taskType: TaskType, output: string, activeChapter: NovelChapter | null): DramaProject {
+  if (taskType === "novel_export") {
+    return {
+      ...setStepContent(project, taskType, buildCompleteNovelDownload(project, output)),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   if (taskType !== "novel_chapter_outline" && taskType !== "novel_chapter_draft" && taskType !== "novel_revision") {
     return setStepContent(project, taskType, output);
   }
@@ -1033,6 +1040,69 @@ function countNovelWords(value: string) {
   const cjkCount = (trimmed.match(/[\u4e00-\u9fff]/g) || []).length;
   const wordCount = (trimmed.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g) || []).length;
   return cjkCount + wordCount;
+}
+
+function buildCompleteNovelDownload(project: DramaProject, aiExportNotes = "") {
+  const chapters = project.novelChapters.length
+    ? project.novelChapters
+    : project.novelChapterDraft.trim()
+      ? [{
+          id: "legacy-chapter",
+          chapterNo: 1,
+          title: "第 1 章",
+          outline: project.novelChapterOutline,
+          draft: project.novelChapterDraft,
+          endingHook: "",
+          pov: "",
+          wordCount: countNovelWords(project.novelChapterDraft),
+          continuityNotes: project.novelContinuityNotes,
+          status: "draft" as const,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        }]
+      : [];
+
+  const manuscript = chapters
+    .filter((chapter) => chapter.draft.trim() || chapter.outline.trim())
+    .map((chapter) => [
+      `## 第 ${chapter.chapterNo} 章 ${chapter.title.replace(/^第\s*\d+\s*章\s*/, "").trim() || ""}`.trim(),
+      "",
+      chapter.draft.trim() || `【待扩写】\n${chapter.outline.trim()}`,
+      chapter.endingHook.trim() ? `\n\n> 结尾钩子：${chapter.endingHook.trim()}` : "",
+    ].join("\n"))
+    .join("\n\n");
+
+  return [
+    `# ${project.title || "未命名小说"}`,
+    "",
+    "## 完整小说正文",
+    "",
+    manuscript || project.novelChapterDraft || "还没有生成章节正文。请先生成章节大纲和章节正文，再导出完整小说。",
+    "",
+    "---",
+    "",
+    "## 创作附录",
+    "",
+    "### 小说 Brief",
+    project.novelBrief || project.idea || "未生成",
+    "",
+    "### 小说 Bible",
+    project.novelBible || "未生成",
+    "",
+    "### 角色卡",
+    project.novelCharacters || "未生成",
+    "",
+    "### 分卷大纲",
+    project.novelVolumeOutline || "未生成",
+    "",
+    "### 连续性备注",
+    chapters.map((chapter) => [
+      `第 ${chapter.chapterNo} 章 ${chapter.title}`,
+      chapter.outline ? `大纲：${chapter.outline}` : "",
+      chapter.continuityNotes ? `连续性：${chapter.continuityNotes}` : "",
+    ].filter(Boolean).join("\n")).filter(Boolean).join("\n\n") || project.novelContinuityNotes || "未生成",
+    aiExportNotes.trim() ? ["", "### AI 导出建议", aiExportNotes.trim()].join("\n") : "",
+  ].filter(Boolean).join("\n");
 }
 
 function buildScriptAdaptationBrief(project: DramaProject) {

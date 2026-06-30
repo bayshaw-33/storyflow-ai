@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { AuthModal } from "@/components/layout/AuthModal";
+import { readWorkflowModelRouting, writeWorkflowModelRouting, type WorkflowModelRoute, type WorkflowModelRouting } from "@/lib/ai/byoClient";
 import type { TeamRole } from "@/lib/actors";
 import { DEFAULT_PLAN_ID, getPlanEntitlement, type PlanId } from "@/lib/billing/plans";
 import { STORAGE_KEY } from "@/lib/projects";
@@ -33,19 +34,23 @@ type Credits = {
 
 type AuthMode = "signin" | "signup";
 type ByoApiSettings = {
-  provider: "auto" | "deepseek" | "minimax";
+  provider: "auto" | "deepseek" | "minimax" | "custom";
   deepseekApiKey: string;
   deepseekModel: string;
   minimaxApiKey: string;
   minimaxModel: string;
   minimaxBaseUrl: string;
+  customProviderName: string;
+  customApiKey: string;
+  customModel: string;
+  customBaseUrl: string;
 };
 
 type ApiConnectionSummary = {
   id: string;
   team_id?: string | null;
   scope: "personal" | "team";
-  provider: "deepseek" | "minimax";
+  provider: string;
   model?: string | null;
   base_url?: string | null;
   label: string;
@@ -67,6 +72,10 @@ const EMPTY_BYO_API: ByoApiSettings = {
   minimaxApiKey: "",
   minimaxModel: "",
   minimaxBaseUrl: "",
+  customProviderName: "",
+  customApiKey: "",
+  customModel: "",
+  customBaseUrl: "",
 };
 
 const copy = {
@@ -76,6 +85,7 @@ const copy = {
     subtitle: "Account identity, current plan, registration date, and creation credits.",
     signedOut: "Sign in to manage your profile.",
     signIn: "Sign in",
+    guestPreview: "Preview as guest",
     localProjects: "local projects",
     profile: "Profile",
     avatar: "Avatar",
@@ -104,16 +114,21 @@ const copy = {
     upgrade: "Change plan",
     notConnected: "Not connected",
     apiKeys: "API Keys",
-    apiKeysHint: "Connect personal or team provider keys. Team keys can be shared by studio members.",
+    apiKeysHint: "Add OpenAI-compatible models, then assign a default model to each workflow.",
     apiProvider: "Provider routing",
     apiProviderAuto: "Auto",
     apiProviderDeepSeek: "DeepSeek",
     apiProviderMiniMax: "MiniMax",
+    apiProviderCustom: "Custom / OpenAI-compatible",
     deepseekKey: "DeepSeek API Key",
     deepseekModel: "DeepSeek model",
     minimaxKey: "MiniMax API Key",
     minimaxModel: "MiniMax model",
     minimaxBaseUrl: "MiniMax base URL",
+    customProviderName: "Custom provider name",
+    customKey: "Custom API Key",
+    customModel: "Custom model",
+    customBaseUrl: "Custom base URL",
     optional: "Optional",
     saveApiKeys: "Save API keys",
     clearApiKeys: "Clear keys",
@@ -129,6 +144,8 @@ const copy = {
     apiConnections: "Saved connections",
     noApiConnections: "No cloud API connections yet.",
     deleteConnection: "Disable",
+    modelRouting: "Workflow model routing",
+    defaultModel: "Default model",
   },
   "zh-CN": {
     kicker: "设置",
@@ -136,6 +153,7 @@ const copy = {
     subtitle: "账号身份、当前套餐、注册时间与创作积分。",
     signedOut: "请先登录后再管理个人资料。",
     signIn: "登录",
+    guestPreview: "访客预览",
     localProjects: "个本地项目",
     profile: "个人资料",
     avatar: "头像",
@@ -164,16 +182,21 @@ const copy = {
     upgrade: "更换套餐",
     notConnected: "未连接",
     apiKeys: "API Keys",
-    apiKeysHint: "可接入个人或团队供应商 Key。团队 Key 可供同团队工作室成员共用。",
+    apiKeysHint: "添加 OpenAI 兼容模型后，可为每个工作流指定默认模型。",
     apiProvider: "供应商路由",
     apiProviderAuto: "自动",
     apiProviderDeepSeek: "DeepSeek",
     apiProviderMiniMax: "MiniMax",
+    apiProviderCustom: "自定义 / OpenAI-compatible",
     deepseekKey: "DeepSeek API Key",
     deepseekModel: "DeepSeek 模型",
     minimaxKey: "MiniMax API Key",
     minimaxModel: "MiniMax 模型",
     minimaxBaseUrl: "MiniMax Base URL",
+    customProviderName: "自定义供应商名称",
+    customKey: "自定义 API Key",
+    customModel: "自定义模型",
+    customBaseUrl: "自定义 Base URL",
     optional: "可选",
     saveApiKeys: "保存 API Key",
     clearApiKeys: "清除 Key",
@@ -189,8 +212,19 @@ const copy = {
     apiConnections: "已保存连接",
     noApiConnections: "暂无云端 API 连接。",
     deleteConnection: "停用",
+    modelRouting: "工作流模型路由",
+    defaultModel: "默认模型",
   },
 };
+
+const workflowRouteOptions: Array<{ id: WorkflowModelRoute; zh: string; en: string }> = [
+  { id: "novel", zh: "小说创作", en: "Novel Creation" },
+  { id: "script", zh: "剧本创作", en: "Script Creation" },
+  { id: "storyboard", zh: "分镜创作", en: "Storyboard" },
+  { id: "video", zh: "视频创作", en: "Video" },
+  { id: "song", zh: "歌曲创作", en: "Song Creation" },
+  { id: "viral", zh: "爆款创作", en: "Viral Creation" },
+];
 
 function normalizePlan(value: string | null | undefined): PlanId {
   return PLAN_IDS.includes(value as PlanId) ? (value as PlanId) : DEFAULT_PLAN_ID;
@@ -233,6 +267,7 @@ export default function SettingsPage() {
   const [apiLabel, setApiLabel] = useState("");
   const [apiConnections, setApiConnections] = useState<ApiConnectionSummary[]>([]);
   const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [workflowRouting, setWorkflowRouting] = useState<WorkflowModelRouting>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -242,6 +277,7 @@ export default function SettingsPage() {
       setMessage(null);
       setProjectCount(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]").length);
       setByoApi(readByoApiSettings());
+      setWorkflowRouting(readWorkflowModelRouting());
 
       const supabase = getSupabaseBrowserClient();
       if (!supabase) {
@@ -427,10 +463,19 @@ export default function SettingsPage() {
       return;
     }
 
-    const provider = byoApi.provider === "minimax" ? "minimax" : "deepseek";
-    const apiKey = provider === "deepseek" ? byoApi.deepseekApiKey.trim() : byoApi.minimaxApiKey.trim();
+    const provider = byoApi.provider === "minimax" ? "minimax" : byoApi.provider === "custom" ? "custom" : "deepseek";
+    const providerName = provider === "custom" ? sanitizeProviderName(byoApi.customProviderName) : provider;
+    const apiKey = provider === "deepseek"
+      ? byoApi.deepseekApiKey.trim()
+      : provider === "minimax"
+        ? byoApi.minimaxApiKey.trim()
+        : byoApi.customApiKey.trim();
     if (!apiKey) {
-      setMessage({ tone: "error", text: provider === "deepseek" ? text.deepseekKey : text.minimaxKey });
+      setMessage({ tone: "error", text: provider === "deepseek" ? text.deepseekKey : provider === "minimax" ? text.minimaxKey : text.customKey });
+      return;
+    }
+    if (provider === "custom" && (!byoApi.customBaseUrl.trim() || !byoApi.customModel.trim())) {
+      setMessage({ tone: "error", text: `${text.customBaseUrl} / ${text.customModel}` });
       return;
     }
 
@@ -444,10 +489,10 @@ export default function SettingsPage() {
         body: JSON.stringify({
           scope: apiScope,
           team_id: apiScope === "team" ? apiTeamId : null,
-          provider,
+          provider: providerName,
           api_key: apiKey,
-          model: provider === "deepseek" ? byoApi.deepseekModel.trim() : byoApi.minimaxModel.trim(),
-          base_url: provider === "minimax" ? byoApi.minimaxBaseUrl.trim() : "",
+          model: provider === "deepseek" ? byoApi.deepseekModel.trim() : provider === "minimax" ? byoApi.minimaxModel.trim() : byoApi.customModel.trim(),
+          base_url: provider === "minimax" ? byoApi.minimaxBaseUrl.trim() : provider === "custom" ? byoApi.customBaseUrl.trim() : "",
           label: apiLabel.trim(),
         }),
       });
@@ -461,13 +506,32 @@ export default function SettingsPage() {
         minimaxApiKey: byoApi.minimaxApiKey.trim(),
         minimaxModel: byoApi.minimaxModel.trim(),
         minimaxBaseUrl: byoApi.minimaxBaseUrl.trim(),
+        customProviderName: byoApi.customProviderName.trim(),
+        customApiKey: byoApi.customApiKey.trim(),
+        customModel: byoApi.customModel.trim(),
+        customBaseUrl: byoApi.customBaseUrl.trim(),
       }));
       setApiConnections((current) => [payload.connection, ...current.filter((item) => item.id !== payload.connection.id)]);
       setApiLabel("");
+      setWorkflowRouting((current) => {
+        const next = { ...current };
+        if (!next.novel) next.novel = payload.connection.id;
+        writeWorkflowModelRouting(next);
+        return next;
+      });
       setMessage({ tone: "success", text: text.apiKeysSaved });
     } catch {
       setMessage({ tone: "error", text: text.saveFailed });
     }
+  }
+
+  function updateWorkflowRoute(workflow: WorkflowModelRoute, connectionId: string) {
+    setWorkflowRouting((current) => {
+      const next = { ...current, [workflow]: connectionId };
+      if (!connectionId) delete next[workflow];
+      writeWorkflowModelRouting(next);
+      return next;
+    });
   }
 
   function clearApiKeys() {
@@ -570,16 +634,19 @@ export default function SettingsPage() {
                 {saving ? text.saving : text.save}
               </button>
             ) : (
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => {
-                  setAuthMode("signin");
-                  setAuthOpen(true);
-                }}
-              >
-                {text.signIn}
-              </button>
+              <>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("signin");
+                    setAuthOpen(true);
+                  }}
+                >
+                  {text.signIn}
+                </button>
+                <Link className="secondary-button" href="/dashboard?guest=1">{text.guestPreview}</Link>
+              </>
             )}
             <Link className="secondary-button" href="/subscription">{text.upgrade}</Link>
           </div>
@@ -647,8 +714,51 @@ export default function SettingsPage() {
               <option value="auto">{text.apiProviderAuto}</option>
               <option value="deepseek">{text.apiProviderDeepSeek}</option>
               <option value="minimax">{text.apiProviderMiniMax}</option>
+              <option value="custom">{text.apiProviderCustom}</option>
             </select>
           </label>
+          {byoApi.provider === "custom" ? (
+            <>
+              <label>
+                {text.customProviderName}
+                <input
+                  value={byoApi.customProviderName}
+                  disabled={!canUseByoApi}
+                  placeholder="openai / qwen / anthropic-proxy"
+                  onChange={(event) => setByoApi((current) => ({ ...current, customProviderName: event.target.value }))}
+                />
+              </label>
+              <label>
+                {text.customKey}
+                <input
+                  type="password"
+                  value={byoApi.customApiKey}
+                  disabled={!canUseByoApi}
+                  placeholder="sk-..."
+                  onChange={(event) => setByoApi((current) => ({ ...current, customApiKey: event.target.value }))}
+                />
+              </label>
+              <label>
+                {text.customModel}
+                <input
+                  value={byoApi.customModel}
+                  disabled={!canUseByoApi}
+                  placeholder="gpt-4.1 / qwen-max / claude-sonnet"
+                  onChange={(event) => setByoApi((current) => ({ ...current, customModel: event.target.value }))}
+                />
+              </label>
+              <label>
+                {text.customBaseUrl}
+                <input
+                  type="url"
+                  value={byoApi.customBaseUrl}
+                  disabled={!canUseByoApi}
+                  placeholder="https://api.example.com/v1"
+                  onChange={(event) => setByoApi((current) => ({ ...current, customBaseUrl: event.target.value }))}
+                />
+              </label>
+            </>
+          ) : null}
           <label>
             {text.deepseekKey}
             <input
@@ -721,6 +831,22 @@ export default function SettingsPage() {
               </article>
             ))}
           </div>
+          <div className="api-routing-list">
+            <strong>{text.modelRouting}</strong>
+            {workflowRouteOptions.map((workflow) => (
+              <label key={workflow.id}>
+                {locale === "zh-CN" ? workflow.zh : workflow.en}
+                <select value={workflowRouting[workflow.id] || ""} onChange={(event) => updateWorkflowRoute(workflow.id, event.target.value)}>
+                  <option value="">{text.defaultModel}</option>
+                  {apiConnections.map((connection) => (
+                    <option key={connection.id} value={connection.id}>
+                      {connection.label || connection.provider} · {connection.model || connection.provider}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
         </article>
 
         <article className="settings-card">
@@ -745,14 +871,23 @@ function readByoApiSettings(): ByoApiSettings {
     const parsed = JSON.parse(localStorage.getItem(BYO_API_STORAGE_KEY) || "null") as Partial<ByoApiSettings> | null;
     if (!parsed) return EMPTY_BYO_API;
     return {
-      provider: parsed.provider === "deepseek" || parsed.provider === "minimax" ? parsed.provider : "auto",
+      provider: parsed.provider === "deepseek" || parsed.provider === "minimax" || parsed.provider === "custom" ? parsed.provider : "auto",
       deepseekApiKey: parsed.deepseekApiKey || "",
       deepseekModel: parsed.deepseekModel || "",
       minimaxApiKey: parsed.minimaxApiKey || "",
       minimaxModel: parsed.minimaxModel || "",
       minimaxBaseUrl: parsed.minimaxBaseUrl || "",
+      customProviderName: parsed.customProviderName || "",
+      customApiKey: parsed.customApiKey || "",
+      customModel: parsed.customModel || "",
+      customBaseUrl: parsed.customBaseUrl || "",
     };
   } catch {
     return EMPTY_BYO_API;
   }
+}
+
+function sanitizeProviderName(value: string) {
+  const cleaned = value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return cleaned || "custom";
 }

@@ -10,7 +10,7 @@ export type ApiConnection = {
   user_id: string;
   team_id?: string | null;
   scope: ApiConnectionScope;
-  provider: Exclude<ByoApiProvider, "auto">;
+  provider: Exclude<ByoApiProvider, "auto"> | string;
   api_key?: string;
   model?: string | null;
   base_url?: string | null;
@@ -24,7 +24,7 @@ export type ApiConnectionInput = {
   id?: string;
   scope?: ApiConnectionScope;
   team_id?: string | null;
-  provider?: Exclude<ByoApiProvider, "auto">;
+  provider?: Exclude<ByoApiProvider, "auto"> | string;
   api_key?: string;
   model?: string | null;
   base_url?: string | null;
@@ -57,7 +57,8 @@ export async function listApiConnectionsForUser(userId: string): Promise<ApiConn
 
 export async function upsertApiConnectionForUser(userId: string, input: ApiConnectionInput): Promise<ApiConnectionSummary> {
   ensureServiceRole();
-  if (!input.provider || (input.provider !== "deepseek" && input.provider !== "minimax")) {
+  const provider = normalizeProvider(input.provider);
+  if (!provider) {
     throw new Error("API_PROVIDER_REQUIRED");
   }
 
@@ -82,11 +83,11 @@ export async function upsertApiConnectionForUser(userId: string, input: ApiConne
     user_id: existing?.user_id || userId,
     team_id: teamId,
     scope,
-    provider: input.provider,
+    provider,
     api_key: apiKey || existing?.api_key || "",
     model: input.model?.trim() || null,
     base_url: input.base_url?.trim() || null,
-    label: input.label?.trim() || defaultLabel(input.provider, scope),
+    label: input.label?.trim() || defaultLabel(provider, scope),
     status: input.status || "active",
     created_at: existing?.created_at || now,
     updated_at: now,
@@ -129,25 +130,74 @@ export async function resolveSavedApiConfig(userId: string, providerPreference: 
   });
 
   if (!rows.length) return null;
-  const providerRows = providerPreference === "deepseek" || providerPreference === "minimax"
-    ? rows.filter((row) => row.provider === providerPreference)
-    : rows;
+  const providerRows = providerPreference === "custom"
+    ? rows.filter((row) => row.provider !== "deepseek" && row.provider !== "minimax")
+    : providerPreference === "deepseek" || providerPreference === "minimax"
+      ? rows.filter((row) => row.provider === providerPreference)
+      : rows;
   const row = providerRows.find((item) => item.scope === "team") || providerRows[0] || rows[0];
   if (!row?.api_key) return null;
 
   if (row.provider === "deepseek") {
     return {
       provider: "deepseek",
+      connectionId: row.id,
       deepseekApiKey: row.api_key,
       deepseekModel: row.model || undefined,
     };
   }
 
+  if (row.provider === "minimax") {
+    return {
+      provider: "minimax",
+      connectionId: row.id,
+      minimaxApiKey: row.api_key,
+      minimaxModel: row.model || undefined,
+      minimaxBaseUrl: row.base_url || undefined,
+    };
+  }
+
   return {
-    provider: "minimax",
-    minimaxApiKey: row.api_key,
-    minimaxModel: row.model || undefined,
-    minimaxBaseUrl: row.base_url || undefined,
+    provider: "custom",
+    connectionId: row.id,
+    customProviderName: row.provider,
+    customApiKey: row.api_key,
+    customModel: row.model || undefined,
+    customBaseUrl: row.base_url || undefined,
+  };
+}
+
+export async function resolveSavedApiConfigById(userId: string, connectionId: string): Promise<ByoApiConfig | null> {
+  ensureServiceRole();
+  const row = await getApiConnectionForUser(userId, connectionId);
+  if (!row || row.status !== "active" || !row.api_key) return null;
+
+  if (row.provider === "deepseek") {
+    return {
+      provider: "deepseek",
+      connectionId: row.id,
+      deepseekApiKey: row.api_key,
+      deepseekModel: row.model || undefined,
+    };
+  }
+
+  if (row.provider === "minimax") {
+    return {
+      provider: "minimax",
+      connectionId: row.id,
+      minimaxApiKey: row.api_key,
+      minimaxModel: row.model || undefined,
+      minimaxBaseUrl: row.base_url || undefined,
+    };
+  }
+
+  return {
+    provider: "custom",
+    connectionId: row.id,
+    customProviderName: row.provider,
+    customApiKey: row.api_key,
+    customModel: row.model || undefined,
+    customBaseUrl: row.base_url || undefined,
   };
 }
 
@@ -203,7 +253,14 @@ function toSummary(row: ApiConnection): ApiConnectionSummary {
 }
 
 function defaultLabel(provider: ApiConnection["provider"], scope: ApiConnectionScope) {
-  return `${scope === "team" ? "Team" : "Personal"} ${provider === "deepseek" ? "DeepSeek" : "MiniMax"}`;
+  const providerName = provider === "deepseek" ? "DeepSeek" : provider === "minimax" ? "MiniMax" : provider;
+  return `${scope === "team" ? "Team" : "Personal"} ${providerName}`;
+}
+
+function normalizeProvider(value: unknown) {
+  const provider = String(value || "").trim().toLowerCase();
+  if (!provider || provider === "auto") return "";
+  return provider.replace(/[^a-z0-9._-]/g, "-").slice(0, 48);
 }
 
 function maskKey(value: string) {

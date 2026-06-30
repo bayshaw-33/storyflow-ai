@@ -10,7 +10,7 @@ export type AIUsage = {
   [key: string]: unknown;
 };
 
-export type AIProviderName = "deepseek" | "minimax";
+export type AIProviderName = "deepseek" | "minimax" | "custom";
 
 export type AIProviderResult = {
   output: string;
