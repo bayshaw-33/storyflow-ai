@@ -310,6 +310,23 @@ function storyboardStateToMarkdown(state: StoryboardState) {
   ].filter(Boolean).join("\n");
 }
 
+function isImageAsset(asset: string) {
+  return /^https?:\/\//i.test(asset) || asset.startsWith("data:image/");
+}
+
+function renderConceptPreview(asset: string, emptyText: string) {
+  if (asset && isImageAsset(asset)) {
+    return (
+      <div className="studio-concept-preview has-image">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={asset} alt="Generated concept" />
+      </div>
+    );
+  }
+
+  return <div className="studio-concept-preview">{asset || emptyText}</div>;
+}
+
 export default function StoryboardWorkbenchPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -326,6 +343,7 @@ export default function StoryboardWorkbenchPage() {
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [savingProject, setSavingProject] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
+  const [conceptBusy, setConceptBusy] = useState<"character" | "scene" | "">("");
   const selectedScene = state.scenes.find((scene) => scene.id === selectedSceneId) || state.scenes[0];
   const scriptSourceProjects = useMemo(
     () =>
@@ -516,15 +534,45 @@ export default function StoryboardWorkbenchPage() {
     setSelectedSceneId(scenes[0]?.id || selectedSceneId);
   }
 
-  function generateConceptAsset(type: "character" | "scene") {
+  async function generateConceptAsset(type: "character" | "scene") {
     const source = type === "character"
       ? [state.characterKeywords, state.characterDesign, state.characterReferenceName].filter(Boolean).join(" / ")
       : [state.sceneKeywords, state.sceneDesign, state.sceneReferenceName].filter(Boolean).join(" / ");
-    const asset = source || (type === "character" ? (isZh ? "待生成角色形象" : "Character concept pending") : (isZh ? "待生成场景图" : "Scene concept pending"));
-    setState((current) => ({
-      ...current,
-      [type === "character" ? "characterConceptAsset" : "sceneConceptAsset"]: asset,
-    }));
+    if (!source.trim()) return;
+    if (!session?.access_token) {
+      const message = isZh ? "请先登录后再生成概念图。" : "Sign in before generating concept images.";
+      setState((current) => ({ ...current, [type === "character" ? "characterConceptAsset" : "sceneConceptAsset"]: message }));
+      return;
+    }
+
+    setConceptBusy(type);
+    try {
+      const response = await fetch("/api/ai/concept-image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          kind: type,
+          projectTitle: state.projectTitle,
+          prompt: type === "character" ? state.characterKeywords : state.sceneKeywords,
+          context: type === "character" ? state.characterDesign : state.sceneDesign,
+          referenceName: type === "character" ? state.characterReferenceName : state.sceneReferenceName,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || (isZh ? "生成失败。" : "Generation failed."));
+      setState((current) => ({
+        ...current,
+        [type === "character" ? "characterConceptAsset" : "sceneConceptAsset"]: String(payload.imageUrl || payload.prompt || source),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : (isZh ? "生成失败。" : "Generation failed.");
+      setState((current) => ({ ...current, [type === "character" ? "characterConceptAsset" : "sceneConceptAsset"]: message }));
+    } finally {
+      setConceptBusy("");
+    }
   }
 
   async function importStoryboardFile(event: ChangeEvent<HTMLInputElement>) {
@@ -885,8 +933,8 @@ export default function StoryboardWorkbenchPage() {
                   <span>Character Look</span>
                   <h3>{isZh ? "角色形象设计" : "Character appearance design"}</h3>
                 </div>
-                <button className="secondary-button" type="button" onClick={() => generateConceptAsset("character")}>
-                  <ImagePlus size={16} /> {isZh ? "生成形象" : "Generate look"}
+                <button className="secondary-button" type="button" onClick={() => void generateConceptAsset("character")} disabled={conceptBusy === "character"}>
+                  <ImagePlus size={16} /> {conceptBusy === "character" ? (isZh ? "生成中" : "Generating") : (isZh ? "生成形象" : "Generate look")}
                 </button>
               </div>
               <label className="studio-field">
@@ -903,7 +951,7 @@ export default function StoryboardWorkbenchPage() {
                 {isZh ? "设计说明" : "Design brief"}
                 <textarea value={state.characterDesign} onChange={(event) => updateState("characterDesign", event.target.value)} placeholder={isZh ? "年龄、气质、服装、发型、色彩、表情、三视图要求。" : "Age, vibe, wardrobe, hair, palette, expression, turnaround requirements."} />
               </label>
-              <div className="studio-concept-preview">{state.characterConceptAsset || (isZh ? "角色形象生成结果会显示在这里。" : "Generated character concept appears here.")}</div>
+              {renderConceptPreview(state.characterConceptAsset, isZh ? "角色形象生成结果会显示在这里。" : "Generated character concept appears here.")}
             </article>
             <article className="studio-concept-module">
               <div className="studio-section-head is-row">
@@ -911,8 +959,8 @@ export default function StoryboardWorkbenchPage() {
                   <span>Scene Concept</span>
                   <h3>{isZh ? "场景图设计" : "Scene concept design"}</h3>
                 </div>
-                <button className="secondary-button" type="button" onClick={() => generateConceptAsset("scene")}>
-                  <ImagePlus size={16} /> {isZh ? "生成场景图" : "Generate scene"}
+                <button className="secondary-button" type="button" onClick={() => void generateConceptAsset("scene")} disabled={conceptBusy === "scene"}>
+                  <ImagePlus size={16} /> {conceptBusy === "scene" ? (isZh ? "生成中" : "Generating") : (isZh ? "生成场景图" : "Generate scene")}
                 </button>
               </div>
               <label className="studio-field">
@@ -929,7 +977,7 @@ export default function StoryboardWorkbenchPage() {
                 {isZh ? "设计说明" : "Design brief"}
                 <textarea value={state.sceneDesign} onChange={(event) => updateState("sceneDesign", event.target.value)} placeholder={isZh ? "关键空间、时代、地域、光线、道具、气氛和可复用场景资产。" : "Key spaces, period, region, lighting, props, mood, reusable scene assets."} />
               </label>
-              <div className="studio-concept-preview">{state.sceneConceptAsset || (isZh ? "场景图生成结果会显示在这里。" : "Generated scene concept appears here.")}</div>
+              {renderConceptPreview(state.sceneConceptAsset, isZh ? "场景图生成结果会显示在这里。" : "Generated scene concept appears here.")}
             </article>
           </div>
           <label className="studio-field">
