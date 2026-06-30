@@ -1,8 +1,8 @@
 "use client";
 
-import { BookOpen, Clapperboard, Film, Flame, Music2, PanelsTopLeft, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { BookOpen, Clapperboard, Film, Flame, Music2, PanelsTopLeft, type LucideIcon } from "lucide-react";
 
-export type WorkflowEntryId = "novel" | "script" | "storyboard" | "director" | "video" | "song" | "viral";
+export type WorkflowEntryId = "novel" | "script" | "storyboard" | "video" | "song" | "viral";
 export type WorkflowEntryTier = "core" | "extended";
 
 export type WorkflowEntryPoint = {
@@ -58,19 +58,6 @@ export const WORKFLOW_ENTRY_POINTS: WorkflowEntryPoint[] = [
     steps: 4,
     difficulty: "Shots",
     difficultyZh: "镜头",
-  },
-  {
-    id: "director",
-    title: "Director",
-    titleZh: "导演",
-    description: "Review storyboard assets, production choices, and model routing before video generation.",
-    descriptionZh: "统筹分镜资产、生产选择和模型路由，再进入视频生成。",
-    href: "/director-workbench?setup=1",
-    tier: "core",
-    icon: SlidersHorizontal,
-    steps: 4,
-    difficulty: "Control",
-    difficultyZh: "统筹",
   },
   {
     id: "video",
