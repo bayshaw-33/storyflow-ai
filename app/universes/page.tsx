@@ -84,7 +84,7 @@ export default function UniversesPage() {
           accessToken ? readProjectsFromSupabase({ accessToken }).catch(() => []) : Promise.resolve([]),
         ]);
         setUniverses(rows);
-        setProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects));
+        setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
 
         const summaryPairs = await Promise.all(
           rows.map(async (universe) => {
@@ -95,7 +95,7 @@ export default function UniversesPage() {
         setUniverseSummaries(Object.fromEntries(summaryPairs));
       } catch (loadIssue) {
         setLoadError(loadIssue instanceof Error ? loadIssue.message : "Universe load failed.");
-        setProjects(readProjectsFromStorage());
+        setProjects(getUniverseSourceProjects(readProjectsFromStorage()));
       } finally {
         setLoading(false);
       }
@@ -197,8 +197,8 @@ export default function UniversesPage() {
     {
       title: isZh ? "项目接入" : "Project Intake",
       body: isZh
-        ? "从剧本、小说、歌曲、分镜、视频或爆款项目中创建宇宙，保留来源链接。"
-        : "Create Universes from script, novel, song, storyboard, video, or viral projects while keeping source links.",
+        ? "从剧本、小说、歌曲、分镜或视频项目中创建宇宙，保留来源链接。"
+        : "Create Universes from script, novel, song, storyboard, or video projects while keeping source links.",
     },
     {
       title: isZh ? "Inbox 审核" : "Inbox Review",
@@ -632,10 +632,13 @@ function sum(items: UniverseSummary[], key: keyof UniverseSummary) {
 
 function workflowLabel(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
-  if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
   if (project.workflowType === "novel") return isZh ? "小说" : "Novel";
   if (project.workflowType === "continuation") return isZh ? "续写剧本" : "Continuation Script";
   return isZh ? "剧本" : "Script";
+}
+
+function getUniverseSourceProjects(projects: DramaProject[]) {
+  return projects.filter((project) => project.workflowType !== "viral");
 }
 
 function mergeProjectsForUniverse(localProjects: DramaProject[], cloudProjects: DramaProject[]) {

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle } from "lucide-react";
 import { createContinuationProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
-import { upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { readProjectsFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
@@ -84,12 +84,32 @@ export default function UniverseDetailPage() {
   }, [params.universeId]);
 
   useEffect(() => {
-    setProjects(readProjectsFromStorage());
-  }, []);
+    let cancelled = false;
+
+    async function loadProjects() {
+      const localProjects = readProjectsFromStorage();
+      if (!session?.access_token) {
+        setProjects(getUniverseSourceProjects(localProjects));
+        return;
+      }
+
+      const cloudProjects = await readProjectsFromSupabase({ accessToken: session.access_token }).catch(() => []);
+      if (!cancelled) setProjects(getUniverseSourceProjects(mergeProjectsForUniverseDetail(localProjects, cloudProjects)));
+    }
+
+    void loadProjects();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
 
   const projectsById = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),
     [projects],
+  );
+  const selectableLinks = useMemo(
+    () => bundle?.links.filter((link) => projectsById.has(link.project_id)) || [],
+    [bundle?.links, projectsById],
   );
 
   async function refresh(nextSession: Session | null = session) {
@@ -259,7 +279,7 @@ export default function UniverseDetailPage() {
   const characters = bundle.entities.filter((item) => item.type === "character");
   const locations = bundle.entities.filter((item) => item.type === "location");
   const pendingInbox = bundle.inbox.filter((item) => item.status === "pending");
-  const hasLinks = bundle.links.length > 0;
+  const hasLinks = selectableLinks.length > 0;
   const acceptedAssets = getAcceptedAssets(bundle);
 
   return (
@@ -366,7 +386,7 @@ export default function UniverseDetailPage() {
               disabled={!hasLinks}
             >
               <option value="">— Select project to extract from —</option>
-              {bundle.links.map((link) => {
+              {selectableLinks.map((link) => {
                 const proj = projectsById.get(link.project_id);
                 return (
                   <option key={link.project_id} value={link.project_id}>
@@ -420,7 +440,7 @@ export default function UniverseDetailPage() {
               disabled={!hasLinks}
             >
               <option value="">— Select project to check —</option>
-              {bundle.links.map((link) => {
+              {selectableLinks.map((link) => {
                 const proj = projectsById.get(link.project_id);
                 return (
                   <option key={link.project_id} value={link.project_id}>
@@ -570,4 +590,19 @@ function downloadBlob(filename: string, content: string, type: string) {
 
 function safeFileName(value: string) {
   return value.replace(/[\\/:*?"<>|]/g, "").trim() || "storyflow-universe";
+}
+
+function mergeProjectsForUniverseDetail(localProjects: DramaProject[], cloudProjects: DramaProject[]) {
+  const byId = new Map<string, DramaProject>();
+  for (const project of [...localProjects, ...cloudProjects]) {
+    const existing = byId.get(project.id);
+    if (!existing || project.updatedAt.localeCompare(existing.updatedAt) > 0) {
+      byId.set(project.id, project);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function getUniverseSourceProjects(projects: DramaProject[]) {
+  return projects.filter((project) => project.workflowType !== "viral");
 }
