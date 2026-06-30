@@ -5,7 +5,15 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle } from "lucide-react";
-import { createContinuationProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
+import {
+  createContinuationProject,
+  createNovelProject,
+  createProject,
+  readProjectsFromStorage,
+  upsertProject,
+  type DramaProject,
+  type WorkflowType,
+} from "@/lib/projects";
 import { readProjectsFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -22,6 +30,7 @@ import {
   rejectInboxItem,
   saveInboxItems,
   type UniverseBundle,
+  type UniverseInheritanceSettings,
   type UniverseInboxItem,
   type UniverseProjectRole,
   upsertUniverseProjectLink,
@@ -37,6 +46,16 @@ type UniverseAssetRow = {
   source: string;
 };
 
+type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
+
+const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: string }> = [
+  { value: "continuation", label: "Script Creation" },
+  { value: "novel", label: "Novel Creation" },
+  { value: "song", label: "Song Creation" },
+  { value: "storyboard", label: "Storyboard Creation" },
+  { value: "video", label: "Video Creation" },
+];
+
 export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
   const router = useRouter();
@@ -50,6 +69,7 @@ export default function UniverseDetailPage() {
   const [entitlement, setEntitlement] = useState(canUseUniverseEngine(null));
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
+    workflowType: "continuation" as UniverseCreateWorkflow,
     title: "",
     projectRole: "main_season" as UniverseProjectRole,
     seasonNumber: 2,
@@ -199,24 +219,17 @@ export default function UniverseDetailPage() {
     }
 
     const inheritanceSettings = DEFAULT_INHERITANCE_SETTINGS;
-    const project = createContinuationProject({
+    const project = buildProjectFromUniverse({
+      bundle,
       title,
+      workflowType: createForm.workflowType,
       market: createForm.market,
-      targetLanguage: createForm.language,
+      language: createForm.language,
       episodeCount: createForm.episodeCount,
       episodeDuration: createForm.episodeDuration,
-      universeId: bundle.universe.id,
       seasonNumber: createForm.seasonNumber,
       projectRole: createForm.projectRole,
       inheritanceSettings,
-      storyBible: buildInheritedStoryBible(bundle, inheritanceSettings),
-      idea: [
-        `Inherited from Universe: ${bundle.universe.name}`,
-        bundle.universe.description,
-        "",
-        "Canon inheritance summary:",
-        bundle.canonFacts.slice(0, 12).map((fact) => `- ${fact.fact_text}`).join("\n"),
-      ].join("\n"),
     });
     const link = buildProjectLink({
       universeId: bundle.universe.id,
@@ -233,7 +246,7 @@ export default function UniverseDetailPage() {
       upsertUniverseProjectLink(link, { accessToken: session?.access_token }),
     ]);
 
-    router.push(`/projects/${project.id}`);
+    router.push(routeForCreatedProject(project));
   }
 
   function exportBundle(format: "json" | "md") {
@@ -492,6 +505,14 @@ export default function UniverseDetailPage() {
             <div className="wizard-grid">
               <label>Title<input value={createForm.title} onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))} autoFocus /></label>
               <label>
+                Workflow
+                <select value={createForm.workflowType} onChange={(event) => setCreateForm((current) => ({ ...current, workflowType: event.target.value as UniverseCreateWorkflow }))}>
+                  {UNIVERSE_CREATE_WORKFLOWS.map((workflow) => (
+                    <option key={workflow.value} value={workflow.value}>{workflow.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Role
                 <select value={createForm.projectRole} onChange={(event) => setCreateForm((current) => ({ ...current, projectRole: event.target.value as UniverseProjectRole }))}>
                   <option value="main_season">{t("universe.projectType.mainSeason")}</option>
@@ -552,6 +573,222 @@ function getAcceptedAssets(bundle: UniverseBundle): UniverseAssetRow[] {
         source: snapshot.title,
       }));
   });
+}
+
+function buildProjectFromUniverse(input: {
+  bundle: UniverseBundle;
+  title: string;
+  workflowType: UniverseCreateWorkflow;
+  market: string;
+  language: string;
+  episodeCount: number;
+  episodeDuration: string;
+  seasonNumber: number;
+  projectRole: UniverseProjectRole;
+  inheritanceSettings: UniverseInheritanceSettings;
+}): DramaProject {
+  const bible = buildInheritedStoryBible(input.bundle, input.inheritanceSettings);
+  const inheritanceSummary = buildUniverseInheritanceSummary(input.bundle);
+  const shared = {
+    title: input.title,
+    market: input.market,
+    targetLanguage: input.language,
+    episodeCount: input.episodeCount,
+    episodeDuration: input.episodeDuration,
+    universeId: input.bundle.universe.id,
+    seasonNumber: input.seasonNumber,
+    projectRole: input.projectRole,
+    inheritanceSettings: input.inheritanceSettings,
+    storyBible: bible,
+    idea: inheritanceSummary,
+  };
+
+  if (input.workflowType === "novel") {
+    return createNovelProject({
+      ...shared,
+      novelBible: [
+        `# ${input.bundle.universe.name}`,
+        input.bundle.universe.description,
+        "",
+        "## Canon",
+        input.bundle.canonFacts.slice(0, 20).map((fact) => `- ${fact.fact_text}`).join("\n"),
+        "",
+        "## Characters",
+        input.bundle.entities.filter((entity) => entity.type === "character").slice(0, 12).map((entity) => `- ${entity.name}: ${entity.summary}`).join("\n"),
+      ].join("\n"),
+      novelBrief: inheritanceSummary,
+      novelStyleGuide: input.bundle.universe.tone || bible.languageStyle,
+      status: "draft",
+    });
+  }
+
+  if (input.workflowType === "song") {
+    return createProject({
+      ...shared,
+      workflowType: "song",
+      genre: input.bundle.universe.genre || "OST",
+      episodeCount: 1,
+      episodeDuration: "",
+      brief: buildUniverseSongMarkdown(input.bundle, input.title),
+      deliveryPackage: buildUniverseSongMarkdown(input.bundle, input.title),
+      status: "draft",
+    });
+  }
+
+  if (input.workflowType === "storyboard") {
+    const projectId = `storyboard-${crypto.randomUUID()}`;
+    const storyboardState = buildUniverseStoryboardState(input.bundle, projectId, input.title);
+    return createProject({
+      ...shared,
+      id: projectId,
+      workflowType: "storyboard",
+      genre: "分镜创作",
+      importedScript: inheritanceSummary,
+      storyboardScript: JSON.stringify(storyboardState, null, 2),
+      storyboardEpisodes: storyboardState.scenes.map((scene, index) => ({
+        id: scene.id,
+        title: scene.title || `Scene ${index + 1}`,
+        content: scene.shots.map((shot, shotIndex) => `Shot ${shotIndex + 1}: ${shot.text}`).join("\n"),
+      })),
+      deliveryPackage: inheritanceSummary,
+      status: "draft",
+    });
+  }
+
+  if (input.workflowType === "video") {
+    return createProject({
+      ...shared,
+      id: `video-project-${crypto.randomUUID()}`,
+      workflowType: "video",
+      genre: "视频创作",
+      storyboardScript: inheritanceSummary,
+      deliveryPackage: JSON.stringify(buildUniverseVideoPayload(input.bundle, input.title), null, 2),
+      status: "draft",
+    });
+  }
+
+  return createContinuationProject(shared);
+}
+
+function routeForCreatedProject(project: DramaProject) {
+  if (project.workflowType === "novel") return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
+  if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
+  if (project.workflowType === "storyboard") return `/storyboard-workbench?projectId=${encodeURIComponent(project.id)}`;
+  if (project.workflowType === "video") return `/video-workbench?projectId=${encodeURIComponent(project.id)}`;
+  return `/projects/${project.id}`;
+}
+
+function buildUniverseInheritanceSummary(bundle: UniverseBundle) {
+  return [
+    `Inherited from Universe: ${bundle.universe.name}`,
+    bundle.universe.description,
+    "",
+    "Canon inheritance summary:",
+    bundle.canonFacts.slice(0, 12).map((fact) => `- ${fact.fact_text}`).join("\n"),
+    "",
+    "Characters:",
+    bundle.entities.filter((entity) => entity.type === "character").slice(0, 10).map((entity) => `- ${entity.name}: ${entity.summary}`).join("\n"),
+    "",
+    "Locations:",
+    bundle.entities.filter((entity) => entity.type === "location").slice(0, 8).map((entity) => `- ${entity.name}: ${entity.summary}`).join("\n"),
+  ].filter(Boolean).join("\n");
+}
+
+function buildUniverseSongMarkdown(bundle: UniverseBundle, title: string) {
+  const concept = [
+    `${title} is an OST/theme song concept inherited from ${bundle.universe.name}.`,
+    bundle.universe.description,
+    bundle.canonFacts.slice(0, 8).map((fact) => `- ${fact.fact_text}`).join("\n"),
+  ].filter(Boolean).join("\n");
+
+  return [
+    `# ${title}`,
+    "",
+    "## 创作设定",
+    "- 项目类型：OST / Theme Song",
+    `- 输出语言：${bundle.universe.default_language || "English"}`,
+    `- 曲风：${bundle.universe.genre || "Not specified"}`,
+    `- 情绪：${bundle.universe.tone || "Not specified"}`,
+    "- 乐器：Not specified",
+    "- 律动：Not specified",
+    "- 调性：Not specified",
+    "- 结构：Not specified",
+    `- 关联 Universe：${bundle.universe.id}`,
+    "",
+    "## 歌曲概念",
+    concept,
+    "",
+    "## 歌词",
+    "未生成",
+    "",
+    "## Style Prompt",
+    "未生成",
+    "",
+    "## Composition Prompt",
+    "未生成",
+    "",
+    "## 歌词审查",
+    "未审查",
+  ].join("\n");
+}
+
+function buildUniverseStoryboardState(bundle: UniverseBundle, projectId: string, title: string) {
+  const locations = bundle.entities.filter((entity) => entity.type === "location").slice(0, 3);
+  const facts = bundle.canonFacts.slice(0, 6);
+  const scenes = (locations.length ? locations : [{ id: "universe-scene", name: bundle.universe.name, summary: bundle.universe.description }]).map((location, index) => ({
+    id: `scene-${index + 1}`,
+    title: location.name || `Scene ${index + 1}`,
+    location: location.name || "",
+    intention: location.summary || bundle.universe.description || "",
+    shots: [
+      {
+        id: `shot-${index + 1}-1`,
+        text: facts[index]?.fact_text || location.summary || bundle.universe.description || "",
+        frame: "Medium shot",
+        action: "",
+        camera: "Static camera",
+        duration: "5s",
+        continuity: "",
+        visualPrompt: [bundle.universe.tone, location.summary].filter(Boolean).join(". "),
+      },
+    ],
+  }));
+
+  return {
+    id: projectId,
+    projectTitle: title,
+    script: buildUniverseInheritanceSummary(bundle),
+    visualStyle: bundle.universe.tone || "cinematic short drama, realistic lighting, high emotional tension",
+    aspectRatio: "9:16" as const,
+    scenes,
+  };
+}
+
+function buildUniverseVideoPayload(bundle: UniverseBundle, title: string) {
+  const prompt = [
+    bundle.universe.tone || "cinematic short drama",
+    bundle.universe.description,
+    bundle.canonFacts[0]?.fact_text,
+  ].filter(Boolean).join(". ");
+
+  return {
+    state: {
+      model: "MiniMax-Hailuo-02",
+      shots: [{
+        id: `video-shot-${crypto.randomUUID()}`,
+        sceneTitle: title,
+        sourceText: bundle.universe.description || "",
+        prompt,
+        duration: "5s",
+        aspectRatio: "9:16",
+        status: "draft",
+      }],
+    },
+    sourceStoryboardTitle: title,
+    sourceStoryboardId: "",
+    selectedUniverseId: bundle.universe.id,
+    uploadedSourceName: "",
+  };
 }
 
 function formatCharacterBody(details: Record<string, unknown>, summary: string) {
