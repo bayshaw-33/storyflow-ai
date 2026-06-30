@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
+import { readSheet } from "read-excel-file/node";
 
 export const runtime = "nodejs";
 
@@ -34,15 +35,31 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { success: false, text: "", error: "文件解析失败，请换一个 txt、md、pdf、doc 或 docx 文件重试。" },
+      { success: false, text: "", error: "文件解析失败，请换一个 txt、md、pdf、doc、docx、xlsx、csv 或 html 文件重试。" },
       { status: 500 },
     );
   }
 }
 
 async function parseFile(fileName: string, buffer: Buffer) {
-  if (fileName.endsWith(".txt") || fileName.endsWith(".md")) {
+  if (fileName.endsWith(".txt") || fileName.endsWith(".md") || fileName.endsWith(".csv")) {
     return buffer.toString("utf8");
+  }
+
+  if (fileName.endsWith(".html") || fileName.endsWith(".htm")) {
+    return buffer
+      .toString("utf8")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|section|article|li|h[1-6])>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/[ \t]+/g, " ")
+      .trim();
   }
 
   if (fileName.endsWith(".pdf")) {
@@ -64,6 +81,14 @@ async function parseFile(fileName: string, buffer: Buffer) {
       .replace(/\u0000/g, "")
       .replace(/[^\S\r\n]+/g, " ")
       .trim();
+  }
+
+  if (fileName.endsWith(".xlsx")) {
+    const rows = await readSheet(buffer);
+    return rows
+      .map((row) => row.map((cell) => String(cell ?? "").trim()).filter(Boolean).join(" | "))
+      .filter(Boolean)
+      .join("\n");
   }
 
   throw new Error("UNSUPPORTED_FILE_TYPE");

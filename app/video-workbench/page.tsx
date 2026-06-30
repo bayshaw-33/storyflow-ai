@@ -6,7 +6,7 @@ import { Download, Loader2, Play, Plus, RefreshCw, Save, Trash2, UploadCloud } f
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
-import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { readProjectFromSupabase, syncProjectsWithSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { buildProjectLink, listUniverses, saveInboxItems, upsertUniverseProjectLink, type Universe } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
 
@@ -76,7 +76,7 @@ type MiniMaxResponse = {
   model?: string;
 };
 
-const defaultModel = "MiniMax-Hailuo-02";
+const defaultModel = "Default video model";
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -223,6 +223,8 @@ export default function VideoWorkbenchPage() {
   const [error, setError] = useState("");
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
+  const [sourceProjects, setSourceProjects] = useState<DramaProject[]>([]);
+  const [sourceStoryboardProjectId, setSourceStoryboardProjectId] = useState("");
   const [sourceStoryboardTitle, setSourceStoryboardTitle] = useState("");
   const [sourceStoryboardId, setSourceStoryboardId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
@@ -233,6 +235,14 @@ export default function VideoWorkbenchPage() {
 
   const completedCount = useMemo(() => state.shots.filter((shot) => shot.status === "done").length, [state.shots]);
   const pendingCount = state.shots.length - completedCount;
+  const sourceStoryboardProjects = useMemo(
+    () =>
+      sourceProjects.filter((project) => {
+        const universeOk = selectedUniverseId ? project.universeId === selectedUniverseId : true;
+        return project.workflowType === "storyboard" && universeOk;
+      }),
+    [selectedUniverseId, sourceProjects],
+  );
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -319,6 +329,23 @@ export default function VideoWorkbenchPage() {
       .catch(() => null);
   }, [session?.access_token]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const localProjects = readProjectsFromStorage();
+    setSourceProjects(localProjects);
+
+    if (!session?.access_token) return;
+    void syncProjectsWithSupabase(localProjects, { accessToken: session.access_token })
+      .then((result) => {
+        if (!cancelled) setSourceProjects(result.projects);
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
+
   function updateShot(id: string, patch: Partial<VideoShot>) {
     setState((current) => ({
       ...current,
@@ -338,6 +365,23 @@ export default function VideoWorkbenchPage() {
 
   function addShot() {
     setState((current) => ({ ...current, shots: [...current.shots, createShot()] }));
+  }
+
+  function importStoryboardProject() {
+    const project = sourceStoryboardProjects.find((item) => item.id === sourceStoryboardProjectId);
+    if (!project) return;
+    const directShots = shotsFromStoryboard(project.storyboardScript);
+    const shots = directShots.length ? directShots : shotsFromStoryboard(project.deliveryPackage);
+    if (!shots.length) {
+      setError(isZh ? "这个分镜项目没有可导入的镜头。" : "This storyboard project has no importable shots.");
+      return;
+    }
+    setState((current) => ({ ...current, shots }));
+    setImportedCount(shots.length);
+    setSourceStoryboardTitle(project.title);
+    setSourceStoryboardId(project.id);
+    setSelectedUniverseId(project.universeId || selectedUniverseId);
+    setError("");
   }
 
   function deleteShot(id: string) {
@@ -367,12 +411,15 @@ export default function VideoWorkbenchPage() {
       return;
     }
 
-    if (!file.type.startsWith("text/") && !/\.(txt|md|json|csv)$/i.test(file.name)) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch("/api/files/parse", { method: "POST", body: formData });
+    const payload = await response.json().catch(() => null);
+    const text = response.ok && payload?.success ? String(payload.text || "") : "";
+    if (!text.trim()) {
       setState((current) => ({ ...current, shots: [createShot(file.name, file.name)] }));
       return;
     }
-
-    const text = await file.text();
     const importedShots = shotsFromStoryboard(text);
     if (importedShots.length) {
       setImportedCount(importedShots.length);
@@ -533,7 +580,7 @@ export default function VideoWorkbenchPage() {
   }
 
   async function callMiniMax(payload: Record<string, unknown>) {
-    if (!session?.access_token) throw new Error(isZh ? "请先登录后再调用 MiniMax。" : "Please sign in before using MiniMax.");
+    if (!session?.access_token) throw new Error(isZh ? "请先登录后再调用视频模型。" : "Please sign in before using the video model.");
     const response = await fetch("/api/video/minimax", {
       method: "POST",
       headers: {
@@ -543,7 +590,7 @@ export default function VideoWorkbenchPage() {
       body: JSON.stringify(payload),
     });
     const data = (await response.json().catch(() => ({}))) as MiniMaxResponse;
-    if (!response.ok || data.success === false) throw new Error(data.error || "MiniMax request failed.");
+    if (!response.ok || data.success === false) throw new Error(data.error || "Video model request failed.");
     return data;
   }
 
@@ -566,7 +613,7 @@ export default function VideoWorkbenchPage() {
         duration: shot.duration,
         resolution: mapResolution(shot.aspectRatio),
       });
-      if (!created.taskId) throw new Error(isZh ? "MiniMax 没有返回 task_id。" : "MiniMax did not return task_id.");
+      if (!created.taskId) throw new Error(isZh ? "视频模型没有返回 task_id。" : "Video model did not return task_id.");
       updateShot(shot.id, { taskId: created.taskId, status: "running" });
 
       for (let attempt = 0; attempt < 24; attempt += 1) {
@@ -581,12 +628,12 @@ export default function VideoWorkbenchPage() {
           updateShot(shot.id, { status: "done", videoUrl: status.videoUrl, fileId: status.fileId });
           return;
         }
-        if (status.status === "error") throw new Error(status.error || "MiniMax task failed.");
+        if (status.status === "error") throw new Error(status.error || "Video task failed.");
       }
 
-      throw new Error(isZh ? "MiniMax 任务仍在处理中，请稍后刷新状态。" : "MiniMax task is still processing. Refresh later.");
+      throw new Error(isZh ? "视频任务仍在处理中，请稍后刷新状态。" : "Video task is still processing. Refresh later.");
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "MiniMax request failed.";
+      const message = nextError instanceof Error ? nextError.message : "Video model request failed.";
       setError(message);
       updateShot(shot.id, { status: "error", error: message });
     } finally {
@@ -606,7 +653,7 @@ export default function VideoWorkbenchPage() {
         error: status.error || "",
       });
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "MiniMax request failed.";
+      const message = nextError instanceof Error ? nextError.message : "Video model request failed.";
       updateShot(shot.id, { status: "error", error: message });
     } finally {
       setBusyShotId("");
@@ -626,7 +673,7 @@ export default function VideoWorkbenchPage() {
       <header className="studio-workbench-header">
         <div>
           <span>{isZh ? "视频创作" : "Video Workbench"}</span>
-          <h1>{isZh ? "分镜到 MiniMax 视频" : "Storyboard to MiniMax video"}</h1>
+          <h1>{isZh ? "分镜到视频生成" : "Storyboard to video generation"}</h1>
         </div>
         <div className="studio-flow-row">
           <span>{isZh ? "导入分镜" : "Import storyboard"}</span>
@@ -649,7 +696,7 @@ export default function VideoWorkbenchPage() {
         <section className="dashboard-panel simple-continuity-banner muted">
           <div>
             <strong>{isZh ? "可从分镜工作台导入" : "Ready for storyboard import"}</strong>
-            <span>{isZh ? "上传分镜 JSON 或从分镜工作台发送后，镜头会进入队列。" : "Upload storyboard JSON or send from Storyboard Workbench to populate the queue."}</span>
+            <span>{isZh ? "从 Universe 调用分镜项目，或上传分镜文件后进入镜头队列。" : "Import a storyboard from Universe, or upload a storyboard file to populate the queue."}</span>
           </div>
           <span className="simple-count-pill">{state.shots.length} shots</span>
         </section>
@@ -674,13 +721,37 @@ export default function VideoWorkbenchPage() {
             <input
               className="visually-hidden-input"
               type="file"
-              accept=".txt,.md,.json,.csv,video/*"
+              accept=".txt,.md,.json,.csv,.pdf,.doc,.docx,.xlsx,.html,.htm,video/*"
               onChange={(event) => void importVideoSourceFile(event)}
             />
             <UploadCloud size={18} />
             <span>{isZh ? "上传分镜 / 视频文件" : "Upload storyboard / video file"}</span>
-            <small>{uploadedSourceName || (isZh ? "支持分镜 JSON、文本和 video/*" : "Storyboard JSON, text, and video/* supported")}</small>
+            <small>{uploadedSourceName || (isZh ? "支持 Word、Excel、PDF、HTML、JSON、文本和 video/*" : "Word, Excel, PDF, HTML, JSON, text, and video/* supported")}</small>
           </label>
+          <div className="studio-source-import">
+            <strong>{isZh ? "从 Universe 调用分镜" : "Import storyboard from Universe"}</strong>
+            <label className="studio-field">
+              Universe
+              <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>
+                <option value="">{isZh ? "全部分镜项目" : "All storyboard projects"}</option>
+                {universes.map((universe) => (
+                  <option key={universe.id} value={universe.id}>{universe.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="studio-field">
+              {isZh ? "分镜项目" : "Storyboard project"}
+              <select value={sourceStoryboardProjectId} onChange={(event) => setSourceStoryboardProjectId(event.target.value)}>
+                <option value="">{isZh ? "选择已保存分镜" : "Select saved storyboard"}</option>
+                {sourceStoryboardProjects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.title}</option>
+                ))}
+              </select>
+            </label>
+            <button className="secondary-button full" type="button" onClick={importStoryboardProject} disabled={!sourceStoryboardProjectId}>
+              {isZh ? "导入镜头队列" : "Import shot queue"}
+            </button>
+          </div>
 
           <div className="studio-shot-list">
             {state.shots.map((shot, index) => (
@@ -696,7 +767,7 @@ export default function VideoWorkbenchPage() {
                   <input value={shot.sceneTitle} onChange={(event) => updateShot(shot.id, { sceneTitle: event.target.value })} />
                 </label>
                 <label className="studio-field">
-                  {isZh ? "MiniMax Prompt" : "MiniMax prompt"}
+                  {isZh ? "视频提示词" : "Video prompt"}
                   <textarea value={shot.prompt} onChange={(event) => updateShot(shot.id, { prompt: event.target.value, status: "draft" })} />
                 </label>
                 <div className="studio-field-grid">
@@ -724,7 +795,7 @@ export default function VideoWorkbenchPage() {
         <section className="dashboard-panel studio-panel">
           <div className="studio-section-head">
             <span>{isZh ? "02 模型" : "02 Model"}</span>
-            <h2>{isZh ? "MiniMax 生成队列" : "MiniMax generation queue"}</h2>
+            <h2>{isZh ? "视频生成队列" : "Video generation queue"}</h2>
           </div>
           <label className="studio-field">
             {isZh ? "模型" : "Model"}

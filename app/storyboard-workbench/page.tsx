@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowRight, Download, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
+import { ArrowRight, Download, ImagePlus, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
-import { readProjectFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { readProjectFromSupabase, syncProjectsWithSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import {
   buildProjectLink,
   listUniverses,
@@ -45,6 +45,12 @@ type StoryboardState = {
   artStylePreset: string;
   characterDesign: string;
   sceneDesign: string;
+  characterKeywords: string;
+  sceneKeywords: string;
+  characterReferenceName: string;
+  sceneReferenceName: string;
+  characterConceptAsset: string;
+  sceneConceptAsset: string;
   aspectRatio: "9:16" | "16:9" | "1:1";
   scenes: Scene[];
 };
@@ -97,6 +103,12 @@ const initialState: StoryboardState = {
   artStylePreset: "realistic-drama",
   characterDesign: "",
   sceneDesign: "",
+  characterKeywords: "",
+  sceneKeywords: "",
+  characterReferenceName: "",
+  sceneReferenceName: "",
+  characterConceptAsset: "",
+  sceneConceptAsset: "",
   aspectRatio: "9:16",
   scenes: [
     {
@@ -134,6 +146,14 @@ const artStylePresets = [
     en: "Comic cinematic",
     prompt: "cinematic manhua adaptation, expressive faces, strong silhouettes, stylized lighting, vivid panels",
   },
+  { id: "urban-noir", zh: "都市黑色", en: "Urban noir", prompt: "urban noir short drama, wet streets, neon reflections, sharp contrast, restrained palette" },
+  { id: "youth-campus", zh: "青春校园", en: "Youth campus", prompt: "youth campus drama, natural daylight, fresh colors, handheld realism, warm friendship energy" },
+  { id: "period-luxury", zh: "年代华丽", en: "Period luxury", prompt: "period luxury drama, ornate costume, warm candlelight, painterly interiors, elegant blocking" },
+  { id: "sci-fi-clean", zh: "科幻冷感", en: "Clean sci-fi", prompt: "clean sci-fi drama, cool lighting, reflective surfaces, minimalist future interiors, precise framing" },
+  { id: "thriller-grit", zh: "悬疑粗粝", en: "Gritty thriller", prompt: "gritty thriller, low-key lighting, tense close-ups, desaturated color, documentary texture" },
+  { id: "warm-family", zh: "家庭温情", en: "Warm family", prompt: "warm family drama, soft natural light, lived-in rooms, intimate close-ups, grounded emotion" },
+  { id: "high-fashion", zh: "时尚大片", en: "High fashion", prompt: "high fashion cinematic drama, editorial wardrobe, glossy lighting, bold color accents, premium composition" },
+  { id: "martial-epic", zh: "武侠史诗", en: "Martial epic", prompt: "martial arts epic, misty landscape, flowing fabric, dynamic movement, poetic wide shots" },
 ];
 
 function buildVideoPrompt(state: StoryboardState, scene: Scene, shot: Shot) {
@@ -233,6 +253,12 @@ function storyboardStateFromProject(project: DramaProject): StoryboardState {
       artStylePreset: parsed.artStylePreset || initialState.artStylePreset,
       characterDesign: parsed.characterDesign || project.characters || "",
       sceneDesign: parsed.sceneDesign || "",
+      characterKeywords: parsed.characterKeywords || "",
+      sceneKeywords: parsed.sceneKeywords || "",
+      characterReferenceName: parsed.characterReferenceName || "",
+      sceneReferenceName: parsed.sceneReferenceName || "",
+      characterConceptAsset: parsed.characterConceptAsset || "",
+      sceneConceptAsset: parsed.sceneConceptAsset || "",
       aspectRatio: parsed.aspectRatio === "16:9" || parsed.aspectRatio === "1:1" ? parsed.aspectRatio : "9:16",
       scenes: scenes || initialState.scenes.map((scene) => ({ ...scene, id: createId("scene") })),
     };
@@ -246,6 +272,12 @@ function storyboardStateFromProject(project: DramaProject): StoryboardState {
       artStylePreset: initialState.artStylePreset,
       characterDesign: project.characters || "",
       sceneDesign: "",
+      characterKeywords: "",
+      sceneKeywords: "",
+      characterReferenceName: "",
+      sceneReferenceName: "",
+      characterConceptAsset: "",
+      sceneConceptAsset: "",
     };
   }
 }
@@ -287,12 +319,23 @@ export default function StoryboardWorkbenchPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
+  const [sourceProjects, setSourceProjects] = useState<DramaProject[]>([]);
+  const [sourceProjectId, setSourceProjectId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
   const [universeStatus, setUniverseStatus] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [savingProject, setSavingProject] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const selectedScene = state.scenes.find((scene) => scene.id === selectedSceneId) || state.scenes[0];
+  const scriptSourceProjects = useMemo(
+    () =>
+      sourceProjects.filter((project) => {
+        const workflowOk = project.workflowType === "creation" || project.workflowType === "continuation" || project.workflowType === "novel";
+        const universeOk = selectedUniverseId ? project.universeId === selectedUniverseId : true;
+        return workflowOk && universeOk;
+      }),
+    [selectedUniverseId, sourceProjects],
+  );
 
   const videoReadyShots = useMemo<VideoReadyShot[]>(
     () =>
@@ -370,6 +413,23 @@ export default function StoryboardWorkbenchPage() {
       .catch(() => null);
   }, [session?.access_token]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const localProjects = readProjectsFromStorage();
+    setSourceProjects(localProjects);
+
+    if (!session?.access_token) return;
+    void syncProjectsWithSupabase(localProjects, { accessToken: session.access_token })
+      .then((result) => {
+        if (!cancelled) setSourceProjects(result.projects);
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token]);
+
   function updateState<K extends keyof StoryboardState>(key: K, value: StoryboardState[K]) {
     setState((current) => ({ ...current, [key]: value }));
   }
@@ -439,17 +499,49 @@ export default function StoryboardWorkbenchPage() {
     setSelectedSceneId(scenes[0].id);
   }
 
+  function importSourceProjectScript() {
+    const source = scriptSourceProjects.find((project) => project.id === sourceProjectId);
+    if (!source) return;
+    const script = extractStoryboardSourceScript(source);
+    if (!script.trim()) return;
+    const scenes = splitScriptIntoScenes(script);
+    setState((current) => ({
+      ...current,
+      projectTitle: current.projectTitle || `${source.title} 分镜`,
+      script,
+      characterDesign: current.characterDesign || source.characters || "",
+      sceneDesign: current.sceneDesign || source.storyBible.world || "",
+      scenes,
+    }));
+    setSelectedSceneId(scenes[0]?.id || selectedSceneId);
+  }
+
+  function generateConceptAsset(type: "character" | "scene") {
+    const source = type === "character"
+      ? [state.characterKeywords, state.characterDesign, state.characterReferenceName].filter(Boolean).join(" / ")
+      : [state.sceneKeywords, state.sceneDesign, state.sceneReferenceName].filter(Boolean).join(" / ");
+    const asset = source || (type === "character" ? (isZh ? "待生成角色形象" : "Character concept pending") : (isZh ? "待生成场景图" : "Scene concept pending"));
+    setState((current) => ({
+      ...current,
+      [type === "character" ? "characterConceptAsset" : "sceneConceptAsset"]: asset,
+    }));
+  }
+
   async function importStoryboardFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setUploadedFileName(file.name);
-    if (!file.type.startsWith("text/") && !/\.(txt|md|json|csv)$/i.test(file.name)) {
-      updateState("script", state.script || `${isZh ? "已选择文件" : "Selected file"}: ${file.name}`);
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch("/api/files/parse", { method: "POST", body: formData });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      updateState("script", state.script || `${isZh ? "文件解析失败" : "File parse failed"}: ${file.name}`);
       return;
     }
 
-    const text = await file.text();
+    const text = String(payload.text || "");
     let nextScript = text;
     let nextScenes: Scene[] | null = null;
     let nextTitle = state.projectTitle;
@@ -727,65 +819,118 @@ export default function StoryboardWorkbenchPage() {
             <input
               className="visually-hidden-input"
               type="file"
-              accept=".txt,.md,.json,.csv"
+              accept=".txt,.md,.json,.csv,.pdf,.doc,.docx,.xlsx,.html,.htm"
               onChange={(event) => void importStoryboardFile(event)}
             />
             <UploadCloud size={18} />
-            <span>{isZh ? "上传剧本 / 分镜文件" : "Upload script / storyboard file"}</span>
-            <small>{uploadedFileName || (isZh ? "支持 TXT、Markdown、JSON" : "TXT, Markdown, JSON supported")}</small>
+            <span>{isZh ? "上传剧本文件" : "Upload script file"}</span>
+            <small>{uploadedFileName || (isZh ? "支持 Word、Excel、PDF、HTML、TXT、Markdown、JSON" : "Word, Excel, PDF, HTML, TXT, Markdown, JSON supported")}</small>
           </label>
+          <div className="studio-source-import">
+            <strong>{isZh ? "从 Universe / 项目调用剧本" : "Import script from Universe / project"}</strong>
+            <label className="studio-field">
+              Universe
+              <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>
+                <option value="">{isZh ? "全部项目" : "All projects"}</option>
+                {universes.map((universe) => (
+                  <option key={universe.id} value={universe.id}>{universe.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="studio-field">
+              {isZh ? "来源剧本 / 小说" : "Source script / novel"}
+              <select value={sourceProjectId} onChange={(event) => setSourceProjectId(event.target.value)}>
+                <option value="">{isZh ? "选择已保存项目" : "Select saved project"}</option>
+                {scriptSourceProjects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.title}</option>
+                ))}
+              </select>
+            </label>
+            <button className="secondary-button full" type="button" onClick={importSourceProjectScript} disabled={!sourceProjectId}>
+              {isZh ? "导入并拆分 Scene" : "Import and split scenes"}
+            </button>
+          </div>
           <label className="studio-field">
-            {isZh ? "剧本" : "Script"}
+            {isZh ? "解析预览" : "Parsed preview"}
             <textarea
-              className="studio-script-input"
+              className="studio-script-input compact"
               value={state.script}
               onChange={(event) => updateState("script", event.target.value)}
-              placeholder={isZh ? "粘贴剧本。用空行分隔场景，系统会按段落拆成 Scene。" : "Paste the script. Blank lines become scenes."}
+              placeholder={isZh ? "上传或导入后，这里显示解析出的剧本文本；需要时可手动微调。" : "Uploaded/imported script text appears here for quick cleanup."}
             />
           </label>
           <label className="studio-field">
             {isZh ? "视觉风格" : "Visual style"}
-            <textarea
-              value={state.visualStyle}
-              onChange={(event) => updateState("visualStyle", event.target.value)}
-            />
+            <select
+              value={state.artStylePreset}
+              onChange={(event) => {
+                const preset = artStylePresets.find((item) => item.id === event.target.value);
+                setState((current) => ({
+                  ...current,
+                  artStylePreset: event.target.value,
+                  visualStyle: preset?.prompt || current.visualStyle,
+                }));
+              }}
+            >
+              {artStylePresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>{isZh ? preset.zh : preset.en}</option>
+              ))}
+            </select>
+            <textarea value={state.visualStyle} onChange={(event) => updateState("visualStyle", event.target.value)} />
           </label>
           <div className="studio-art-pack" aria-label={isZh ? "美术设计包" : "Art design pack"}>
-            <div className="studio-art-presets">
-              {artStylePresets.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={state.artStylePreset === preset.id ? "active" : ""}
-                  onClick={() => {
-                    setState((current) => ({
-                      ...current,
-                      artStylePreset: preset.id,
-                      visualStyle: preset.prompt,
-                    }));
-                  }}
-                >
-                  <span>{preset.id === "realistic-drama" ? "01" : preset.id === "premium-romance" ? "02" : preset.id === "dark-fantasy" ? "03" : "04"}</span>
-                  <strong>{isZh ? preset.zh : preset.en}</strong>
+            <article className="studio-concept-module">
+              <div className="studio-section-head is-row">
+                <div>
+                  <span>Character Look</span>
+                  <h3>{isZh ? "角色形象设计" : "Character appearance design"}</h3>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => generateConceptAsset("character")}>
+                  <ImagePlus size={16} /> {isZh ? "生成形象" : "Generate look"}
                 </button>
-              ))}
-            </div>
-            <label className="studio-field">
-              {isZh ? "角色形象设计" : "Character appearance design"}
-              <textarea
-                value={state.characterDesign}
-                onChange={(event) => updateState("characterDesign", event.target.value)}
-                placeholder={isZh ? "输入主要角色的年龄、气质、服装、发型、色彩和参考表要求。" : "Describe age, vibe, wardrobe, hair, palette, and reference sheet needs."}
-              />
-            </label>
-            <label className="studio-field">
-              {isZh ? "场景图设计" : "Scene concept design"}
-              <textarea
-                value={state.sceneDesign}
-                onChange={(event) => updateState("sceneDesign", event.target.value)}
-                placeholder={isZh ? "输入关键空间、时代、地域、光线、道具和氛围。" : "Describe key spaces, period, region, lighting, props, and mood."}
-              />
-            </label>
+              </div>
+              <label className="studio-field">
+                {isZh ? "关键词" : "Keywords"}
+                <input value={state.characterKeywords} onChange={(event) => updateState("characterKeywords", event.target.value)} placeholder={isZh ? "例如：狼人女主、冷感、银发、皮衣" : "e.g. werewolf heroine, silver hair, leather coat"} />
+              </label>
+              <label className="studio-file-drop compact">
+                <input className="visually-hidden-input" type="file" accept="image/*" onChange={(event) => updateState("characterReferenceName", event.target.files?.[0]?.name || "")} />
+                <UploadCloud size={16} />
+                <span>{isZh ? "上传角色参考图" : "Upload character reference"}</span>
+                <small>{state.characterReferenceName || (isZh ? "可选" : "Optional")}</small>
+              </label>
+              <label className="studio-field">
+                {isZh ? "设计说明" : "Design brief"}
+                <textarea value={state.characterDesign} onChange={(event) => updateState("characterDesign", event.target.value)} placeholder={isZh ? "年龄、气质、服装、发型、色彩、表情、三视图要求。" : "Age, vibe, wardrobe, hair, palette, expression, turnaround requirements."} />
+              </label>
+              <div className="studio-concept-preview">{state.characterConceptAsset || (isZh ? "角色形象生成结果会显示在这里。" : "Generated character concept appears here.")}</div>
+            </article>
+            <article className="studio-concept-module">
+              <div className="studio-section-head is-row">
+                <div>
+                  <span>Scene Concept</span>
+                  <h3>{isZh ? "场景图设计" : "Scene concept design"}</h3>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => generateConceptAsset("scene")}>
+                  <ImagePlus size={16} /> {isZh ? "生成场景图" : "Generate scene"}
+                </button>
+              </div>
+              <label className="studio-field">
+                {isZh ? "关键词" : "Keywords"}
+                <input value={state.sceneKeywords} onChange={(event) => updateState("sceneKeywords", event.target.value)} placeholder={isZh ? "例如：地下酒吧、蓝紫霓虹、雨夜" : "e.g. basement bar, blue neon, rainy night"} />
+              </label>
+              <label className="studio-file-drop compact">
+                <input className="visually-hidden-input" type="file" accept="image/*" onChange={(event) => updateState("sceneReferenceName", event.target.files?.[0]?.name || "")} />
+                <UploadCloud size={16} />
+                <span>{isZh ? "上传场景参考图" : "Upload scene reference"}</span>
+                <small>{state.sceneReferenceName || (isZh ? "可选" : "Optional")}</small>
+              </label>
+              <label className="studio-field">
+                {isZh ? "设计说明" : "Design brief"}
+                <textarea value={state.sceneDesign} onChange={(event) => updateState("sceneDesign", event.target.value)} placeholder={isZh ? "关键空间、时代、地域、光线、道具、气氛和可复用场景资产。" : "Key spaces, period, region, lighting, props, mood, reusable scene assets."} />
+              </label>
+              <div className="studio-concept-preview">{state.sceneConceptAsset || (isZh ? "场景图生成结果会显示在这里。" : "Generated scene concept appears here.")}</div>
+            </article>
           </div>
           <label className="studio-field">
             {isZh ? "画幅" : "Aspect ratio"}
@@ -804,13 +949,43 @@ export default function StoryboardWorkbenchPage() {
         <section className="dashboard-panel studio-panel">
           <div className="studio-section-head is-row">
             <div>
-              <span>{isZh ? "02 场景" : "02 Scenes"}</span>
-              <h2>{isZh ? "场景队列" : "Scene queue"}</h2>
+              <span>{isZh ? "02 分镜表" : "02 Storyboard table"}</span>
+              <h2>{isZh ? "场景与镜头清单" : "Scenes and shots"}</h2>
             </div>
             <button className="secondary-button" type="button" onClick={addScene}>
               <Plus size={16} />
               {isZh ? "新增" : "Add"}
             </button>
+          </div>
+          <div className="storyboard-table-wrap">
+            <table className="storyboard-production-table">
+              <thead>
+                <tr>
+                  <th>Scene</th>
+                  <th>Shot</th>
+                  <th>{isZh ? "景别" : "Frame"}</th>
+                  <th>{isZh ? "动作" : "Action"}</th>
+                  <th>{isZh ? "镜头" : "Camera"}</th>
+                  <th>{isZh ? "时长" : "Duration"}</th>
+                  <th>{isZh ? "提示词" : "Prompt"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.scenes.flatMap((scene, sceneIndex) =>
+                  scene.shots.map((shot, shotIndex) => (
+                    <tr key={shot.id} onClick={() => setSelectedSceneId(scene.id)}>
+                      <td>{scene.title || `Scene ${sceneIndex + 1}`}</td>
+                      <td>Shot {shotIndex + 1}</td>
+                      <td>{shot.frame}</td>
+                      <td>{shot.text || shot.action || "-"}</td>
+                      <td>{shot.camera}</td>
+                      <td>{shot.duration}</td>
+                      <td>{buildVideoPrompt(state, scene, shot)}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
           </div>
           <div className="studio-scene-grid">
             <div className="studio-scene-list">
@@ -901,8 +1076,8 @@ export default function StoryboardWorkbenchPage() {
 
         <aside className="dashboard-panel studio-panel">
           <div className="studio-section-head">
-            <span>{isZh ? "03 交接" : "03 Handoff"}</span>
-            <h2>{isZh ? "发往视频工作台" : "Ready for video"}</h2>
+            <span>{isZh ? "03 输出与生产" : "03 Output"}</span>
+            <h2>{isZh ? "导出分镜 / 进入视频" : "Export storyboard / continue to video"}</h2>
           </div>
           <div className="studio-metric-row">
             <strong>{state.scenes.length}</strong>
@@ -963,4 +1138,31 @@ export default function StoryboardWorkbenchPage() {
       </section>
     </main>
   );
+}
+
+function extractStoryboardSourceScript(project: DramaProject) {
+  if (project.workflowType === "novel") {
+    const chapters = project.novelChapters
+      .map((chapter) => [
+        `第 ${chapter.chapterNo} 章 ${chapter.title}`,
+        chapter.draft || chapter.outline,
+      ].filter(Boolean).join("\n"))
+      .filter(Boolean)
+      .join("\n\n");
+    return chapters || project.novelChapterDraft || project.novelVolumeOutline || project.novelBrief || project.idea;
+  }
+
+  return [
+    project.finalScript,
+    project.finalScriptBilingual,
+    project.finalScriptForeign,
+    project.finalScriptChinese,
+    project.formatCheck,
+    project.localization,
+    project.chineseScript,
+    project.continuationScript,
+    project.outline,
+    project.brief,
+    project.idea,
+  ].find((value) => value?.trim()) || "";
 }
