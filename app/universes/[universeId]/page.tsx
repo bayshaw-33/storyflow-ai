@@ -29,6 +29,9 @@ import {
   readUniverseEntitlement,
   rejectInboxItem,
   saveInboxItems,
+  upsertCanonStateSnapshot,
+  type CanonStateSnapshot,
+  type UniverseEntity,
   type UniverseBundle,
   type UniverseInheritanceSettings,
   type UniverseInboxItem,
@@ -44,6 +47,10 @@ type UniverseAssetRow = {
   url: string;
   prompt: string;
   source: string;
+  snapshotId: string;
+  assetIndex: number;
+  assetGroup: "assets" | "production_assets";
+  raw: Record<string, unknown>;
 };
 
 type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
@@ -85,6 +92,12 @@ export default function UniverseDetailPage() {
   const [extracting, setExtracting] = useState(false);
   const [checkProjectId, setCheckProjectId] = useState("");
   const [checking, setChecking] = useState(false);
+  const [editingInboxItem, setEditingInboxItem] = useState<UniverseInboxItem | null>(null);
+  const [inboxDraft, setInboxDraft] = useState("");
+  const [inboxDraftError, setInboxDraftError] = useState("");
+  const [editingAsset, setEditingAsset] = useState<UniverseAssetRow | null>(null);
+  const [assetDraft, setAssetDraft] = useState("");
+  const [assetDraftError, setAssetDraftError] = useState("");
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -147,6 +160,57 @@ export default function UniverseDetailPage() {
   async function acceptItem(item: UniverseInboxItem, editedPayload?: Record<string, unknown>) {
     await acceptInboxItem(item, editedPayload, { accessToken: session?.access_token });
     setStatus("Inbox item accepted into canon.");
+    await refresh();
+  }
+
+  function openInboxEditor(item: UniverseInboxItem) {
+    setEditingInboxItem(item);
+    setInboxDraft(JSON.stringify(item.proposed_payload || {}, null, 2));
+    setInboxDraftError("");
+  }
+
+  async function acceptEditedInboxItem() {
+    if (!editingInboxItem) return;
+    const parsed = parseJsonDraft(inboxDraft);
+    if (!parsed.ok) {
+      setInboxDraftError(parsed.error);
+      return;
+    }
+    await acceptItem(editingInboxItem, parsed.value);
+    setEditingInboxItem(null);
+    setInboxDraft("");
+    setInboxDraftError("");
+  }
+
+  function openAssetEditor(asset: UniverseAssetRow) {
+    setEditingAsset(asset);
+    setAssetDraft(JSON.stringify(asset.raw, null, 2));
+    setAssetDraftError("");
+  }
+
+  async function saveEditedAsset() {
+    if (!editingAsset || !bundle) return;
+    if (!entitlement.canUse) {
+      setAssetDraftError(entitlement.reason);
+      return;
+    }
+    const parsed = parseJsonDraft(assetDraft);
+    if (!parsed.ok) {
+      setAssetDraftError(parsed.error);
+      return;
+    }
+
+    const snapshot = bundle.snapshots.find((item) => item.id === editingAsset.snapshotId);
+    if (!snapshot) {
+      setAssetDraftError("Snapshot not found.");
+      return;
+    }
+    const nextSnapshot = updateSnapshotAsset(snapshot, editingAsset, parsed.value);
+    await upsertCanonStateSnapshot(nextSnapshot, { accessToken: session?.access_token });
+    setStatus("Asset updated.");
+    setEditingAsset(null);
+    setAssetDraft("");
+    setAssetDraftError("");
     await refresh();
   }
 
@@ -357,19 +421,12 @@ export default function UniverseDetailPage() {
         </section>
       ) : null}
 
-      {activeTab === "characters" ? <ListSection items={characters} render={(item) => ({ title: item.name, body: formatCharacterBody(item.details_json, item.summary), meta: item.status })} /> : null}
+      {activeTab === "characters" ? <CharacterAssetSection characters={characters} /> : null}
       {activeTab === "relationships" ? <ListSection items={bundle.relationships} render={(item) => ({ title: item.relationship_type, body: item.summary, meta: item.status })} /> : null}
       {activeTab === "timeline" ? <ListSection items={bundle.timeline} render={(item) => ({ title: item.title, body: item.description, meta: item.date_label || item.status })} /> : null}
       {activeTab === "facts" ? <ListSection items={bundle.canonFacts} render={(item) => ({ title: item.fact_text, body: item.source_location_text || "", meta: `${item.importance}${item.is_locked ? " / locked" : ""}` })} /> : null}
       {activeTab === "assets" ? (
-        <ListSection
-          items={acceptedAssets}
-          render={(item) => ({
-            title: item.title,
-            body: [item.prompt, item.url].filter(Boolean).join("\n"),
-            meta: `${item.type}${item.source ? ` · ${item.source}` : ""}`,
-          })}
-        />
+        <AssetEditorSection assets={acceptedAssets} canEdit={entitlement.canUse} onEdit={openAssetEditor} />
       ) : null}
 
       {activeTab === "projects" ? (
@@ -434,6 +491,9 @@ export default function UniverseDetailPage() {
               <div className="universe-row-actions">
                 <button className="primary-button" disabled={item.status !== "pending" || !entitlement.canUse} onClick={() => acceptItem(item)}>
                   <CheckCircle2 size={16} /> Accept
+                </button>
+                <button className="secondary-button" disabled={item.status !== "pending" || !entitlement.canUse} onClick={() => openInboxEditor(item)}>
+                  Edit + Accept
                 </button>
                 <button className="secondary-button" disabled={item.status !== "pending" || !entitlement.canUse} onClick={() => rejectItem(item)}>
                   <XCircle size={16} /> Reject
@@ -536,6 +596,40 @@ export default function UniverseDetailPage() {
           </div>
         </div>
       ) : null}
+
+      {editingInboxItem ? (
+        <div className="modal-backdrop">
+          <div className="modal wizard-modal universe-json-modal">
+            <h2>Edit Inbox Candidate</h2>
+            <p>Adjust the structured payload before writing it into canon. This does not overwrite existing locked canon automatically.</p>
+            <textarea value={inboxDraft} onChange={(event) => setInboxDraft(event.target.value)} />
+            {inboxDraftError ? <p className="form-error">{inboxDraftError}</p> : null}
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setEditingInboxItem(null)}>Cancel</button>
+              <button className="primary-button" onClick={() => void acceptEditedInboxItem()}>
+                <CheckCircle2 size={16} /> Accept Edited
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingAsset ? (
+        <div className="modal-backdrop">
+          <div className="modal wizard-modal universe-json-modal">
+            <h2>Edit Asset</h2>
+            <p>Update the asset metadata stored in the accepted canon state snapshot.</p>
+            <textarea value={assetDraft} onChange={(event) => setAssetDraft(event.target.value)} />
+            {assetDraftError ? <p className="form-error">{assetDraftError}</p> : null}
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setEditingAsset(null)}>Cancel</button>
+              <button className="primary-button" onClick={() => void saveEditedAsset()}>
+                <CheckCircle2 size={16} /> Save Asset
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -560,21 +654,87 @@ function ListSection<T>({ items, render }: { items: T[]; render: (item: T) => { 
   );
 }
 
+function CharacterAssetSection({ characters }: { characters: UniverseEntity[] }) {
+  return (
+    <section className="universe-list">
+      {characters.length === 0 ? <div className="empty-state"><h2>No characters yet</h2></div> : null}
+      {characters.map((character) => {
+        const variants = getCharacterVariants(character.details_json);
+        return (
+          <article className="universe-row universe-character-card" key={character.id}>
+            <div>
+              <span>{character.status} · {variants.length} appearance versions</span>
+              <h2>{character.name}</h2>
+              <p>{character.summary}</p>
+              <div className="universe-character-meta">
+                {stringValue(character.details_json.actor_name) ? <span>Actor: {stringValue(character.details_json.actor_name)}</span> : null}
+                {stringValue(character.details_json.actor_id) ? <span>Actor ID: {stringValue(character.details_json.actor_id)}</span> : null}
+                {character.source_project_id ? <span>Source: {character.source_project_id}</span> : null}
+              </div>
+              {variants.length ? (
+                <div className="universe-variant-grid">
+                  {variants.map((variant, index) => (
+                    <article className="universe-variant-card" key={stringValue(variant.id) || index}>
+                      {firstVisualAssetUrl(variant) ? <img src={firstVisualAssetUrl(variant)} alt="" /> : <div className="universe-variant-empty">{stringValue(variant.source_workflow) || "project"}</div>}
+                      <div>
+                        <strong>{stringValue(variant.title) || `Version ${index + 1}`}</strong>
+                        <span>{[stringValue(variant.source_workflow), stringValue(variant.actor_name), stringValue(variant.actor_id)].filter(Boolean).join(" · ") || "project image"}</span>
+                        <p>{stringValue(variant.appearance) || stringValue(variant.prompt) || "No visual notes yet."}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="field-note">No project appearance versions yet. Accept character Inbox items with appearance, actor_id, actor_name, project_variant or visual_assets to populate this area.</p>
+              )}
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+function AssetEditorSection({ assets, canEdit, onEdit }: { assets: UniverseAssetRow[]; canEdit: boolean; onEdit: (asset: UniverseAssetRow) => void }) {
+  return (
+    <section className="universe-list">
+      {assets.length === 0 ? <div className="empty-state"><h2>No accepted production assets yet</h2></div> : null}
+      {assets.map((item) => (
+        <article className="universe-row universe-asset-row" key={`${item.snapshotId}-${item.assetGroup}-${item.assetIndex}`}>
+          <div>
+            <span>{item.type} · {item.source}</span>
+            <h2>{item.title}</h2>
+            {item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.url}</a> : null}
+            {item.prompt ? <p>{item.prompt}</p> : null}
+          </div>
+          <div className="universe-row-actions">
+            <button className="secondary-button" onClick={() => onEdit(item)} disabled={!canEdit}>Edit Asset</button>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 function getAcceptedAssets(bundle: UniverseBundle): UniverseAssetRow[] {
   return bundle.snapshots.flatMap((snapshot) => {
-    const assets = [
-      ...(Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets : []),
-      ...(Array.isArray(snapshot.state_json.production_assets) ? snapshot.state_json.production_assets : []),
+    const groups: Array<{ key: "assets" | "production_assets"; items: unknown[] }> = [
+      { key: "assets", items: Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets : [] },
+      { key: "production_assets", items: Array.isArray(snapshot.state_json.production_assets) ? snapshot.state_json.production_assets : [] },
     ];
-    return assets
+    return groups.flatMap((group) => group.items
       .filter((asset): asset is Record<string, unknown> => Boolean(asset) && typeof asset === "object" && !Array.isArray(asset))
-      .map((asset, index) => ({
+      .map((asset, index): UniverseAssetRow => ({
         title: stringValue(asset.title) || `${snapshot.title} asset ${index + 1}`,
         type: stringValue(asset.type) || "asset",
         url: stringValue(asset.url),
         prompt: stringValue(asset.prompt) || formatAssetMetadata(asset),
         source: snapshot.title,
-      }));
+        snapshotId: snapshot.id,
+        assetIndex: index,
+        assetGroup: group.key,
+        raw: asset,
+      })));
   });
 }
 
@@ -589,6 +749,47 @@ function formatAssetMetadata(asset: Record<string, unknown>) {
     .map(([label, value]) => `${label}: ${String(value)}`);
 
   return pairs.join(" · ");
+}
+
+function parseJsonDraft(value: string): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: "JSON payload must be an object." };
+    }
+    return { ok: true, value: parsed as Record<string, unknown> };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Invalid JSON." };
+  }
+}
+
+function updateSnapshotAsset(snapshot: CanonStateSnapshot, asset: UniverseAssetRow, nextAsset: Record<string, unknown>): CanonStateSnapshot {
+  const currentItems = Array.isArray(snapshot.state_json[asset.assetGroup])
+    ? [...(snapshot.state_json[asset.assetGroup] as unknown[])]
+    : [];
+  currentItems[asset.assetIndex] = nextAsset;
+  return {
+    ...snapshot,
+    state_json: {
+      ...snapshot.state_json,
+      [asset.assetGroup]: currentItems,
+    },
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function getCharacterVariants(details: Record<string, unknown>) {
+  return Array.isArray(details.appearance_variants)
+    ? details.appearance_variants.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
+function firstVisualAssetUrl(variant: Record<string, unknown>) {
+  const assets = Array.isArray(variant.visual_assets)
+    ? variant.visual_assets.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const first = assets[0];
+  return first ? stringValue(first.url) || stringValue(first.public_url) || stringValue(first.imageUrl) : "";
 }
 
 function buildProjectFromUniverse(input: {

@@ -1840,6 +1840,44 @@ input:focus, textarea:focus, select:focus {
   background: var(--glass-fill-strong); color: var(--ink-primary);
 }
 .universe-counts, .universe-meta { font-size: 13px; color: var(--ink-muted); }
+.universe-character-card { align-items: stretch; }
+.universe-character-meta {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+}
+.universe-character-meta span,
+.universe-variant-card span {
+  color: var(--ink-muted); font-size: 12px;
+}
+.universe-variant-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px; margin-top: 14px;
+}
+.universe-variant-card {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px;
+  padding: 10px; border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm); background: var(--glass-fill);
+}
+.universe-variant-card img,
+.universe-variant-empty {
+  width: 72px; height: 72px; border-radius: var(--radius-sm);
+  object-fit: cover; background: var(--glass-fill-strong);
+}
+.universe-variant-empty {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-muted); font-size: 11px; text-align: center;
+}
+.universe-variant-card strong {
+  display: block; color: var(--ink-primary); font-size: 13px;
+}
+.universe-variant-card p,
+.universe-asset-row p {
+  margin: 6px 0 0; color: var(--ink-secondary); font-size: 12px; line-height: 1.45;
+}
+.universe-asset-row a { color: var(--accent); word-break: break-all; }
+.universe-json-modal textarea {
+  width: 100%; min-height: 420px; resize: vertical;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+}
 .universe-mini-panel {
   padding: var(--space-4); border-radius: var(--radius-md);
   background: var(--glass-fill); border: 1px solid var(--glass-border);

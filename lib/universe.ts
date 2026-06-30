@@ -372,6 +372,12 @@ export async function saveCanonCheckReport(report: CanonCheckReport, options: Su
   await supabaseUpsert(TABLES.reports, report, "id", options).catch(() => null);
 }
 
+export async function upsertCanonStateSnapshot(snapshot: CanonStateSnapshot, options: SupabaseOptions = {}) {
+  upsertLocalItem(CANON_STATE_STORAGE_KEY, snapshot);
+  if (!isSupabaseConfigured() || !options.accessToken) return;
+  await supabaseUpsert(TABLES.snapshots, snapshot, "id", options).catch(() => null);
+}
+
 export async function getProjectUniverseLink(projectId: string, options: SupabaseOptions = {}) {
   if (isSupabaseConfigured() && options.accessToken) {
     const rows = await supabaseFetch<UniverseProjectLink[]>(
@@ -603,6 +609,8 @@ function buildCharacterAppearanceVariant(payload: Record<string, unknown>, item:
   const prompt = stringValue(projectVariant.prompt) || stringValue(payload.prompt) || stringValue(payload.style_prompt);
   const sourceWorkflow = stringValue(payload.source_workflow) || stringValue(projectVariant.source_workflow);
   const sourcePackageId = stringValue(payload.source_package_id) || stringValue(projectVariant.source_package_id);
+  const actorId = stringValue(payload.actor_id) || stringValue(projectVariant.actor_id);
+  const actorName = stringValue(payload.actor_name) || stringValue(projectVariant.actor_name);
 
   if (!appearance && !visualAssets.length && !prompt && !sourceWorkflow && !sourcePackageId && !item.project_id) return null;
 
@@ -611,6 +619,8 @@ function buildCharacterAppearanceVariant(payload: Record<string, unknown>, item:
     source_project_id: item.project_id || stringValue(projectVariant.source_project_id) || null,
     source_workflow: sourceWorkflow || "project",
     source_package_id: sourcePackageId || null,
+    actor_id: actorId || null,
+    actor_name: actorName || null,
     title: stringValue(projectVariant.title) || `${item.title} project variant`,
     appearance,
     prompt,
