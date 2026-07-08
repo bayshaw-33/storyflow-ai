@@ -171,6 +171,7 @@ export type DramaProject = {
   novelVolumeOutline: string;
   novelChapterOutline: string;
   novelChapterDraft: string;
+  novelDevelopmentNotes: string;
   novelContinuityNotes: string;
   novelStyleGuide: string;
   novelChapters: NovelChapter[];
@@ -267,6 +268,7 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   final_delivery: "deliveryPackage",
   song_workbench: "idea",
   novel_brief: "novelBrief",
+  novel_development_chat: "novelDevelopmentNotes",
   novel_bible: "novelBible",
   novel_characters: "novelCharacters",
   novel_volume_outline: "novelVolumeOutline",
@@ -314,13 +316,12 @@ export const continuationWorkflowSteps: WorkflowStep[] = [
 ];
 
 export const novelWorkflowSteps: WorkflowStep[] = [
-  { key: "novel_brief", field: "novelBrief", label: "小说创意 Brief", short: "Brief" },
-  { key: "novel_bible", field: "novelBible", label: "小说 Bible", short: "Bible" },
-  { key: "novel_characters", field: "novelCharacters", label: "小说角色卡", short: "角色" },
-  { key: "novel_volume_outline", field: "novelVolumeOutline", label: "分卷大纲", short: "卷纲" },
-  { key: "novel_chapter_outline", field: "novelChapterOutline", label: "章节大纲", short: "章纲" },
-  { key: "novel_chapter_draft", field: "novelChapterDraft", label: "章节正文", short: "正文" },
-  { key: "novel_revision", field: "novelChapterDraft", label: "章节修改", short: "修改" },
+  { key: "novel_brief", field: "novelBrief", label: "小说背景", short: "背景" },
+  { key: "novel_bible", field: "novelBible", label: "小说世界观及大纲", short: "世界观" },
+  { key: "novel_characters", field: "novelCharacters", label: "角色 Bible", short: "角色" },
+  { key: "novel_chapter_draft", field: "novelChapterDraft", label: "小说正文", short: "正文" },
+  { key: "translation", field: "translation", label: "小说译文", short: "译文" },
+  { key: "localization", field: "localization", label: "本土化及雷同查验", short: "本土化" },
   { key: "novel_export", field: "deliveryPackage", label: "小说导出包", short: "导出" },
 ];
 
@@ -375,31 +376,31 @@ export const workflowPhases: WorkflowPhase[] = [
 export const novelWorkflowPhases: WorkflowPhase[] = [
   {
     key: "novel_setup",
-    title: "项目设定",
-    englishTitle: "Project Setup",
-    description: "标题、类型、平台、语言、目标字数、连载频率和读者定位。",
+    title: "小说背景",
+    englishTitle: "Novel Background",
+    description: "通过对话整理项目标识、卖点、读者、叙事规模和创作边界。",
     stepKeys: ["novel_brief"],
   },
   {
     key: "novel_bible",
-    title: "小说 Bible",
-    englishTitle: "Novel Bible",
-    description: "世界观、角色、关系、规则、伏笔和 locked canon。",
+    title: "世界观与角色",
+    englishTitle: "World & Character Bible",
+    description: "世界观、大纲、信息差、角色 Bible 和 locked canon。",
     stepKeys: ["novel_bible", "novel_characters"],
   },
   {
     key: "novel_structure",
-    title: "卷纲与长线结构",
-    englishTitle: "Volume Structure",
-    description: "全书结构、分卷目标、关键反转和情感线推进。",
-    stepKeys: ["novel_volume_outline"],
+    title: "正文生产",
+    englishTitle: "Manuscript Production",
+    description: "基于前期三件套生成小说正文，保留连续性备注。",
+    stepKeys: ["novel_chapter_draft"],
   },
   {
     key: "novel_chapters",
-    title: "章节生产",
-    englishTitle: "Chapter Production",
-    description: "章节大纲、正文、结尾钩子和连续性备注。",
-    stepKeys: ["novel_chapter_outline", "novel_chapter_draft", "novel_revision"],
+    title: "翻译与本土化",
+    englishTitle: "Translation & Localization",
+    description: "小说译文、本土化修改和雷同查验。",
+    stepKeys: ["translation", "localization"],
   },
   {
     key: "novel_delivery",
@@ -486,6 +487,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     novelVolumeOutline: "",
     novelChapterOutline: "",
     novelChapterDraft: "",
+    novelDevelopmentNotes: "",
     novelContinuityNotes: "",
     novelStyleGuide: "",
     novelChapters: [],
@@ -631,6 +633,9 @@ function buildNovelMarkdown(project: DramaProject, deliveryOnly = false) {
     "## Novel Brief",
     project.novelBrief || "未生成",
     "",
+    "## 创作沟通记录",
+    project.novelDevelopmentNotes || "未记录",
+    "",
     "## 小说 Bible",
     project.novelBible || "未生成",
     "",
@@ -651,6 +656,12 @@ function buildNovelMarkdown(project: DramaProject, deliveryOnly = false) {
           chapter.continuityNotes ? `#### 连续性备注\n${chapter.continuityNotes}` : "",
         ].filter(Boolean).join("\n\n")).join("\n\n")
       : project.novelChapterDraft || "未生成",
+    "",
+    "## 小说译文",
+    project.translation || "未生成",
+    "",
+    "## 本土化及雷同查验",
+    project.localization || "未生成",
     "",
   ];
 
@@ -1130,6 +1141,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     novelVolumeOutline: project.novelVolumeOutline || "",
     novelChapterOutline: project.novelChapterOutline || "",
     novelChapterDraft: project.novelChapterDraft || "",
+    novelDevelopmentNotes: project.novelDevelopmentNotes || "",
     novelContinuityNotes: project.novelContinuityNotes || "",
     novelStyleGuide: project.novelStyleGuide || "",
     novelChapters: Array.isArray(project.novelChapters) ? project.novelChapters.map(normalizeNovelChapter) : [],
@@ -1495,6 +1507,8 @@ const demoStepContent: Record<TaskType, string> = {
     "1. 故事概况：隐藏继承人林晚在订婚宴被背叛后，以董事身份回归复仇。\n2. 大纲交付范围：三幕结构、八段式 Treatment、分集大纲。\n3. 最终剧本版本清单：中文版本、英文版本、双语版本。\n4. 分镜交付范围：按集拆分，每集包含镜头、台词、音效和 AI 生成提示词。\n5. 现场演示建议：先展示附件导入，再一键推进到分镜和交付下载。",
   song_workbench:
     "---LYRICS---\n[Verse]\nA demo song draft belongs in the song workbench, not the drama workflow.\n---STYLE_PROMPT---\nindie pop, safe vocal descriptor, clean Suno-ready mix\n---COMPOSITION_PROMPT---\nStart with a small motif, build into a repeatable chorus, then end with a clean outro.",
+  novel_development_chat:
+    "USER: 我想写一个适合海外平台的狼人女性向小说，主打退婚羞辱和身份反转。\nAI: 已确认方向：狼人 Alpha、女性向、强开场羞辱、隐藏继承人反击。下一步建议先锁定目标平台、目标语言、读者年龄层和叙事规模。",
   novel_brief:
     "书名：月影契约\n1. 类型定位：狼人 Alpha 女性向连载\n2. 一句话卖点：被逐出族群的女主发现自己才是月神契约的真正继承人。\n3. 主冲突：身份被夺、伴侣契约被伪造、族群权力重组。\n4. 前 3 章爆点：退婚羞辱、隐藏血脉觉醒、真正 Alpha 现身。",
   novel_bible:

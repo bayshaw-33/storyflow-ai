@@ -56,14 +56,20 @@ type WorkspaceEntryDraft = {
   } | null;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
 const novelActionTasks: TaskType[] = [
   "novel_brief",
   "novel_bible",
   "novel_characters",
-  "novel_volume_outline",
-  "novel_chapter_outline",
   "novel_chapter_draft",
-  "novel_revision",
+  "translation",
+  "localization",
   "novel_export",
 ];
 
@@ -90,14 +96,15 @@ const stepCopy: Record<TaskType, { zh: string; en: string; shortZh: string; shor
   viral_video_analysis: { zh: "爆款分析", en: "Viral Analysis", shortZh: "分析", shortEn: "Analyze" },
   viral_structure_remake: { zh: "同结构改写", en: "Structure Remake", shortZh: "改写", shortEn: "Remake" },
   viral_export_package: { zh: "爆款交付", en: "Viral Export", shortZh: "交付", shortEn: "Export" },
-  novel_brief: { zh: "小说创意 Brief", en: "Novel Brief", shortZh: "生成 Brief", shortEn: "Generate brief" },
-  novel_bible: { zh: "小说 Bible", en: "Novel Bible", shortZh: "生成 Bible", shortEn: "Generate bible" },
-  novel_characters: { zh: "小说角色卡", en: "Novel Characters", shortZh: "生成角色", shortEn: "Generate cast" },
+  novel_development_chat: { zh: "小说创作对话", en: "Novel Development Chat", shortZh: "对话反馈", shortEn: "Chat feedback" },
+  novel_brief: { zh: "小说背景", en: "Novel Background", shortZh: "生成背景", shortEn: "Generate background" },
+  novel_bible: { zh: "小说世界观及大纲", en: "World & Outline", shortZh: "生成世界观", shortEn: "Generate world" },
+  novel_characters: { zh: "角色 Bible", en: "Character Bible", shortZh: "生成角色", shortEn: "Generate bible" },
   novel_volume_outline: { zh: "分卷大纲", en: "Volume Outline", shortZh: "生成卷纲", shortEn: "Volume outline" },
   novel_chapter_outline: { zh: "章节大纲", en: "Chapter Outline", shortZh: "生成章纲", shortEn: "Chapter outline" },
-  novel_chapter_draft: { zh: "章节正文", en: "Chapter Draft", shortZh: "生成正文", shortEn: "Chapter draft" },
+  novel_chapter_draft: { zh: "小说正文", en: "Manuscript", shortZh: "生成正文", shortEn: "Generate manuscript" },
   novel_revision: { zh: "章节修改", en: "Chapter Revision", shortZh: "修改章节", shortEn: "Revise chapter" },
-  novel_export: { zh: "小说导出包", en: "Novel Export", shortZh: "生成导出包", shortEn: "Export package" },
+  novel_export: { zh: "小说导出", en: "Novel Export", shortZh: "生成导出包", shortEn: "Export package" },
 };
 
 function createFreshNovelProject() {
@@ -105,6 +112,45 @@ function createFreshNovelProject() {
     title: "未命名小说项目",
     projectGroup: DEFAULT_PROJECT_GROUP,
   });
+}
+
+function createChatMessage(role: ChatMessage["role"], content: string): ChatMessage {
+  return {
+    id: `novel-chat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function createAssistantMessage(content: string) {
+  return createChatMessage("assistant", content);
+}
+
+function getNovelOpeningMessage(isZh: boolean) {
+  if (!isZh) {
+    return [
+      "Dear creator, I am KK, your novel creation assistant.",
+      "Before we begin, tell me what you have in mind:",
+      "1. What genre do you want to write?",
+      "2. Which platform are you preparing it for?",
+      "3. What target language should we write toward?",
+      "4. Who are your target readers?",
+      "5. Have you chosen a title? If yes, tell me. If not, you can edit it later in project management.",
+      "Creator, share your idea with me. Let us build it together.",
+    ].join("\n");
+  }
+
+  return [
+    "尊敬的创作者大人，我是您的小说创作小助理 KK。",
+    "在开始创作前，请告诉我您的想法：",
+    "1. 您想创作的小说题材是什么？",
+    "2. 准备发布在什么平台呢？",
+    "3. 目标语言是什么？",
+    "4. 目标读者是哪些呢？",
+    "5. 给小说想好名字了吗？如果想好了请告诉我；如果没想好，待会您可以自己在项目管理里面编辑小说名字哦！",
+    "创作者大人，告诉我您的想法，让我们一起创作吧！",
+  ].join("\n");
 }
 
 export default function NovelWorkbenchPage() {
@@ -137,6 +183,10 @@ function NovelWorkbenchContent() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatHydrated, setChatHydrated] = useState(false);
+  const [chatGenerating, setChatGenerating] = useState(false);
 
   const steps = useMemo(() => getWorkflowSteps("novel"), []);
   const activeChapter = useMemo(
@@ -148,6 +198,8 @@ function NovelWorkbenchContent() {
   const completedCount = steps.filter((step) => getStepContent(project, step.key).trim()).length;
   const isChapterTask = activeTask === "novel_chapter_outline" || activeTask === "novel_chapter_draft" || activeTask === "novel_revision";
   const secondaryTasks = novelActionTasks.filter((task) => task !== activeTask);
+  const currentStepIndex = Math.max(0, novelActionTasks.indexOf(activeTask));
+  const nextTask = novelActionTasks[currentStepIndex + 1] || null;
   const aiDisabledReason = !session?.access_token
     ? (isZh ? "登录后可使用 AI 生成。" : "Sign in to use AI generation.")
     : credits?.balance === 0
@@ -169,7 +221,7 @@ function NovelWorkbenchContent() {
           updatedAt: new Date().toISOString(),
         }));
       }
-      setSettingsModalOpen(true);
+      setSettingsModalOpen(false);
     }
 
     void supabase?.auth.getSession().then(async ({ data }) => {
@@ -199,6 +251,21 @@ function NovelWorkbenchContent() {
       listener?.subscription.unsubscribe();
     };
   }, [searchParams]);
+
+  useEffect(() => {
+    if (chatHydrated) return;
+    if (!project.novelDevelopmentNotes.trim()) {
+      setChatMessages([createAssistantMessage(getNovelOpeningMessage(isZh))]);
+      setChatHydrated(true);
+      return;
+    }
+
+    setChatMessages([
+      createAssistantMessage(isZh ? "我已读取这个项目之前保存的创作沟通记录。可以继续补充新想法，或直接基于记录生成当前阶段。" : "I loaded the saved development notes for this project. You can keep talking, or generate the active stage from the notes."),
+      createAssistantMessage(project.novelDevelopmentNotes),
+    ]);
+    setChatHydrated(true);
+  }, [chatHydrated, isZh, project.novelDevelopmentNotes]);
 
   useEffect(() => {
     if (!session?.access_token) {
@@ -345,6 +412,114 @@ function NovelWorkbenchContent() {
     setStatus(isZh ? "已保存到工作台。" : "Saved to Workspace.");
   }
 
+  async function sendChatMessage() {
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatGenerating) return;
+
+    setError("");
+    setStatus("");
+    setChatInput("");
+
+    const userMessage = createChatMessage("user", trimmed);
+    setChatMessages((current) => [...current, userMessage]);
+
+    const notesWithUser = appendDevelopmentNotes(project.novelDevelopmentNotes, "USER", trimmed);
+    const projectWithUser: DramaProject = {
+      ...project,
+      idea: project.idea.trim() ? project.idea : trimmed,
+      novelDevelopmentNotes: notesWithUser,
+      updatedAt: new Date().toISOString(),
+    };
+    setProject(projectWithUser);
+    upsertProject(projectWithUser);
+
+    if (!session?.access_token) {
+      const assistantMessage = createAssistantMessage(isZh
+        ? "我已经先把这条想法记录进项目。登录后，我可以基于这些记录继续追问、归纳，并生成右侧阶段文档。"
+        : "I saved this idea into the project notes. After sign-in, I can question, summarize, and generate the stage document from these notes.");
+      setChatMessages((current) => [...current, assistantMessage]);
+      const localProject = {
+        ...projectWithUser,
+        novelDevelopmentNotes: appendDevelopmentNotes(projectWithUser.novelDevelopmentNotes, "AI", assistantMessage.content),
+        updatedAt: new Date().toISOString(),
+      };
+      setProject((current) => ({
+        ...current,
+        novelDevelopmentNotes: appendDevelopmentNotes(current.novelDevelopmentNotes, "AI", assistantMessage.content),
+        updatedAt: new Date().toISOString(),
+      }));
+      upsertProject(localProject);
+      return;
+    }
+
+    if (credits?.balance === 0) {
+      setError(isZh ? "本月 AI 额度已用完。" : "Monthly AI credits are used up.");
+      return;
+    }
+
+    setChatGenerating(true);
+    setStatus(isZh ? "AI 正在读你的想法…" : "AI is reading your idea…");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), AI_GENERATION_TIMEOUT_MS);
+
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          taskType: "novel_development_chat",
+          projectId: projectWithUser.id,
+          projectTitle: projectWithUser.title,
+          market: projectWithUser.market,
+          genre: projectWithUser.novelSettings.type || projectWithUser.genre,
+          idea: projectWithUser.idea,
+          input: trimmed,
+          context: buildNovelChatContext(projectWithUser, activeChapter, activeTask, chatMessages),
+          options: {
+            market: projectWithUser.market,
+            genre: projectWithUser.novelSettings.type || projectWithUser.genre,
+            targetLanguage: projectWithUser.novelSettings.targetLanguage,
+            targetWordCount: projectWithUser.novelSettings.targetWordCount,
+            platform: projectWithUser.novelSettings.targetPlatform,
+            optimizeInstruction: `当前正在沟通阶段：${getStepLabel(activeTask, isZh)}`,
+          },
+          allSteps: buildNovelAllSteps(projectWithUser),
+          byoApi: readByoApiConfig("novel"),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data?.success) throw new Error(data?.error || "AI 对话失败");
+
+      const assistantMessage = createAssistantMessage(data.output);
+      setChatMessages((current) => [...current, assistantMessage]);
+      const notesWithAi = appendDevelopmentNotes(notesWithUser, "AI", data.output);
+      const nextProject = saveStepVersion(
+        { ...projectWithUser, novelDevelopmentNotes: notesWithAi, updatedAt: new Date().toISOString() },
+        "novel_development_chat",
+        data.output,
+        "ai",
+      );
+      setProject(nextProject);
+      await saveProject(nextProject);
+      setStatus(isZh ? "对话已记录，可继续聊或生成当前阶段。" : "Chat saved. Keep talking or generate the active stage.");
+      if (credits) setCredits({ ...credits, balance: Math.max(0, credits.balance - 1) });
+    } catch (chatError) {
+      if (chatError instanceof Error && chatError.name === "AbortError") {
+        setError(isZh ? "AI 对话超时，请稍后重试。你的输入已记录。" : "AI chat timed out. Your input was saved.");
+      } else {
+        setError(chatError instanceof Error ? chatError.message : (isZh ? "AI 对话失败。" : "AI chat failed."));
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      setChatGenerating(false);
+    }
+  }
+
   async function generate(taskType: TaskType) {
     setError("");
     setStatus("");
@@ -397,12 +572,7 @@ function NovelWorkbenchContent() {
             optimizeInstruction: taskType === "novel_revision" ? revisionInstruction : "",
           },
           allSteps: {
-            novel_brief: project.novelBrief,
-            novel_bible: project.novelBible,
-            novel_characters: project.novelCharacters,
-            novel_volume_outline: project.novelVolumeOutline,
-            novel_chapter_outline: project.novelChapterOutline,
-            novel_chapter_draft: project.novelChapterDraft,
+            ...buildNovelAllSteps(project),
           },
           byoApi: readByoApiConfig("novel"),
         }),
@@ -670,7 +840,7 @@ function NovelWorkbenchContent() {
             key={panel}
             onClick={() => setMobilePanel(panel)}
           >
-            {panel === "setup" ? (isZh ? "设定" : "Setup") : panel === "editor" ? (isZh ? "编辑" : "Editor") : (isZh ? "AI / 宇宙" : "AI / Universe")}
+            {panel === "setup" ? (isZh ? "流程" : "Flow") : panel === "editor" ? (isZh ? "对话" : "Chat") : (isZh ? "预览 / 宇宙" : "Preview / Universe")}
           </button>
         ))}
       </nav>
@@ -686,7 +856,7 @@ function NovelWorkbenchContent() {
           <div className="dashboard-panel-head">
             <div>
               <span>{isZh ? "工作流" : "Workflow"}</span>
-              <h2>{isZh ? "小说流程" : "Novel Flow"}</h2>
+              <h2>{isZh ? "7 阶段小说流程" : "7-stage novel flow"}</h2>
             </div>
           </div>
 
@@ -722,11 +892,59 @@ function NovelWorkbenchContent() {
           </div>
         </aside>
 
-        <section className={mobilePanel === "editor" ? "dashboard-panel novel-editor-panel is-mobile-active" : "dashboard-panel novel-editor-panel"}>
+        <section className={mobilePanel === "editor" ? "dashboard-panel novel-editor-panel novel-chat-panel is-mobile-active" : "dashboard-panel novel-editor-panel novel-chat-panel"}>
+          <div className="dashboard-panel-head">
+            <div>
+              <span>{isZh ? "创作对话" : "Development Chat"}</span>
+              <h2>{isZh ? "先聊清楚，再生成文档" : "Talk first. Generate after."}</h2>
+            </div>
+            <div className="novel-chat-stage-pill">
+              {getActionNumber(activeTask)} · {getStepLabel(activeTask, isZh)}
+            </div>
+          </div>
+
+          <div className="novel-chat-thread" aria-live="polite">
+            {chatMessages.map((message) => (
+              <article className={`novel-chat-message ${message.role}`} key={message.id}>
+                <span>{message.role === "user" ? (isZh ? "我" : "Me") : "Kiikis AI"}</span>
+                <p>{message.content}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="novel-chat-composer">
+            <textarea
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void sendChatMessage();
+                }
+              }}
+              placeholder={isZh ? "像和助理聊天一样输入：故事想法、参考、修改意见、你不满意的地方、想继续追问的问题。⌘/Ctrl + Enter 发送。" : "Write like a conversation: raw idea, references, revision notes, doubts, or questions. Cmd/Ctrl + Enter to send."}
+            />
+            <div className="novel-chat-actions">
+              <button className="secondary-button" type="button" onClick={() => void sendChatMessage()} disabled={!chatInput.trim() || chatGenerating}>
+                <Send size={16} /> {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
+              </button>
+              <button className="primary-button" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(activeBlockedReason) || (isChapterTask && activeChapter?.status === "locked")} title={activeBlockedReason || undefined}>
+                <Sparkles size={16} /> {isZh ? "生成/更新当前阶段" : "Generate active stage"}
+              </button>
+              {nextTask ? (
+                <button className="secondary-button" type="button" onClick={() => setActiveTask(nextTask)}>
+                  {isZh ? "进入下一阶段" : "Next stage"} · {getStepShort(nextTask, isZh)}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <aside className={mobilePanel === "ai" ? "dashboard-panel novel-ai-panel is-mobile-active" : "dashboard-panel novel-ai-panel"}>
           <div className="dashboard-panel-head">
             <div>
               <span>{completedCount}/{steps.length} {isZh ? "已完成" : "complete"}</span>
-              <h2>{getStepLabel(activeTask, isZh)}</h2>
+              <h2>{isZh ? "阶段预览" : "Stage preview"}</h2>
             </div>
             <div className="novel-editor-actions">
               {isChapterTask && activeChapter ? (
@@ -739,10 +957,10 @@ function NovelWorkbenchContent() {
           </div>
 
           <textarea
-            className="novel-main-editor"
+            className="novel-main-editor novel-stage-preview"
             value={activeContent}
             onChange={(event) => updateActiveContent(event.target.value)}
-            placeholder={isZh ? "在这里编辑当前模块内容，或使用右侧 AI 工具生成。" : "Edit the active module here, or generate with AI tools on the right."}
+            placeholder={isZh ? "当前阶段生成内容会出现在这里。你可以手动编辑，也可以在中间对话框提出修改意见后重新生成。" : "The active stage output appears here. Edit manually, or request changes in chat and regenerate."}
           />
 
           {isChapterTask ? (
@@ -759,19 +977,11 @@ function NovelWorkbenchContent() {
                 </button>
               ))}
               {!project.novelChapters.length ? (
-                <div className="novel-empty-chapters">{isZh ? "生成章节正文后，会在这里形成章节列表。" : "Generated chapter drafts will appear here."}</div>
+                <div className="novel-empty-chapters">{isZh ? "生成小说正文后，会在这里形成章节/正文列表。" : "Generated manuscript sections will appear here."}</div>
               ) : null}
             </div>
           ) : null}
-        </section>
 
-        <aside className={mobilePanel === "ai" ? "dashboard-panel novel-ai-panel is-mobile-active" : "dashboard-panel novel-ai-panel"}>
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "AI 工具" : "AI TOOLS"}</span>
-              <h2>{isZh ? "生产动作" : "Actions"}</h2>
-            </div>
-          </div>
           {credits ? <small className="field-note">{isZh ? "剩余额度" : "Credits"}: {credits.balance}/{credits.monthlyLimit}</small> : null}
           {aiDisabledReason ? (
             <div className="notice warning novel-auth-notice">
@@ -794,7 +1004,7 @@ function NovelWorkbenchContent() {
           <div className="novel-current-action">
             <span>{isZh ? "当前步骤" : "Current step"}</span>
             <strong>{getActionNumber(activeTask)} · {getStepLabel(activeTask, isZh)}</strong>
-            <p>{activeBlockedReason || (isZh ? "优先基于中间编辑区当前内容继续生成或补全。" : "Generate from the active editor content and current project context.")}</p>
+            <p>{activeBlockedReason || (isZh ? "会综合左侧阶段、对话记录、当前预览内容和项目上下文生成。" : "Uses the active stage, chat notes, current preview, and project context.")}</p>
             <button className="primary-button full" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(activeBlockedReason) || (isChapterTask && activeChapter?.status === "locked")} title={activeBlockedReason || undefined}>
               <Sparkles size={16} />
               {generating === activeTask ? (isZh ? "生成中" : "Generating") : getStepShort(activeTask, isZh)}
@@ -931,8 +1141,14 @@ function getNovelTaskBlockedReason(
   if (taskType === "novel_chapter_outline" && !project.novelVolumeOutline.trim()) {
     return isZh ? "请先生成分卷大纲，再生成章节大纲。" : "Generate the volume outline before chapter outlines.";
   }
-  if (taskType === "novel_chapter_draft" && !chapterOutline.trim()) {
-    return isZh ? "请先生成或填写当前章节大纲。" : "Generate or write the current chapter outline first.";
+  if (taskType === "novel_chapter_draft" && !chapterOutline.trim() && !project.novelBible.trim() && !project.novelCharacters.trim()) {
+    return isZh ? "请先生成小说世界观及大纲，或填写正文大纲。" : "Generate the world outline or write a manuscript outline first.";
+  }
+  if (taskType === "translation" && !chapterDraft.trim() && !project.novelChapterDraft.trim()) {
+    return isZh ? "请先生成或填写小说正文。" : "Generate or write the manuscript first.";
+  }
+  if (taskType === "localization" && !project.translation.trim() && !chapterDraft.trim() && !project.novelChapterDraft.trim()) {
+    return isZh ? "请先生成小说译文，或至少填写小说正文。" : "Generate the translation, or at least write the manuscript first.";
   }
   if (taskType === "novel_revision") {
     if (!chapterDraft.trim()) return isZh ? "请先生成或填写章节正文。" : "Generate or write the chapter draft first.";
@@ -946,6 +1162,8 @@ function getNovelTaskBlockedReason(
       project.novelVolumeOutline,
       project.novelChapterOutline,
       project.novelChapterDraft,
+      project.translation,
+      project.localization,
     ].some((value) => value.trim());
     if (!hasAnyNovelContent) return isZh ? "请先生成至少一个小说模块。" : "Generate at least one novel module first.";
   }
@@ -1095,6 +1313,12 @@ function buildCompleteNovelDownload(project: DramaProject, aiExportNotes = "") {
     "### 分卷大纲",
     project.novelVolumeOutline || "未生成",
     "",
+    "### 小说译文",
+    project.translation || "未生成",
+    "",
+    "### 本土化及雷同查验",
+    project.localization || "未生成",
+    "",
     "### 连续性备注",
     chapters.map((chapter) => [
       `第 ${chapter.chapterNo} 章 ${chapter.title}`,
@@ -1111,6 +1335,9 @@ function buildScriptAdaptationBrief(project: DramaProject) {
     "",
     "## 小说 Brief",
     project.novelBrief || project.idea || "未填写",
+    "",
+    "## 创作沟通记录",
+    project.novelDevelopmentNotes || "未记录",
     "",
     "## 小说 Bible",
     project.novelBible || "未生成",
@@ -1130,6 +1357,10 @@ function buildScriptAdaptationBrief(project: DramaProject) {
 }
 
 function buildTaskInput(project: DramaProject, taskType: TaskType, revisionInstruction: string, activeChapter: NovelChapter | null) {
+  if (taskType === "novel_development_chat") {
+    return project.novelDevelopmentNotes || project.idea;
+  }
+
   if (taskType === "novel_revision") {
     return [
       "【修改指令】",
@@ -1141,11 +1372,25 @@ function buildTaskInput(project: DramaProject, taskType: TaskType, revisionInstr
   }
 
   if (taskType === "novel_chapter_draft") {
-    return activeChapter?.outline || project.novelChapterOutline || project.novelBrief || project.idea;
+    return [
+      activeChapter?.outline || project.novelChapterOutline || "",
+      project.novelBible ? `【小说世界观及大纲】\n${project.novelBible}` : "",
+      project.novelCharacters ? `【角色 Bible】\n${project.novelCharacters}` : "",
+      project.novelDevelopmentNotes ? `【创作沟通记录】\n${project.novelDevelopmentNotes}` : "",
+      project.novelBrief || project.idea,
+    ].filter(Boolean).join("\n\n");
   }
 
   if (taskType === "novel_chapter_outline") {
     return project.novelVolumeOutline || project.novelBrief || project.idea;
+  }
+
+  if (taskType === "translation") {
+    return buildNovelManuscriptText(project, activeChapter) || project.novelChapterDraft || project.idea;
+  }
+
+  if (taskType === "localization") {
+    return project.translation || buildNovelManuscriptText(project, activeChapter) || project.novelChapterDraft || project.idea;
   }
 
   return getStepContent(project, taskType) || project.idea;
@@ -1164,12 +1409,54 @@ function buildNovelContext(project: DramaProject, activeChapter: NovelChapter | 
     `目标读者：${settings.targetReader}`,
     `留存钩子：${settings.retentionHook}`,
     project.universeId ? `关联 Universe：${project.universeId}` : "",
+    project.novelDevelopmentNotes ? `创作沟通记录：\n${project.novelDevelopmentNotes}` : "",
+    project.novelBrief ? `小说背景：\n${project.novelBrief}` : "",
     project.novelBible ? `小说 Bible：\n${project.novelBible}` : "",
     project.novelCharacters ? `角色卡：\n${project.novelCharacters}` : "",
     project.novelVolumeOutline ? `分卷大纲：\n${project.novelVolumeOutline}` : "",
     activeChapter ? `当前章节：第 ${activeChapter.chapterNo} 章 ${activeChapter.title}\n${activeChapter.outline}\n${activeChapter.continuityNotes}` : "",
     latestChapter ? `上一章：第 ${latestChapter.chapterNo} 章 ${latestChapter.title}\n${latestChapter.continuityNotes || latestChapter.endingHook}` : "",
   ].filter(Boolean).join("\n\n");
+}
+
+function buildNovelAllSteps(project: DramaProject): Partial<Record<TaskType, string>> {
+  return {
+    novel_development_chat: project.novelDevelopmentNotes,
+    novel_brief: project.novelBrief,
+    novel_bible: project.novelBible,
+    novel_characters: project.novelCharacters,
+    novel_chapter_draft: project.novelChapterDraft,
+    translation: project.translation,
+    localization: project.localization,
+    novel_export: project.deliveryPackage,
+  };
+}
+
+function buildNovelChatContext(project: DramaProject, activeChapter: NovelChapter | null, activeTask: TaskType, messages: ChatMessage[]) {
+  const recentChat = messages.slice(-8).map((message) => `${message.role === "user" ? "USER" : "AI"}：${message.content}`).join("\n\n");
+  return [
+    `当前阶段：${taskNamesSafe(activeTask)}`,
+    recentChat ? `最近对话：\n${recentChat}` : "",
+    buildNovelContext(project, activeChapter),
+  ].filter(Boolean).join("\n\n");
+}
+
+function buildNovelManuscriptText(project: DramaProject, activeChapter: NovelChapter | null) {
+  const chapters = project.novelChapters.length ? project.novelChapters : activeChapter ? [activeChapter] : [];
+  const chapterText = chapters
+    .filter((chapter) => chapter.draft.trim())
+    .map((chapter) => `## 第 ${chapter.chapterNo} 章 ${chapter.title}\n\n${chapter.draft}`)
+    .join("\n\n");
+  return chapterText || activeChapter?.draft || project.novelChapterDraft || "";
+}
+
+function appendDevelopmentNotes(current: string, role: "USER" | "AI", content: string) {
+  const stamp = new Date().toLocaleString("zh-CN", { hour12: false });
+  return [current.trim(), `## ${stamp} ${role}`, content.trim()].filter(Boolean).join("\n\n").slice(-24000);
+}
+
+function taskNamesSafe(taskType: TaskType) {
+  return stepCopy[taskType]?.zh || taskType;
 }
 
 function readWorkspaceEntryDraft(workflowId: string): WorkspaceEntryDraft | null {

@@ -3595,7 +3595,7 @@ textarea.script-editor {
   width: min(1680px, calc(100% - 40px));
   margin: var(--space-6) auto var(--space-10);
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(620px, 1fr) minmax(260px, 330px);
+  grid-template-columns: minmax(240px, 300px) minmax(560px, 1fr) minmax(380px, 0.72fr);
   gap: var(--space-4);
   align-items: start;
 }
@@ -3978,6 +3978,100 @@ textarea.script-editor {
   overflow: auto;
 }
 
+.novel-chat-panel {
+  min-height: 760px;
+}
+
+.novel-chat-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  background: var(--glass-fill);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.novel-chat-thread {
+  display: flex;
+  flex: 1;
+  min-height: 520px;
+  max-height: 620px;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.novel-chat-message {
+  width: min(88%, 760px);
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-fill);
+  color: var(--ink-primary);
+}
+
+.novel-chat-message.user {
+  align-self: flex-end;
+  background: rgba(0, 107, 255, 0.16);
+}
+
+.novel-chat-message.assistant {
+  align-self: flex-start;
+  background: var(--glass-fill-strong);
+}
+
+.novel-chat-message span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.novel-chat-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--ink-primary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.novel-chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.novel-chat-composer textarea {
+  min-height: 132px;
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.novel-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.novel-stage-preview {
+  min-height: 360px;
+  max-height: 520px;
+}
+
 @media (max-width: 1180px) {
   .novel-workbench-shell {
     grid-template-columns: 1fr;
@@ -3985,6 +4079,15 @@ textarea.script-editor {
 
   .novel-main-editor {
     min-height: 460px;
+  }
+
+  .novel-chat-panel {
+    min-height: 680px;
+  }
+
+  .novel-chat-thread {
+    min-height: 420px;
+    max-height: 520px;
   }
 }
 
@@ -4049,6 +4152,38 @@ textarea.script-editor {
   .novel-editor-panel.is-mobile-active,
   .novel-ai-panel.is-mobile-active {
     display: flex;
+  }
+
+  .novel-chat-panel {
+    min-height: 0;
+  }
+
+  .novel-chat-stage-pill {
+    width: 100%;
+  }
+
+  .novel-chat-thread {
+    min-height: 360px;
+    max-height: 58vh;
+  }
+
+  .novel-chat-message {
+    width: 100%;
+  }
+
+  .novel-chat-actions {
+    justify-content: stretch;
+  }
+
+  .novel-chat-actions .primary-button,
+  .novel-chat-actions .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .novel-stage-preview {
+    min-height: 320px;
+    max-height: none;
   }
 }
 
