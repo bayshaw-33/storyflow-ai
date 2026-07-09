@@ -70,8 +70,8 @@ function getWorkflowDetail(project: DramaProject, isZh: boolean) {
 
 function getProjectHref(project: DramaProject) {
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
-  if (project.workflowType === "storyboard") return `/storyboard-workbench?projectId=${encodeURIComponent(project.id)}`;
-  if (project.workflowType === "video") return `/video-workbench?projectId=${encodeURIComponent(project.id)}`;
+  if (project.workflowType === "storyboard") return `/production-workbench?projectId=${encodeURIComponent(project.id)}&mode=planning`;
+  if (project.workflowType === "video") return `/production-workbench?projectId=${encodeURIComponent(project.id)}&mode=editor`;
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${encodeURIComponent(project.id)}`;

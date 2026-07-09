@@ -12,6 +12,48 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-09 - Production Workbench 挂接现有入口
+
+### 本次目标
+
+- 修复新制片工作台已上线但用户从现有入口看不到的问题。
+- 将分镜 / 视频入口指向 `/production-workbench`，让用户能直接看到新工作台。
+
+### 已完成
+
+- 工作流首页的“分镜”入口改为 `/production-workbench?mode=planning&setup=1`。
+- 工作流首页的“视频”入口改为 `/production-workbench?mode=editor&setup=1`。
+- 项目列表中的 storyboard 项目改为打开 `/production-workbench?projectId=...&mode=planning`。
+- 项目列表中的 video 项目改为打开 `/production-workbench?projectId=...&mode=editor`。
+- Universe 中创建 / 打开的 storyboard、video 项目也改为进入新制片工作台。
+
+### 修改文件
+
+- `components/workflow/workflow-data.ts`
+- `components/home/ProjectList.tsx`
+- `app/universes/[universeId]/page.tsx`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- `pnpm run build`：通过。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- 旧 `/storyboard-workbench` 与 `/video-workbench` 页面仍保留，直接输入旧 URL 仍会看到旧工作台。
+- 下一步如确认新工作台稳定，可以把旧页面改成 redirect 或 wrapper。
+
+### 给下一位 Codex
+
+- 用户从首页工作流卡片、项目列表、Universe 项目进入分镜 / 视频时，应看到 `/production-workbench`。
+- 不要删除旧工作台文件，等新工作台 API 与保存逻辑稳定后再迁移。
+
 ## 2026-07-09 - Production Workbench Phase 2 基础页面
 
 ### 本次目标
