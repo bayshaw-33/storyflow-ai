@@ -1,0 +1,510 @@
+import type { DramaProject, StoryboardEpisode, WorkflowType } from "@/lib/projects";
+import { defaultProductionProviders, parseShotDurationSeconds } from "./providers";
+import type {
+  ProductionAspectRatio,
+  ProductionChatMessage,
+  ProductionHistoryItem,
+  ProductionHistoryType,
+  ProductionMode,
+  ProductionProjectState,
+  ProductionProviderSettings,
+  ProductionShot,
+  ProductionShotStatus,
+  ProductionShotType,
+  ProductionSourceFile,
+  ProductionStoryBrief,
+  ProductionTimelineItem,
+  ProductionVisualBible,
+} from "./types";
+
+type UnknownRecord = Record<string, unknown>;
+
+const defaultVisualBible: ProductionVisualBible = {
+  visualStyle: "cinematic vertical short drama, realistic lighting, clear emotional blocking",
+  colorPalette: "natural contrast, controlled highlights, production-ready skin tones",
+  cameraRules: "prioritize readable 9:16 composition, close-ups for emotion, stable continuity between shots",
+  characterRules: "keep character face, wardrobe, age, body shape and key props consistent across shots",
+  sceneRules: "keep location geography, lighting direction and important props consistent",
+  negativePrompt: "watermark, logo, unreadable text, distorted hands, inconsistent faces, low quality, collage artifacts",
+};
+
+const defaultStoryBrief: ProductionStoryBrief = {
+  logline: "",
+  targetPlatform: "TikTok / Reels / Shorts",
+  targetAudience: "overseas short drama viewers",
+  storySummary: "",
+  notes: "",
+};
+
+export function createProductionId(prefix: string) {
+  const randomId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return `${prefix}-${randomId}`;
+}
+
+export function createProductionShot(overrides: Partial<ProductionShot> = {}): ProductionShot {
+  const now = new Date().toISOString();
+  const index = Number.isFinite(Number(overrides.index)) && Number(overrides.index) > 0 ? Number(overrides.index) : 1;
+  const description = overrides.description || "";
+  const imagePrompt = overrides.imagePrompt || description;
+  return {
+    id: overrides.id || createProductionId("shot"),
+    index,
+    sceneTitle: overrides.sceneTitle || `Scene ${index}`,
+    shotType: normalizeShotType(overrides.shotType),
+    duration: overrides.duration || "5s",
+    description,
+    composition: overrides.composition || "",
+    cameraMovement: overrides.cameraMovement || "",
+    imagePrompt,
+    videoPrompt: overrides.videoPrompt || imagePrompt,
+    dialogue: overrides.dialogue || "",
+    sound: overrides.sound || "",
+    continuity: overrides.continuity || "",
+    characterRefs: Array.isArray(overrides.characterRefs) ? overrides.characterRefs : [],
+    sceneRefs: Array.isArray(overrides.sceneRefs) ? overrides.sceneRefs : [],
+    imageUrl: overrides.imageUrl || "",
+    videoUrl: overrides.videoUrl || "",
+    imageTaskId: overrides.imageTaskId || "",
+    videoTaskId: overrides.videoTaskId || "",
+    imageProvider: overrides.imageProvider || "minimax",
+    videoProvider: overrides.videoProvider || "minimax",
+    status: normalizeShotStatus(overrides.status, overrides.imageUrl, overrides.videoUrl),
+    error: overrides.error || "",
+    createdAt: overrides.createdAt || now,
+    updatedAt: overrides.updatedAt || now,
+  };
+}
+
+export function createEmptyProductionState(overrides: Partial<ProductionProjectState> = {}): ProductionProjectState {
+  const now = new Date().toISOString();
+  const shots = normalizeProductionShots(overrides.shots || []);
+  const selectedShotId = overrides.selectedShotId || shots[0]?.id || "";
+  return {
+    id: overrides.id || createProductionId("production"),
+    projectId: overrides.projectId || "",
+    title: overrides.title || "未命名制片项目",
+    workflowType: overrides.workflowType || "production",
+    contentType: overrides.contentType || "short_drama",
+    aspectRatio: normalizeAspectRatio(overrides.aspectRatio),
+    language: overrides.language || "zh",
+    universeId: typeof overrides.universeId === "string" ? overrides.universeId : null,
+    sourceFiles: normalizeSourceFiles(overrides.sourceFiles || []),
+    sourceSummary: overrides.sourceSummary || "",
+    storyBrief: { ...defaultStoryBrief, ...(overrides.storyBrief || {}) },
+    visualBible: { ...defaultVisualBible, ...(overrides.visualBible || {}) },
+    shots,
+    selectedShotId,
+    mode: overrides.mode || "planning",
+    providers: normalizeProviders(overrides.providers),
+    chatMessages: normalizeChatMessages(overrides.chatMessages || []),
+    history: normalizeHistory(overrides.history || []),
+    updatedAt: overrides.updatedAt || now,
+  };
+}
+
+export function productionStateFromProject(project: DramaProject, mode: ProductionMode = "planning"): ProductionProjectState {
+  const deliveryPayload = parseJson(project.deliveryPackage);
+  const savedState = isRecord(deliveryPayload.productionState) ? deliveryPayload.productionState : null;
+
+  if (savedState) {
+    return createEmptyProductionState({
+      ...(savedState as Partial<ProductionProjectState>),
+      projectId: project.id,
+      id: stringValue(savedState.id) || project.id,
+      title: stringValue(savedState.title) || project.title,
+      universeId: stringValue(savedState.universeId) || project.universeId || null,
+      mode,
+    });
+  }
+
+  const aspectRatio = normalizeAspectRatio(deliveryPayload.aspectRatio || parseJson(project.storyboardScript).aspectRatio);
+  const videoShots = videoPayloadToShots(deliveryPayload, aspectRatio);
+  const storyboardShots = storyboardPayloadToShots(parseJson(project.storyboardScript), aspectRatio);
+  const episodeShots = storyboardEpisodesToShots(project.storyboardEpisodes || [], aspectRatio);
+  const fallbackText = project.importedScript || project.finalScript || project.chineseScript || project.idea || project.storyboardScript || "";
+  const shots =
+    videoShots.length > 0
+      ? videoShots
+      : storyboardShots.length > 0
+        ? storyboardShots
+        : episodeShots.length > 0
+          ? episodeShots
+          : fallbackText
+            ? [createProductionShot({ index: 1, sceneTitle: project.title || "Scene 1", description: fallbackText.slice(0, 600), imagePrompt: fallbackText.slice(0, 600) })]
+            : [];
+
+  return createEmptyProductionState({
+    id: project.id,
+    projectId: project.id,
+    title: project.title || "未命名制片项目",
+    workflowType: project.workflowType === "video" ? "video" : "storyboard",
+    contentType: inferContentType(project),
+    aspectRatio,
+    language: inferProductionLanguage(project.targetLanguage),
+    universeId: project.universeId || null,
+    sourceSummary: fallbackText.slice(0, 1200),
+    storyBrief: {
+      ...defaultStoryBrief,
+      logline: project.storyBible.logline || "",
+      targetPlatform: project.market || defaultStoryBrief.targetPlatform,
+      targetAudience: project.storyBible.targetMarket || defaultStoryBrief.targetAudience,
+      storySummary: project.brief || project.outline || project.idea || "",
+      notes: project.storyBible.lockedCanon || "",
+    },
+    visualBible: {
+      ...defaultVisualBible,
+      visualStyle: project.storyBible.languageStyle || defaultVisualBible.visualStyle,
+      characterRules: project.characters || defaultVisualBible.characterRules,
+    },
+    shots,
+    mode,
+    providers: {
+      ...defaultProductionProviders,
+      ...(isRecord(deliveryPayload.providers) ? deliveryPayload.providers : {}),
+    } as ProductionProviderSettings,
+  });
+}
+
+export function productionStateToMarkdown(state: ProductionProjectState) {
+  return [
+    `# ${state.title || "未命名制片项目"}`,
+    "",
+    `- 内容类型：${state.contentType === "mv" ? "MV" : "短剧"}`,
+    `- 画幅：${state.aspectRatio}`,
+    `- 镜头数：${state.shots.length}`,
+    `- 预计时长：${formatSeconds(totalTimelineSeconds(state))}`,
+    state.universeId ? `- Universe：${state.universeId}` : "",
+    "",
+    "## 故事概况",
+    state.storyBrief.logline ? `- Logline：${state.storyBrief.logline}` : "",
+    state.storyBrief.storySummary ? state.storyBrief.storySummary : "",
+    "",
+    "## 视觉规则",
+    `- 视觉风格：${state.visualBible.visualStyle}`,
+    `- 运镜规则：${state.visualBible.cameraRules}`,
+    `- 人物一致性：${state.visualBible.characterRules}`,
+    "",
+    "## 分镜脚本",
+    ...state.shots.map((shot) =>
+      [
+        `### 分镜 ${shot.index}: ${shot.sceneTitle || "Untitled"}`,
+        `- 画面类型：${shot.shotType}`,
+        `- 分镜时长：${shot.duration}`,
+        shot.description ? `- 画面描述：${shot.description}` : "",
+        shot.composition ? `- 构图设计：${shot.composition}` : "",
+        shot.cameraMovement ? `- 运镜调度：${shot.cameraMovement}` : "",
+        shot.dialogue ? `- 对白：${shot.dialogue}` : "",
+        shot.sound ? `- 声音：${shot.sound}` : "",
+        shot.imagePrompt ? `- 图片提示词：${shot.imagePrompt}` : "",
+        shot.videoPrompt ? `- 视频提示词：${shot.videoPrompt}` : "",
+        shot.imageUrl ? `- 图片：${shot.imageUrl}` : "",
+        shot.videoUrl ? `- 视频：${shot.videoUrl}` : "",
+      ].filter(Boolean).join("\n"),
+    ),
+  ].filter(Boolean).join("\n");
+}
+
+export function productionStateToProjectPatch(state: ProductionProjectState, workflowType: Extract<WorkflowType, "storyboard" | "video"> = "storyboard"): Partial<DramaProject> {
+  const markdown = productionStateToMarkdown(state);
+  return {
+    workflowType,
+    title: state.title,
+    storyboardScript: markdown,
+    storyboardEpisodes: productionStateToStoryboardEpisodes(state),
+    deliveryPackage: JSON.stringify({ productionState: state, exportedAt: new Date().toISOString(), version: "production-workbench-v1" }, null, 2),
+    universeId: state.universeId || null,
+    status: "ready",
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function productionStateToStoryboardEpisodes(state: ProductionProjectState): StoryboardEpisode[] {
+  const sceneMap = new Map<string, ProductionShot[]>();
+  state.shots.forEach((shot) => {
+    const title = shot.sceneTitle || "Scene";
+    sceneMap.set(title, [...(sceneMap.get(title) || []), shot]);
+  });
+
+  return Array.from(sceneMap.entries()).map(([title, shots], sceneIndex) => ({
+    id: createProductionId("episode"),
+    title: title || `第 ${sceneIndex + 1} 场`,
+    content: shots
+      .map((shot) =>
+        [
+          `分镜 ${shot.index}`,
+          `画面类型：${shot.shotType}`,
+          `时长：${shot.duration}`,
+          shot.description ? `画面描述：${shot.description}` : "",
+          shot.composition ? `构图：${shot.composition}` : "",
+          shot.cameraMovement ? `运镜：${shot.cameraMovement}` : "",
+          shot.imagePrompt ? `图片提示词：${shot.imagePrompt}` : "",
+          shot.videoPrompt ? `视频提示词：${shot.videoPrompt}` : "",
+        ].filter(Boolean).join("\n"),
+      )
+      .join("\n\n"),
+  }));
+}
+
+export function addProductionHistory(
+  state: ProductionProjectState,
+  input: Omit<ProductionHistoryItem, "id" | "createdAt"> & { id?: string; createdAt?: string },
+): ProductionProjectState {
+  return {
+    ...state,
+    history: [
+      {
+        id: input.id || createProductionId("history"),
+        type: input.type,
+        title: input.title,
+        detail: input.detail,
+        shotId: input.shotId,
+        createdAt: input.createdAt || new Date().toISOString(),
+      },
+      ...state.history,
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function updateProductionShot(state: ProductionProjectState, shotId: string, patch: Partial<ProductionShot>): ProductionProjectState {
+  const now = new Date().toISOString();
+  return {
+    ...state,
+    shots: normalizeProductionShots(state.shots.map((shot) => (shot.id === shotId ? { ...shot, ...patch, updatedAt: now } : shot))),
+    selectedShotId: state.selectedShotId || shotId,
+    updatedAt: now,
+  };
+}
+
+export function deleteProductionShot(state: ProductionProjectState, shotId: string): ProductionProjectState {
+  const shots = normalizeProductionShots(state.shots.filter((shot) => shot.id !== shotId));
+  return {
+    ...state,
+    shots,
+    selectedShotId: state.selectedShotId === shotId ? shots[0]?.id || "" : state.selectedShotId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function moveProductionShot(state: ProductionProjectState, shotId: string, direction: "up" | "down"): ProductionProjectState {
+  const shots = [...state.shots];
+  const index = shots.findIndex((shot) => shot.id === shotId);
+  const target = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || target < 0 || target >= shots.length) return state;
+  [shots[index], shots[target]] = [shots[target], shots[index]];
+  return {
+    ...state,
+    shots: normalizeProductionShots(shots),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function productionTimelineItems(state: ProductionProjectState): ProductionTimelineItem[] {
+  return state.shots.map((shot) => ({
+    shotId: shot.id,
+    index: shot.index,
+    title: shot.sceneTitle || `Shot ${shot.index}`,
+    durationSeconds: parseShotDurationSeconds(shot.duration),
+    imageUrl: shot.imageUrl,
+    videoUrl: shot.videoUrl,
+    status: shot.status,
+  }));
+}
+
+export function totalTimelineSeconds(state: ProductionProjectState) {
+  return productionTimelineItems(state).reduce((sum, item) => sum + item.durationSeconds, 0);
+}
+
+export function formatSeconds(seconds: number) {
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return minutes > 0 ? `${minutes}:${String(rest).padStart(2, "0")}` : `${rest}s`;
+}
+
+function normalizeProductionShots(shots: Partial<ProductionShot>[]) {
+  return shots.map((shot, index) => createProductionShot({ ...shot, index: index + 1 }));
+}
+
+function normalizeSourceFiles(files: Partial<ProductionSourceFile>[]) {
+  return files
+    .filter((file) => file.name)
+    .map((file) => ({
+      id: file.id || createProductionId("source"),
+      name: file.name || "untitled",
+      mimeType: file.mimeType || "text/plain",
+      size: Number(file.size || 0),
+      textPreview: file.textPreview || file.extractedText?.slice(0, 500) || "",
+      extractedText: file.extractedText || "",
+      storagePath: file.storagePath || "",
+      uploadedAt: file.uploadedAt || new Date().toISOString(),
+    }));
+}
+
+function normalizeChatMessages(messages: Partial<ProductionChatMessage>[]) {
+  return messages
+    .filter((message) => message.content)
+    .map((message) => ({
+      id: message.id || createProductionId("chat"),
+      role: message.role || "assistant",
+      content: message.content || "",
+      sourceFileIds: Array.isArray(message.sourceFileIds) ? message.sourceFileIds : [],
+      shotId: message.shotId || "",
+      createdAt: message.createdAt || new Date().toISOString(),
+    }));
+}
+
+function normalizeHistory(items: Partial<ProductionHistoryItem>[]) {
+  return items
+    .filter((item) => item.title || item.detail)
+    .map((item) => ({
+      id: item.id || createProductionId("history"),
+      type: normalizeHistoryType(item.type),
+      title: item.title || "Production update",
+      detail: item.detail || "",
+      shotId: item.shotId || "",
+      createdAt: item.createdAt || new Date().toISOString(),
+    }));
+}
+
+function normalizeProviders(providers?: Partial<ProductionProviderSettings>) {
+  return {
+    ...defaultProductionProviders,
+    ...(providers || {}),
+  };
+}
+
+function videoPayloadToShots(payload: UnknownRecord, aspectRatio: ProductionAspectRatio) {
+  const state = isRecord(payload.state) ? payload.state : null;
+  const shots = Array.isArray(state?.shots) ? state.shots : [];
+  return shots.map((value, index) => {
+    const shot = isRecord(value) ? value : {};
+    const prompt = stringValue(shot.prompt) || stringValue(shot.sourceText);
+    return createProductionShot({
+      id: stringValue(shot.id) || undefined,
+      index: index + 1,
+      sceneTitle: stringValue(shot.sceneTitle) || `Shot ${index + 1}`,
+      duration: stringValue(shot.duration) || "5s",
+      description: stringValue(shot.sourceText) || prompt,
+      imagePrompt: prompt,
+      videoPrompt: prompt,
+      videoUrl: stringValue(shot.videoUrl),
+      videoTaskId: stringValue(shot.taskId),
+      status: normalizeShotStatus(stringValue(shot.status), "", stringValue(shot.videoUrl)),
+      imageProvider: "minimax",
+      videoProvider: "minimax",
+      sceneRefs: [aspectRatio],
+    });
+  });
+}
+
+function storyboardPayloadToShots(payload: UnknownRecord, aspectRatio: ProductionAspectRatio) {
+  const scenes = Array.isArray(payload.scenes) ? payload.scenes : [];
+  return scenes.flatMap((sceneValue, sceneIndex) => {
+    const scene = isRecord(sceneValue) ? sceneValue : {};
+    const shots = Array.isArray(scene.shots) ? scene.shots : [];
+    return shots.map((shotValue, shotIndex) => {
+      const shot = isRecord(shotValue) ? shotValue : {};
+      const description = stringValue(shot.text) || stringValue(shot.description) || stringValue(shot.prompt);
+      const visualPrompt = stringValue(shot.visualPrompt) || stringValue(shot.prompt) || description;
+      return createProductionShot({
+        id: stringValue(shot.id) || undefined,
+        index: sceneIndex * 100 + shotIndex + 1,
+        sceneTitle: stringValue(scene.title) || `Scene ${sceneIndex + 1}`,
+        duration: stringValue(shot.duration) || "5s",
+        description,
+        composition: stringValue(shot.frame) || stringValue(shot.composition),
+        cameraMovement: stringValue(shot.camera) || stringValue(shot.cameraMovement),
+        imagePrompt: visualPrompt,
+        videoPrompt: visualPrompt,
+        continuity: stringValue(shot.continuity),
+        shotType: inferShotType(description, visualPrompt),
+        sceneRefs: [stringValue(scene.location), stringValue(scene.intention), aspectRatio].filter(Boolean),
+      });
+    });
+  });
+}
+
+function storyboardEpisodesToShots(episodes: StoryboardEpisode[], aspectRatio: ProductionAspectRatio) {
+  return episodes.flatMap((episode, episodeIndex) => {
+    const blocks = episode.content.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+    const lines = blocks.length ? blocks : episode.content.split(/\n/).map((line) => line.trim()).filter(Boolean);
+    return lines.slice(0, 40).map((line, shotIndex) =>
+      createProductionShot({
+        index: episodeIndex * 100 + shotIndex + 1,
+        sceneTitle: episode.title || `Scene ${episodeIndex + 1}`,
+        description: line,
+        imagePrompt: line,
+        videoPrompt: line,
+        shotType: inferShotType(line, line),
+        sceneRefs: [aspectRatio],
+      }),
+    );
+  });
+}
+
+function inferContentType(project: DramaProject) {
+  const text = [project.genre, project.idea, project.deliveryPackage, project.storyboardScript].join(" ").toLowerCase();
+  return text.includes("mv") || text.includes("music video") || text.includes("歌曲") ? "mv" : "short_drama";
+}
+
+function inferProductionLanguage(targetLanguage = "") {
+  const value = targetLanguage.toLowerCase();
+  if (value.includes("english") || value.includes("英文")) return "en";
+  if (value.includes("双语") || value.includes("bilingual")) return "bilingual";
+  return "zh";
+}
+
+function normalizeAspectRatio(value: unknown): ProductionAspectRatio {
+  return value === "16:9" || value === "1:1" ? value : "9:16";
+}
+
+function normalizeShotType(value: unknown): ProductionShotType {
+  if (value === "对口型画面" || value === "空镜" || value === "转场" || value === "动作镜头" || value === "普通画面") return value;
+  return "普通画面";
+}
+
+function inferShotType(description: string, prompt: string): ProductionShotType {
+  const text = `${description} ${prompt}`.toLowerCase();
+  if (text.includes("lip") || text.includes("dialogue") || text.includes("对口") || text.includes("唱")) return "对口型画面";
+  if (text.includes("transition") || text.includes("转场")) return "转场";
+  if (text.includes("empty") || text.includes("establishing") || text.includes("空镜")) return "空镜";
+  if (text.includes("action") || text.includes("fight") || text.includes("追") || text.includes("打")) return "动作镜头";
+  return "普通画面";
+}
+
+function normalizeShotStatus(value: unknown, imageUrl = "", videoUrl = ""): ProductionShotStatus {
+  if (videoUrl) return "video_ready";
+  if (imageUrl) return "image_ready";
+  if (value === "image_generating" || value === "image_ready" || value === "video_generating" || value === "video_ready" || value === "error") return value;
+  if (value === "done") return "video_ready";
+  if (value === "running" || value === "queued") return "video_generating";
+  return "draft";
+}
+
+function normalizeHistoryType(value: unknown): ProductionHistoryType {
+  if (value === "chat" || value === "upload" || value === "edit" || value === "delete" || value === "image" || value === "video" || value === "save" || value === "universe" || value === "export") return value;
+  return "edit";
+}
+
+function parseJson(value = ""): UnknownRecord {
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringValue(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
