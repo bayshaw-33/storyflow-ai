@@ -107,7 +107,7 @@ function buildExtractionPrompt(title: string, visualStyle: string, sourceText: s
 }
 
 function parseExtraction(output: string): ExtractedArtAssets {
-  const jsonText = output.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  const jsonText = extractJsonObject(output);
   const parsed = JSON.parse(jsonText) as Partial<ExtractedArtAssets>;
   return {
     title: String(parsed.title || "美术资产拆解"),
@@ -116,6 +116,23 @@ function parseExtraction(output: string): ExtractedArtAssets {
     scenes: normalizeAssetList(parsed.scenes, "scene"),
     props: normalizeAssetList(parsed.props, "prop"),
   };
+}
+
+function extractJsonObject(output: string) {
+  const cleaned = output
+    .replace(/^\s*```(?:json)?/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  try {
+    JSON.parse(cleaned);
+    return cleaned;
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) return cleaned.slice(start, end + 1);
+    throw new Error("ART_EXTRACTION_JSON_PARSE_FAILED");
+  }
 }
 
 function normalizeAssetList(value: unknown, kind: "character" | "scene" | "prop") {
@@ -156,5 +173,6 @@ function toFriendlyError(error: unknown) {
   if (message === "MISSING_MINIMAX_API_KEY") return "MiniMax 暂未配置，已使用本地规则生成初稿。";
   if (message.includes("MINIMAX_API_ERROR")) return "MiniMax 拆解失败，已使用本地规则生成初稿。";
   if (message === "MINIMAX_TIMEOUT" || message === "MINIMAX_NETWORK_ERROR") return "MiniMax 连接失败，已使用本地规则生成初稿。";
+  if (message === "ART_EXTRACTION_JSON_PARSE_FAILED" || message.includes("JSON")) return "AI 返回格式无法解析，已使用本地规则生成初稿。";
   return "AI 拆解失败，已使用本地规则生成初稿。";
 }

@@ -163,20 +163,24 @@ export function buildArtImagePrompt(asset: ArtAsset, mode: "reference_sheet" | "
 
 export function fallbackExtractArtAssets(source: string): ExtractedArtAssets {
   const clean = source.replace(/\s+/g, " ").trim();
-  const names = Array.from(new Set((clean.match(/[\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z·]{1,12}/g) || [])
-    .filter((name) => !["项目", "角色", "场景", "剧本", "故事", "背景", "一个", "这个", "他们", "她们", "我们"].includes(name))
-    .slice(0, 8)));
+  const characterCandidates = extractCharacterCandidates(source);
+  const names = characterCandidates.length
+    ? characterCandidates.map((item) => item.name)
+    : Array.from(new Set((clean.match(/\b[A-Z][A-Za-zÀ-ÿ'·-]{2,24}\b/g) || [])
+      .filter((name) => !isBlockedFallbackName(name))
+      .slice(0, 8)));
   const firstSentence = source.split(/[。！？.!?\n]/).map((item) => item.trim()).find(Boolean) || "根据项目资料生成的视觉资产。";
+  const projectTitle = source.match(/《([^》]{2,40})》/)?.[1] || "美术资产拆解";
 
   return {
-    title: "美术资产拆解",
+    title: `${projectTitle} 美术资产拆解`,
     visualStyle: "cinematic short drama, consistent production design, realistic streaming series quality",
     characters: (names.length ? names.slice(0, 4) : ["主角", "重要配角"]).map((name, index) => ({
       name,
       priority: index === 0 ? "lead" : "supporting",
       role: index === 0 ? "主角 / 核心叙事人物" : "重要配角",
-      description: firstSentence,
-      prompt: `Character design for ${name}, ${firstSentence}, cinematic short drama, consistent face, full body, production-ready costume`,
+      description: characterCandidates.find((item) => item.name === name)?.description || firstSentence,
+      prompt: `Character design for ${name}, ${characterCandidates.find((item) => item.name === name)?.description || firstSentence}, cinematic short drama, consistent face, full body, production-ready costume`,
       negativePrompt: "low quality, blurry, inconsistent face, extra limbs, watermark, logo, text",
     })),
     scenes: ["核心室内场景", "关键冲突场景"].map((name) => ({
@@ -194,6 +198,51 @@ export function fallbackExtractArtAssets(source: string): ExtractedArtAssets {
       negativePrompt: "low quality, blurry, watermark, logo, text",
     })),
   };
+}
+
+function extractCharacterCandidates(source: string) {
+  const lines = source
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-*•\d.、\s]+/, "").trim())
+    .filter(Boolean);
+  const candidates: Array<{ name: string; description: string }> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const match = line.match(/^([A-Z][A-Za-zÀ-ÿ'·-]{2,24}|[\u4e00-\u9fa5]{2,8})\s*(?:是|:|：|—|-)\s*(.{4,220})/);
+    if (!match) continue;
+    const name = match[1].trim();
+    if (isBlockedFallbackName(name) || candidates.some((item) => item.name === name)) continue;
+    const nextLine = lines[index + 1] && !lines[index + 1].match(/^([A-Z][A-Za-zÀ-ÿ'·-]{2,24}|[\u4e00-\u9fa5]{2,8})\s*(?:是|:|：|—|-)/)
+      ? ` ${lines[index + 1].slice(0, 160)}`
+      : "";
+    candidates.push({
+      name,
+      description: `${match[2].trim()}${nextLine}`.slice(0, 360),
+    });
+  }
+
+  return candidates.slice(0, 12);
+}
+
+function isBlockedFallbackName(name: string) {
+  const lower = name.toLowerCase();
+  return [
+    "character",
+    "bible",
+    "final",
+    "version",
+    "project",
+    "script",
+    "角色",
+    "场景",
+    "剧本",
+    "故事",
+    "背景",
+    "项目",
+    "资料",
+    "特别注意",
+  ].includes(lower) || ["角色圣经", "契约之家", "characterbible"].includes(name);
 }
 
 function buildDefaultAssetPrompt(kind: ArtAssetKind, name: string, description: string) {
