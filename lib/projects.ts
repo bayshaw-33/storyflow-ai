@@ -267,6 +267,7 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   storyboard_script: "storyboardScript",
   final_delivery: "deliveryPackage",
   song_workbench: "idea",
+  song_development_chat: "idea",
   novel_brief: "novelBrief",
   novel_development_chat: "novelDevelopmentNotes",
   novel_bible: "novelBible",
@@ -1506,7 +1507,9 @@ const demoStepContent: Record<TaskType, string> = {
   final_delivery:
     "1. 故事概况：隐藏继承人林晚在订婚宴被背叛后，以董事身份回归复仇。\n2. 大纲交付范围：三幕结构、八段式 Treatment、分集大纲。\n3. 最终剧本版本清单：中文版本、英文版本、双语版本。\n4. 分镜交付范围：按集拆分，每集包含镜头、台词、音效和 AI 生成提示词。\n5. 现场演示建议：先展示附件导入，再一键推进到分镜和交付下载。",
   song_workbench:
-    "---LYRICS---\n[Verse]\nA demo song draft belongs in the song workbench, not the drama workflow.\n---STYLE_PROMPT---\nindie pop, safe vocal descriptor, clean Suno-ready mix\n---COMPOSITION_PROMPT---\nStart with a small motif, build into a repeatable chorus, then end with a clean outro.",
+    "---LYRICS---\n[Verse]\nA demo song draft belongs in the song workbench, not the drama workflow.\n---MUSIC_PROMPT---\nindie pop, safe vocal descriptor, clean Suno-ready mix, concise motif, repeatable chorus, clean outro.",
+  song_development_chat:
+    "USER: 我想做一首适合短视频传播的英文歌，情绪是雨夜、孤独但有一点希望。\nAI: 我理解到的方向是 cinematic pop、female vocal、piano and soft electronic pulse。建议继续确认目标平台、歌词语言和副歌记忆点。",
   novel_development_chat:
     "USER: 我想写一个适合海外平台的狼人女性向小说，主打退婚羞辱和身份反转。\nAI: 已确认方向：狼人 Alpha、女性向、强开场羞辱、隐藏继承人反击。下一步建议先锁定目标平台、目标语言、读者年龄层和叙事规模。",
   novel_brief:

@@ -263,7 +263,7 @@ export async function cancelGenerationTask(params: { userId: string; taskId: str
 }
 
 export function resolvePhaseKey(taskType: TaskType) {
-  if (taskType === "song_workbench" || taskType === "viral_video_analysis" || taskType === "viral_structure_remake" || taskType === "viral_export_package") return "development";
+  if (taskType === "song_workbench" || taskType === "song_development_chat" || taskType === "viral_video_analysis" || taskType === "viral_structure_remake" || taskType === "viral_export_package") return "development";
   if (taskType === "novel_development_chat" || taskType === "novel_brief") return "development";
   if (taskType === "novel_bible" || taskType === "novel_characters" || taskType === "novel_volume_outline") return "story_bible";
   if (taskType === "novel_chapter_outline" || taskType === "novel_chapter_draft" || taskType === "novel_revision") return "script_production";

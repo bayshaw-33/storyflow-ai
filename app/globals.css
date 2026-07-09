@@ -2826,6 +2826,77 @@ input:focus, textarea:focus, select:focus {
   font-size: 12px;
   line-height: 1.55;
 }
+.song-reference-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: #FAFAFA;
+}
+.song-reference-panel p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.song-chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 360px;
+  max-height: 48vh;
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.04);
+}
+.song-chat-message {
+  width: min(92%, 620px);
+  padding: 11px 13px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: #FFFFFF;
+  color: var(--ink-primary);
+}
+.song-chat-message.user {
+  align-self: flex-end;
+  background: rgba(0, 107, 255, 0.1);
+}
+.song-chat-message.assistant {
+  align-self: flex-start;
+}
+.song-chat-message span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.song-chat-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.song-chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.song-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
 .song-chip-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2950,6 +3021,10 @@ input:focus, textarea:focus, select:focus {
   font-size: 14px;
   font-weight: 600;
 }
+.song-output-card-head select {
+  max-width: 160px;
+  min-height: 34px;
+}
 .song-lyrics-textarea,
 .song-prompt-textarea {
   flex: 1;
@@ -2958,11 +3033,8 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.7;
   font-family: var(--font-body);
 }
-.song-output-grid .song-output-card:first-child {
-  grid-row: span 2;
-}
 .song-output-grid .song-prompt-textarea {
-  min-height: clamp(220px, 29vh, 360px);
+  min-height: clamp(420px, 52vh, 680px);
 }
 .song-ai-panel {
   display: flex;

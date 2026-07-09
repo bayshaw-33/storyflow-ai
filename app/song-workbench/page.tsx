@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, RefreshCw, Save, Send, Sparkles } from "lucide-react";
+import { Copy, FileText, RefreshCw, Save, Send, Sparkles, Upload } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -26,6 +26,15 @@ type SongProjectType =
 type OutputLanguage = "English" | "Chinese" | "Bilingual" | "Japanese" | "Korean" | "Spanish" | "French" | "Cantonese" | "Custom";
 type LyricsMode = "enhanced_lyrics" | "plain_lyrics" | "no_tags";
 type AuditStatus = "pass" | "low_risk" | "medium_risk" | "high_risk";
+type TranslationLanguage = "Chinese" | "English" | "Spanish" | "French" | "Japanese" | "Korean";
+type SongModelProvider = "auto" | "deepseek" | "minimax";
+
+type SongChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
 
 type SingerProfile = {
   id: string;
@@ -93,7 +102,16 @@ type SaveSongProjectOptions = {
   audit?: AuditResult | null;
 };
 
+type UploadedReference = {
+  name: string;
+  type: "audio" | "lyrics";
+  mode: "similar_style" | "rewrite_lyrics";
+  text: string;
+};
+
 const STORAGE_KEY = "kiikis-song-workbench-v1";
+const MUSIC_PROMPT_MAX_BYTES = 1000;
+const translationLanguages: TranslationLanguage[] = ["Chinese", "English", "Spanish", "French", "Japanese", "Korean"];
 
 const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: string; strategy: string }> = [
   { value: "original_song", label: "原创/独立歌曲", labelEn: "Original / indie song", strategy: "standard lyrics structure" },
@@ -383,7 +401,7 @@ const i18n = {
     fromReference: "Generate safe tag from reference",
     referencePlaceholder: "Reference artist name, used internally only",
     add: "Add",
-    required: "Please fill title, concept, and at least one genre.",
+    required: "Tell KK your idea first, or enter a project title.",
     signInRequired: "Please sign in before using AI generation.",
     noVersions: "No versions yet. Every save creates a branch you can return to.",
     auditPass: "Audit before publishing. Catches clichés, weak rhymes, tonal drift.",
@@ -438,7 +456,7 @@ const i18n = {
     fromReference: "通过对标歌手生成安全标签",
     referencePlaceholder: "对标歌手名，仅内部理解使用",
     add: "添加",
-    required: "请填写标题、歌曲概念，并至少选择一个曲风。",
+    required: "请先告诉 KK 您的歌曲想法，或填写一个项目标题。",
     signInRequired: "请先登录后再调用 AI 生成。",
     noVersions: "还没有版本。每保存一次，创建一个可回溯的分支。",
     auditPass: "发布前自动审核。识别陈词滥调、押韵薄弱与情绪漂移。",
@@ -447,8 +465,48 @@ const i18n = {
   },
 };
 
+function createSongChatMessage(role: SongChatMessage["role"], content: string): SongChatMessage {
+  return {
+    id: `song-chat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function createSongAssistantMessage(content: string) {
+  return createSongChatMessage("assistant", content);
+}
+
+function getSongOpeningMessage(isZh: boolean) {
+  if (!isZh) {
+    return [
+      "Dear creator, I am KK, your music creation assistant.",
+      "You do not need to know genres, arrangement, or production terms. Tell me your feeling first:",
+      "1. What kind of song do you want to make, and where will you use it?",
+      "2. What emotion should listeners feel?",
+      "3. What language should the lyrics use?",
+      "4. Do you imagine a vocal song, BGM, OST, short-video hook, or something else?",
+      "5. Any scene, reference mood, instrument, or title in mind?",
+      "Creator, speak freely. I will help turn your idea into lyrics and a Suno-ready style prompt.",
+    ].join("\n");
+  }
+
+  return [
+    "尊敬的创作者大人，我是您的歌曲创作小助理 KK。",
+    "您不需要懂曲风、编曲或音乐术语。先告诉我您的感觉：",
+    "1. 您想做一首什么用途的歌？短视频、OST、BGM、角色歌，还是独立歌曲？",
+    "2. 希望听众听完是什么情绪？甜、燃、孤独、治愈、性感、复仇感，还是别的？",
+    "3. 歌词想用什么语言？",
+    "4. 您想要有人声演唱，还是偏氛围音乐？",
+    "5. 脑海里有没有画面、标题、乐器、参考感觉？不用专业，随便说就好。",
+    "创作者大人，告诉我您的想法，我会帮您整理成歌词和 Suno 可用的 style 提示词。",
+  ].join("\n");
+}
+
 export default function SongWorkbenchPage() {
-  const { locale, t } = useI18n();
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
   const text = i18n[locale];
   const [form, setForm] = useState<SongForm>(initialForm);
   const [singers, setSingers] = useState<SingerProfile[]>(defaultSingers);
@@ -456,6 +514,17 @@ export default function SongWorkbenchPage() {
   const [stylePrompt, setStylePrompt] = useState("");
   const [compositionPrompt, setCompositionPrompt] = useState("");
   const [audit, setAudit] = useState<AuditResult | null>(null);
+  const [songDevelopmentNotes, setSongDevelopmentNotes] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<SongChatMessage[]>([]);
+  const [chatGenerating, setChatGenerating] = useState(false);
+  const [translationLanguage, setTranslationLanguage] = useState<TranslationLanguage>("Chinese");
+  const [translatedLyrics, setTranslatedLyrics] = useState("");
+  const [translationGenerating, setTranslationGenerating] = useState(false);
+  const [selectedModelProvider, setSelectedModelProvider] = useState<SongModelProvider>("auto");
+  const [uploadedReference, setUploadedReference] = useState<UploadedReference | null>(null);
+  const [referenceMode, setReferenceMode] = useState<UploadedReference["mode"]>("similar_style");
+  const [uploadingReference, setUploadingReference] = useState(false);
   const [versions, setVersions] = useState<SongVersion[]>([]);
   const [sourceProjects, setSourceProjects] = useState<DramaProject[]>([]);
   const [universes, setUniverses] = useState<Universe[]>([]);
@@ -530,12 +599,18 @@ export default function SongWorkbenchPage() {
       if (data.form) setForm(normalizeStoredForm(data.form));
       if (data.singers) setSingers(data.singers);
       if (data.lyrics) setLyrics(data.lyrics);
-      if (data.stylePrompt) setStylePrompt(data.stylePrompt);
-      if (data.compositionPrompt) setCompositionPrompt(data.compositionPrompt);
+      if (data.stylePrompt || data.compositionPrompt) setStylePrompt(mergeMusicPrompt(data.stylePrompt || "", data.compositionPrompt || ""));
+      if (data.compositionPrompt) setCompositionPrompt("");
       if (data.audit) setAudit(data.audit);
       if (data.versions) setVersions(data.versions);
       if (data.songProjectId) setSongProjectId(data.songProjectId);
       if (data.selectedUniverseId) setSelectedUniverseId(data.selectedUniverseId);
+      if (data.songDevelopmentNotes) setSongDevelopmentNotes(data.songDevelopmentNotes);
+      if (data.translationLanguage) setTranslationLanguage(data.translationLanguage);
+      if (data.translatedLyrics) setTranslatedLyrics(data.translatedLyrics);
+      if (data.selectedModelProvider) setSelectedModelProvider(data.selectedModelProvider);
+      if (data.uploadedReference) setUploadedReference(data.uploadedReference);
+      if (data.referenceMode) setReferenceMode(data.referenceMode);
       loadedEntryRef.current = "draft";
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -585,9 +660,40 @@ export default function SongWorkbenchPage() {
   useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId }),
+      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, uploadedReference, referenceMode }),
     );
-  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId]);
+  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, uploadedReference, referenceMode]);
+
+  useEffect(() => {
+    if (songDevelopmentNotes.trim()) return;
+    setChatMessages([createSongAssistantMessage(getSongOpeningMessage(isZh))]);
+  }, [isZh, songDevelopmentNotes]);
+
+  useEffect(() => {
+    const trimmed = lyrics.trim();
+    if (!trimmed) {
+      setTranslatedLyrics("");
+      return;
+    }
+    if (shouldSkipLyricsTranslation(trimmed, translationLanguage)) {
+      setTranslatedLyrics(isZh ? "当前歌词已经是中文，无需翻译。" : "The current lyrics are already Chinese, so no translation is needed.");
+      return;
+    }
+    if (!session?.access_token) {
+      setTranslatedLyrics(isZh ? "登录后可自动翻译歌词。" : "Sign in to auto-translate lyrics.");
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void translateLyrics(trimmed, translationLanguage, cancelled);
+    }, 900);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [lyrics, translationLanguage, session?.access_token, isZh]);
 
   function resetSongWorkbench() {
     setForm(initialForm);
@@ -596,6 +702,13 @@ export default function SongWorkbenchPage() {
     setStylePrompt("");
     setCompositionPrompt("");
     setAudit(null);
+    setSongDevelopmentNotes("");
+    setChatInput("");
+    setChatMessages([createSongAssistantMessage(getSongOpeningMessage(isZh))]);
+    setTranslationLanguage("Chinese");
+    setTranslatedLyrics("");
+    setUploadedReference(null);
+    setReferenceMode("similar_style");
     setVersions([]);
     setSongProjectId(null);
     setError("");
@@ -615,6 +728,14 @@ export default function SongWorkbenchPage() {
     setStylePrompt(snapshot.stylePrompt);
     setCompositionPrompt(snapshot.compositionPrompt);
     setAudit(snapshot.audit);
+    setSongDevelopmentNotes(snapshot.songDevelopmentNotes);
+    setChatInput("");
+    setChatMessages(snapshot.songDevelopmentNotes
+      ? [
+          createSongAssistantMessage(isZh ? "我已读取这个歌曲项目之前保存的创作沟通记录，可以继续聊，也可以直接生成/更新歌曲。" : "I loaded the saved music development notes. We can keep talking or generate/update the song."),
+          createSongAssistantMessage(snapshot.songDevelopmentNotes),
+        ]
+      : [createSongAssistantMessage(getSongOpeningMessage(isZh))]);
     setVersions([]);
     setSongProjectId(project.id);
     setSelectedUniverseId(project.universeId || "");
@@ -673,7 +794,8 @@ export default function SongWorkbenchPage() {
     [form.sourceProjectId, sourceProjects],
   );
 
-  const canCopyLyrics = !audit || audit.allowCopy;
+  const canCopyLyrics = true;
+  const musicPromptBytes = byteLength(stylePrompt);
 
   function updateForm<K extends keyof SongForm>(key: K, value: SongForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -723,8 +845,142 @@ export default function SongWorkbenchPage() {
   }
 
   function validateForm() {
-    const genres = normalizedGenres(form);
-    return Boolean(form.title.trim() && form.concept.trim() && genres.length > 0);
+    return Boolean(form.title.trim() || form.concept.trim() || songDevelopmentNotes.trim());
+  }
+
+  async function sendChatMessage() {
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatGenerating) return;
+
+    setError("");
+    setSaveStatus("");
+    setChatInput("");
+
+    const userMessage = createSongChatMessage("user", trimmed);
+    setChatMessages((current) => [...current, userMessage]);
+    const notesWithUser = appendSongNotes(songDevelopmentNotes, "USER", trimmed);
+    setSongDevelopmentNotes(notesWithUser);
+    if (!form.concept.trim()) updateForm("concept", trimmed);
+
+    if (!session?.access_token) {
+      const reply = createSongAssistantMessage(isZh
+        ? "我已经先把这条想法记录下来。登录后，我可以继续追问、归纳音乐方向，并基于对话生成歌词和 Suno style 提示词。"
+        : "I saved this idea. After sign-in, I can keep asking, summarize the music direction, and generate lyrics plus a Suno style prompt from the conversation.");
+      setChatMessages((current) => [...current, reply]);
+      setSongDevelopmentNotes((current) => appendSongNotes(current, "AI", reply.content));
+      return;
+    }
+
+    setChatGenerating(true);
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          taskType: "song_development_chat",
+          projectTitle: form.title || "Song development chat",
+          genre: normalizedGenres(form).join(", "),
+          input: trimmed,
+          context: buildSongChatContext(form, notesWithUser, chatMessages, lyrics, stylePrompt, uploadedReference, selectedSourceProject, universeBundle),
+          byoApi: buildSongByoApi(selectedModelProvider),
+        }),
+      });
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI chat failed.");
+      const reply = createSongAssistantMessage(payload.output || "");
+      setChatMessages((current) => [...current, reply]);
+      setSongDevelopmentNotes((current) => appendSongNotes(current, "AI", reply.content));
+    } catch (chatError) {
+      setError(chatError instanceof Error ? chatError.message : isZh ? "AI 对话失败。" : "AI chat failed.");
+    } finally {
+      setChatGenerating(false);
+    }
+  }
+
+  async function translateLyrics(sourceLyrics: string, targetLanguage: TranslationLanguage, cancelled: boolean) {
+    if (!session?.access_token || cancelled) return;
+    setTranslationGenerating(true);
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          taskType: "translation",
+          projectTitle: `${form.title || "Song"} lyrics translation`,
+          input: [
+            `Translate these song lyrics into ${targetLanguage}.`,
+            "Preserve section tags, line breaks, repeated hooks, and singing rhythm. Output only the translated lyrics.",
+            "",
+            sourceLyrics,
+          ].join("\n"),
+          options: { targetLanguage },
+          context: "This is a song lyric translation preview inside Kiikis Song Workbench.",
+          byoApi: buildSongByoApi(selectedModelProvider),
+        }),
+      });
+      const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "Translation failed.");
+      if (!cancelled) setTranslatedLyrics(payload.output || "");
+    } catch (translationError) {
+      if (!cancelled) setTranslatedLyrics(translationError instanceof Error ? translationError.message : isZh ? "翻译失败。" : "Translation failed.");
+    } finally {
+      if (!cancelled) setTranslationGenerating(false);
+    }
+  }
+
+  async function handleReferenceFileUpload(file: File | null) {
+    if (!file || uploadingReference) return;
+    const lowerName = file.name.toLowerCase();
+    const isAudio = lowerName.endsWith(".mp3") || lowerName.endsWith(".wav");
+    const isLyricsFile = lowerName.endsWith(".txt") || lowerName.endsWith(".doc") || lowerName.endsWith(".docx");
+    if (!isAudio && !isLyricsFile) {
+      setError(isZh ? "请上传 mp3、wav、doc、docx 或 txt 文件。" : "Upload an mp3, wav, doc, docx, or txt file.");
+      return;
+    }
+
+    setUploadingReference(true);
+    setError("");
+    try {
+      if (isAudio) {
+        const note = referenceMode === "similar_style"
+          ? `已上传音频参考：${file.name}（${formatFileSize(file.size)}）。用户希望创作一首类似曲风、情绪和质感的新歌。`
+          : `已上传音频参考：${file.name}（${formatFileSize(file.size)}）。用户希望以该音频作为创作参考。`;
+        setUploadedReference({ name: file.name, type: "audio", mode: referenceMode, text: note });
+        setSongDevelopmentNotes((current) => appendSongNotes(current, "REFERENCE", note));
+        setChatMessages((current) => [...current, createSongAssistantMessage(isZh
+          ? `已记录音频参考：${file.name}。当前版本会把它作为创作意图和风格参考；如果您能再描述一下它的情绪、节奏或乐器，我可以整理得更准确。`
+          : `Audio reference saved: ${file.name}. I will use it as a style intention; describe its mood, tempo, or instruments to make the direction sharper.`)]);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/files/parse", { method: "POST", body: formData });
+      const data = await readJsonResponse<{ success?: boolean; error?: string; text?: string; fileName?: string }>(response);
+      if (!response.ok || !data.success || !data.text) throw new Error(data.error || "File parse failed.");
+
+      const textPreview = data.text.trim();
+      const note = referenceMode === "rewrite_lyrics"
+        ? `已上传歌词文件：${file.name}。改编要求：保留原歌词结构和字数/行数规模，换一版全新的原创歌词。\n\n原歌词：\n${textPreview}`
+        : `已上传文字参考：${file.name}。请基于其中的情绪、主题和表达方向创作歌曲。\n\n参考内容：\n${textPreview}`;
+      setUploadedReference({ name: file.name, type: "lyrics", mode: referenceMode, text: textPreview });
+      if (referenceMode === "rewrite_lyrics") setLyrics(textPreview);
+      if (!form.concept.trim()) updateForm("concept", referenceMode === "rewrite_lyrics" ? "基于上传歌词改编，保留原结构和字数规模，换一版新的原创歌词。" : textPreview.slice(0, 500));
+      setSongDevelopmentNotes((current) => appendSongNotes(current, "REFERENCE", note));
+      setChatMessages((current) => [...current, createSongAssistantMessage(isZh
+        ? `已读取歌词/文字文件：${file.name}。我会把它作为本次创作参考，生成时按您的模式处理。`
+        : `Text file loaded: ${file.name}. I will use it as reference for the next generation.`)]);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : isZh ? "文件上传失败。" : "File upload failed.");
+    } finally {
+      setUploadingReference(false);
+    }
   }
 
   async function generateAll(event?: FormEvent<HTMLFormElement>) {
@@ -760,13 +1016,14 @@ export default function SongWorkbenchPage() {
           genre: normalizedGenres(form).join(", "),
           input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject),
           context: [
+            songDevelopmentNotes.trim() ? `Music development chat notes:\n${songDevelopmentNotes}` : "",
+            uploadedReference ? `Uploaded reference (${uploadedReference.type}, ${uploadedReference.mode}):\n${uploadedReference.text}` : "",
             selectedSourceProject ? `Source story project for OST/theme song:\n${summarizeSourceProject(selectedSourceProject)}` : "",
             universeBundle ? `Universe context for OST/theme song:\n${summarizeUniverseBundle(universeBundle)}` : "",
             lyrics.trim() ? `Existing lyrics to improve or replace:\n${lyrics}` : "",
-            stylePrompt.trim() ? `Existing style prompt:\n${stylePrompt}` : "",
-            compositionPrompt.trim() ? `Existing composition prompt:\n${compositionPrompt}` : "",
+            stylePrompt.trim() ? `Existing Suno style prompt:\n${stylePrompt}` : "",
           ].filter(Boolean).join("\n\n"),
-          byoApi: readByoApiConfig("song"),
+          byoApi: buildSongByoApi(selectedModelProvider),
         }),
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
@@ -775,8 +1032,8 @@ export default function SongWorkbenchPage() {
       const parsed = parseSongGeneration(payload.output || "");
       const fallbackLyrics = buildLyrics(form, selectedSingers);
       const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers);
-      const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
-      const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
+      const nextStylePrompt = trimPromptBytes(sanitizeForbidden(parsed.stylePrompt || buildMusicPrompt(form, selectedSingers), selectedSingers), MUSIC_PROMPT_MAX_BYTES);
+      const nextCompositionPrompt = "";
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
       setLyrics(nextLyrics);
@@ -828,6 +1085,7 @@ export default function SongWorkbenchPage() {
       options.stylePrompt ?? stylePrompt,
       options.compositionPrompt ?? compositionPrompt,
       options.audit ?? audit,
+      songDevelopmentNotes,
       selectedSourceProject,
       selectedUniverseId || selectedSourceProject?.universeId || null,
     );
@@ -882,7 +1140,7 @@ export default function SongWorkbenchPage() {
         title: `${title} musical theme`,
         source_workflow: "song",
         source_package_id: `song-package-${songProjectId || title}`,
-        prompt: [form.primaryEmotion, stylePrompt, compositionPrompt].filter(Boolean).join("\n"),
+        prompt: [form.primaryEmotion, stylePrompt].filter(Boolean).join("\n"),
       },
     })) || [];
 
@@ -911,20 +1169,13 @@ export default function SongWorkbenchPage() {
           prompt: stylePrompt,
           metadata: { genres: normalizedGenres(form), instruments: normalizedInstruments(form) },
         },
-        {
-          id: `composition-${songProjectId || title}`,
-          type: "prompt",
-          title: `${title} composition prompt`,
-          prompt: compositionPrompt,
-          metadata: { groove: form.groove, key: form.key, structure: form.structure },
-        },
       ],
       canonFacts: [
         `Song asset for ${universeBundle?.universe.name || selectedSourceProject?.title || title}: ${title}`,
         `Song mood: ${form.primaryEmotion}`,
         normalizedGenres(form).length ? `Song genre: ${normalizedGenres(form).join(", ")}` : "",
       ].filter(Boolean),
-      sourceText: [form.concept, sourceSummary, lyrics, stylePrompt, compositionPrompt].filter(Boolean).join("\n\n"),
+      sourceText: [form.concept, sourceSummary, songDevelopmentNotes, lyrics, stylePrompt].filter(Boolean).join("\n\n"),
       metadata: {
         projectType: form.projectType,
         outputLanguage: form.outputLanguage,
@@ -1004,7 +1255,7 @@ export default function SongWorkbenchPage() {
             stylePrompt.trim() ? `Current style prompt:\n${stylePrompt}` : "",
             compositionPrompt.trim() ? `Current composition prompt:\n${compositionPrompt}` : "",
           ].filter(Boolean).join("\n\n"),
-          byoApi: readByoApiConfig("song"),
+          byoApi: buildSongByoApi(selectedModelProvider),
         }),
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
@@ -1115,8 +1366,8 @@ export default function SongWorkbenchPage() {
         <form id="song-workbench-form" className="dashboard-panel song-setup-panel" onSubmit={generateAll}>
           <div className="dashboard-panel-head">
             <div>
-              <span>{text.setup}</span>
-              <h2>{form.title || text.concept}</h2>
+              <span>{isZh ? "AI 创作对话" : "AI Creation Chat"}</span>
+              <h2>{isZh ? "先聊感觉，再生成歌曲" : "Talk first, generate after"}</h2>
             </div>
           </div>
 
@@ -1130,14 +1381,6 @@ export default function SongWorkbenchPage() {
               />
             </label>
             <label>
-              {text.projectType}
-              <select value={form.projectType} onChange={(event) => updateForm("projectType", event.target.value as SongProjectType)}>
-                {projectTypes.map((option) => (
-                  <option key={option.value} value={option.value}>{locale === "zh-CN" ? option.label : option.labelEn}</option>
-                ))}
-              </select>
-            </label>
-            <label>
               {locale === "zh-CN" ? "关联故事 / 宇宙来源" : "Story / Universe source"}
               <select value={form.sourceProjectId} onChange={(event) => updateSourceProject(event.target.value)}>
                 <option value="">{locale === "zh-CN" ? "不关联，创建独立歌曲" : "No source, standalone song"}</option>
@@ -1149,37 +1392,76 @@ export default function SongWorkbenchPage() {
               </select>
             </label>
             <label>
-              {text.outputLanguage}
-              <select value={form.outputLanguage} onChange={(event) => updateForm("outputLanguage", event.target.value as OutputLanguage)}>
-                {["English", "Chinese", "Bilingual", "Japanese", "Korean", "Spanish", "French", "Cantonese", "Custom"].map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {text.primaryEmotion}
-              <select
-                value={form.primaryEmotion}
-                onChange={(event) => setForm((current) => ({ ...current, primaryEmotion: event.target.value, secondaryEmotions: [] }))}
-              >
-                {primaryEmotionOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {locale === "zh-CN" ? option.value : option.labelEn}
-                  </option>
-                ))}
+              {isZh ? "输出模型" : "Output model"}
+              <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
+                <option value="auto">{isZh ? "自动路由" : "Auto route"}</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="minimax">MiniMax</option>
               </select>
             </label>
           </div>
 
-          <label>
-            {text.concept}
+          <div className="song-reference-panel">
+            <div className="song-tool-head">
+              <span>{isZh ? "参考素材" : "Reference material"}</span>
+              <label className="secondary-button">
+                <Upload size={15} />
+                {uploadingReference ? (isZh ? "上传中" : "Uploading") : (isZh ? "上传文件" : "Upload file")}
+                <input
+                  type="file"
+                  accept=".mp3,.wav,.doc,.docx,.txt"
+                  onChange={(event) => void handleReferenceFileUpload(event.target.files?.[0] || null)}
+                  hidden
+                />
+              </label>
+            </div>
+            <select value={referenceMode} onChange={(event) => setReferenceMode(event.target.value as UploadedReference["mode"])}>
+              <option value="similar_style">{isZh ? "音频/文本参考：做类似风格" : "Reference: make a similar style"}</option>
+              <option value="rewrite_lyrics">{isZh ? "歌词改编：保留结构和字数，换新歌词" : "Lyric rewrite: keep structure and length"}</option>
+            </select>
+            {uploadedReference ? (
+              <p>
+                <FileText size={14} />
+                {uploadedReference.name}
+              </p>
+            ) : (
+              <p>{isZh ? "支持 mp3、wav、doc、docx、txt。" : "Supports mp3, wav, doc, docx, and txt."}</p>
+            )}
+          </div>
+
+          <div className="song-chat-thread" aria-live="polite">
+            {chatMessages.map((message) => (
+              <article className={`song-chat-message ${message.role}`} key={message.id}>
+                <span>{message.role === "user" ? (isZh ? "我" : "Me") : "Kiikis AI"}</span>
+                <p>{message.content}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="song-chat-composer">
             <textarea
               className="song-concept-textarea"
-              value={form.concept}
-              onChange={(event) => updateForm("concept", event.target.value)}
-              placeholder="A burned-out office worker fights another miserable Monday with sarcasm and dark humor."
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void sendChatMessage();
+                }
+              }}
+              placeholder={isZh ? "像聊天一样描述：用途、情绪、画面、歌词语言、参考感觉、想修改的地方。⌘/Ctrl + Enter 发送。" : "Describe the use, emotion, scene, lyric language, reference feeling, or revision notes. Cmd/Ctrl + Enter to send."}
             />
-          </label>
+            <div className="song-chat-actions">
+              <button className="secondary-button" type="button" onClick={() => void sendChatMessage()} disabled={!chatInput.trim() || chatGenerating}>
+                <Send size={15} />
+                {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
+              </button>
+              <button className="primary-button" type="submit" disabled={generating}>
+                <Sparkles size={15} />
+                {generating ? text.generating : (isZh ? "生成/更新歌曲" : "Generate / Update")}
+              </button>
+            </div>
+          </div>
 
           {selectedSourceProject ? (
             <div className="song-source-panel">
@@ -1224,101 +1506,13 @@ export default function SongWorkbenchPage() {
             </div>
             {universeStatus ? <small className="field-note">{universeStatus}</small> : null}
           </div>
-
-          <details className="song-control-group">
-            <summary>{text.genres}</summary>
-            <div className="song-group-stack song-details-body">
-              {genreGroups.map((group) => (
-                <div className="song-option-group" key={group.title}>
-                  <strong>{group.title}</strong>
-                  <div className="song-chip-grid">
-                    {group.options.map((option) => (
-                      <label key={option}>
-                        <input
-                          type="checkbox"
-                          checked={form.genres.includes(option)}
-                          onChange={(event) => updateGenreSelection(option, event.target.checked)}
-                        />
-                        {option}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <input
-                value={form.customGenre}
-                onChange={(event) => updateForm("customGenre", event.target.value)}
-                placeholder="Custom genre tags, comma separated"
-              />
-            </div>
-          </details>
-
-          <details className="song-control-group">
-            <summary>{locale === "zh-CN" ? "乐器 / 编曲元素" : "Instruments / Arrangement"}</summary>
-            <div className="song-group-stack song-details-body">
-              {instrumentGroups.map((group) => (
-                <div className="song-option-group" key={group.title}>
-                  <strong>{group.title}</strong>
-                  <div className="song-chip-grid">
-                    {group.options.map((option) => (
-                      <label key={option}>
-                        <input
-                          type="checkbox"
-                          checked={form.instruments.includes(option)}
-                          onChange={() => toggleListValue("instruments", option)}
-                        />
-                        {option}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <input
-                value={form.customInstrument}
-                onChange={(event) => updateForm("customInstrument", event.target.value)}
-                placeholder="Custom instruments, comma separated"
-              />
-            </div>
-          </details>
-
-          <details className="song-control-group">
-            <summary>{text.advanced}</summary>
-            <div className="song-field-stack song-details-body">
-              <label>
-                {locale === "zh-CN" ? "律动 / 速度" : "Groove"}
-                <select value={form.groove} onChange={(event) => updateForm("groove", event.target.value)}>
-                  {grooveOptions.map((option) => <option key={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                {locale === "zh-CN" ? "调性" : "Key"}
-                <select value={form.key} onChange={(event) => updateForm("key", event.target.value)}>
-                  {keyOptions.map((option) => <option key={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                {locale === "zh-CN" ? "歌词结构" : "Lyrics structure"}
-                <select value={form.structure} onChange={(event) => updateForm("structure", event.target.value)}>
-                  {structureOptions.map((option) => <option key={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                {locale === "zh-CN" ? "歌词格式" : "Lyrics output mode"}
-                <select value={form.lyricsMode} onChange={(event) => updateForm("lyricsMode", event.target.value as LyricsMode)}>
-                  <option value="enhanced_lyrics">{t("song.format.enhanced")}</option>
-                  <option value="plain_lyrics">{t("song.format.plainLyrics")}</option>
-                  <option value="no_tags">{t("song.format.noTags")}</option>
-                </select>
-              </label>
-            </div>
-          </details>
         </form>
 
         <section className="dashboard-panel song-output-panel">
           <div className="dashboard-panel-head">
             <div>
               <span>{text.outputs}</span>
-              <small className="field-note">{locale === "zh-CN" ? "歌词和提示词输出区" : "Lyrics and prompt outputs"}</small>
+              <small className="field-note">{isZh ? "歌词与翻译预览" : "Lyrics and translation preview"}</small>
             </div>
           </div>
           <div className="song-output-grid">
@@ -1333,76 +1527,36 @@ export default function SongWorkbenchPage() {
             </label>
             <label className="song-output-card">
               <span className="song-output-card-head">
-                {text.stylePrompt}
-                <button className="icon-button" type="button" title={text.copy} disabled={!stylePrompt} onClick={() => copyText(stylePrompt)}>
-                  <Copy size={15} />
-                </button>
+                {isZh ? "翻译" : "Translation"}
+                <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as TranslationLanguage)}>
+                  {translationLanguages.map((language) => <option key={language}>{language}</option>)}
+                </select>
               </span>
-              <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(event.target.value)} />
-            </label>
-            <label className="song-output-card">
-              <span className="song-output-card-head">
-                {locale === "zh-CN" ? "编曲提示词" : "Composition prompt"}
-                <button className="icon-button" type="button" title={text.copy} disabled={!compositionPrompt} onClick={() => copyText(compositionPrompt)}>
-                  <Copy size={15} />
-                </button>
-              </span>
-              <textarea className="song-prompt-textarea" value={compositionPrompt} onChange={(event) => setCompositionPrompt(event.target.value)} />
+              <textarea className="song-lyrics-textarea" value={translatedLyrics} readOnly placeholder={isZh ? "默认翻译成中文；如果原歌词为中文，则不翻译。" : "Defaults to Chinese; Chinese lyrics are not translated."} />
             </label>
           </div>
-          {audit ? (
-            <div className="song-audit-result-panel" data-status={audit.status}>
-              <div>
-                <span>{text.audit}</span>
-                <strong>{audit.items.length === 0 ? (locale === "zh-CN" ? "审查通过" : "Audit passed") : auditSummary(audit)}</strong>
-              </div>
-              <button className="secondary-button" type="button" onClick={() => setAuditOpen(true)}>
-                {locale === "zh-CN" ? "查看详情" : "View details"}
-              </button>
-            </div>
-          ) : null}
+          {translationGenerating ? <small className="field-note">{isZh ? "正在翻译歌词…" : "Translating lyrics..."}</small> : null}
         </section>
 
         <aside className="dashboard-panel song-ai-panel">
           <div className="dashboard-panel-head">
             <div>
-              <span>{text.tools}</span>
-              <h2>{text.audit}</h2>
+              <span>Suno</span>
+              <h2>{isZh ? "音乐生成提示词" : "Music Prompt"}</h2>
+              <small className={musicPromptBytes > MUSIC_PROMPT_MAX_BYTES ? "field-note song-save-warning" : "field-note"}>
+                {musicPromptBytes}/{MUSIC_PROMPT_MAX_BYTES} bytes
+              </small>
             </div>
           </div>
 
           <div className="song-tool-section">
             <div className="song-tool-head">
-              <span>{text.audit}</span>
-              <button className="secondary-button" type="button" onClick={runAudit}>{text.audit}</button>
+              <span>{isZh ? "Suno style 输入框" : "Suno style input"}</span>
+              <button className="icon-button" type="button" title={text.copy} disabled={!stylePrompt} onClick={() => copyText(stylePrompt)}>
+                  <Copy size={15} />
+                </button>
             </div>
-            <p className="subtle">{audit ? auditSummary(audit) : text.auditPass}</p>
-            {audit ? (
-              <div className="song-audit-inline">
-                {audit.items.length === 0 ? (
-                  <p>{auditReportText(audit)}</p>
-                ) : (
-                  audit.items.map((item) => (
-                    <article key={`${item.type}-${item.message}`}>
-                      <strong>{item.severity.toUpperCase()} · {item.type}</strong>
-                      <p>{item.message}</p>
-                      <small>{item.suggestion}</small>
-                    </article>
-                  ))
-                )}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="song-tool-section">
-            <div className="song-tool-head">
-              <span>{text.revision}</span>
-              <button className="primary-button" type="button" onClick={applyRevision} disabled={generating || !revisionInstruction.trim() || !lyrics.trim()}>{generating ? text.generating : text.revise}</button>
-            </div>
-            <label>
-              {locale === "zh-CN" ? "指令" : "Instruction"}
-              <textarea className="song-revision-textarea" value={revisionInstruction} onChange={(event) => setRevisionInstruction(event.target.value)} placeholder={text.revisionPlaceholder} />
-            </label>
+            <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(trimPromptBytes(event.target.value, MUSIC_PROMPT_MAX_BYTES))} placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."} />
           </div>
 
           <div className="song-tool-section">
@@ -1511,13 +1665,14 @@ function buildSongProjectSnapshot(
   stylePrompt: string,
   compositionPrompt: string,
   audit: AuditResult | null,
+  developmentNotes: string,
   sourceProject: DramaProject | null,
   universeIdOverride: string | null = null,
 ): DramaProject {
   const now = new Date().toISOString();
   const title = form.title.trim() || "未命名歌曲";
   const genres = normalizedGenres(form);
-  const content = buildSongProjectMarkdown(form, lyrics, stylePrompt, compositionPrompt, audit, sourceProject);
+  const content = buildSongProjectMarkdown(form, lyrics, stylePrompt, developmentNotes, audit, sourceProject);
 
   return createProject({
     id: existingId || `song-${crypto.randomUUID()}`,
@@ -1540,7 +1695,7 @@ function buildSongProjectSnapshot(
       purpose: "ost_theme_song",
       inheritUniverse: Boolean(universeIdOverride || sourceProject?.universeId),
     } : null,
-    status: lyrics.trim() || stylePrompt.trim() || compositionPrompt.trim() ? "ready" : "draft",
+    status: lyrics.trim() || stylePrompt.trim() ? "ready" : "draft",
     updatedAt: now,
   });
 }
@@ -1549,7 +1704,7 @@ function buildSongProjectMarkdown(
   form: SongForm,
   lyrics: string,
   stylePrompt: string,
-  compositionPrompt: string,
+  developmentNotes: string,
   audit: AuditResult | null,
   sourceProject: DramaProject | null,
 ) {
@@ -1575,16 +1730,16 @@ function buildSongProjectMarkdown(
     sourceProject ? "## 来源故事 / Universe" : "",
     sourceProject ? summarizeSourceProject(sourceProject) : "",
     sourceProject ? "" : "",
+    "## 创作沟通记录",
+    developmentNotes || "未记录",
+    "",
     "## 歌词",
     lyrics || "未生成",
     "",
-    "## Style Prompt",
+    "## Music Prompt",
     stylePrompt || "未生成",
     "",
-    "## Composition Prompt",
-    compositionPrompt || "未生成",
-    "",
-    "## 歌词审查",
+    "## 备注",
     audit ? auditReportText(audit) : "未审查",
   ].join("\n");
 }
@@ -1605,14 +1760,16 @@ function songProjectToWorkbench(project: DramaProject) {
     instruments: withGenreInstrumentDefaults(genres.length ? genres : initialForm.genres, initialForm.instruments),
   });
   const lyrics = project.finalScript || extractMarkdownSection(content, "歌词");
-  const stylePrompt = extractMarkdownSection(content, "Style Prompt");
-  const compositionPrompt = extractMarkdownSection(content, "Composition Prompt");
+  const stylePrompt = mergeMusicPrompt(extractMarkdownSection(content, "Music Prompt") || extractMarkdownSection(content, "Style Prompt"), extractMarkdownSection(content, "Composition Prompt"));
+  const compositionPrompt = "";
+  const songDevelopmentNotes = extractMarkdownSection(content, "创作沟通记录");
 
   return {
     form,
     lyrics,
     stylePrompt,
     compositionPrompt,
+    songDevelopmentNotes,
     audit: lyrics || stylePrompt || compositionPrompt
       ? auditLyrics(lyrics, stylePrompt, compositionPrompt, [], form)
       : null,
@@ -1730,10 +1887,13 @@ function parseSongGeneration(output: string) {
   };
 
   const lyrics = section("LYRICS") || output.match(/(?:^|\n)#+\s*(?:lyrics|歌词)\s*\n([\s\S]*?)(?=\n#+\s*|$)/i)?.[1]?.trim() || "";
-  const stylePrompt = section("STYLE_PROMPT") || output.match(/(?:style prompt|风格提示词)\s*[:：]\s*([\s\S]*?)(?=\n(?:composition prompt|编曲提示词)\s*[:：]|$)/i)?.[1]?.trim() || "";
+  const stylePrompt = section("MUSIC_PROMPT")
+    || section("STYLE_PROMPT")
+    || output.match(/(?:music prompt|style prompt|音乐生成提示词|风格提示词)\s*[:：]\s*([\s\S]*?)(?=\n(?:composition prompt|编曲提示词)\s*[:：]|$)/i)?.[1]?.trim()
+    || "";
   const compositionPrompt = section("COMPOSITION_PROMPT") || output.match(/(?:composition prompt|编曲提示词)\s*[:：]\s*([\s\S]*)$/i)?.[1]?.trim() || "";
 
-  return { lyrics, stylePrompt, compositionPrompt };
+  return { lyrics, stylePrompt: mergeMusicPrompt(stylePrompt, compositionPrompt), compositionPrompt: "" };
 }
 
 function normalizedGenres(form: SongForm) {
@@ -1758,6 +1918,41 @@ function specifiedValue(value: string) {
 
 function splitCustom(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function appendSongNotes(current: string, role: string, content: string) {
+  const next = [current.trim(), `${role}: ${content.trim()}`].filter(Boolean).join("\n\n");
+  return next.length > 24000 ? next.slice(-24000) : next;
+}
+
+function buildSongByoApi(provider: SongModelProvider) {
+  const config = readByoApiConfig("song");
+  if (provider === "auto") return config;
+  return { ...(config || {}), provider };
+}
+
+function buildSongChatContext(
+  form: SongForm,
+  notes: string,
+  messages: SongChatMessage[],
+  lyrics: string,
+  musicPrompt: string,
+  uploadedReference: UploadedReference | null,
+  sourceProject: DramaProject | null,
+  universeBundle: UniverseBundle | null,
+) {
+  return [
+    `Project title: ${form.title || "Untitled song"}`,
+    `Output language: ${form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage}`,
+    form.concept ? `Current concept:\n${form.concept}` : "",
+    notes ? `Saved development notes:\n${notes}` : "",
+    uploadedReference ? `Uploaded reference (${uploadedReference.type}, ${uploadedReference.mode}):\n${uploadedReference.text}` : "",
+    lyrics ? `Current lyrics:\n${lyrics}` : "",
+    musicPrompt ? `Current Suno style prompt:\n${musicPrompt}` : "",
+    sourceProject ? `Source project:\n${summarizeSourceProject(sourceProject)}` : "",
+    universeBundle ? `Universe:\n${summarizeUniverseBundle(universeBundle)}` : "",
+    messages.length ? `Recent visible chat:\n${messages.slice(-8).map((message) => `${message.role.toUpperCase()}: ${message.content}`).join("\n\n")}` : "",
+  ].filter(Boolean).join("\n\n");
 }
 
 function buildLyrics(form: SongForm, singers: SingerProfile[]) {
@@ -1817,6 +2012,10 @@ And leave the old fear without a name
 }
 
 function buildStylePrompt(form: SongForm, singers: SingerProfile[]) {
+  return buildMusicPrompt(form, singers);
+}
+
+function buildMusicPrompt(form: SongForm, singers: SingerProfile[]) {
   const genres = normalizedGenres(form).slice(0, 4).join(", ");
   const singerTerms = singers.flatMap((singer) => singer.safePromptTerms).slice(0, 2).join(", ");
   const instruments = normalizedInstruments(form).slice(0, 4).join(", ");
@@ -1828,9 +2027,11 @@ function buildStylePrompt(form: SongForm, singers: SingerProfile[]) {
     specifiedValue(form.groove),
     specifiedValue(form.key),
     "hook-driven chorus",
+    "concise motif",
+    "verse lift into repeatable chorus",
     "clean modern production-ready mix",
   ].filter(Boolean).join(", ");
-  return trimPrompt(sanitizeForbidden(prompt, singers), 250);
+  return trimPromptBytes(sanitizeForbidden(prompt, singers), MUSIC_PROMPT_MAX_BYTES);
 }
 
 function buildCompositionPrompt(form: SongForm, singers: SingerProfile[]) {
@@ -1890,6 +2091,40 @@ function sanitizeForbidden(value: string, singers: SingerProfile[]) {
 
 function trimPrompt(value: string, max: number) {
   return value.length <= max ? value : value.slice(0, max - 1).trimEnd();
+}
+
+function byteLength(value: string) {
+  return new TextEncoder().encode(value).length;
+}
+
+function trimPromptBytes(value: string, maxBytes: number) {
+  const encoder = new TextEncoder();
+  if (encoder.encode(value).length <= maxBytes) return value.trim();
+  let output = value.trim();
+  while (output && encoder.encode(output).length > maxBytes) {
+    output = output.slice(0, -1).trimEnd();
+  }
+  return output;
+}
+
+function mergeMusicPrompt(stylePrompt: string, compositionPrompt: string) {
+  return trimPromptBytes([stylePrompt, compositionPrompt].map((item) => item.trim()).filter(Boolean).join(", "), MUSIC_PROMPT_MAX_BYTES);
+}
+
+function shouldSkipLyricsTranslation(value: string, targetLanguage: TranslationLanguage) {
+  return targetLanguage === "Chinese" && isMostlyChinese(value);
+}
+
+function isMostlyChinese(value: string) {
+  const chars = value.replace(/\s/g, "");
+  if (!chars) return false;
+  const chineseCount = Array.from(chars).filter((char) => /[\u3400-\u9fff]/.test(char)).length;
+  return chineseCount / chars.length > 0.25;
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function auditLyrics(

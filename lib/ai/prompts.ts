@@ -18,6 +18,7 @@ export type TaskType =
   | "storyboard_script"
   | "final_delivery"
   | "song_workbench"
+  | "song_development_chat"
   | "novel_development_chat"
   | "novel_brief"
   | "novel_bible"
@@ -105,6 +106,7 @@ export const taskNames: Record<TaskType, string> = {
   storyboard_script: "分镜",
   final_delivery: "最终交付",
   song_workbench: "歌曲创作",
+  song_development_chat: "歌曲创作对话",
   novel_development_chat: "小说创作对话",
   novel_brief: "小说背景",
   novel_bible: "小说世界观及大纲",
@@ -131,13 +133,13 @@ const commonRules = [
 ].join("\n");
 
 const songRules = [
-  "你是 Kiikis 的歌曲创作助手，专门生成可复制到 Suno 的歌词、Style Prompt 和 Composition Prompt。",
+  "你是 Kiikis 的歌曲创作助手，专门生成可复制到 Suno 的歌词和单一 Music Prompt。",
   "只输出生成内容本身，不输出解释、教程、免责声明或 AI 回复套话。",
   "必须严格使用用户要求的输出语言；如果是 Bilingual，歌词应提供清晰双语段落。",
   "不得输出真实歌手、艺人、乐队、唱片公司或受版权保护作品名称；只能使用安全的声音、唱法、曲风、编曲描述。",
   "歌词必须原创，避免照抄用户输入中的长句，避免套用知名歌词、影视台词或可识别的版权表达。",
-  "Suno 标签要清晰、短促、可复制；Style Prompt 控制在 250 字符左右，Composition Prompt 控制在 350 字符左右。",
-  "输出格式必须稳定，严格包含：---LYRICS---、---STYLE_PROMPT---、---COMPOSITION_PROMPT--- 三个分隔标题。",
+  "Suno 标签要清晰、短促、可复制；Music Prompt 是 Suno style 输入框使用的一段精炼提示词，必须少于 1000 bytes。",
+  "输出格式必须稳定，严格包含：---LYRICS---、---MUSIC_PROMPT--- 两个分隔标题。",
 ].join("\n");
 
 const novelRules = [
@@ -440,15 +442,28 @@ const promptByTask: Record<TaskType, string> = {
   ].join("\n"),
 
   song_workbench: [
-    "任务：根据歌曲项目设定，生成 Suno-ready 歌词、Style Prompt 和 Composition Prompt。",
+    "任务：根据歌曲项目设定与创作对话记录，生成 Suno-ready 歌词和一个可直接复制到 Suno style 输入框的 Music Prompt。",
     "输出必须严格使用以下结构：",
     "---LYRICS---",
     "完整歌词。根据 lyricsMode 输出：suno_enhanced 使用 [Intro]、[Verse]、[Chorus] 等 Suno 段落标签和少量括号演唱/编曲提示；plain_lyrics 保留段落标签但减少括号提示；no_tags 不使用标签。",
-    "---STYLE_PROMPT---",
-    "一行可复制到 Suno 的风格提示词，包含曲风、情绪、声线、安全歌手描述、主要乐器、律动、调性和混音方向。",
-    "---COMPOSITION_PROMPT---",
-    "一段编曲提示词，说明 intro、verse、pre-chorus、chorus、bridge、final chorus、outro 的推进方式。",
-    "要求：歌词要有清晰 hook，副歌适合重复；不要使用真实艺人名字；不要输出解释。",
+    "---MUSIC_PROMPT---",
+    "一段可复制到 Suno style 输入框的提示词，合并曲风、情绪、声线、安全歌手描述、主要乐器、律动、调性、结构推进和混音方向。",
+    "要求：Music Prompt 必须少于 1000 bytes，语言精炼，不堆砌形容词；歌词要有清晰 hook，副歌适合重复；不要使用真实艺人名字；不要输出解释。",
+  ].join("\n"),
+
+  song_development_chat: [
+    "任务：你正在和创作负责人进行歌曲创作前期沟通，不要直接输出最终歌词。",
+    "你的语气应像专业但好懂的音乐制作助理：帮助新手把模糊感受变成歌曲方向。",
+    "不要要求用户填写专业参数；通过自然追问归纳项目类型、主情绪、曲风、乐器、声线、歌词语言、使用场景和参考画面。",
+    "输出结构必须包含：",
+    "## 我理解到的方向",
+    "- 用 3-6 条整理用户刚刚输入的新信息。",
+    "## 已经可以确定",
+    "- 只列已经足够明确、可用于生成歌词和 Suno style 的信息。",
+    "## 我建议补充",
+    "- 提出 2-4 个新手也能回答的问题。",
+    "## 下一步建议",
+    "- 告诉用户可以继续聊天，或直接生成/更新歌词与音乐提示词。",
   ].join("\n"),
 
   novel_development_chat: [

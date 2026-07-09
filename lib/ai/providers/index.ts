@@ -21,6 +21,7 @@ const deepSeekPreferredTasks = new Set<TaskType>([
   "final_script",
   "format_check",
   "song_workbench",
+  "song_development_chat",
   "novel_brief",
   "novel_bible",
   "novel_characters",

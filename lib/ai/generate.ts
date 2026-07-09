@@ -21,6 +21,7 @@ const taskTypes: TaskType[] = [
   "storyboard_script",
   "final_delivery",
   "song_workbench",
+  "song_development_chat",
   "novel_development_chat",
   "novel_brief",
   "novel_bible",

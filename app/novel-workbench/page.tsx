@@ -96,6 +96,7 @@ const stepCopy: Record<TaskType, { zh: string; en: string; shortZh: string; shor
   viral_video_analysis: { zh: "爆款分析", en: "Viral Analysis", shortZh: "分析", shortEn: "Analyze" },
   viral_structure_remake: { zh: "同结构改写", en: "Structure Remake", shortZh: "改写", shortEn: "Remake" },
   viral_export_package: { zh: "爆款交付", en: "Viral Export", shortZh: "交付", shortEn: "Export" },
+  song_development_chat: { zh: "歌曲创作对话", en: "Song Development Chat", shortZh: "对话反馈", shortEn: "Chat feedback" },
   novel_development_chat: { zh: "小说创作对话", en: "Novel Development Chat", shortZh: "对话反馈", shortEn: "Chat feedback" },
   novel_brief: { zh: "小说背景", en: "Novel Background", shortZh: "生成背景", shortEn: "Generate background" },
   novel_bible: { zh: "小说世界观及大纲", en: "World & Outline", shortZh: "生成世界观", shortEn: "Generate world" },
