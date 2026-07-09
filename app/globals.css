@@ -2667,22 +2667,22 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-8) clamp(20px, 4vw, 40px) var(--space-16);
 }
 .song-workbench-page .cosmic-title-band {
-  max-width: 1580px;
-  padding-top: var(--space-6);
-  padding-bottom: 0;
+  max-width: 1720px;
+  padding: var(--space-4) clamp(20px, 3vw, 32px) 0;
 }
 .song-workbench-page .cosmic-title-band h1 {
-  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  margin: 0;
+  font-size: clamp(1.2rem, 1.5vw, 1.45rem);
   font-weight: 500;
 }
 .song-workbench-shell {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(560px, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(320px, 380px) minmax(620px, 1fr) minmax(360px, 430px);
   align-items: start;
-  gap: var(--space-4);
-  max-width: 1580px;
+  gap: var(--space-5);
+  max-width: 1720px;
   margin: 0 auto;
-  padding: var(--space-4) clamp(20px, 3vw, 32px) var(--space-16);
+  padding: var(--space-3) clamp(20px, 3vw, 32px) var(--space-16);
 }
 .song-workbench-shell > .notice {
   grid-column: 1 / -1;
@@ -2696,7 +2696,8 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-4);
+  min-height: 72px;
+  padding: var(--space-3) var(--space-4);
 }
 .song-action-bar > div:first-child {
   min-width: 0;
@@ -2753,8 +2754,8 @@ input:focus, textarea:focus, select:focus {
 .song-setup-panel,
 .song-ai-panel {
   position: sticky;
-  top: 88px;
-  max-height: calc(100vh - 112px);
+  top: 84px;
+  max-height: calc(100dvh - 104px);
   overflow-y: auto;
 }
 .song-field-stack,
@@ -2770,7 +2771,7 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-4);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FAFAFA;
+  background: var(--glass-fill-strong);
 }
 .song-control-group > span,
 .song-control-group > summary,
@@ -2807,7 +2808,7 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-3);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FAFAFA;
+  background: var(--glass-fill-strong);
 }
 .song-source-panel span {
   color: var(--ink-muted);
@@ -2833,7 +2834,7 @@ input:focus, textarea:focus, select:focus {
   padding: var(--space-3);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: #FAFAFA;
+  background: var(--glass-fill-strong);
 }
 .song-reference-panel p {
   display: flex;
@@ -2848,25 +2849,25 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 360px;
-  max-height: 48vh;
+  min-height: 300px;
+  max-height: 420px;
   overflow: auto;
   padding: var(--space-3);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.04);
+  background: color-mix(in srgb, var(--bg-void), transparent 28%);
 }
 .song-chat-message {
   width: min(92%, 620px);
   padding: 11px 13px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  background: #FFFFFF;
+  background: var(--glass-fill-strong);
   color: var(--ink-primary);
 }
 .song-chat-message.user {
   align-self: flex-end;
-  background: rgba(0, 107, 255, 0.1);
+  background: color-mix(in srgb, var(--accent-blue), var(--glass-fill-strong) 84%);
 }
 .song-chat-message.assistant {
   align-self: flex-start;
@@ -2997,7 +2998,7 @@ input:focus, textarea:focus, select:focus {
 .song-output-panel {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 112px);
+  min-height: calc(100dvh - 172px);
 }
 .song-output-grid {
   display: grid;
@@ -3028,13 +3029,13 @@ input:focus, textarea:focus, select:focus {
 .song-lyrics-textarea,
 .song-prompt-textarea {
   flex: 1;
-  min-height: clamp(520px, 62vh, 760px);
+  min-height: clamp(520px, 62dvh, 760px);
   resize: vertical;
   line-height: 1.7;
   font-family: var(--font-body);
 }
 .song-output-grid .song-prompt-textarea {
-  min-height: clamp(420px, 52vh, 680px);
+  min-height: clamp(460px, 58dvh, 720px);
 }
 .song-ai-panel {
   display: flex;
@@ -5548,6 +5549,8 @@ textarea.script-editor {
 :root[data-theme="dark"] .song-control-group,
 :root[data-theme="dark"] .song-tool-section,
 :root[data-theme="dark"] .song-source-panel,
+:root[data-theme="dark"] .song-reference-panel,
+:root[data-theme="dark"] .song-chat-message,
 :root[data-theme="dark"] .song-singer-card,
 :root[data-theme="dark"] .song-audit-inline article,
 :root[data-theme="dark"] .song-audit-inline p,
@@ -5564,8 +5567,17 @@ textarea.script-editor {
   color: var(--ink-primary);
 }
 
+:root[data-theme="dark"] .song-chat-thread {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+:root[data-theme="dark"] .song-chat-message.user {
+  background: rgba(0, 107, 255, 0.16);
+}
+
 :root[data-theme="dark"] .song-control-group:hover,
 :root[data-theme="dark"] .song-tool-section:hover,
+:root[data-theme="dark"] .song-reference-panel:hover,
 :root[data-theme="dark"] .novel-step-button:hover,
 :root[data-theme="dark"] .novel-step-button.active,
 :root[data-theme="dark"] .novel-chapter-strip button.active,
@@ -6034,6 +6046,9 @@ a.ghost-button {
 .viral-workbench-page input,
 .viral-workbench-page textarea,
 .viral-workbench-page select,
+.song-workbench-page input,
+.song-workbench-page textarea,
+.song-workbench-page select,
 .settings-page input,
 .settings-page textarea,
 .settings-page select {
