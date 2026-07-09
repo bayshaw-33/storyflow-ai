@@ -12,6 +12,44 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-09 - 新增协作开发 Codex 接入说明
+
+### 本次目标
+
+- 生成一份可直接发给协作开发伙伴 Codex 的完整 Markdown 接入说明，避免项目背景、交接规则和开发规范遗漏。
+
+### 已完成
+
+- 新增 `docs/CODEX_TEAMMATE_ONBOARDING.md`。
+- 文档包含项目背景、技术架构、开工必读文件、收工留痕要求、已完成重点方向、Git 规范、开发原则和第一条指令模板。
+- 明确要求协作 Codex 每次开工前必须先读 `docs/DEV_HANDOFF_LOG.md` 和 `docs/CODEX_HANDOFF_SOP.md`。
+
+### 修改文件
+
+- `docs/CODEX_TEAMMATE_ONBOARDING.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- 文档创建完成。
+- 本次仅新增和更新 Markdown 文档，无代码逻辑修改，无需运行 build。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- 协作开发伙伴接入后，需要确认其本地项目路径、GitHub 权限、Supabase/Vercel 权限是否可用。
+
+### 给下一位 Codex
+
+- 开工前先执行 `git pull origin main`。
+- 优先阅读 `docs/CODEX_TEAMMATE_ONBOARDING.md`、`docs/DEV_HANDOFF_LOG.md`、`docs/CODEX_HANDOFF_SOP.md`。
+- 完成任何任务后继续在本日志顶部追加交接记录。
+
 ## 2026-07-09 - Codex 协作留痕机制初始化
 
 ### 本次目标
