@@ -1,8 +1,8 @@
 "use client";
 
-import { BookOpen, Clapperboard, Film, Flame, Music2, PanelsTopLeft, type LucideIcon } from "lucide-react";
+import { BookOpen, Clapperboard, Film, Flame, Music2, Palette, PanelsTopLeft, type LucideIcon } from "lucide-react";
 
-export type WorkflowEntryId = "novel" | "script" | "storyboard" | "video" | "song" | "viral";
+export type WorkflowEntryId = "novel" | "script" | "art" | "storyboard" | "video" | "song" | "viral";
 export type WorkflowEntryTier = "core" | "extended";
 
 export type WorkflowEntryPoint = {
@@ -58,6 +58,19 @@ export const WORKFLOW_ENTRY_POINTS: WorkflowEntryPoint[] = [
     steps: 4,
     difficulty: "Shots",
     difficultyZh: "镜头",
+  },
+  {
+    id: "art",
+    title: "Art",
+    titleZh: "美术",
+    description: "Extract characters, scenes, and props into production-ready visual references.",
+    descriptionZh: "从剧本和项目资料中拆解角色、场景、关键道具，并生成美术参考表。",
+    href: "/art-workbench?setup=1",
+    tier: "core",
+    icon: Palette,
+    steps: 4,
+    difficulty: "Visuals",
+    difficultyZh: "美术",
   },
   {
     id: "video",

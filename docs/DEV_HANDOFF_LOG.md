@@ -12,6 +12,104 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-09 - Production Workbench Phase 1 架构底座
+
+### 本次目标
+
+- 按 `docs/PRD-production-workbench-seko-style.md` 开始实现分镜视频一体化制片工作台。
+- 先完成 Phase 1 的数据结构、状态转换、Provider 抽象与 Universe 快照底座。
+
+### 已完成
+
+- 新增 `lib/production/types.ts`，定义 `ProductionProjectState`、`ProductionShot`、上传资料、历史记录、Provider、时间线等核心类型。
+- 新增 `lib/production/state.ts`，支持从现有 storyboard/video `DramaProject` 转换为统一 production state。
+- 新增 `lib/production/providers.ts`，定义 MiniMax / Seedance / Runway / Kling 等 Provider 抽象与默认 MiniMax 设置。
+- 新增 `lib/production/prompts.ts`，沉淀分镜对话、图片生成、视频生成 Prompt 构建函数。
+- 新增 `lib/production/universe.ts`，支持生成 Production Universe Snapshot 与 Creative Package。
+- 已确认现有 `/api/files/parse` 可复用，后续左侧文件上传不需要重复造解析轮子。
+
+### 修改文件
+
+- `lib/production/types.ts`
+- `lib/production/state.ts`
+- `lib/production/providers.ts`
+- `lib/production/prompts.ts`
+- `lib/production/universe.ts`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- `pnpm run build`：通过。
+- 构建时发现当前工作区存在未跟踪 `app/api/art/`、`lib/art-workbench.ts`、`.DS_Store`，本次未修改也未清理。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- 下一步需要进入 Phase 2：搭建 `components/production/ProductionWorkbench.tsx` 基础可用页面。
+- 之后再把 `/storyboard-workbench` 与 `/video-workbench` 逐步接入统一工作台。
+- 真实图片 / 视频 API 需要在现有 MiniMax 能力基础上新增 production 级接口。
+
+### 给下一位 Codex
+
+- 不要重写 `lib/production/*` 的核心类型，后续页面、API、Universe 都应复用这套结构。
+- 如果要改动未跟踪 art 相关文件，先确认它们是谁的工作。
+
+## 2026-07-09 - 新增 Kiikis 美术工作台 MVP
+
+### 本次目标
+
+- 加急新增独立美术工作台，用于根据剧本、项目背景、角色圣经等资料自动拆解角色、场景和关键道具，并生成角色参考表 / 三视图 / 场景道具概念图。
+
+### 已完成
+
+- 新增 `/art-workbench` 独立页面。
+- 新增工作流入口“美术”。
+- 新增 `lib/art-workbench.ts`，定义美术工作台状态、资产类型、提示词构建和本地兜底拆解。
+- 新增 `/api/art/extract-assets`，使用 MiniMax 文本模型拆解角色、场景、道具；失败时返回本地规则初稿。
+- 新增 `/api/art/generate-image`，使用 MiniMax 图片接口生成角色参考表、三视图、场景/道具概念图。
+- 支持从本地已有项目载入资料。
+- 支持上传并解析 `.txt/.md/.json/.csv/.doc/.docx/.pdf/.html/.xlsx`。
+- 支持用户手动增删资产、编辑名称、角色级别、叙事功能、设计说明、正向提示词和负面提示词。
+- 美术工作台状态暂存 localStorage，并支持 JSON 导出。
+
+### 修改文件
+
+- `app/art-workbench/page.tsx`
+- `app/api/art/extract-assets/route.ts`
+- `app/api/art/generate-image/route.ts`
+- `lib/art-workbench.ts`
+- `components/workflow/workflow-data.ts`
+- `app/globals.css`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- `pnpm run build`：通过。
+- Next 构建已识别 `/art-workbench`、`/api/art/extract-assets`、`/api/art/generate-image`。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- 当前版本未新增 Supabase 专用美术资产表，项目状态先保存在 localStorage；后续如需团队协作，应补结构化表。
+- 图片生成当前只启用 MiniMax，接口已预留 provider，明天更换 API 时优先改 `/api/art/generate-image` 与 provider 层。
+- 视觉是基础可用版，后续由同事 Codex 做精修。
+- 当前工作区存在未跟踪 `.DS_Store`，本次不处理。
+
+### 给下一位 Codex
+
+- 不要先重构演员库或分镜工作台；美术工作台已作为独立入口实现。
+- 下一步优先考虑 Supabase 持久化、Universe 关联、批量生成和 API provider 替换。
+
 ## 2026-07-09 - 新增分镜视频一体化制片工作台 PRD
 
 ### 本次目标
