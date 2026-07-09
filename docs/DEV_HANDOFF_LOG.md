@@ -12,6 +12,58 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-09 - Production Workbench Phase 2 基础页面
+
+### 本次目标
+
+- 按 PRD Phase 2 搭建 Seko 风格的一体化制片工作台基础可用版。
+- 先以独立 `/production-workbench` 路由承载，不直接替换现有 `/storyboard-workbench` 与 `/video-workbench`。
+
+### 已完成
+
+- 新增 `components/production/ProductionWorkbench.tsx`。
+- 新增 `components/production/ProductionWorkbench.module.css`。
+- 新增 `/production-workbench` 页面入口。
+- 实现左侧 AI 制片对话区。
+- 实现左侧上传剧本 / 背景设定 / 角色设定资料，并复用现有 `/api/files/parse`。
+- 实现顶部三模式切换：剧本策划 / 分镜画布 / 视频编辑。
+- 实现右侧分镜文档模式，分镜可编辑、删除、标记图片状态。
+- 实现分镜画布网格，包含分镜卡片、缩略图、状态、上移 / 下移 / 删除。
+- 实现视频编辑基础模式，包含当前镜头编辑、中央预览、底部轻量时间线。
+- 实现本地保存与 Markdown 导出。
+
+### 修改文件
+
+- `app/production-workbench/page.tsx`
+- `components/production/ProductionWorkbench.tsx`
+- `components/production/ProductionWorkbench.module.css`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- `pnpm run build`：通过。
+- 本地启动 `next dev -H 127.0.0.1 -p 3004`：通过。
+- `HEAD /production-workbench`：200。
+- 本次未处理未跟踪 `.DS_Store`。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- 当前 `/production-workbench` 是独立入口，尚未替换 storyboard/video 入口。
+- 当前对话生成分镜为本地草稿逻辑，尚未接真实 AI 分镜 API。
+- 图片生成 / 视频生成按钮目前是状态和 URL 管理基础，尚未接 `/api/production/*`。
+- 下一步建议进入 Phase 3 / Phase 4：新增 production API，并把 storyboard/video 入口逐步接入。
+
+### 给下一位 Codex
+
+- 不要先美化视觉；下一步优先接真实 API 与项目保存 / Universe 同步。
+- 如果要让同事美化，可从 `components/production/ProductionWorkbench.module.css` 入手，不要改核心状态结构。
+
 ## 2026-07-09 - Production Workbench Phase 1 架构底座
 
 ### 本次目标

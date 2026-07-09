@@ -1,0 +1,516 @@
+"use client";
+
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { Download, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
+import { readProjectsFromStorage } from "@/lib/projects";
+import {
+  addProductionHistory,
+  createEmptyProductionState,
+  createProductionId,
+  createProductionShot,
+  deleteProductionShot,
+  formatSeconds,
+  moveProductionShot,
+  productionStateFromProject,
+  productionStateToMarkdown,
+  productionTimelineItems,
+  totalTimelineSeconds,
+  updateProductionShot,
+} from "@/lib/production/state";
+import type { ProductionMode, ProductionProjectState, ProductionShot } from "@/lib/production/types";
+import styles from "./ProductionWorkbench.module.css";
+
+type Props = {
+  initialMode?: ProductionMode;
+};
+
+const modeLabels: Array<{ id: ProductionMode; label: string }> = [
+  { id: "planning", label: "剧本策划" },
+  { id: "canvas", label: "分镜画布" },
+  { id: "editor", label: "视频编辑" },
+];
+
+export function ProductionWorkbench({ initialMode = "planning" }: Props) {
+  const [state, setState] = useState<ProductionProjectState>(() =>
+    createEmptyProductionState({
+      title: "连光都不肯碰我半分",
+      mode: initialMode,
+      shots: [
+        createProductionShot({
+          index: 1,
+          sceneTitle: "浴缸边缘",
+          duration: "5s",
+          description: "镜头紧贴浴缸边缘，以极低频率水平滑行。浴缸内墨汁般的黑色液体静谧深邃。",
+          composition: "极低机位，边缘构图，浴缸边缘占据画面下 1/3。",
+          cameraMovement: "极慢速横移 Track，营造黑色电影压迫感。",
+          imagePrompt: "经典黑白电影质感，极低机位拍摄白色浴缸，黑色液体微微反光，35mm 胶片颗粒。",
+          videoPrompt: "镜头沿浴缸边缘缓慢横移，黑色液体保持轻微波纹，压抑安静。",
+        }),
+      ],
+    }),
+  );
+  const [input, setInput] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const selectedShot = state.shots.find((shot) => shot.id === state.selectedShotId) || state.shots[0];
+  const timeline = useMemo(() => productionTimelineItems(state), [state]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get("projectId");
+    const mode = params.get("mode") as ProductionMode | null;
+    const saved = localStorage.getItem("kiikis_production_workbench_state");
+    if (projectId) {
+      const project = readProjectsFromStorage().find((item) => item.id === projectId);
+      if (project) {
+        setState(productionStateFromProject(project, mode || initialMode));
+        return;
+      }
+    }
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as Partial<ProductionProjectState>;
+        setState(createEmptyProductionState({ ...parsed, mode: mode || parsed.mode || initialMode }));
+      } catch {
+        // Ignore stale local state.
+      }
+    }
+  }, [initialMode]);
+
+  function patchState(patch: Partial<ProductionProjectState>) {
+    setState((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
+  }
+
+  function selectMode(mode: ProductionMode) {
+    patchState({ mode });
+  }
+
+  function selectShot(shotId: string) {
+    patchState({ selectedShotId: shotId });
+  }
+
+  function addShot() {
+    setState((current) => {
+      const shot = createProductionShot({
+        index: current.shots.length + 1,
+        sceneTitle: `分镜 ${current.shots.length + 1}`,
+        duration: "5s",
+        description: "新的分镜画面。",
+      });
+      return addProductionHistory(
+        {
+          ...current,
+          shots: [...current.shots, shot],
+          selectedShotId: shot.id,
+          mode: current.mode === "planning" ? current.mode : "canvas",
+        },
+        { type: "edit", title: "新增分镜", detail: `新增分镜 ${shot.index}`, shotId: shot.id },
+      );
+    });
+  }
+
+  function updateShot(shotId: string, patch: Partial<ProductionShot>) {
+    setState((current) => updateProductionShot(current, shotId, patch));
+  }
+
+  function removeShot(shotId: string) {
+    setState((current) => addProductionHistory(deleteProductionShot(current, shotId), { type: "delete", title: "删除分镜", detail: `删除分镜 ${shotId}`, shotId }));
+  }
+
+  function sendMessage() {
+    const content = input.trim();
+    if (!content) return;
+    const now = new Date().toISOString();
+    setInput("");
+    setState((current) => {
+      const shouldCreateShots = current.shots.length === 0 || /拆|生成|分镜|镜头/.test(content);
+      const nextShots = shouldCreateShots && current.shots.length < 3
+        ? buildDraftShotsFromText(content || current.sourceSummary, current.shots.length)
+        : current.shots;
+      const assistantText = shouldCreateShots
+        ? "收到。我已根据你的要求整理分镜草案，你可以在右侧继续编辑、删除或进入画布。"
+        : "收到。我会把这条反馈作为当前制片上下文，后续生成图片和视频提示词时会参考。";
+      return addProductionHistory(
+        {
+          ...current,
+          shots: nextShots.length ? nextShots : current.shots,
+          selectedShotId: current.selectedShotId || nextShots[0]?.id || current.shots[0]?.id || "",
+          chatMessages: [
+            ...current.chatMessages,
+            { id: createProductionId("chat"), role: "user", content, createdAt: now },
+            { id: createProductionId("chat"), role: "assistant", content: assistantText, createdAt: new Date().toISOString() },
+          ],
+        },
+        { type: "chat", title: "对话更新", detail: content },
+      );
+    });
+  }
+
+  async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await fetch("/api/files/parse", { method: "POST", body: formData });
+      const payload = await response.json() as { success?: boolean; text?: string; error?: string };
+      const extractedText = payload.text || "";
+      const sourceFile = {
+        id: createProductionId("source"),
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        textPreview: extractedText.slice(0, 260),
+        extractedText,
+        uploadedAt: new Date().toISOString(),
+      };
+      setState((current) => addProductionHistory({
+        ...current,
+        sourceFiles: [sourceFile, ...current.sourceFiles],
+        sourceSummary: [extractedText.slice(0, 1600), current.sourceSummary].filter(Boolean).join("\n\n"),
+        chatMessages: [
+          ...current.chatMessages,
+          {
+            id: createProductionId("chat"),
+            role: "assistant",
+            content: payload.success ? `已读取资料《${file.name}》，可以基于它拆分镜。` : `资料《${file.name}》解析失败：${payload.error || "未知错误"}`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }, { type: "upload", title: "上传资料", detail: file.name }));
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  function saveLocal() {
+    localStorage.setItem("kiikis_production_workbench_state", JSON.stringify(state));
+    setState((current) => addProductionHistory(current, { type: "save", title: "保存工作台", detail: "已保存到本地工作台状态。" }));
+  }
+
+  function exportMarkdown() {
+    const blob = new Blob([productionStateToMarkdown(state)], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${state.title || "production-workbench"}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <main className={styles.shell}>
+      <header className={styles.header}>
+        <div className={styles.titleBlock}>
+          <p className={styles.eyebrow}>Kiikis Production Workbench</p>
+          <input className={styles.titleInput} value={state.title} onChange={(event) => patchState({ title: event.target.value })} aria-label="Project title" />
+        </div>
+        <nav className={styles.modeSwitch} aria-label="Production mode">
+          {modeLabels.map((mode) => (
+            <button
+              className={`${styles.modeButton} ${state.mode === mode.id ? styles.modeButtonActive : ""}`}
+              key={mode.id}
+              type="button"
+              onClick={() => selectMode(mode.id)}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </nav>
+        <div className={styles.actionRow}>
+          <button className={styles.secondaryButton} type="button" onClick={saveLocal}><Save size={16} /> 保存</button>
+          <button className={styles.primaryButton} type="button" onClick={exportMarkdown}><Download size={16} /> 导出</button>
+        </div>
+      </header>
+
+      <section className={styles.workspace}>
+        <aside className={styles.chatPanel}>
+          <div className={styles.panelHeader}>
+            <h2><MessageSquareText size={17} /> AI 制片对话</h2>
+            <p>上传剧本、设定或直接提出修改意见。右侧分镜会保持可编辑状态。</p>
+          </div>
+
+          <div className={styles.messages}>
+            {state.chatMessages.length === 0 ? (
+              <div className={styles.message}>
+                <span className={styles.messageMeta}>KK</span>
+                创作者大人，请上传剧本或告诉我你想做的短剧 / MV。我会先生成可编辑分镜，再进入图片和视频制作。
+              </div>
+            ) : null}
+            {state.chatMessages.map((message) => (
+              <div className={`${styles.message} ${message.role === "user" ? styles.messageUser : ""}`} key={message.id}>
+                <span className={styles.messageMeta}>{message.role === "user" ? "你" : "KK"}</span>
+                {message.content}
+              </div>
+            ))}
+          </div>
+
+          <label className={styles.uploadBox}>
+            <FileUp size={16} /> {uploading ? "解析资料中..." : "上传剧本 / 背景设定 / 角色设定"}
+            <input className={styles.fileInput} type="file" accept=".txt,.md,.json,.csv,.doc,.docx,.pdf,.html,.xlsx" onChange={handleFileUpload} disabled={uploading} />
+          </label>
+
+          {selectedShot ? <CurrentShotPanel shot={selectedShot} onUpdate={(patch) => updateShot(selectedShot.id, patch)} /> : null}
+
+          <div className={styles.composer}>
+            <textarea
+              className={styles.textarea}
+              value={input}
+              placeholder="输入你的想法，例如：把总镜头控制在30个以内，增加长镜头，强化男女主对峙。"
+              onChange={(event) => setInput(event.target.value)}
+            />
+            <button className={styles.primaryButton} type="button" onClick={sendMessage} aria-label="Send message"><Send size={18} /></button>
+          </div>
+        </aside>
+
+        <section className={styles.mainPanel}>
+          <div className={styles.mainHeader}>
+            <div>
+              <h2 className={styles.sectionTitle}>{modeLabels.find((mode) => mode.id === state.mode)?.label}</h2>
+              <p className={styles.muted}>{state.shots.length} 个分镜 · 预计 {formatSeconds(totalTimelineSeconds(state))} · {state.aspectRatio}</p>
+            </div>
+            <div className={styles.actionRow}>
+              <button className={styles.secondaryButton} type="button" onClick={addShot}><Plus size={16} /> 新增分镜</button>
+            </div>
+          </div>
+          <div className={styles.mainBody}>
+            {state.mode === "planning" ? (
+              <PlanningMode state={state} patchState={patchState} updateShot={updateShot} removeShot={removeShot} selectShot={selectShot} />
+            ) : null}
+            {state.mode === "canvas" ? (
+              <CanvasMode state={state} selectShot={selectShot} removeShot={removeShot} moveShot={(id, direction) => setState((current) => moveProductionShot(current, id, direction))} />
+            ) : null}
+            {state.mode === "editor" ? (
+              <EditorMode state={state} selectedShot={selectedShot} timeline={timeline} selectShot={selectShot} updateShot={updateShot} />
+            ) : null}
+          </div>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function CurrentShotPanel({ shot, onUpdate }: { shot: ProductionShot; onUpdate: (patch: Partial<ProductionShot>) => void }) {
+  return (
+    <div className={styles.currentShot}>
+      <strong>当前分镜 {shot.index}</strong>
+      <p className={styles.muted}>{shot.sceneTitle} · {shot.duration} · {shot.status}</p>
+      <div className={styles.promptBlock}>
+        <strong>图片提示词</strong>
+        <textarea className={styles.shotTextarea} value={shot.imagePrompt} onChange={(event) => onUpdate({ imagePrompt: event.target.value })} />
+      </div>
+      <div className={styles.promptBlock}>
+        <strong>视频提示词</strong>
+        <textarea className={styles.shotTextarea} value={shot.videoPrompt} onChange={(event) => onUpdate({ videoPrompt: event.target.value })} />
+      </div>
+    </div>
+  );
+}
+
+function PlanningMode({
+  state,
+  patchState,
+  updateShot,
+  removeShot,
+  selectShot,
+}: {
+  state: ProductionProjectState;
+  patchState: (patch: Partial<ProductionProjectState>) => void;
+  updateShot: (shotId: string, patch: Partial<ProductionShot>) => void;
+  removeShot: (shotId: string) => void;
+  selectShot: (shotId: string) => void;
+}) {
+  return (
+    <div className={styles.planningGrid}>
+      <aside className={styles.settingsPanel}>
+        <h3 className={styles.sectionTitle}>项目设定</h3>
+        <div className={styles.formGrid}>
+          <label>内容类型
+            <select className={styles.select} value={state.contentType} onChange={(event) => patchState({ contentType: event.target.value as ProductionProjectState["contentType"] })}>
+              <option value="short_drama">短剧</option>
+              <option value="mv">MV</option>
+            </select>
+          </label>
+          <label>画幅
+            <select className={styles.select} value={state.aspectRatio} onChange={(event) => patchState({ aspectRatio: event.target.value as ProductionProjectState["aspectRatio"] })}>
+              <option value="9:16">9:16</option>
+              <option value="16:9">16:9</option>
+              <option value="1:1">1:1</option>
+            </select>
+          </label>
+          <label>故事概况
+            <textarea
+              className={styles.shotTextarea}
+              value={state.storyBrief.storySummary}
+              onChange={(event) => patchState({ storyBrief: { ...state.storyBrief, storySummary: event.target.value } })}
+            />
+          </label>
+          <label>视觉风格
+            <textarea
+              className={styles.shotTextarea}
+              value={state.visualBible.visualStyle}
+              onChange={(event) => patchState({ visualBible: { ...state.visualBible, visualStyle: event.target.value } })}
+            />
+          </label>
+        </div>
+      </aside>
+      <section className={styles.documentPanel}>
+        <h3 className={styles.sectionTitle}>分镜剧本</h3>
+        {state.shots.map((shot) => (
+          <article className={styles.documentShot} key={shot.id}>
+            <h3>分镜 {shot.index}</h3>
+            <ul>
+              <li>画面类型：{shot.shotType}</li>
+              <li>分镜时长：{shot.duration}</li>
+              <li>画面描述：{shot.description}</li>
+              <li>构图设计：{shot.composition}</li>
+              <li>运镜调度：{shot.cameraMovement}</li>
+            </ul>
+            <div className={styles.shotActions}>
+              <button className={styles.secondaryButton} type="button" onClick={() => selectShot(shot.id)}>编辑</button>
+              <button className={styles.secondaryButton} type="button" onClick={() => updateShot(shot.id, { status: "image_generating" })}><ImagePlus size={15} /> 标记图片</button>
+              <button className={styles.iconButton} type="button" onClick={() => removeShot(shot.id)} aria-label="删除分镜"><Trash2 size={15} /></button>
+            </div>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
+}
+
+function CanvasMode({
+  state,
+  selectShot,
+  removeShot,
+  moveShot,
+}: {
+  state: ProductionProjectState;
+  selectShot: (shotId: string) => void;
+  removeShot: (shotId: string) => void;
+  moveShot: (shotId: string, direction: "up" | "down") => void;
+}) {
+  return (
+    <div className={styles.canvasGrid}>
+      {state.shots.map((shot) => (
+        <button className={`${styles.shotCard} ${state.selectedShotId === shot.id ? styles.shotCardActive : ""}`} key={shot.id} type="button" onClick={() => selectShot(shot.id)}>
+          <ShotThumb shot={shot} />
+          <h3>分镜 {shot.index}</h3>
+          <p className={styles.muted}>{shot.description.slice(0, 82) || "暂无画面描述"}</p>
+          <div className={styles.badgeRow}>
+            <span className={styles.badge}>{shot.shotType}</span>
+            <span className={styles.badge}>{shot.duration}</span>
+            <span className={styles.badge}>{shot.status}</span>
+          </div>
+          <div className={styles.shotActions}>
+            <span className={styles.secondaryButton} onClick={(event) => { event.stopPropagation(); moveShot(shot.id, "up"); }}>上移</span>
+            <span className={styles.secondaryButton} onClick={(event) => { event.stopPropagation(); moveShot(shot.id, "down"); }}>下移</span>
+            <span className={styles.iconButton} onClick={(event) => { event.stopPropagation(); removeShot(shot.id); }}><Trash2 size={15} /></span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EditorMode({
+  state,
+  selectedShot,
+  timeline,
+  selectShot,
+  updateShot,
+}: {
+  state: ProductionProjectState;
+  selectedShot?: ProductionShot;
+  timeline: ReturnType<typeof productionTimelineItems>;
+  selectShot: (shotId: string) => void;
+  updateShot: (shotId: string, patch: Partial<ProductionShot>) => void;
+}) {
+  return (
+    <div className={styles.editorGrid}>
+      <aside className={styles.editorAside}>
+        <h3 className={styles.sectionTitle}>当前镜头</h3>
+        {selectedShot ? (
+          <div className={styles.formGrid}>
+            <label>场景标题
+              <input className={styles.field} value={selectedShot.sceneTitle} onChange={(event) => updateShot(selectedShot.id, { sceneTitle: event.target.value })} />
+            </label>
+            <label>时长
+              <input className={styles.field} value={selectedShot.duration} onChange={(event) => updateShot(selectedShot.id, { duration: event.target.value })} />
+            </label>
+            <label>画面描述
+              <textarea className={styles.shotTextarea} value={selectedShot.description} onChange={(event) => updateShot(selectedShot.id, { description: event.target.value })} />
+            </label>
+            <label>图片 URL
+              <input className={styles.field} value={selectedShot.imageUrl || ""} onChange={(event) => updateShot(selectedShot.id, { imageUrl: event.target.value, status: event.target.value ? "image_ready" : "draft" })} />
+            </label>
+            <label>视频 URL
+              <input className={styles.field} value={selectedShot.videoUrl || ""} onChange={(event) => updateShot(selectedShot.id, { videoUrl: event.target.value, status: event.target.value ? "video_ready" : selectedShot.status })} />
+            </label>
+          </div>
+        ) : <p className={styles.muted}>请选择一个分镜。</p>}
+      </aside>
+      <section className={styles.previewStage}>
+        <div className={styles.previewFrame}>
+          {selectedShot ? <ShotPreview shot={selectedShot} /> : "No shot selected"}
+        </div>
+      </section>
+      <section className={styles.timeline}>
+        <div className={styles.timelineControls}>
+          <strong><Video size={16} /> 时间线</strong>
+          <span className={styles.muted}>{timeline.length} clips · {formatSeconds(totalTimelineSeconds(state))}</span>
+        </div>
+        <div className={styles.timelineTrack}>
+          {timeline.map((item) => (
+            <button
+              className={`${styles.timelineClip} ${state.selectedShotId === item.shotId ? styles.timelineClipActive : ""}`}
+              key={item.shotId}
+              type="button"
+              onClick={() => selectShot(item.shotId)}
+            >
+              <div className={styles.timelineClipThumb}>
+                {item.videoUrl ? <video src={item.videoUrl} muted /> : item.imageUrl ? <img src={item.imageUrl} alt="" /> : null}
+              </div>
+              <div className={styles.timelineClipText}>分镜 {item.index}<br />{formatSeconds(item.durationSeconds)}</div>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ShotThumb({ shot }: { shot: ProductionShot }) {
+  return (
+    <div className={styles.thumb}>
+      {shot.videoUrl ? <video src={shot.videoUrl} muted /> : shot.imageUrl ? <img src={shot.imageUrl} alt={`分镜 ${shot.index}`} /> : <ImagePlus size={34} />}
+    </div>
+  );
+}
+
+function ShotPreview({ shot }: { shot: ProductionShot }) {
+  if (shot.videoUrl) return <video src={shot.videoUrl} controls />;
+  if (shot.imageUrl) return <img src={shot.imageUrl} alt={`分镜 ${shot.index}`} />;
+  return <span>等待图片或视频素材</span>;
+}
+
+function buildDraftShotsFromText(text: string, existingCount: number) {
+  const lines = text
+    .split(/\n|(?<=[。！？.!?])\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  const seedLines = lines.length ? lines : ["建立主角处境。", "推进核心冲突。", "用情绪特写收束。"];
+  return seedLines.map((line, index) =>
+    createProductionShot({
+      index: existingCount + index + 1,
+      sceneTitle: `场景 ${existingCount + index + 1}`,
+      duration: index === 0 ? "5s" : "4s",
+      description: line,
+      composition: index % 2 === 0 ? "竖屏中近景，主体位于画面中心。" : "侧面构图，保留环境压迫感。",
+      cameraMovement: index % 2 === 0 ? "缓慢推进 Dolly In。" : "轻微横移 Track。",
+      imagePrompt: `cinematic vertical short drama, ${line}`,
+      videoPrompt: `slow cinematic motion, ${line}`,
+    }),
+  );
+}
