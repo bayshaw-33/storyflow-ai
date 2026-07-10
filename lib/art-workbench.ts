@@ -13,6 +13,11 @@ export type ArtAsset = {
   description: string;
   prompt: string;
   negativePrompt: string;
+  identityAnchor?: string;
+  variants?: ArtAssetVariant[];
+  versions?: ArtAssetVersion[];
+  approvedVersionId?: string;
+  publishedVersionId?: string;
   referenceSheetUrl?: string;
   threeViewUrl?: string;
   conceptUrl?: string;
@@ -21,6 +26,26 @@ export type ArtAsset = {
   status: ArtAssetStatus;
   error?: string;
   updatedAt: string;
+};
+
+export type ArtAssetVersion = {
+  id: string;
+  imageUrl: string;
+  storagePath?: string;
+  source: "generated" | "uploaded";
+  provider?: string;
+  model?: string;
+  prompt: string;
+  createdAt: string;
+};
+
+export type ArtAssetVariant = {
+  id: string;
+  name: string;
+  type: "master" | "appearance" | "state";
+  prompt: string;
+  versions: ArtAssetVersion[];
+  approvedVersionId?: string;
 };
 
 export type ArtSourceFile = {
