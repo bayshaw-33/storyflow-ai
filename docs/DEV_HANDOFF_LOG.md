@@ -397,3 +397,12 @@ docs/CODEX_HANDOFF_SOP.md
 - 开工前先执行 `git pull origin main`。
 - 然后阅读本文档顶部最近 3 条记录。
 - 如果接到新任务，请在完成后把本次变更追加到本文档顶部。
+
+## 2026-07-10 17:05 - SMB workspace rebuilt from GitHub
+
+- Backed up the previous SMB working folder to `/Volumes/Kiikis2026/storyflow-ai-backup-20260710-170551`.
+- Re-cloned the canonical GitHub repository into `/Volumes/Kiikis2026/storyflow-ai`.
+- Restored local-only `.env.local` from the backup; it remains uncommitted.
+- Restored `docs/KIIKIS_CODEX_WORKSPACE_RULE.md` so future Codex sessions know the required workspace path.
+- From this point forward, all Kiikis development work should happen in `/Volumes/Kiikis2026/storyflow-ai`.
+
