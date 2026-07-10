@@ -12,6 +12,47 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-10 17:18 - Codex / 美术工作台线上环境验证
+
+### 本次目标
+
+- 验证用户已执行的 Supabase 美术工作台 migration 和 Vercel 图片服务环境变量是否可用。
+- 说明 Atlas 特殊授权账号变量的配置方式。
+
+### 已完成
+
+- 用户确认 Supabase SQL Editor 已成功执行 `docs/supabase-art-workbench-migration.sql`。
+- 使用测试账号获取 Supabase access token 后，请求线上 `https://www.kiikis.com/api/art/generate-image`。
+- FLUX 路由验证通过：`selection=flux`、`modelId=flux-2-pro` 返回 200，生成 1 张图片，并返回可用预览地址。
+- Atlas 路由验证通过：`selection=atlas`、`modelId=google/imagen4` 返回 200，生成 1 张图片，并返回 provider/model 信息。
+- 验证过程未写入任何密钥到仓库或文档。
+
+### 修改文件
+
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- 线上 Supabase Auth：测试账号登录 token 获取成功。
+- 线上 FLUX 图片接口：HTTP 200，`provider=flux`，`model=flux-2-pro`，`images=1`。
+- 线上 Atlas 图片接口：HTTP 200，`provider=atlas`，`model=google/imagen4`，`images=1`。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- Vercel 环境变量值无法也不应该在 Codex 中明文查看；本次通过真实运行时行为确认变量已生效。
+- 用户已在对话中暴露过供应商 Key，建议后续在供应商后台轮换一次，并只保存在 Vercel Server Environment Variables。
+
+### 给下一位 Codex
+
+- Atlas 授权由 `ADMIN_EMAIL`、`ART_ATLAS_AUTHORIZED_EMAILS`、`ART_ATLAS_AUTHORIZED_USER_IDS` 控制。
+- 标准用户默认走 FLUX；Atlas 只给管理员或特殊授权账号开放。
+
 ## 2026-07-10 - 美术工作台生产版首批闭环
 
 ### 本次目标
