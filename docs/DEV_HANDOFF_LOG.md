@@ -12,6 +12,79 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-10 - 美术工作台生产版首批闭环
+
+### 本次目标
+
+- 将现有美术工作台从三栏本地原型升级为 38/62 的 AI 对话 + 美术仓库布局。
+- 增加独立资产详情页、母版/变体/版本、Atlas/FLUX 路由、图片持久化基础和 Universe 发布状态。
+
+### 已完成
+
+- 新增完整设计规格与实施计划。
+- 新增美术项目、来源、聊天、action、资产、变体、版本、生成任务、发布和审计表 migration。
+- 新增角色/场景/道具统一母版、变体、版本和状态转换领域契约。
+- 新增 Atlas Cloud 与 Black Forest Labs FLUX Provider、模型目录、特殊账号授权和智能路由。
+- 图片生成结果会从供应商临时 URL 转存到 Supabase 私有 `art-assets` bucket 后返回。
+- 新增 `/api/art/chat`，支持结构化新增/编辑 action；危险 action 自动转为确认请求。
+- 美术主页改为左侧约 38% KK 对话区、右侧约 62% 美术仓库。
+- 资料上传、图片上传和自动拆解入口统一收进对话区。
+- 点击资产卡进入 `/art-workbench/assets/[assetId]` 独立详情页。
+- 详情页支持大图、角色母版/剧中造型、场景/道具状态变体、上传版本、1/2/4 候选、模型选择、终稿锁定和独立 Universe 发布状态。
+- 新增 11 个 Node 行为测试，覆盖状态转换、候选数量、账号路由和 AI action 安全规则。
+
+### 修改文件
+
+- `app/art-workbench/page.tsx`
+- `app/art-workbench/assets/[assetId]/page.tsx`
+- `app/api/art/chat/route.ts`
+- `app/api/art/generate-image/route.ts`
+- `components/art/ArtWorkbench.tsx`
+- `components/art/ArtWorkbench.module.css`
+- `components/art/ArtAssetDetail.tsx`
+- `components/art/ArtAssetDetail.module.css`
+- `lib/art/*`
+- `lib/supabase/art-storage.ts`
+- `docs/supabase-art-workbench-migration.sql`
+- `docs/StoryFlow-2.0-data-contract.md`
+- `docs/superpowers/specs/2026-07-10-art-workbench-production-design.md`
+- `docs/superpowers/plans/2026-07-10-art-workbench-production.md`
+- `tests/art-*.test.mjs`
+
+### 验证结果
+
+- Node 行为测试：11/11 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `pnpm run build`：通过，识别 `/art-workbench`、`/art-workbench/assets/[assetId]`、`/api/art/chat` 和 `/api/art/generate-image`。
+- 本地浏览器检查：未执行。Codex 工作区额度限制导致本地 dev server 的提权启动被拒绝，不是代码或端口冲突。
+- Secret 扫描：代码中没有提交 Atlas 或 BFL 密钥值。
+
+### Git 信息
+
+- branch：main
+- commits：`10eddd7`、`eb340b6`、`b2d36d4`、`e36479b`，以及本条 handoff 的后续提交。
+- push：本条提交后执行。
+
+### 部署前必做
+
+- 在 Supabase SQL Editor 执行 `docs/supabase-art-workbench-migration.sql`。
+- 在 Vercel 服务端环境配置 `BFL_API_KEY`、`ATLASCLOUD_API_KEY`。
+- 配置 `ADMIN_EMAIL`，或使用 `ART_ATLAS_AUTHORIZED_EMAILS` / `ART_ATLAS_AUTHORIZED_USER_IDS` 指定 Atlas 特殊授权账号。
+- 不要把任何 Key 放入 `NEXT_PUBLIC_*`、前端代码、handoff 或 Git。
+
+### 未完成 / 风险
+
+- 页面仍保留旧 localStorage 状态迁移兼容；结构化表 migration 执行后，下一批需要把主页全部 CRUD 正式切换到云端 art API。
+- 当前“发布到 Universe”先在资产状态中分离记录，尚未创建完整 Universe Inbox/publication API 写入。
+- 聊天图片当前可作为本次会话母版来源；正式私有上传 API 需要在 migration 后接到 Storage 路径。
+- Atlas 和 FLUX 真实调用需要 Vercel 环境变量及供应商账户余额后才能线上验收。
+
+### 给下一位 Codex
+
+- 不要把角色演员身份与项目角色合并；沿用演员库、Universe 角色、项目形象版本三层契约。
+- 前端美化只修改 `components/art/*.module.css` 和展示组件，避免改 Provider、action allowlist 和资产状态机。
+- 下一批优先执行 migration、接云端 CRUD、Universe publication API 和真实图片生成验收。
+
 ## 2026-07-09 - Production Workbench 挂接现有入口
 
 ### 本次目标

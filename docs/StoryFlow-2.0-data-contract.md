@@ -126,6 +126,38 @@
 - `scene_concept`: 分镜前置美术设计场景图。
 - `storyboard_frame`: 分镜帧图。
 
+## 美术工作台生产数据
+
+迁移文件：`docs/supabase-art-workbench-migration.sql`
+
+核心表：
+
+- `storyflow_art_projects`：美术项目，关联 owner、team、Universe 和来源项目。
+- `storyflow_art_sources`：剧本、背景、角色圣经和聊天资料来源。
+- `storyflow_art_assets`：角色、场景、道具母资产。
+- `storyflow_art_asset_variants`：角色剧中造型、场景状态和道具状态。
+- `storyflow_art_asset_versions`：上传或 AI 生成的不可变图片版本。
+- `storyflow_art_chat_messages`：KK 美术助理对话留痕。
+- `storyflow_art_actions`：结构化 AI 写操作、确认状态和撤销数据。
+- `storyflow_art_generation_jobs`：Atlas / FLUX 任务、参数和错误状态。
+- `storyflow_art_publications`：终稿发布到 Universe 的记录。
+- `storyflow_art_audit_events`：版权与团队协作审计记录。
+
+图片 Provider：
+
+- 普通账号只能使用平台 `BFL_API_KEY` 对应的 FLUX 服务。
+- 管理员和特殊授权账号可使用 `smart` / `atlas` / `flux`。
+- 特殊账号通过 `ADMIN_EMAIL`、`ART_ATLAS_AUTHORIZED_EMAILS` 或 `ART_ATLAS_AUTHORIZED_USER_IDS` 服务端变量授权。
+- Atlas 使用 `ATLASCLOUD_API_KEY`；所有变量都只能存在于 Vercel 或本地服务端环境。
+- 供应商临时链接必须转存私有 Supabase Storage bucket `art-assets`。
+
+安全规则：
+
+- AI 只返回允许列表内的结构化 action，不能直接写数据库。
+- 删除、替换终稿、更换 Universe、发布和撤回必须二次确认。
+- 已发布版本不可覆盖；下游引用固定 `asset_version_id`。
+- 美术发布不能静默改写演员母版或 Universe canon。
+
 权限规则：
 - 演员库第一版只支持虚拟演员，不支持真实演员肖像授权流程。
 - `private` 演员仅创建者可见。
@@ -238,4 +270,3 @@
 4. 在 `storyflow_assets` / `storyflow_exports` 上做正式交付包上传和下载。
 5. 使用 `phase_key` 把现有 14 步收纳为 5 阶段，不需要删除原有步骤。
 6. 按 `PRD-actor-library-team-universe.md` 落地团队、演员库、项目形象版本和分镜预生产流程。
-
