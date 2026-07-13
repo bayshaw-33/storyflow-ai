@@ -3922,7 +3922,7 @@ textarea.script-editor {
   width: min(1680px, calc(100% - 40px));
   margin: var(--space-6) auto var(--space-10);
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(560px, 1fr) minmax(380px, 0.72fr);
+  grid-template-columns: minmax(340px, 38fr) minmax(560px, 62fr);
   gap: var(--space-4);
   align-items: start;
 }
@@ -3961,7 +3961,7 @@ textarea.script-editor {
 }
 
 .novel-sidebar {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: var(--space-3);
 }
@@ -4306,7 +4306,7 @@ textarea.script-editor {
 }
 
 .novel-chat-panel {
-  min-height: 760px;
+  min-height: calc(100vh - 150px);
 }
 
 .novel-chat-stage-pill {
@@ -4327,8 +4327,8 @@ textarea.script-editor {
 .novel-chat-thread {
   display: flex;
   flex: 1;
-  min-height: 520px;
-  max-height: 620px;
+  min-height: 420px;
+  max-height: calc(100vh - 430px);
   flex-direction: column;
   gap: 12px;
   overflow: auto;
@@ -4395,13 +4395,113 @@ textarea.script-editor {
 }
 
 .novel-stage-preview {
-  min-height: 360px;
-  max-height: 520px;
+  min-height: 520px;
+  max-height: calc(100vh - 360px);
 }
+
+.novel-source-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.novel-source-files {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.novel-source-files span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novel-source-files small {
+  color: var(--ink-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.novel-document-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.novel-document-tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.novel-document-tabs button,
+.novel-content-type button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  background: transparent;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.novel-document-tabs button:hover,
+.novel-document-tabs button.active,
+.novel-content-type button.active {
+  border-color: var(--glass-border-hover);
+  color: var(--ink-primary);
+  background: var(--glass-fill-strong);
+}
+
+.novel-content-type {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+}
+
+.novel-handoff-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--glass-border);
+}
+
+.novel-handoff-bar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.novel-handoff-bar strong { color: var(--ink-primary); font-size: 13px; }
+.novel-handoff-bar span { color: var(--ink-muted); font-size: 11px; line-height: 1.4; }
 
 @media (max-width: 1180px) {
   .novel-workbench-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(300px, 38fr) minmax(480px, 62fr);
   }
 
   .novel-main-editor {
@@ -4438,7 +4538,7 @@ textarea.script-editor {
     top: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 6px;
     width: min(100% - 28px, 1580px);
     margin: var(--space-4) auto 0;
@@ -4511,6 +4611,20 @@ textarea.script-editor {
   .novel-stage-preview {
     min-height: 320px;
     max-height: none;
+  }
+
+  .novel-source-bar,
+  .novel-document-toolbar,
+  .novel-handoff-bar {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .novel-handoff-bar .primary-button,
+  .novel-handoff-bar .secondary-button {
+    width: 100%;
+    justify-content: center;
   }
 }
 

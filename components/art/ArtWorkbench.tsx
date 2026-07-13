@@ -9,6 +9,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
+import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ArtWorkbench.module.css";
 
 export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
@@ -37,6 +38,24 @@ export default function ArtWorkbench() {
     void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
     setProjects(readProjectsFromStorage());
+    const params = new URLSearchParams(window.location.search);
+    const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
+    if (handoff) {
+      setState({
+        ...createEmptyArtWorkbenchState(),
+        projectId: handoff.sourceProjectId,
+        projectTitle: handoff.title,
+        title: `${handoff.title} 美术设定`,
+        sourceText: [
+          handoff.projectBackground ? `【项目背景】\n${handoff.projectBackground}` : "",
+          handoff.worldAndOutline ? `【世界观与大纲】\n${handoff.worldAndOutline}` : "",
+          handoff.characterBible ? `【角色 Bible】\n${handoff.characterBible}` : "",
+          handoff.manuscript ? `【${handoff.contentType === "script" ? "剧本" : "小说正文"}】\n${handoff.manuscript}` : "",
+        ].filter(Boolean).join("\n\n"),
+      });
+      setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。` }]);
+      return () => listener?.subscription.unsubscribe();
+    }
     try {
       const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
       if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
