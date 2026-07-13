@@ -17,11 +17,15 @@ type AuthModalProps = {
 // Where Supabase sends users back to after they click the password-reset
 // email. Prefer the configured site URL (production Vercel domain); fall back
 // to the current origin for local dev.
-function resetRedirectUrl() {
+function siteUrl() {
   const base =
     process.env.NEXT_PUBLIC_SITE_URL ||
     (typeof window !== "undefined" ? window.location.origin : "");
-  return `${base}/reset-password`;
+  return base.replace(/\/$/, "");
+}
+
+function resetRedirectUrl() {
+  return `${siteUrl()}/reset-password`;
 }
 
 export function AuthModal({ open, mode, onClose }: AuthModalProps) {
@@ -64,7 +68,11 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
     setBusy(true);
     const result =
       mode === "signup"
-        ? await supabase.auth.signUp({ email: nextEmail, password: nextPassword })
+        ? await supabase.auth.signUp({
+            email: nextEmail,
+            password: nextPassword,
+            options: { emailRedirectTo: siteUrl() || undefined },
+          })
         : await supabase.auth.signInWithPassword({ email: nextEmail, password: nextPassword });
     setBusy(false);
 

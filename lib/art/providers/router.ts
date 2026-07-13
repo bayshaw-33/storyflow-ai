@@ -29,6 +29,8 @@ export function resolveArtProviderRoute(input: {
 }
 
 export function isAtlasAuthorizedUser(user: { id: string; email: string }) {
+  if (process.env.ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS === "true") return true;
+
   const ids = new Set((process.env.ART_ATLAS_AUTHORIZED_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean));
   const emails = new Set([
     process.env.ADMIN_EMAIL || "",
