@@ -12,6 +12,56 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-13 - Codex / Atlas 临时全员授权与认证邮件修复
+
+### 本次目标
+
+- 暂时允许所有已注册并登录的 Kiikis 账号使用 Atlas 图片生成。
+- 排查注册确认邮件、找回密码邮件中的链接乱码问题。
+
+### 已完成
+
+- `isAtlasAuthorizedUser` 增加服务端环境开关 `ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS`。
+- 开关仅在值严格等于 `true` 时生效；未登录请求仍会被认证层拒绝。
+- 注册时显式设置当前站点为 Supabase 邮箱确认后的回跳地址。
+- 新增 Supabase 注册确认和密码重置的 UTF-8 HTML 模板及控制台配置说明。
+- 模板将 `{{ .ConfirmationURL }}` 放进按钮链接，不直接把长 URL 输出为正文，避免邮件客户端显示编码后的乱码。
+
+### 修改文件
+
+- `lib/art/providers/router.ts`
+- `components/layout/AuthModal.tsx`
+- `tests/art-provider-routing.test.mjs`
+- `docs/supabase-auth-email-templates.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- Atlas 授权行为测试：5/5 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `pnpm run build`：通过。
+- 资源校验：通过，既有 `LOGO_PRIMARY` 孤立 token 警告未由本次引入。
+- 仓库未写入供应商密钥。
+
+### 部署 / 配置操作
+
+- 在 Vercel Production 新增 `ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS=true`，然后重新部署。
+- 在 Supabase `Authentication -> Email Templates` 粘贴 `docs/supabase-auth-email-templates.md` 中的 Confirm signup 与 Reset password 模板。
+- 在 Supabase URL Configuration 中确认 Site URL 为 `https://www.kiikis.com`，并允许该站点回跳地址。
+
+### 未完成 / 风险
+
+- 当前 Codex 没有 Supabase Management API token，不能代替管理员直接修改项目级邮件模板；publishable key 也不具备该权限。
+- 临时全员 Atlas 开关上线后，后续应改回 `ART_ATLAS_AUTHORIZED_EMAILS` / `ART_ATLAS_AUTHORIZED_USER_IDS` 白名单模式。
+- 如果粘贴模板后仍显示乱码，应检查邮件供应商的 HTML 编码和链接追踪重写设置，并发送原始邮件源码进一步定位。
+
+### 给下一位 Codex
+
+- 不要把 `ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS` 写入前端或改成 `NEXT_PUBLIC_*`。
+- 邮件模板必须使用 `{{ .ConfirmationURL }}` 作为 href，不能拼接或 URL 二次编码。
+
+---
+
 ## 2026-07-10 17:18 - Codex / 美术工作台线上环境验证
 
 ### 本次目标
@@ -446,4 +496,3 @@ docs/CODEX_HANDOFF_SOP.md
 - Restored local-only `.env.local` from the backup; it remains uncommitted.
 - Restored `docs/KIIKIS_CODEX_WORKSPACE_RULE.md` so future Codex sessions know the required workspace path.
 - From this point forward, all Kiikis development work should happen in `/Volumes/Kiikis2026/storyflow-ai`.
-
