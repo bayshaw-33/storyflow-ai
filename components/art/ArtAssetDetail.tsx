@@ -56,7 +56,7 @@ export default function ArtAssetDetail() {
     if (!state) return;
     const nextState = { ...state, assets: state.assets.map((item) => item.id === next.id ? next : item), updatedAt: new Date().toISOString() };
     setState(nextState);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
   }
 
   function patchAsset(patch: Partial<ArtAsset>) {
@@ -78,17 +78,26 @@ export default function ArtAssetDetail() {
     setSelectedVersionId("");
   }
 
-  function uploadVersion(event: ChangeEvent<HTMLInputElement>) {
+  async function uploadVersion(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !asset || !selectedVariant) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const version: ArtAssetVersion = { id: crypto.randomUUID(), imageUrl: String(reader.result || ""), source: "uploaded", prompt: selectedVariant.prompt, createdAt: new Date().toISOString() };
+    if (!session?.access_token) return setNotice("请先登录后再上传图片版本。");
+    setBusy("upload");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/art/upload-reference", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
+      const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
+      if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "图片版本上传失败");
+      const version: ArtAssetVersion = { id: crypto.randomUUID(), imageUrl: payload.previewUrl, storagePath: payload.storagePath, source: "uploaded", prompt: selectedVariant.prompt, createdAt: new Date().toISOString() };
       patchVariant({ versions: [version, ...selectedVariant.versions] });
       setSelectedVersionId(version.id);
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "图片版本上传失败");
+    } finally {
+      setBusy("");
+      event.target.value = "";
+    }
   }
 
   async function generate() {

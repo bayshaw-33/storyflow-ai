@@ -603,6 +603,7 @@ input:focus, textarea:focus, select:focus {
   .workflow-shell,
   .song-workbench-page,
   .novel-workbench-page,
+  .art-workbench-page,
   .storyboard-workbench-page,
   .video-workbench-page {
     padding-left: var(--workspace-nav-offset);

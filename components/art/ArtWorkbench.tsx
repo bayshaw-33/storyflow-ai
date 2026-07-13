@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Send, Sparkles, Upload, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
@@ -16,7 +17,7 @@ import collapseStyles from "./ArtWorkbenchCollapse.module.css";
 export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; note?: string };
-type PendingImage = { id: string; name: string; url: string };
+type PendingImage = { id: string; name: string; url: string; storagePath: string };
 
 export default function ArtWorkbench() {
   const { locale } = useI18n();
@@ -37,9 +38,16 @@ export default function ArtWorkbench() {
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
-    setProjects(readProjectsFromStorage());
+    const localProjects = readProjectsFromStorage();
+    setProjects(localProjects);
+    const loadSession = async (next: Session | null) => {
+      setSession(next);
+      if (!next?.access_token) return setProjects(localProjects);
+      const cloudProjects = await readProjectsFromSupabase({ accessToken: next.access_token }).catch(() => []);
+      setProjects(mergeArtProjects(localProjects, cloudProjects));
+    };
+    void supabase?.auth.getSession().then(({ data }) => loadSession(data.session || null));
+    const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { void loadSession(next); }) || {};
     const params = new URLSearchParams(window.location.search);
     const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
     if (handoff) {
@@ -58,6 +66,13 @@ export default function ArtWorkbench() {
       setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。` }]);
       return () => listener?.subscription.unsubscribe();
     }
+    if (params.get("setup") === "1") {
+      localStorage.removeItem(ART_WORKBENCH_STORAGE_KEY);
+      setState(createEmptyArtWorkbenchState());
+      params.delete("setup");
+      window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
+      return () => listener?.subscription.unsubscribe();
+    }
     try {
       const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
       if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
@@ -66,7 +81,7 @@ export default function ArtWorkbench() {
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem(ART_WORKBENCH_STORAGE_KEY, JSON.stringify(state)); } catch { /* Best effort until migration is applied. */ }
+    try { localStorage.setItem(ART_WORKBENCH_STORAGE_KEY, JSON.stringify(state)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
   }, [state]);
 
   const visibleAssets = useMemo(() => state.assets.filter((asset) => asset.kind === selectedKind && (!query.trim() || `${asset.name} ${asset.role} ${asset.description}`.toLowerCase().includes(query.trim().toLowerCase()))), [state.assets, selectedKind, query]);
@@ -83,13 +98,21 @@ export default function ArtWorkbench() {
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已关联《${project.title}》。现有剧本、项目背景和角色资料已经进入分析上下文。` }]);
   }
 
-  function newProject() {
+  async function newProject() {
     const name = window.prompt(isZh ? "请输入新项目名称" : "New project name");
     if (!name?.trim()) return;
     const next = createEmptyArtWorkbenchState();
     next.title = name.trim();
+    const supabase = getSupabaseBrowserClient();
+    if (session?.user && supabase) {
+      const { data, error } = await supabase.from("storyflow_art_projects").insert({ owner_id: session.user.id, name: next.title, visual_style: next.visualStyle }).select("id").single();
+      if (error) return setNotice(`云端项目创建失败：${error.message}`);
+      next.id = data.id;
+    } else {
+      setNotice("当前未登录，项目只保存在这台设备。登录后可创建团队云端项目。");
+    }
     setState(next);
-    setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已新建《${name.trim()}》美术项目。Universe 项目外壳将在云端 migration 启用后同步创建。` }]);
+    setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已新建《${name.trim()}》美术项目。${session ? "项目已保存到云端。" : "当前为本地草稿。"}` }]);
   }
 
   async function uploadSource(event: ChangeEvent<HTMLInputElement>) {
@@ -119,13 +142,24 @@ export default function ArtWorkbench() {
     }
   }
 
-  function uploadImage(event: ChangeEvent<HTMLInputElement>) {
+  async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setPendingImage({ id: crypto.randomUUID(), name: file.name, url: String(reader.result || "") });
-    reader.readAsDataURL(file);
-    event.target.value = "";
+    if (!session?.access_token) return setNotice("请先登录后再上传参考图。");
+    setBusy("image");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/art/upload-reference", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
+      const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
+      if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "参考图上传失败");
+      setPendingImage({ id: crypto.randomUUID(), name: file.name, url: payload.previewUrl, storagePath: payload.storagePath });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "参考图上传失败");
+    } finally {
+      setBusy("");
+      event.target.value = "";
+    }
   }
 
   async function extractAssets() {
@@ -151,7 +185,7 @@ export default function ArtWorkbench() {
     setMessage("");
     setBusy("chat");
     try {
-      const response = await fetch("/api/art/chat", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: userMessage, projectTitle: state.title, assets: state.assets, attachments: pendingImage ? [{ id: pendingImage.id, name: pendingImage.name, kind: "image" }] : [] }) });
+      const response = await fetch("/api/art/chat", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: userMessage, projectTitle: state.title, assets: state.assets, attachments: pendingImage ? [{ id: pendingImage.id, name: pendingImage.name, kind: "image", url: pendingImage.url, storagePath: pendingImage.storagePath }] : [] }) });
       const payload = await response.json() as { success?: boolean; assistantText?: string; actions?: ArtAction[]; error?: string; warning?: string };
       if (!response.ok || !payload.success) throw new Error(payload.error || "KK 暂时无法处理这条指令");
       applyActions(payload.actions || [], pendingImage);
@@ -181,7 +215,7 @@ export default function ArtWorkbench() {
   }
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} art-workbench-page`}>
       <header className={styles.header}>
         <div className={styles.brand}><span>KIIKIS</span><strong>{state.title}</strong><small>美术工作台</small></div>
         <div className={styles.headerActions}>
@@ -215,6 +249,15 @@ export default function ArtWorkbench() {
       </div>
     </main>
   );
+}
+
+function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaProject[]) {
+  const projects = new Map<string, DramaProject>();
+  for (const project of [...localProjects, ...cloudProjects]) {
+    const current = projects.get(project.id);
+    if (!current || project.updatedAt.localeCompare(current.updatedAt) > 0) projects.set(project.id, project);
+  }
+  return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 function AssetCard({ asset }: { asset: ArtAsset }) {

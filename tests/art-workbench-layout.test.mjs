@@ -17,7 +17,7 @@ test("art workbench provides an accessible 48px assistant rail without changing 
   assert.match(component, /aria-expanded=\{!isAssistantCollapsed\}/);
   assert.match(component, /collapseStyles\.workspace/);
   assert.match(component, /isAssistantCollapsed \? collapseStyles\.assistantCollapsed : ""/);
-  assert.match(stylesheet, /grid-template-columns:minmax\(340px,38fr\) minmax\(520px,62fr\)/);
+  assert.match(stylesheet, /grid-template-columns:minmax\(0,38fr\) minmax\(0,62fr\)/);
   assert.match(collapseStylesheet, /\.assistantCollapsed\{grid-template-columns:48px minmax\(0,1fr\)\}/);
   assert.match(collapseStylesheet, /@media\(max-width:760px\)/);
 });

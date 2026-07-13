@@ -12,6 +12,59 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-13 - Codex / 美术工作台生产故障修复
+
+### 本次目标
+
+- 修复 `/art-workbench?setup=1` 的导航遮挡、中等宽度裁切、旧项目状态残留和参考图未进入 AI 上下文等线上问题。
+- 补齐美术项目、参考图与资产版本的云端保存反馈，避免浏览器存储失败时静默丢失。
+
+### 已完成
+
+- 美术工作台接入全局导航偏移，桌面端不再被左侧导航覆盖。
+- 38/62 双栏改为可收缩网格，移除 761-1050px 区间造成横向裁切的固定最小宽度。
+- `setup=1` 会清除旧的本地工作台状态并建立空白项目，同时从地址栏移除一次性参数。
+- 来源项目同时读取本地缓存和 Supabase 项目，按 ID 与更新时间合并。
+- 登录用户新建美术项目时会创建 `storyflow_art_projects` 云端记录；未登录时明确提示仅保存在当前设备。
+- 新增 `/api/art/upload-reference`：PNG/JPG/WebP、最大 10MB，经服务端上传到私有 `art-assets` bucket。
+- 对话参考图以 MiniMax `image_url` 多模态内容发送，不再只传文件名；资产详情页上传版本也改为云端存储。
+- localStorage 写入失败会向创作者显示空间不足提示，不再静默忽略。
+
+### 修改文件
+
+- `app/api/art/chat/route.ts`
+- `app/api/art/upload-reference/route.ts`
+- `app/globals.css`
+- `components/art/ArtAssetDetail.tsx`
+- `components/art/ArtWorkbench.tsx`
+- `components/art/ArtWorkbench.module.css`
+- `components/art/ArtWorkbenchCollapse.module.css`
+- `lib/ai/providers/minimax.ts`
+- `lib/ai/providers/types.ts`
+- `lib/supabase/art-storage.ts`
+- `tests/art-workbench-layout.test.mjs`
+- `tests/art-workbench-production-regressions.test.mjs`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- Node 测试：17/17 通过。
+- TypeScript：`tsc --noEmit --incremental false` 通过。
+- 资源校验：通过；既有 `LOGO_PRIMARY` orphan 警告未由本次引入。
+- `git diff --check`：通过。
+- 本机 Next production build 受 SMB 依赖中的 macOS SWC 二进制签名错误阻塞；以 Vercel Linux Production 构建为最终部署验证。
+
+### 未完成 / 风险
+
+- 当前工作台主体状态仍以 localStorage 为第一版缓存；本次只补齐项目外壳和图片文件的云端持久化，没有新增数据库 schema 或重写整套状态 API。
+- 私有 bucket 的预览地址为七天签名 URL；后续完整云端状态迁移时应按 `storagePath` 在读取阶段重新签名。
+
+### 给下一位 Codex
+
+- 开工前先确认本条记录对应提交已经在 Vercel Production 成功部署。
+- 不要重新引入双栏固定像素最小宽度；中等视口必须允许两栏按比例收缩。
+- 参考图和上传版本只允许通过服务端私有 bucket 链路保存，不要恢复 Base64 写入 localStorage。
+
 ## 2026-07-13 - Codex / 创作工作台统一升级与制作链路打通
 
 ### 本次目标

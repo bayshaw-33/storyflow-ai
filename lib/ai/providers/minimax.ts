@@ -21,13 +21,14 @@ export async function callMiniMax({
 }: MiniMaxOptions): Promise<AIProviderResult> {
   const apiKey = apiKeyOverride || getMiniMaxApiKey();
   const model = modelOverride || process.env.MINIMAX_MODEL || "MiniMax-M3";
-  const baseUrl = baseUrlOverride || process.env.MINIMAX_API_BASE_URL || (isTokenPlanKey(apiKey) ? "https://api.minimaxi.com/v1/chat/completions" : "https://api.minimax.io/v1/chat/completions");
+  const hasMultimodalInput = messages.some((message) => Array.isArray(message.content));
+  const baseUrl = baseUrlOverride || process.env.MINIMAX_API_BASE_URL || (isTokenPlanKey(apiKey) && hasMultimodalInput ? "https://api.minimaxi.com/v1/text/chatcompletion_v2" : isTokenPlanKey(apiKey) ? "https://api.minimaxi.com/v1/chat/completions" : "https://api.minimax.io/v1/chat/completions");
 
   if (!apiKey) {
     throw new Error("MISSING_MINIMAX_API_KEY");
   }
 
-  if (isTokenPlanKey(apiKey) && !baseUrlOverride && !process.env.MINIMAX_API_BASE_URL) {
+  if (isTokenPlanKey(apiKey) && !hasMultimodalInput && !baseUrlOverride && !process.env.MINIMAX_API_BASE_URL) {
     return callMiniMaxAnthropic({
       apiKey,
       model,
@@ -101,7 +102,7 @@ async function callMiniMaxAnthropic({
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const system = messages
     .filter((message) => message.role === "system")
-    .map((message) => message.content)
+    .map((message) => typeof message.content === "string" ? message.content : message.content.map((part) => part.type === "text" ? part.text : "").join("\n"))
     .join("\n\n");
   const chatMessages = messages
     .filter((message) => message.role !== "system")
