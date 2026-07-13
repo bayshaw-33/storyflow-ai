@@ -12,6 +12,50 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-13 - Codex / 创作工作台统一升级与制作链路打通
+
+### 本次目标
+
+- 将小说工作台升级为小说与剧本共用的“创作工作台”。
+- 建立创作工作台到美术工作台、分镜/视频工作台的可用交接通道。
+
+### 已完成
+
+- `/novel-workbench` 升级为桌面 38/62 双栏：左侧 AI 对话与资料上传，右侧 Markdown 文档编辑。
+- 移除可见流程侧栏、重复生成工具、完整 AI 生成序列、章节修改工具和小说转剧本入口。
+- 右侧阶段统一为项目背景、世界观与大纲、角色 Bible、正文、翻译、本土化/检查、导出。
+- 正文阶段支持小说/剧本模式切换，沿用现有 AI 与项目数据逻辑。
+- 支持上传 txt、md、csv、html、pdf、doc、docx、xlsx 资料并写入创作上下文。
+- 新增 `CreativeHandoffPackage`，传递前三件套、正文、翻译、本土化、Universe 和来源项目 ID。
+- 美术工作台和分镜/视频工作台可从 URL + localStorage 自动消费交接包。
+- 修复 Markdown 下载文件名非法字符及 Blob URL 过早释放问题。
+- 旧剧本工作台保持不变，未新增 Supabase migration，未重写 AI API。
+
+### 修改文件
+
+- `app/novel-workbench/page.tsx`
+- `app/globals.css`
+- `components/art/ArtWorkbench.tsx`
+- `components/production/ProductionWorkbench.tsx`
+- `lib/creative-handoff.ts`
+- `lib/creative-handoff.test.ts`
+- `docs/superpowers/specs/2026-07-10-creation-workbench-design.md`
+- `docs/superpowers/plans/2026-07-10-creation-workbench.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- 交接包单元测试：2/2 通过。
+- TypeScript：`tsc --noEmit` 通过。
+- Next.js production build：57/57 页面生成成功。
+- 浏览器：桌面双栏为 38%/61%，无重叠；390px 移动端无横向溢出。
+- 浏览器：小说/剧本模式切换、美术交接、分镜/视频交接均通过，控制台 0 error。
+
+### 给下一位 Codex
+
+- 第一版交接使用 `kiikis_creative_handoff_v1` localStorage；后续可迁移到 Supabase production package。
+- 开发目标工作台时保留 `sourceProjectId` 与 `universeId`，避免切断上下游追踪。
+
 ## 2026-07-10 - 美术工作台生产版首批闭环
 
 ### 本次目标
@@ -405,4 +449,3 @@ docs/CODEX_HANDOFF_SOP.md
 - Restored local-only `.env.local` from the backup; it remains uncommitted.
 - Restored `docs/KIIKIS_CODEX_WORKSPACE_RULE.md` so future Codex sessions know the required workspace path.
 - From this point forward, all Kiikis development work should happen in `/Volumes/Kiikis2026/storyflow-ai`.
-

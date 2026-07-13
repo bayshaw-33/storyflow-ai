@@ -1,15 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, BookOpen, Download, Link2, Lock, Plus, RefreshCcw, Save, Send, Sparkles, Unlock } from "lucide-react";
+import { ArrowLeft, BookOpen, Clapperboard, Download, FileText, Link2, Lock, Palette, Plus, Save, Send, Sparkles, Unlock, Upload } from "lucide-react";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import type { TaskType } from "@/lib/ai/prompts";
 import {
   DEFAULT_PROJECT_GROUP,
-  createProject,
   createNovelProject,
   exportProjectMarkdown,
   getStepContent,
@@ -33,6 +32,7 @@ import {
   type Universe,
 } from "@/lib/universe";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { buildCreativeHandoffPackage, writeCreativeHandoff, type CreativeContentType } from "@/lib/creative-handoff";
 
 const settingOptions = {
   type: ["狼人Alpha", "逆袭复仇", "奇幻冒险", "都市甜宠", "悬疑惊悚", "科幻末世", "其他"],
@@ -41,7 +41,7 @@ const settingOptions = {
 };
 const AI_GENERATION_TIMEOUT_MS = 75_000;
 
-type MobilePanel = "setup" | "editor" | "ai";
+type MobilePanel = "chat" | "content";
 type Credits = { balance: number; monthlyLimit: number };
 type AuthMode = "signin" | "signup";
 type WorkspaceEntryDraft = {
@@ -62,6 +62,8 @@ type ChatMessage = {
   content: string;
   createdAt: string;
 };
+
+type CreativeSourceFile = { id: string; name: string; text: string };
 
 const novelActionTasks: TaskType[] = [
   "novel_brief",
@@ -173,10 +175,10 @@ function NovelWorkbenchContent() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState<TaskType | null>(null);
-  const [revisionInstruction, setRevisionInstruction] = useState("");
+  const [revisionInstruction] = useState("");
   const [cloudWarning, setCloudWarning] = useState("");
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("editor");
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>("chat");
   const [credits, setCredits] = useState<Credits | null>(null);
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
@@ -188,25 +190,27 @@ function NovelWorkbenchContent() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatHydrated, setChatHydrated] = useState(false);
   const [chatGenerating, setChatGenerating] = useState(false);
+  const [contentType, setContentType] = useState<CreativeContentType>("novel");
+  const [sourceFiles, setSourceFiles] = useState<CreativeSourceFile[]>([]);
+  const [uploadingSource, setUploadingSource] = useState(false);
+  const sourceInputRef = useRef<HTMLInputElement>(null);
 
   const steps = useMemo(() => getWorkflowSteps("novel"), []);
   const activeChapter = useMemo(
     () => project.novelChapters.find((chapter) => chapter.id === activeChapterId) || project.novelChapters[project.novelChapters.length - 1] || null,
     [activeChapterId, project.novelChapters],
   );
-  const activeContent = getActiveNovelContent(project, activeTask, activeChapter);
+  const effectiveTask: TaskType = activeTask === "novel_chapter_draft" && contentType === "script" ? "chinese_script" : activeTask;
+  const activeContent = getActiveNovelContent(project, effectiveTask, activeChapter);
   const latestChapter = project.novelChapters[project.novelChapters.length - 1];
   const completedCount = steps.filter((step) => getStepContent(project, step.key).trim()).length;
   const isChapterTask = activeTask === "novel_chapter_outline" || activeTask === "novel_chapter_draft" || activeTask === "novel_revision";
-  const secondaryTasks = novelActionTasks.filter((task) => task !== activeTask);
-  const currentStepIndex = Math.max(0, novelActionTasks.indexOf(activeTask));
-  const nextTask = novelActionTasks[currentStepIndex + 1] || null;
   const aiDisabledReason = !session?.access_token
     ? (isZh ? "登录后可使用 AI 生成。" : "Sign in to use AI generation.")
     : credits?.balance === 0
       ? (isZh ? "本月 AI 额度已用完。" : "Monthly AI credits are used up.")
       : "";
-  const activeBlockedReason = getNovelTaskBlockedReason(activeTask, project, activeChapter, revisionInstruction, isZh);
+  const activeBlockedReason = getNovelTaskBlockedReason(effectiveTask, project, activeChapter, revisionInstruction, isZh);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -324,12 +328,12 @@ function NovelWorkbenchContent() {
   }
 
   function updateActiveContent(value: string) {
-    if (activeTask === "novel_chapter_outline" || activeTask === "novel_chapter_draft" || activeTask === "novel_revision") {
+    if (contentType === "novel" && (activeTask === "novel_chapter_outline" || activeTask === "novel_chapter_draft" || activeTask === "novel_revision")) {
       updateCurrentChapter(activeTask === "novel_chapter_outline" ? { outline: value } : { draft: value });
       return;
     }
 
-    setProject((current) => setStepContent(current, activeTask, value));
+    setProject((current) => setStepContent(current, effectiveTask, value));
   }
 
   function updateCurrentChapter(patch: Partial<NovelChapter>) {
@@ -373,7 +377,7 @@ function NovelWorkbenchContent() {
     setProject(nextProject);
     setActiveChapterId(chapter.id);
     setActiveTask("novel_chapter_outline");
-    setMobilePanel("editor");
+    setMobilePanel("content");
   }
 
   function selectChapter(chapterId: string) {
@@ -387,7 +391,7 @@ function NovelWorkbenchContent() {
       novelContinuityNotes: chapter.continuityNotes,
     }));
     setActiveTask(chapter.draft ? "novel_chapter_draft" : "novel_chapter_outline");
-    setMobilePanel("editor");
+    setMobilePanel("content");
   }
 
   function toggleChapterLock() {
@@ -710,37 +714,44 @@ function NovelWorkbenchContent() {
     }
   }
 
-  async function createScriptProjectFromNovel() {
-    if (!session?.access_token) {
-      setAuthMode("signin");
-      setAuthOpen(true);
-      setError(isZh ? "请先登录后再创建剧本项目。" : "Sign in before creating a script project.");
-      return;
+  async function uploadCreativeSources(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    setUploadingSource(true);
+    setError("");
+    try {
+      const added: CreativeSourceFile[] = [];
+      for (const file of files) {
+        const form = new FormData();
+        form.append("file", file);
+        const response = await fetch("/api/files/parse", { method: "POST", body: form });
+        const payload = await response.json() as { success?: boolean; text?: string; error?: string };
+        if (!response.ok || !payload.text) throw new Error(payload.error || `无法解析 ${file.name}`);
+        added.push({ id: crypto.randomUUID(), name: file.name, text: payload.text });
+      }
+      const sourceNotes = added.map((file) => `【上传资料：${file.name}】\n${file.text}`).join("\n\n");
+      setSourceFiles((current) => [...current, ...added]);
+      setProject((current) => ({
+        ...current,
+        novelDevelopmentNotes: [current.novelDevelopmentNotes, sourceNotes].filter(Boolean).join("\n\n"),
+        updatedAt: new Date().toISOString(),
+      }));
+      setChatMessages((current) => [...current, createAssistantMessage(isZh ? `已读取 ${added.length} 份资料，并加入本项目创作上下文。` : `Read ${added.length} source files and added them to this project's context.`)]);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : (isZh ? "资料解析失败。" : "Could not parse the source file."));
+    } finally {
+      setUploadingSource(false);
+      event.target.value = "";
     }
-    setStatus(isZh ? "正在创建剧本项目…" : "Creating script project…");
+  }
 
-    const scriptProject = createProject({
-      title: `${project.title || "Novel"} 剧本改编`,
-      workflowType: "creation",
-      market: project.market,
-      genre: project.novelSettings.type || project.genre,
-      targetLanguage: project.novelSettings.targetLanguage,
-      universeId: project.universeId || null,
-      projectGroup: project.projectGroup || DEFAULT_PROJECT_GROUP,
-      projectRole: "adaptation",
-      inheritanceSettings: {
-        sourceProjectId: project.id,
-        sourceWorkflowType: "novel",
-        inheritUniverse: Boolean(project.universeId),
-        ...DEFAULT_INHERITANCE_SETTINGS,
-      },
-      idea: buildScriptAdaptationBrief(project),
-      brief: buildScriptAdaptationBrief(project),
-    });
-
-    upsertProject(scriptProject);
-    await upsertProjectToSupabase(scriptProject, { accessToken: session.access_token }).catch(() => null);
-    router.push(`/projects/${scriptProject.id}?mode=creation`);
+  async function openDownstreamWorkspace(target: "art" | "production") {
+    await saveProject();
+    writeCreativeHandoff(buildCreativeHandoffPackage(project, contentType));
+    const source = encodeURIComponent(project.id);
+    router.push(target === "art"
+      ? `/art-workbench?handoff=creative&sourceProjectId=${source}`
+      : `/production-workbench?handoff=creative&sourceProjectId=${source}&mode=planning`);
   }
 
   function downloadMarkdown() {
@@ -748,9 +759,12 @@ function NovelWorkbenchContent() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${project.title || "novel-project"}.md`;
+    const safeTitle = (project.title || "creative-project").replace(/[\\/:*?"<>|]/g, "-");
+    link.download = `${safeTitle}.md`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function renderSettingsFields() {
@@ -816,7 +830,7 @@ function NovelWorkbenchContent() {
             <ArrowLeft size={18} />
           </button>
           <div className="novel-title-block">
-            <span>{isZh ? "小说创作" : "Novel Creation"}</span>
+            <span>{isZh ? "创作工作台" : "Creation Workbench"}</span>
             <h1>{project.title || (isZh ? "未命名小说项目" : "Untitled Novel")}</h1>
           </div>
         </div>
@@ -833,15 +847,15 @@ function NovelWorkbenchContent() {
         </div>
       </section>
 
-      <nav className="novel-mobile-tabs" aria-label={isZh ? "小说创作面板" : "Novel workbench panels"}>
-        {(["setup", "editor", "ai"] as const).map((panel) => (
+      <nav className="novel-mobile-tabs" aria-label={isZh ? "创作工作台面板" : "Creation workbench panels"}>
+        {(["chat", "content"] as const).map((panel) => (
           <button
             className={mobilePanel === panel ? "active" : ""}
             type="button"
             key={panel}
             onClick={() => setMobilePanel(panel)}
           >
-            {panel === "setup" ? (isZh ? "流程" : "Flow") : panel === "editor" ? (isZh ? "对话" : "Chat") : (isZh ? "预览 / 宇宙" : "Preview / Universe")}
+            {panel === "chat" ? (isZh ? "创作对话" : "Chat") : (isZh ? "文档创作" : "Documents")}
           </button>
         ))}
       </nav>
@@ -853,7 +867,7 @@ function NovelWorkbenchContent() {
           </div>
         ) : null}
 
-        <aside className={mobilePanel === "setup" ? "dashboard-panel novel-sidebar is-mobile-active" : "dashboard-panel novel-sidebar"}>
+        <aside className="dashboard-panel novel-sidebar">
           <div className="dashboard-panel-head">
             <div>
               <span>{isZh ? "工作流" : "Workflow"}</span>
@@ -893,7 +907,7 @@ function NovelWorkbenchContent() {
           </div>
         </aside>
 
-        <section className={mobilePanel === "editor" ? "dashboard-panel novel-editor-panel novel-chat-panel is-mobile-active" : "dashboard-panel novel-editor-panel novel-chat-panel"}>
+        <section className={mobilePanel === "chat" ? "dashboard-panel novel-editor-panel novel-chat-panel is-mobile-active" : "dashboard-panel novel-editor-panel novel-chat-panel"}>
           <div className="dashboard-panel-head">
             <div>
               <span>{isZh ? "创作对话" : "Development Chat"}</span>
@@ -913,6 +927,17 @@ function NovelWorkbenchContent() {
             ))}
           </div>
 
+          <div className="novel-source-bar">
+            <button className="secondary-button" type="button" onClick={() => sourceInputRef.current?.click()} disabled={uploadingSource}>
+              <Upload size={16} /> {uploadingSource ? (isZh ? "读取中" : "Reading") : (isZh ? "上传创作资料" : "Upload sources")}
+            </button>
+            <div className="novel-source-files">
+              {sourceFiles.map((file) => <span key={file.id}><FileText size={13} />{file.name}</span>)}
+              {!sourceFiles.length ? <small>{isZh ? "支持剧本、背景设定、角色资料与参考文档" : "Scripts, bibles, character notes, and references"}</small> : null}
+            </div>
+            <input ref={sourceInputRef} hidden multiple type="file" accept=".txt,.md,.csv,.html,.htm,.pdf,.doc,.docx,.xlsx" onChange={uploadCreativeSources} />
+          </div>
+
           <div className="novel-chat-composer">
             <textarea
               value={chatInput}
@@ -929,23 +954,18 @@ function NovelWorkbenchContent() {
               <button className="secondary-button" type="button" onClick={() => void sendChatMessage()} disabled={!chatInput.trim() || chatGenerating}>
                 <Send size={16} /> {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
               </button>
-              <button className="primary-button" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(activeBlockedReason) || (isChapterTask && activeChapter?.status === "locked")} title={activeBlockedReason || undefined}>
+              <button className="primary-button" type="button" onClick={() => void generate(effectiveTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(activeBlockedReason) || (isChapterTask && activeChapter?.status === "locked")} title={activeBlockedReason || undefined}>
                 <Sparkles size={16} /> {isZh ? "生成/更新当前阶段" : "Generate active stage"}
               </button>
-              {nextTask ? (
-                <button className="secondary-button" type="button" onClick={() => setActiveTask(nextTask)}>
-                  {isZh ? "进入下一阶段" : "Next stage"} · {getStepShort(nextTask, isZh)}
-                </button>
-              ) : null}
             </div>
           </div>
         </section>
 
-        <aside className={mobilePanel === "ai" ? "dashboard-panel novel-ai-panel is-mobile-active" : "dashboard-panel novel-ai-panel"}>
+        <aside className={mobilePanel === "content" ? "dashboard-panel novel-ai-panel is-mobile-active" : "dashboard-panel novel-ai-panel"}>
           <div className="dashboard-panel-head">
             <div>
               <span>{completedCount}/{steps.length} {isZh ? "已完成" : "complete"}</span>
-              <h2>{isZh ? "阶段预览" : "Stage preview"}</h2>
+              <h2>{isZh ? "Markdown 创作稿" : "Markdown draft"}</h2>
             </div>
             <div className="novel-editor-actions">
               {isChapterTask && activeChapter ? (
@@ -957,6 +977,22 @@ function NovelWorkbenchContent() {
             </div>
           </div>
 
+          <div className="novel-document-toolbar">
+            <div className="novel-document-tabs" role="tablist" aria-label={isZh ? "创作阶段" : "Creation stages"}>
+              {novelActionTasks.map((task) => (
+                <button className={activeTask === task ? "active" : ""} type="button" role="tab" key={task} onClick={() => setActiveTask(task)}>
+                  {getStepLabel(task, isZh)}
+                </button>
+              ))}
+            </div>
+            {activeTask === "novel_chapter_draft" ? (
+              <div className="novel-content-type" aria-label={isZh ? "正文类型" : "Content type"}>
+                <button className={contentType === "novel" ? "active" : ""} type="button" onClick={() => setContentType("novel")}>{isZh ? "小说" : "Novel"}</button>
+                <button className={contentType === "script" ? "active" : ""} type="button" onClick={() => setContentType("script")}>{isZh ? "剧本" : "Script"}</button>
+              </div>
+            ) : null}
+          </div>
+
           <textarea
             className="novel-main-editor novel-stage-preview"
             value={activeContent}
@@ -964,7 +1000,7 @@ function NovelWorkbenchContent() {
             placeholder={isZh ? "当前阶段生成内容会出现在这里。你可以手动编辑，也可以在中间对话框提出修改意见后重新生成。" : "The active stage output appears here. Edit manually, or request changes in chat and regenerate."}
           />
 
-          {isChapterTask ? (
+          {isChapterTask && contentType === "novel" ? (
             <div className="novel-chapter-strip">
               <button className="novel-add-chapter-card" type="button" onClick={addChapter}>
                 <Plus size={16} />
@@ -1002,53 +1038,7 @@ function NovelWorkbenchContent() {
             </div>
           ) : null}
 
-          <div className="novel-current-action">
-            <span>{isZh ? "当前步骤" : "Current step"}</span>
-            <strong>{getActionNumber(activeTask)} · {getStepLabel(activeTask, isZh)}</strong>
-            <p>{activeBlockedReason || (isZh ? "会综合左侧阶段、对话记录、当前预览内容和项目上下文生成。" : "Uses the active stage, chat notes, current preview, and project context.")}</p>
-            <button className="primary-button full" type="button" onClick={() => void generate(activeTask)} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(activeBlockedReason) || (isChapterTask && activeChapter?.status === "locked")} title={activeBlockedReason || undefined}>
-              <Sparkles size={16} />
-              {generating === activeTask ? (isZh ? "生成中" : "Generating") : getStepShort(activeTask, isZh)}
-            </button>
-          </div>
-
-          <details className="novel-tool-section">
-            <summary>{isZh ? "完整 AI 生成序列" : "Full AI generation sequence"}</summary>
-            <div className="novel-action-sequence">
-              {secondaryTasks.map((task) => {
-                const blocked = getNovelTaskBlockedReason(task, project, activeChapter, revisionInstruction, isZh);
-                const done = getStepContent(project, task).trim() || (task === "novel_chapter_draft" && activeChapter?.draft.trim()) || (task === "novel_chapter_outline" && activeChapter?.outline.trim());
-                return (
-                  <button
-                    className="novel-action-button"
-                    type="button"
-                    key={task}
-                    onClick={() => void generate(task)}
-                    disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(blocked)}
-                    title={blocked || undefined}
-                  >
-                    <span>{getActionNumber(task)}</span>
-                    <strong>{getStepShort(task, isZh)}</strong>
-                    <small>{blocked || (done ? (isZh ? "已生成，可重新生成" : "Done, can regenerate") : (isZh ? "可生成" : "Ready"))}</small>
-                  </button>
-                );
-              })}
-            </div>
-          </details>
-
-          <details className="novel-tool-section" open={isChapterTask}>
-            <summary>{isZh ? "按指令修改章节" : "Revise Chapter"}</summary>
-            <textarea
-              value={revisionInstruction}
-              onChange={(event) => setRevisionInstruction(event.target.value)}
-              placeholder={isZh ? "例如：增强狼人男主的危险感，结尾改成身份暴露。" : "Example: make the Alpha lead more dangerous and end with identity exposure."}
-            />
-            <button className="primary-button full" type="button" onClick={() => void generate("novel_revision")} disabled={Boolean(generating) || Boolean(aiDisabledReason) || Boolean(getNovelTaskBlockedReason("novel_revision", project, activeChapter, revisionInstruction, isZh)) || activeChapter?.status === "locked"} title={getNovelTaskBlockedReason("novel_revision", project, activeChapter, revisionInstruction, isZh) || undefined}>
-              <RefreshCcw size={16} /> {isZh ? "应用修改" : "Apply Revision"}
-            </button>
-          </details>
-
-          <details className="novel-tool-section">
+          <details className="novel-tool-section novel-universe-tool">
             <summary>{isZh ? "连续性与 Universe" : "Continuity & Universe"}</summary>
             <p>{latestChapter?.continuityNotes || project.novelContinuityNotes || (isZh ? "暂无连续性备注。" : "No continuity notes yet.")}</p>
             {project.universeId ? (
@@ -1073,13 +1063,14 @@ function NovelWorkbenchContent() {
             </button>
           </details>
 
-          <details className="novel-tool-section">
-            <summary>{isZh ? "小说转剧本" : "Novel to Script"}</summary>
-            <p>{isZh ? "把当前 Novel Brief、Bible、角色和章节沉淀为剧本创作项目输入。" : "Create a script project from this novel's brief, bible, characters, and chapters."}</p>
-            <button className="primary-button full" type="button" onClick={() => void createScriptProjectFromNovel()} disabled={!session}>
-              <BookOpen size={16} /> {isZh ? "创建剧本项目" : "Create script project"}
-            </button>
-          </details>
+          <div className="novel-handoff-bar">
+            <div>
+              <strong>{isZh ? "进入制作" : "Continue production"}</strong>
+              <span>{isZh ? "当前三件套、正文和 Universe 会自动随项目传递。" : "The creative bible, manuscript, and Universe travel with the project."}</span>
+            </div>
+            <button className="secondary-button" type="button" onClick={() => void openDownstreamWorkspace("art")}><Palette size={16} />{isZh ? "进入美术工作台" : "Art workbench"}</button>
+            <button className="primary-button" type="button" onClick={() => void openDownstreamWorkspace("production")}><Clapperboard size={16} />{isZh ? "进入分镜/视频" : "Storyboard / video"}</button>
+          </div>
         </aside>
       </section>
       {settingsModalOpen ? (

@@ -18,6 +18,7 @@ import {
   updateProductionShot,
 } from "@/lib/production/state";
 import type { ProductionMode, ProductionProjectState, ProductionShot } from "@/lib/production/types";
+import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -59,6 +60,40 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     const projectId = params.get("projectId");
     const mode = params.get("mode") as ProductionMode | null;
     const saved = localStorage.getItem("kiikis_production_workbench_state");
+    const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(projectId) : null;
+    if (handoff) {
+      setState(createEmptyProductionState({
+        projectId: handoff.sourceProjectId,
+        id: handoff.sourceProjectId,
+        title: handoff.title,
+        mode: mode || "planning",
+        universeId: handoff.universeId,
+        sourceSummary: handoff.manuscript,
+        storyBrief: {
+          logline: "",
+          targetPlatform: "TikTok / Reels / Shorts",
+          targetAudience: "overseas short drama viewers",
+          storySummary: [handoff.projectBackground, handoff.worldAndOutline].filter(Boolean).join("\n\n"),
+          notes: handoff.characterBible,
+        },
+        visualBible: {
+          visualStyle: "cinematic vertical short drama, realistic lighting, production-ready visual continuity",
+          colorPalette: "natural contrast, controlled highlights, production-ready skin tones",
+          cameraRules: "prioritize readable 9:16 composition, emotional close-ups, and stable continuity",
+          characterRules: handoff.characterBible || "keep face, wardrobe, age, body shape, and key props consistent",
+          sceneRules: "keep location geography, lighting direction, and important props consistent",
+          negativePrompt: "watermark, logo, unreadable text, distorted hands, inconsistent faces, low quality",
+        },
+        chatMessages: [{
+          id: createProductionId("chat"),
+          role: "assistant",
+          content: `已接收《${handoff.title}》的创作资料、正文与 Universe。请告诉我分镜节奏、画幅或镜头数量要求，我会生成可编辑分镜。`,
+          createdAt: new Date().toISOString(),
+        }],
+        shots: handoff.manuscript ? [createProductionShot({ index: 1, sceneTitle: handoff.title, description: handoff.manuscript.slice(0, 600), imagePrompt: handoff.manuscript.slice(0, 600) })] : [],
+      }));
+      return;
+    }
     if (projectId) {
       const project = readProjectsFromStorage().find((item) => item.id === projectId);
       if (project) {
