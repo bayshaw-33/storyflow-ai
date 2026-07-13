@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
-import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, Plus, Search, Send, Sparkles, Upload, Users } from "lucide-react";
+import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Send, Sparkles, Upload, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
@@ -11,6 +11,7 @@ import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyA
 import type { ArtAction } from "@/lib/art/types";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ArtWorkbench.module.css";
+import collapseStyles from "./ArtWorkbenchCollapse.module.css";
 
 export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
 
@@ -30,6 +31,7 @@ export default function ArtWorkbench() {
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
 
@@ -191,12 +193,12 @@ export default function ArtWorkbench() {
 
       {notice ? <button className={styles.notice} type="button" onClick={() => setNotice("")}>{notice}</button> : null}
 
-      <div className={styles.workspace}>
+      <div className={`${styles.workspace} ${collapseStyles.workspace} ${isAssistantCollapsed ? collapseStyles.assistantCollapsed : ""}`}>
         <section className={styles.chatPanel}>
-          <div className={styles.chatHead}><div><MessageSquareText size={18} /><strong>KK 美术助理</strong></div><button type="button" onClick={() => sourceInput.current?.click()}><FilePlus2 size={15} />管理资料</button></div>
-          <div className={styles.sourceChips}>{state.sourceFiles.slice(0, 5).map((file) => <span key={file.id}>{file.name}</span>)}{state.projectTitle ? <span>Universe · {state.projectTitle}</span> : null}{!state.sourceFiles.length && !state.projectTitle ? <small>还没有资料，上传剧本或关联项目即可开始</small> : null}</div>
-          <div className={styles.messages}>{messages.map((item) => <article key={item.id} className={item.role === "user" ? styles.userMessage : styles.assistantMessage}><p>{item.content}</p>{item.note ? <small>{item.note}</small> : null}</article>)}{busy === "chat" ? <div className={styles.thinking}><LoaderCircle className={styles.spin} size={16} />KK 正在整理美术仓库...</div> : null}</div>
-          <div className={styles.composer}>
+          <div className={`${styles.chatHead} ${collapseStyles.chatHead}`}><div><MessageSquareText size={18} /><strong>KK 美术助理</strong></div><div className={collapseStyles.chatHeadActions}><button className={collapseStyles.collapseButton} type="button" aria-expanded={!isAssistantCollapsed} aria-label={isAssistantCollapsed ? "展开 KK 美术助理" : "折叠 KK 美术助理"} title={isAssistantCollapsed ? "展开 KK 美术助理" : "折叠 KK 美术助理"} onClick={() => setIsAssistantCollapsed((collapsed) => !collapsed)}>{isAssistantCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</button><button className={collapseStyles.manageSourcesButton} type="button" onClick={() => sourceInput.current?.click()}><FilePlus2 size={15} />管理资料</button></div></div>
+          <div className={`${styles.sourceChips} ${collapseStyles.sourceChips}`}>{state.sourceFiles.slice(0, 5).map((file) => <span key={file.id}>{file.name}</span>)}{state.projectTitle ? <span>Universe · {state.projectTitle}</span> : null}{!state.sourceFiles.length && !state.projectTitle ? <small>还没有资料，上传剧本或关联项目即可开始</small> : null}</div>
+          <div className={`${styles.messages} ${collapseStyles.messages}`}>{messages.map((item) => <article key={item.id} className={item.role === "user" ? styles.userMessage : styles.assistantMessage}><p>{item.content}</p>{item.note ? <small>{item.note}</small> : null}</article>)}{busy === "chat" ? <div className={styles.thinking}><LoaderCircle className={styles.spin} size={16} />KK 正在整理美术仓库...</div> : null}</div>
+          <div className={`${styles.composer} ${collapseStyles.composer}`}>
             {pendingImage ? <div className={styles.pendingImage}><img src={pendingImage.url} alt="待发送参考" /><span>{pendingImage.name}</span><button type="button" onClick={() => setPendingImage(null)}>×</button></div> : null}
             <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void sendMessage(); }} placeholder="告诉 KK 要增加、编辑或修改什么，也可以上传剧本、图片和角色参考……" />
             <div className={styles.composerActions}><div><button type="button" onClick={() => sourceInput.current?.click()} title="上传资料"><Upload size={16} />文件</button><button type="button" onClick={() => imageInput.current?.click()} title="上传图片"><ImagePlus size={16} />图片</button><button type="button" onClick={extractAssets} disabled={busy === "extract"}><Sparkles size={16} />自动拆解</button></div><button className={styles.sendButton} type="button" onClick={sendMessage} disabled={busy === "chat"}><Send size={17} /></button></div>
