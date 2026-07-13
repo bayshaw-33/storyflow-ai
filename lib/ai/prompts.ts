@@ -28,6 +28,14 @@ export type TaskType =
   | "novel_chapter_draft"
   | "novel_revision"
   | "novel_export"
+  | "creation_development_chat"
+  | "creation_background_world"
+  | "creation_character_bible"
+  | "creation_plot_outline"
+  | "creation_novel_unit"
+  | "creation_screenplay_unit"
+  | "creation_translate_unit"
+  | "creation_localize_unit"
   | "viral_video_analysis"
   | "viral_structure_remake"
   | "viral_export_package";
@@ -52,6 +60,15 @@ export type GenerateOptions = {
   targetWordCount?: number;
   platform?: string;
   chapterNo?: number;
+  interfaceLanguage?: string;
+  contentMode?: "novel" | "screenplay";
+  translationLanguage?: string;
+  screenplayLanguage?: string;
+  dialogueLanguage?: string;
+  screenplayFormat?: "international_production" | "hollywood_spec" | "asian_production";
+  generationScope?: "unit" | "arc";
+  unitNo?: number;
+  arcTitle?: string;
 };
 
 export type ByoApiProvider = "auto" | "deepseek" | "minimax" | "custom";
@@ -116,6 +133,14 @@ export const taskNames: Record<TaskType, string> = {
   novel_chapter_draft: "小说正文",
   novel_revision: "小说章节修改",
   novel_export: "小说导出",
+  creation_development_chat: "创作对话",
+  creation_background_world: "背景及世界观",
+  creation_character_bible: "角色圣经",
+  creation_plot_outline: "剧情及大纲",
+  creation_novel_unit: "正文",
+  creation_screenplay_unit: "正文",
+  creation_translate_unit: "翻译",
+  creation_localize_unit: "本土化及雷同查验",
   viral_video_analysis: "爆款结构分析",
   viral_structure_remake: "同结构改写",
   viral_export_package: "爆款创作交付",
@@ -150,6 +175,19 @@ const novelRules = [
   "不得静默覆盖用户设定；如果需要新增设定，必须在连续性备注中标明。",
   "输出格式要稳定，使用清晰标题、编号、短段落或表格，便于前端保存版本和后续编辑。",
 ].join("\n");
+
+function creationRules(interfaceLanguage?: string) {
+  const languageRule = /^(en|en-|english)/i.test(interfaceLanguage || "")
+    ? "Respond entirely in English. The interface language controls the assistant conversation only; generated work follows the configured content languages."
+    : "全部回复必须使用简体中文。界面语言只控制助手对话，作品正文严格使用已配置的创作语言。";
+  return [
+    "你是 Kiikis 创作工作台的制片统筹型 AI 助手。",
+    languageRule,
+    "共享前期文档严格按此顺序推进：背景及世界观、角色圣经、剧情及大纲。",
+    "小说与剧本分别保存；只处理当前阶段和当前章/集，不得静默覆盖其他内容。",
+    "用户要求生成结构化内容时，只输出指定机器标记，不输出解释性开场白。",
+  ].join("\n");
+}
 
 const promptByTask: Record<TaskType, string> = {
   market_analysis: [
@@ -629,6 +667,64 @@ const promptByTask: Record<TaskType, string> = {
     "要求：这是导出包目录和内容摘要，不要新增未确认的 canon 事实。",
   ].join("\n"),
 
+  creation_development_chat: [
+    "任务：与创作者自然沟通，逐步明确当前阶段，不直接生成未请求的最终文档。",
+    "先简短复述已确认方向，再提出最多 3 个会实质影响创作的问题，最后说明可以继续聊天或生成当前阶段。",
+    "必须围绕背景及世界观、角色圣经、剧情及大纲推进，并说明本次反馈针对哪个阶段。",
+    "不要使用 Markdown 表格，不要擅自增加叙事规模或已锁定事实。",
+  ].join("\n"),
+
+  creation_background_world: [
+    "任务：生成或更新共享文档《背景及世界观》。",
+    "包含项目定位、叙事规模、目标市场、Logline、长简介、世界规则、历史前史、地理/社会边界、视觉与语言规则、locked canon 和制作红线。",
+    "只输出可直接保存的 Markdown；未确认信息标记为“待确认”，不得默认三季结构。",
+  ].join("\n"),
+
+  creation_character_bible: [
+    "任务：在《背景及世界观》约束下生成或更新《角色圣经》。",
+    "包含角色层级、信息差、Want/Need/Fear/Secret、人物弧线、关系矩阵、对白样式、视觉锚点、当前状态与风险控制。",
+    "只输出可直接保存的 Markdown；每个角色必须有明确剧情功能。",
+  ].join("\n"),
+
+  creation_plot_outline: [
+    "任务：在《背景及世界观》和《角色圣经》约束下生成或更新《剧情及大纲》。",
+    "包含全局主线、关键因果、反转与终局，并使用“## 大章 N｜标题”和“### 第 N 章/集｜标题”输出可解析结构。",
+    "大章数量和每章/集数量按用户确认内容决定，不得强制固定规模。只输出可直接保存的 Markdown。",
+  ].join("\n"),
+
+  creation_novel_unit: [
+    "任务：按当前结构生成小说正文。默认一次只生成一个章；generationScope=arc 时可生成当前大章，但每章仍须独立返回。",
+    "叙述与对白统一使用 options.sourceLanguage，承接前三份共享文档、前序锁定单元摘要和连续性备注。",
+    "单章必须严格输出：<CREATION_OUTPUT> 后接 JSON 对象，再以 </CREATION_OUTPUT> 结束。",
+    "JSON 字段仅包含 number、title、outline、content；content 是完整正文，不是梗概。大章批量时标记内改为 JSON 数组。",
+  ].join("\n"),
+
+  creation_screenplay_unit: [
+    "Task: create one structured screenplay mother model for the current episode. Never invent three separate format drafts.",
+    "Scene/action/production text uses options.screenplayLanguage. Spoken dialogue uses options.dialogueLanguage and each dialogue block includes its screenplay-language translation.",
+    "The same mother model will later render as international_production, hollywood_spec, or asian_production; screenplayFormat selects preview only.",
+    "Return only <CREATION_OUTPUT> JSON </CREATION_OUTPUT>. Fields: number, title, outline, content, screenplay.",
+    "screenplay fields: id, episodeNo, title, logline, scenes[]. Each scene has id, sceneNo, interiorExterior (INT/EXT/INT/EXT), location, timeOfDay, characters[], blocks[]. Each block has id, type, character, text, translation.",
+  ].join("\n"),
+
+  creation_translate_unit: [
+    "任务：翻译当前章/集的完整内容，从 options.sourceLanguage 翻译为 options.translationLanguage。",
+    "翻译阶段为 optional（可跳过），但一旦执行必须保留结构、段落、角色口吻、专名和剧情事实，不得摘要或本土化改写。",
+    "只输出完整译文，不输出原文复述或说明。",
+  ].join("\n"),
+
+  creation_localize_unit: [
+    "任务：对当前章/集同时完成目标市场本土化、修改留痕和雷同风险检查。优先使用已有译文；没有译文则处理原文。",
+    "严格按以下三个标记输出，三部分必须来自同一次处理并绑定同一版本：",
+    "---LOCALIZED_CONTENT---",
+    "本土化后的完整内容",
+    "---LOCALIZATION_CHANGES---",
+    "逐项说明修改前、修改后、原因和影响范围",
+    "---SIMILARITY_REPORT---",
+    "高频套路、潜在相似风险、原创化建议和可安全保留表达",
+    "不得改变核心剧情事实、角色关系、场景顺序或关键钩子。",
+  ].join("\n"),
+
   viral_video_analysis: [
     "任务：分析短视频的爆款结构。",
     "输出必须是稳定 JSON，包含 f1_hook、f2_body、f3_action、f4_result、f5_memory、raw_storyboard。",
@@ -650,7 +746,13 @@ const promptByTask: Record<TaskType, string> = {
 };
 
 export function buildPrompt(payload: GeneratePayload) {
-  const rules = payload.taskType === "song_workbench" ? songRules : isNovelTask(payload.taskType) ? novelRules : commonRules;
+  const rules = payload.taskType === "song_workbench"
+    ? songRules
+    : isCreationTask(payload.taskType)
+      ? creationRules(payload.options?.interfaceLanguage)
+      : isNovelTask(payload.taskType)
+        ? novelRules
+        : commonRules;
 
   return [
     rules,
@@ -671,6 +773,14 @@ export function buildPrompt(payload: GeneratePayload) {
 
 function isNovelTask(taskType: TaskType) {
   return taskType.startsWith("novel_");
+}
+
+function isCreationTask(taskType: TaskType) {
+  return taskType.startsWith("creation_");
+}
+
+export function isTaskType(value: unknown): value is TaskType {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(taskNames, value);
 }
 
 function buildContext(payload: GeneratePayload) {
@@ -719,5 +829,14 @@ function buildOptions(payload: GeneratePayload) {
     targetWordCount: payload.options?.targetWordCount || 1800,
     platform: payload.options?.platform || "",
     chapterNo: payload.options?.chapterNo || 1,
+    interfaceLanguage: payload.options?.interfaceLanguage || "zh-CN",
+    contentMode: payload.options?.contentMode || "novel",
+    translationLanguage: payload.options?.translationLanguage || "",
+    screenplayLanguage: payload.options?.screenplayLanguage || payload.options?.sourceLanguage || "中文",
+    dialogueLanguage: payload.options?.dialogueLanguage || payload.options?.sourceLanguage || "中文",
+    screenplayFormat: payload.options?.screenplayFormat || "international_production",
+    generationScope: payload.options?.generationScope || "unit",
+    unitNo: payload.options?.unitNo || payload.options?.chapterNo || 1,
+    arcTitle: payload.options?.arcTitle || "",
   };
 }

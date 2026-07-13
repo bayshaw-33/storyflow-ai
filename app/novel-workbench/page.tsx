@@ -108,6 +108,14 @@ const stepCopy: Record<TaskType, { zh: string; en: string; shortZh: string; shor
   novel_chapter_draft: { zh: "小说正文", en: "Manuscript", shortZh: "生成正文", shortEn: "Generate manuscript" },
   novel_revision: { zh: "章节修改", en: "Chapter Revision", shortZh: "修改章节", shortEn: "Revise chapter" },
   novel_export: { zh: "小说导出", en: "Novel Export", shortZh: "生成导出包", shortEn: "Export package" },
+  creation_development_chat: { zh: "创作对话", en: "Creation Chat", shortZh: "对话", shortEn: "Chat" },
+  creation_background_world: { zh: "背景及世界观", en: "Background & World", shortZh: "背景", shortEn: "Background" },
+  creation_character_bible: { zh: "角色圣经", en: "Character Bible", shortZh: "角色", shortEn: "Characters" },
+  creation_plot_outline: { zh: "剧情及大纲", en: "Plot & Outline", shortZh: "大纲", shortEn: "Outline" },
+  creation_novel_unit: { zh: "正文", en: "Manuscript", shortZh: "正文", shortEn: "Write" },
+  creation_screenplay_unit: { zh: "正文", en: "Screenplay", shortZh: "剧本", shortEn: "Write" },
+  creation_translate_unit: { zh: "翻译", en: "Translation", shortZh: "翻译", shortEn: "Translate" },
+  creation_localize_unit: { zh: "本土化及雷同查验", en: "Localization & Similarity", shortZh: "本土化", shortEn: "Localize" },
 };
 
 function createFreshNovelProject() {
