@@ -1,4 +1,5 @@
 import type { DramaProject } from "./projects.ts";
+import { assembleNovel, assembleScreenplay } from "./creation/assembly.ts";
 
 export const CREATIVE_HANDOFF_STORAGE_KEY = "kiikis_creative_handoff_v1";
 
@@ -24,8 +25,16 @@ export function buildCreativeHandoffPackage(
   project: DramaProject,
   contentType: CreativeContentType,
 ): CreativeHandoffPackage {
-  const novelManuscript = project.novelChapters?.map((chapter) => chapter.draft).filter(Boolean).join("\n\n") || project.novelChapterDraft || "";
-  const scriptManuscript = project.finalScript || project.chineseScript || project.existingScript || project.importedScript || "";
+  const workspace = project.creationWorkspace;
+  const novelManuscript = workspace?.novel.units.length
+    ? assembleNovel(workspace, "original", project.title).markdown
+    : project.novelChapters?.map((chapter) => chapter.draft).filter(Boolean).join("\n\n") || project.novelChapterDraft || "";
+  const scriptManuscript = workspace?.screenplay.units.length
+    ? assembleScreenplay(workspace, "original", workspace.settings.screenplayFormat, project.title).markdown
+    : project.finalScript || project.chineseScript || project.existingScript || project.importedScript || "";
+  const activeTrack = workspace?.[contentType === "script" ? "screenplay" : "novel"];
+  const translation = activeTrack?.units.map((unit) => unit.translation).filter(Boolean).join("\n\n") || project.translation || "";
+  const localization = activeTrack?.units.map((unit) => unit.localizedContent).filter(Boolean).join("\n\n") || project.localization || "";
   return {
     version: 1,
     sourceProjectId: project.id,
@@ -33,12 +42,12 @@ export function buildCreativeHandoffPackage(
     title: project.title,
     contentType,
     universeId: project.universeId || null,
-    projectBackground: project.novelBrief || project.brief || project.idea || "",
-    worldAndOutline: project.novelBible || project.outline || "",
-    characterBible: project.novelCharacters || project.characters || "",
+    projectBackground: workspace?.documents.backgroundWorld.content || project.novelBrief || project.brief || project.idea || "",
+    worldAndOutline: workspace?.documents.plotOutline.content || project.novelBible || project.outline || "",
+    characterBible: workspace?.documents.characterBible.content || project.novelCharacters || project.characters || "",
     manuscript: contentType === "script" ? scriptManuscript : novelManuscript,
-    translation: project.translation || "",
-    localization: project.localization || "",
+    translation,
+    localization,
     createdAt: new Date().toISOString(),
   };
 }

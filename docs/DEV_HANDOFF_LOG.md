@@ -49,6 +49,61 @@ docs/CODEX_HANDOFF_SOP.md
 - 不要恢复 Qwen Image / Imagen 4，也不要把纯文生图模型显示在有参考图的编辑任务中。
 - 开工前确认本条记录所在提交已在 Vercel Production 为 `READY`。
 
+---
+
+## 2026-07-13 - Codex / 创作工作台 V2 七阶段升级
+
+### 本次目标
+
+- 将 `/novel-workbench` 内部升级为小说/剧本共用的“创作工作台”，旧剧本工作台保持不变。
+- 支持逐章/逐集创作、三种剧本格式、多语言、本土化留痕，以及 Markdown、DOCX 和 ZIP 交付。
+
+### 已完成
+
+- 建立 V2 创作状态：背景及世界观、角色圣经、剧情及大纲，小说与剧本独立单元及版本历史。
+- 旧小说字段自动迁移到 V2，旧字段继续保留，锁定单元禁止 AI 覆盖。
+- 同一结构化剧本母版支持 `international_production`、`hollywood_spec`、`asian_production` 三种渲染。
+- AI 新增七阶段任务、界面语言规则、作品语言规则、逐章/逐集机器标记和本土化三段输出。
+- 新增确定性文档合并器；只提供 Markdown、真实 DOCX 和完整 ZIP，不提供 PDF。
+- `/novel-workbench` 改为左侧 38% 对话、右侧 62% 七阶段文档，保留资料上传、Universe、美术和分镜/视频交接。
+- 翻译可跳过；本土化可切换完整内容、修改记录和雷同查验报告。
+
+### 主要修改文件
+
+- `app/novel-workbench/page.tsx`
+- `components/creation/CreationWorkbench.tsx`
+- `app/globals.css`
+- `lib/creation/*`
+- `lib/ai/prompts.ts`
+- `lib/ai/generate.ts`
+- `lib/creative-handoff.ts`
+- `package.json`
+- `package-lock.json`
+- `tests/creation-*.test.mjs`
+
+### 验证状态
+
+- 底层状态、剧本格式、解析、AI 提示和文档导出模块在 UI 开发前已通过聚焦测试及 TypeScript 检查。
+- 按项目负责人本轮明确要求，完成 UI 与下游交接后未再运行测试、production build、浏览器验收或线上回归，以节省额度。
+
+### 风险 / 后续
+
+- 下一位开发者开工后应优先补跑 TypeScript、production build，并检查桌面 1440x900 与移动 390x844。
+- 需要用真实账号分别试跑小说单章、剧本单集、大章批量、翻译、本土化、DOCX/ZIP 下载和两个下游入口。
+- 剧本 Markdown 手工编辑目前作为编辑稿保存；结构化母版仍是三种格式重渲染的权威来源，后续可增加“从编辑稿更新母版”的显式动作。
+
+### Git 信息
+
+- branch：`codex/creation-workbench-v2`
+- commit / push：见本次最终提交与远端 `main`
+
+### 给下一位 Codex
+
+- 开工先读本条、`docs/superpowers/specs/2026-07-13-creation-workbench-v2-design.md` 和对应 plan。
+- 不要删除旧剧本工作台；新创作工作台完成真实项目验收后，再由项目负责人决定下线时间。
+
+---
+
 ## 2026-07-13 - Codex / 美术工作台生产故障修复
 
 ### 本次目标
