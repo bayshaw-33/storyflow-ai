@@ -3,6 +3,7 @@ import type { ArtCandidateCount, ArtProviderSelection } from "../types.ts";
 export type ArtImageTask = "reference_sheet" | "variant" | "concept" | "edit";
 export type ArtImageCapability = "text-to-image" | "image-edit" | "multi-reference";
 export type ArtImageProvider = "atlas" | "flux";
+export type AtlasModelProfile = "flux-text" | "gpt-text" | "seedream-text" | "grok-edit" | "gpt-edit" | "banana-edit";
 
 export type ArtModelDescriptor = {
   id: string;
@@ -12,6 +13,7 @@ export type ArtModelDescriptor = {
   recommendedFor: ArtImageTask[];
   maxReferences: number;
   aspectRatios: string[];
+  atlasProfile?: AtlasModelProfile;
 };
 
 export type ArtImageRequest = {

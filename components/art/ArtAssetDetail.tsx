@@ -7,7 +7,7 @@ import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
-import { ART_MODEL_CATALOG } from "@/lib/art/providers/catalog";
+import { ART_MODEL_CATALOG, findDefaultArtModel } from "@/lib/art/providers/catalog";
 import styles from "./ArtAssetDetail.module.css";
 
 const STORAGE_KEY = "kiikis_art_workbench_state";
@@ -49,7 +49,17 @@ export default function ArtAssetDetail() {
 
   const selectedVariant = asset?.variants?.find((item) => item.id === selectedVariantId) || asset?.variants?.[0];
   const selectedVersion = selectedVariant?.versions.find((item) => item.id === selectedVersionId) || selectedVariant?.versions[0];
-  const availableModels = useMemo(() => ART_MODEL_CATALOG.filter((model) => selection === "smart" || model.provider === selection), [selection]);
+  const hasReference = Boolean(selectedVersion?.imageUrl?.startsWith("http"));
+  const requiredCapability = hasReference ? "image-edit" : "text-to-image";
+  const availableModels = useMemo(() => ART_MODEL_CATALOG.filter((model) =>
+    (selection === "smart" || model.provider === selection) && model.capabilities.includes(requiredCapability),
+  ), [selection, requiredCapability]);
+
+  useEffect(() => {
+    if (selection === "smart") return setModelId("");
+    const currentIsValid = availableModels.some((model) => model.id === modelId);
+    if (!currentIsValid) setModelId(findDefaultArtModel(selection, requiredCapability)?.id || availableModels[0]?.id || "");
+  }, [availableModels, modelId, requiredCapability, selection]);
 
   function persist(next: ArtAsset) {
     setAsset(next);
@@ -115,7 +125,7 @@ export default function ArtAssetDetail() {
           task: asset.kind === "character" && selectedVariant.type === "master" ? "reference_sheet" : selectedVersion ? "edit" : "concept",
           prompt: selectedVariant.prompt,
           negativePrompt: asset.negativePrompt,
-          referenceUrls: selectedVersion?.imageUrl?.startsWith("http") ? [selectedVersion.imageUrl] : [],
+          referenceUrls: hasReference && selectedVersion ? [selectedVersion.imageUrl] : [],
           aspectRatio: asset.kind === "character" && selectedVariant.type === "master" ? "4:3" : "16:9",
           count,
           selection,

@@ -1,4 +1,4 @@
-import { ART_MODEL_CATALOG, findArtModel } from "./catalog.ts";
+import { ART_MODEL_CATALOG, findArtModel, findDefaultArtModel } from "./catalog.ts";
 import type { ArtImageTask, ArtProviderRoute } from "./types.ts";
 import type { ArtProviderSelection } from "../types.ts";
 
@@ -7,18 +7,19 @@ export function resolveArtProviderRoute(input: {
   task: ArtImageTask;
   atlasAuthorized: boolean;
   modelId?: string;
+  hasReferences?: boolean;
 }): ArtProviderRoute {
   const provider = input.atlasAuthorized && input.selection !== "flux" ? "atlas" : "flux";
+  const capability = (input.hasReferences ?? ["edit", "variant"].includes(input.task)) ? "image-edit" : "text-to-image";
   const requested = input.modelId ? findArtModel(input.modelId) : null;
   if (input.modelId && !requested) throw new Error("ART_MODEL_NOT_FOUND");
   if (requested && requested.provider !== provider) throw new Error("ART_MODEL_PROVIDER_MISMATCH");
+  if (requested && !requested.capabilities.includes(capability)) throw new Error("ART_MODEL_CAPABILITY_MISMATCH");
 
   const candidates = ART_MODEL_CATALOG.filter((model) =>
-    model.provider === provider && model.recommendedFor.includes(input.task),
+    model.provider === provider && model.capabilities.includes(capability) && model.recommendedFor.includes(input.task),
   );
-  const model = requested || candidates.find((item) =>
-    input.task === "reference_sheet" ? item.capabilities.includes("multi-reference") : true,
-  ) || ART_MODEL_CATALOG.find((item) => item.provider === provider);
+  const model = requested || findDefaultArtModel(provider, capability) || candidates[0] || ART_MODEL_CATALOG.find((item) => item.provider === provider && item.capabilities.includes(capability));
   if (!model) throw new Error("ART_MODEL_NOT_AVAILABLE");
 
   return {

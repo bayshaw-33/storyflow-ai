@@ -215,7 +215,7 @@ export default function ArtWorkbench() {
   }
 
   return (
-    <main className={`${styles.page} art-workbench-page`}>
+    <main className={`${styles.page} art-workbench-shell`}>
       <header className={styles.header}>
         <div className={styles.brand}><span>KIIKIS</span><strong>{state.title}</strong><small>美术工作台</small></div>
         <div className={styles.headerActions}>
@@ -244,7 +244,7 @@ export default function ArtWorkbench() {
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={styles.assetGrid}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>

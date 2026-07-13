@@ -13,6 +13,7 @@ export async function generateArtImages(input: ArtImageRequest, context: { atlas
     task: input.task,
     atlasAuthorized: context.atlasAuthorized,
     modelId: input.modelId,
+    hasReferences: input.referenceUrls.length > 0,
   });
   if (route.provider === "flux") return generateFluxImages(input, route.model);
 
@@ -20,7 +21,7 @@ export async function generateArtImages(input: ArtImageRequest, context: { atlas
     return await generateAtlasImages(input, route.model, context.atlasApiKey);
   } catch (error) {
     if (!route.allowFallback) throw error;
-    const fallback = resolveArtProviderRoute({ selection: "flux", task: input.task, atlasAuthorized: false });
+    const fallback = resolveArtProviderRoute({ selection: "flux", task: input.task, atlasAuthorized: false, hasReferences: input.referenceUrls.length > 0 });
     return generateFluxImages({ ...input, selection: "flux", modelId: undefined }, fallback.model);
   }
 }

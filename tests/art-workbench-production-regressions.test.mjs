@@ -12,11 +12,14 @@ test("art workbench reserves the global navigation and keeps medium viewports un
     read("../components/art/ArtWorkbenchCollapse.module.css"),
   ]);
 
-  assert.match(component, /className=\{`\$\{styles\.page\} art-workbench-page`\}/);
-  assert.match(globalStyles, /\.art-workbench-page[\s\S]*padding-left:\s*var\(--workspace-nav-offset\)/);
+  assert.match(component, /className=\{`\$\{styles\.page\} art-workbench-shell`\}/);
+  assert.equal((globalStyles.match(/\.art-workbench-shell/g) || []).length, 1);
+  assert.match(globalStyles, /\.art-workbench-shell[\s\S]*padding-left:\s*var\(--workspace-nav-offset\)/);
   assert.doesNotMatch(workbenchStyles, /minmax\((?:320|340|440|520)px/);
+  assert.match(collapseStyles, /grid-template-columns:repeat\(auto-fill,minmax\(240px,320px\)\)/);
   assert.match(collapseStyles, /grid-template-columns:minmax\(0,38fr\) minmax\(0,62fr\)/);
   assert.doesNotMatch(collapseStyles, /minmax\(340px,38fr\)/);
+  assert.match(collapseStyles, /\.assistantCollapsed \.chatHead\{height:58px;flex:0 0 58px/);
 });
 
 test("setup entry resets stale local state and cloud projects are merged", async () => {

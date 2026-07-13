@@ -19,6 +19,7 @@ test("smart routing uses Atlas for identity-sensitive edits", () => {
     selection: "smart",
     task: "reference_sheet",
     atlasAuthorized: true,
+    hasReferences: true,
   });
 
   assert.equal(route.provider, "atlas");
@@ -30,13 +31,54 @@ test("manual model selection rejects a model from another provider", () => {
     selection: "flux",
     task: "concept",
     atlasAuthorized: true,
-    modelId: "atlascloud/qwen-image/edit-plus",
+    modelId: "openai/gpt-image-2/text-to-image",
   }), /ART_MODEL_PROVIDER_MISMATCH/);
 });
 
-test("catalog has a public FLUX model and an Atlas edit model", () => {
+test("Atlas catalog exposes the approved six models with both Image 2 modes", () => {
+  const atlasIds = ART_MODEL_CATALOG.filter((model) => model.provider === "atlas").map((model) => model.id);
+
+  assert.deepEqual(atlasIds, [
+    "black-forest-labs/flux-dev",
+    "openai/gpt-image-2/text-to-image",
+    "bytedance/seedream-v5.0-lite",
+    "xai/grok-imagine-image/edit",
+    "openai/gpt-image-2/edit",
+    "google/nano-banana-pro/edit-ultra",
+  ]);
   assert.equal(ART_MODEL_CATALOG.some((model) => model.provider === "flux"), true);
-  assert.equal(ART_MODEL_CATALOG.some((model) => model.provider === "atlas" && model.capabilities.includes("image-edit")), true);
+});
+
+test("Atlas defaults to FLUX Dev without a reference image", () => {
+  const route = resolveArtProviderRoute({
+    selection: "atlas",
+    task: "concept",
+    atlasAuthorized: true,
+    hasReferences: false,
+  });
+
+  assert.equal(route.model.id, "black-forest-labs/flux-dev");
+});
+
+test("Atlas defaults to GPT Image 2 Edit with a reference image", () => {
+  const route = resolveArtProviderRoute({
+    selection: "atlas",
+    task: "edit",
+    atlasAuthorized: true,
+    hasReferences: true,
+  });
+
+  assert.equal(route.model.id, "openai/gpt-image-2/edit");
+});
+
+test("manual selection rejects a model with the wrong generation capability", () => {
+  assert.throws(() => resolveArtProviderRoute({
+    selection: "atlas",
+    task: "edit",
+    atlasAuthorized: true,
+    hasReferences: true,
+    modelId: "openai/gpt-image-2/text-to-image",
+  }), /ART_MODEL_CAPABILITY_MISMATCH/);
 });
 
 test("temporary all-user Atlas access applies only when explicitly enabled", () => {

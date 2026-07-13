@@ -1,5 +1,6 @@
 .workspace{grid-template-columns:minmax(0,38fr) minmax(0,62fr)}
 .chatHeadActions{display:flex;align-items:center;gap:6px}
 .collapseButton{width:30px;height:30px;border:1px solid #303638;background:#171b1d;color:#aeb7b8;border-radius:5px;display:grid;place-items:center;padding:0}
-@media(min-width:761px){.assistantCollapsed{grid-template-columns:48px minmax(0,1fr)}.assistantCollapsed .chatHead{height:100%;flex:1;padding:0;justify-content:center}.assistantCollapsed .chatHead>div:first-child,.assistantCollapsed .manageSourcesButton,.assistantCollapsed .sourceChips,.assistantCollapsed .messages,.assistantCollapsed .composer{display:none}}
+.assetGrid{grid-template-columns:repeat(auto-fill,minmax(240px,320px));align-content:start}
+@media(min-width:761px){.assistantCollapsed{grid-template-columns:48px minmax(0,1fr)}.assistantCollapsed .chatHead{height:58px;flex:0 0 58px;padding:14px 0;justify-content:center}.assistantCollapsed .chatHead>div:first-child,.assistantCollapsed .manageSourcesButton,.assistantCollapsed .sourceChips,.assistantCollapsed .messages,.assistantCollapsed .composer{display:none}}
 @media(max-width:760px){.collapseButton{display:none}}

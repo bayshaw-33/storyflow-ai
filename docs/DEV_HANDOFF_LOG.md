@@ -12,6 +12,43 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-13 - Codex / 美术工作台布局与 Atlas 六模型修复
+
+### 本次目标
+
+- 修复美术工作台全局导航遮挡、助理折叠按钮冲突和少量资产卡过度拉伸。
+- 将 Atlas Cloud 模型菜单替换为已确认的六模型组合，并按文生图/图生图能力过滤。
+
+### 已完成
+
+- 新工作台使用独立 `art-workbench-shell` 标记，保留旧版 `.art-workbench-page`，避免旧 CSS 覆盖导航偏移。
+- KK 助理折叠后的展开按钮固定在 48px 侧栏顶部，不再与全局导航项目重叠。
+- 美术资产网格改为 240-320px 有界自动填充，少量资产不会拉伸成半屏大卡。
+- Atlas 菜单固定为：FLUX Dev、GPT Image 2 Text-to-Image、Seedream v5.0 Lite、Grok Imagine Edit、GPT Image 2 Edit、Nano Banana Pro Edit Ultra。
+- 无参考图时 Atlas 默认 `black-forest-labs/flux-dev`；有参考图时默认 `openai/gpt-image-2/edit`。
+- 模型下拉只显示当前任务可用能力；服务端拒绝手动选择的能力不匹配模型。
+- Atlas 适配器按六个模型的官方 schema 分别构造请求，并支持非批量模型按候选数量发起多次任务。
+- Atlas 轮询同时接受 `completed` 和 `succeeded`，并兼容 `outputs` / `output` 返回字段。
+
+### 验证结果
+
+- Node 测试：27/27 通过。
+- TypeScript：`tsc --noEmit --incremental false` 通过。
+- 资源校验：通过；仅有仓库既存的 `LOGO_PRIMARY` orphan 警告。
+- `git diff --check`：通过。
+- 本机 Next build 仍被 SMB 依赖中的 macOS SWC 二进制签名策略阻塞；必须以 Vercel Linux Production 构建作为最终部署验证。
+
+### 未完成 / 风险
+
+- 本次没有消耗 Atlas 额度逐个发起真实图片任务；请求模型 ID 与字段已按 Atlas 官方模型页面核对并由单元测试锁定。
+- GPT Image 2 使用 Atlas 的 `moderation: low`，没有关闭或绕过供应商审核。
+
+### 给下一位 Codex
+
+- 修改 Atlas 模型时同步更新 `lib/art/providers/catalog.ts`、`atlasProfile` payload 和 `tests/art-atlas-payload.test.mjs`。
+- 不要恢复 Qwen Image / Imagen 4，也不要把纯文生图模型显示在有参考图的编辑任务中。
+- 开工前确认本条记录所在提交已在 Vercel Production 为 `READY`。
+
 ## 2026-07-13 - Codex / 美术工作台生产故障修复
 
 ### 本次目标

@@ -12,8 +12,8 @@
 
 - Atlas catalog contains exactly the six models in the approved design.
 - Default text-to-image model is `black-forest-labs/flux-dev`.
-- Default image-edit model is `bytedance/seedream-v5.0-lite/edit`.
-- GPT Image 2 is not implemented in this change.
+- Default image-edit model is `openai/gpt-image-2/edit`.
+- GPT Image 2 text and edit variants are routed through the existing Atlas provider.
 - No provider safety option is disabled by Kiikis.
 - Existing teammate changes and unrelated files are not modified.
 
