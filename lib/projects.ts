@@ -1,4 +1,6 @@
 import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
+import { normalizeCreationWorkspace } from "./creation/state.ts";
+import type { CreationWorkspaceV2 } from "./creation/types.ts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel" | "storyboard" | "video";
@@ -175,6 +177,7 @@ export type DramaProject = {
   novelContinuityNotes: string;
   novelStyleGuide: string;
   novelChapters: NovelChapter[];
+  creationWorkspace?: CreationWorkspaceV2;
   projectGroup: string;
   universeId?: string | null;
   seasonNumber?: number | null;
@@ -492,6 +495,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     novelContinuityNotes: "",
     novelStyleGuide: "",
     novelChapters: [],
+    creationWorkspace: overrides.creationWorkspace,
     projectGroup: DEFAULT_PROJECT_GROUP,
     universeId: null,
     seasonNumber: null,
@@ -1146,6 +1150,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     novelContinuityNotes: project.novelContinuityNotes || "",
     novelStyleGuide: project.novelStyleGuide || "",
     novelChapters: Array.isArray(project.novelChapters) ? project.novelChapters.map(normalizeNovelChapter) : [],
+    creationWorkspace: normalizeCreationWorkspace(project.creationWorkspace, project),
     projectGroup: normalizeProjectGroup(project.projectGroup),
     universeId: typeof project.universeId === "string" ? project.universeId : null,
     seasonNumber: Number.isFinite(Number(project.seasonNumber)) ? Number(project.seasonNumber) : null,
