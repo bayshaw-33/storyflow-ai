@@ -56,6 +56,97 @@ docs/CODEX_HANDOFF_SOP.md
 - 第一版交接使用 `kiikis_creative_handoff_v1` localStorage；后续可迁移到 Supabase production package。
 - 开发目标工作台时保留 `sourceProjectId` 与 `universeId`，避免切断上下游追踪。
 
+## 2026-07-13 - Codex / Atlas 临时全员授权与认证邮件修复
+
+### 本次目标
+
+- 暂时允许所有已注册并登录的 Kiikis 账号使用 Atlas 图片生成。
+- 排查注册确认邮件、找回密码邮件中的链接乱码问题。
+
+### 已完成
+
+- `isAtlasAuthorizedUser` 增加服务端环境开关 `ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS`。
+- 开关仅在值严格等于 `true` 时生效；未登录请求仍会被认证层拒绝。
+- 注册时显式设置当前站点为 Supabase 邮箱确认后的回跳地址。
+- 新增 Supabase 注册确认和密码重置的 UTF-8 HTML 模板及控制台配置说明。
+- 模板将 `{{ .ConfirmationURL }}` 放进按钮链接，不直接把长 URL 输出为正文，避免邮件客户端显示编码后的乱码。
+
+### 修改文件
+
+- `lib/art/providers/router.ts`
+- `components/layout/AuthModal.tsx`
+- `tests/art-provider-routing.test.mjs`
+- `docs/supabase-auth-email-templates.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- Atlas 授权行为测试：5/5 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `pnpm run build`：通过。
+- 资源校验：通过，既有 `LOGO_PRIMARY` 孤立 token 警告未由本次引入。
+- 仓库未写入供应商密钥。
+
+### 部署 / 配置操作
+
+- 在 Vercel Production 新增 `ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS=true`，然后重新部署。
+- 在 Supabase `Authentication -> Email Templates` 粘贴 `docs/supabase-auth-email-templates.md` 中的 Confirm signup 与 Reset password 模板。
+- 在 Supabase URL Configuration 中确认 Site URL 为 `https://www.kiikis.com`，并允许该站点回跳地址。
+
+### 未完成 / 风险
+
+- 当前 Codex 没有 Supabase Management API token，不能代替管理员直接修改项目级邮件模板；publishable key 也不具备该权限。
+- 临时全员 Atlas 开关上线后，后续应改回 `ART_ATLAS_AUTHORIZED_EMAILS` / `ART_ATLAS_AUTHORIZED_USER_IDS` 白名单模式。
+- 如果粘贴模板后仍显示乱码，应检查邮件供应商的 HTML 编码和链接追踪重写设置，并发送原始邮件源码进一步定位。
+
+### 给下一位 Codex
+
+- 不要把 `ART_ATLAS_ALLOW_ALL_AUTHENTICATED_USERS` 写入前端或改成 `NEXT_PUBLIC_*`。
+- 邮件模板必须使用 `{{ .ConfirmationURL }}` 作为 href，不能拼接或 URL 二次编码。
+
+---
+
+## 2026-07-10 17:18 - Codex / 美术工作台线上环境验证
+
+### 本次目标
+
+- 验证用户已执行的 Supabase 美术工作台 migration 和 Vercel 图片服务环境变量是否可用。
+- 说明 Atlas 特殊授权账号变量的配置方式。
+
+### 已完成
+
+- 用户确认 Supabase SQL Editor 已成功执行 `docs/supabase-art-workbench-migration.sql`。
+- 使用测试账号获取 Supabase access token 后，请求线上 `https://www.kiikis.com/api/art/generate-image`。
+- FLUX 路由验证通过：`selection=flux`、`modelId=flux-2-pro` 返回 200，生成 1 张图片，并返回可用预览地址。
+- Atlas 路由验证通过：`selection=atlas`、`modelId=google/imagen4` 返回 200，生成 1 张图片，并返回 provider/model 信息。
+- 验证过程未写入任何密钥到仓库或文档。
+
+### 修改文件
+
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+
+- 线上 Supabase Auth：测试账号登录 token 获取成功。
+- 线上 FLUX 图片接口：HTTP 200，`provider=flux`，`model=flux-2-pro`，`images=1`。
+- 线上 Atlas 图片接口：HTTP 200，`provider=atlas`，`model=google/imagen4`，`images=1`。
+
+### Git 信息
+
+- branch：main
+- commit：待提交
+- push：待推送
+
+### 未完成 / 风险
+
+- Vercel 环境变量值无法也不应该在 Codex 中明文查看；本次通过真实运行时行为确认变量已生效。
+- 用户已在对话中暴露过供应商 Key，建议后续在供应商后台轮换一次，并只保存在 Vercel Server Environment Variables。
+
+### 给下一位 Codex
+
+- Atlas 授权由 `ADMIN_EMAIL`、`ART_ATLAS_AUTHORIZED_EMAILS`、`ART_ATLAS_AUTHORIZED_USER_IDS` 控制。
+- 标准用户默认走 FLUX；Atlas 只给管理员或特殊授权账号开放。
+
 ## 2026-07-10 - 美术工作台生产版首批闭环
 
 ### 本次目标
