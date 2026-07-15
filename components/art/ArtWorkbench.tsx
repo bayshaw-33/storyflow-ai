@@ -214,6 +214,11 @@ export default function ArtWorkbench() {
     patchState({ assets: [asset, ...state.assets], selectedAssetId: asset.id });
   }
 
+  function deleteAsset(assetId: string) {
+    if (!window.confirm(isZh ? "确定删除这个资产吗？" : "Delete this asset?")) return;
+    patchState({ assets: state.assets.filter((item) => item.id !== assetId), selectedAssetId: state.selectedAssetId === assetId ? "" : state.selectedAssetId });
+  }
+
   return (
     <main className={`${styles.page} art-workbench-shell`}>
       <header className={styles.header}>
@@ -244,7 +249,7 @@ export default function ArtWorkbench() {
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -260,7 +265,17 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
   return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function AssetCard({ asset }: { asset: ArtAsset }) {
+function AssetCard({ asset, onDelete, isZh }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean }) {
   const image = asset.referenceSheetUrl || asset.threeViewUrl || asset.conceptUrl;
-  return <Link className={styles.assetCard} href={`/art-workbench/assets/${encodeURIComponent(asset.id)}`}><div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div><div className={styles.assetTitle}><strong>{asset.name}</strong><span className={asset.status === "ready" ? styles.ready : ""}>{asset.status === "ready" ? "已锁定" : asset.status === "generating" ? "生成中" : asset.status === "error" ? "失败" : "草稿"}</span></div><p>{asset.role || asset.description || "尚未填写设计说明"}</p><small>{asset.kind === "character" ? `${asset.variants?.length || 0} 个剧中造型` : `${asset.variants?.length || 0} 个状态变体`}</small></Link>;
+  return (
+    <div className={styles.assetCardWrapper}>
+      <Link className={styles.assetCard} href={`/art-workbench/assets/${encodeURIComponent(asset.id)}`}>
+        <div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div>
+        <div className={styles.assetTitle}><strong>{asset.name}</strong><span className={asset.status === "ready" ? styles.ready : ""}>{asset.status === "ready" ? "已锁定" : asset.status === "generating" ? "生成中" : asset.status === "error" ? "失败" : "草稿"}</span></div>
+        <p>{asset.role || asset.description || "尚未填写设计说明"}</p>
+        <small>{asset.kind === "character" ? `${asset.variants?.length || 0} 个剧中造型` : `${asset.variants?.length || 0} 个状态变体`}</small>
+      </Link>
+      {onDelete ? <button type="button" className={styles.assetDeleteBtn} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(asset.id); }} title={isZh ? "删除" : "Delete"}>×</button> : null}
+    </div>
+  );
 }

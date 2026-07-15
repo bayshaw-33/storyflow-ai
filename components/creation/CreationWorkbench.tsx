@@ -679,8 +679,8 @@ export function CreationWorkbench() {
             </div>
             {(stage === "manuscript" || stage === "translation" || stage === "localization") ? <>
               <select aria-label={isZh ? "当前章/集" : "Current unit"} value={activeUnit?.id || ""} onChange={(event) => setActiveUnitId(event.target.value)}>{track.units.map((unit) => <option value={unit.id} key={unit.id}>{mode === "novel" ? (isZh ? `第 ${unit.number} 章` : `Chapter ${unit.number}`) : (isZh ? `第 ${unit.number} 集` : `Episode ${unit.number}`)} · {unit.title}</option>)}</select>
-              <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? "新增章/集" : "Add unit"}><Plus size={16} /></button>
-              <select aria-label={isZh ? "状态" : "Status"} value={activeUnit?.status || "draft"} onChange={(event) => updateUnit({ status: event.target.value as CreationUnit["status"] })}><option value="draft">draft</option><option value="reviewed">reviewed</option><option value="locked">locked</option></select>
+              <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? "新增章/集" : "Add unit"}><Plus size={16} /><span>{isZh ? "新增" : "Add"}</span></button>
+              <select aria-label={isZh ? "状态" : "Status"} value={activeUnit?.status || "draft"} onChange={(event) => updateUnit({ status: event.target.value as CreationUnit["status"] })}><option value="draft">{isZh ? "草稿" : "Draft"}</option><option value="reviewed">{isZh ? "已审阅" : "Reviewed"}</option><option value="locked">{isZh ? "已锁定" : "Locked"}</option></select>
               {activeUnit?.status === "locked" ? <Lock size={16} /> : null}
             </> : null}
           </div>

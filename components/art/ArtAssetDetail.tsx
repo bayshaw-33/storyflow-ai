@@ -110,22 +110,30 @@ export default function ArtAssetDetail() {
     }
   }
 
-  async function generate() {
+  async function generate(taskOverride?: string) {
     if (!asset || !selectedVariant) return;
     if (!session?.access_token) return setNotice("请先登录后再生成图片。");
     setBusy("generate");
     setNotice("");
     try {
+      // Use asset reference images (referenceSheetUrl/conceptUrl) as fallback reference
+      const assetReferenceUrl = asset.referenceSheetUrl || asset.conceptUrl || asset.threeViewUrl;
+      const referenceUrls = hasReference && selectedVersion
+        ? [selectedVersion.imageUrl]
+        : assetReferenceUrl
+          ? [assetReferenceUrl]
+          : [];
+      const task = taskOverride || (asset.kind === "character" && selectedVariant.type === "master" ? "reference_sheet" : referenceUrls.length ? "edit" : "concept");
       const response = await fetch("/api/art/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           projectId: state?.id,
           assetId: asset.id,
-          task: asset.kind === "character" && selectedVariant.type === "master" ? "reference_sheet" : selectedVersion ? "edit" : "concept",
+          task,
           prompt: selectedVariant.prompt,
           negativePrompt: asset.negativePrompt,
-          referenceUrls: hasReference && selectedVersion ? [selectedVersion.imageUrl] : [],
+          referenceUrls,
           aspectRatio: asset.kind === "character" && selectedVariant.type === "master" ? "4:3" : "16:9",
           count,
           selection,
@@ -171,7 +179,7 @@ export default function ArtAssetDetail() {
         <label><span>{asset.kind === "character" ? "身份锚点" : "母版锚点"}</span><textarea value={asset.identityAnchor || ""} onChange={(event) => patchAsset({ identityAnchor: event.target.value })} placeholder="固定身份、结构、比例、材质和不可变化的识别特征" /></label>
         <label className={styles.prompt}><span>生成提示词</span><textarea value={selectedVariant?.prompt || ""} onChange={(event) => patchVariant({ prompt: event.target.value })} /></label>
         <div className={styles.settings}><label><span>供应商</span><div className={styles.select}><select value={selection} onChange={(event) => { setSelection(event.target.value as typeof selection); setModelId(""); }}><option value="smart">智能选择</option><option value="atlas">Atlas Cloud</option><option value="flux">FLUX</option></select><ChevronDown size={14} /></div></label><label><span>模型</span><div className={styles.select}><select value={modelId} onChange={(event) => setModelId(event.target.value)}><option value="">自动模型</option>{availableModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><ChevronDown size={14} /></div></label><label><span>候选数量</span><div className={styles.select}><select value={count} onChange={(event) => setCount(Number(event.target.value) as 1 | 2 | 4)}><option value={1}>1 张</option><option value={2}>2 张</option><option value={4}>4 张</option></select><ChevronDown size={14} /></div></label><label><span>画幅</span><input value={asset.kind === "character" && selectedVariant?.type === "master" ? "4:3 · 横版" : "16:9"} readOnly /></label></div>
-        <button className={styles.generate} type="button" onClick={generate} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className={styles.spin} size={17} /> : <Sparkles size={17} />}生成新版本</button>
+        <div className={styles.generateActions}><button className={styles.generate} type="button" onClick={() => generate()} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className={styles.spin} size={17} /> : <Sparkles size={17} />}生成新版本</button>{asset.kind === "character" ? <button className={styles.threeViewBtn} type="button" onClick={() => generate("three_view")} disabled={busy === "generate"} title="基于角色母版生成三视图">三视图</button> : null}</div>
         <div className={styles.finalActions}><button type="button" onClick={approve} disabled={!selectedVersion}><LockKeyhole size={16} />设为终稿</button><button type="button" onClick={publish} disabled={!asset.approvedVersionId}><Send size={16} />发布到 Universe</button></div>
       </aside>
     </div>
