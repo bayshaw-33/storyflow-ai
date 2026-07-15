@@ -60,11 +60,13 @@ export function downloadMarkdown(document: AssembledDocument, baseFilename: stri
 
 export async function downloadDocx(document: AssembledDocument, baseFilename: string) {
   const bytes = await buildDocxBytes(document);
-  downloadBlob(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), `${baseFilename}.docx`);
+  const buffer = bytes.slice();
+  downloadBlob(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), `${baseFilename}.docx`);
 }
 
 export async function downloadDeliveryZip(items: DeliveryItem[], baseFilename: string) {
   const bytes = await buildDeliveryZipBytes(items);
-  downloadBlob(new Blob([bytes], { type: "application/zip" }), `${baseFilename}.zip`);
+  const buffer = bytes.slice();
+  downloadBlob(new Blob([buffer], { type: "application/zip" }), `${baseFilename}.zip`);
 }
 
