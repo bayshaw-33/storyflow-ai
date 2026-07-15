@@ -12,6 +12,61 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-15 - TRAE / Codex 遗留任务推送与分支同步
+
+### 本次目标
+
+- 提交并推送 Codex 未完成的"Atlas 临时全员授权与认证邮件修复"任务。
+- 将本地 main 分支同步到 origin/main（落后 16 个 commits）。
+- 同步 art-workbench-assistant-collapse 分支到远端。
+
+### 接管时发现的 Codex 遗留状态
+
+- 本地 main 落后 origin/main 16 个 commits。
+- 工作区存在 4 个已修改文件 + 3 个新文件（未提交）。
+- art-workbench-assistant-collapse 分支领先远端同名分支 5 个 commits。
+- Codex 已完成任务实现和测试，仅缺少最终 commit 和 push。
+
+### 已完成内容
+
+- 将 Codex 未提交的 7 个文件（4 修改 + 3 新增）提交到本地 main：`0675c1c`。
+- Fetch 并 merge origin/main，解决 `docs/DEV_HANDOFF_LOG.md` 冲突：`2e6599f`。
+- Push main 到 origin：`1084bcb..2e6599f`。
+- Push art-workbench-assistant-collapse 到 origin：`ceccb27..54e3dae`。
+
+### 修改文件（Codex 原创，TRAE 提交）
+
+- `components/layout/AuthModal.tsx`
+- `lib/art/providers/router.ts`
+- `tests/art-provider-routing.test.mjs`
+- `docs/DEV_HANDOFF_LOG.md`
+- `docs/supabase-auth-email-templates.md`（新文件）
+- `docs/superpowers/plans/2026-07-13-art-workbench-assistant-collapse.md`（新文件）
+- `docs/superpowers/specs/2026-07-13-art-workbench-assistant-collapse-design.md`（新文件）
+
+### 验证结果
+
+- 受 SMB 环境限制，未运行本地 build（Codex 已验证通过）。
+- 以 Vercel Production 部署作为最终验证标准。
+
+### Git 信息
+
+- branch：main
+- commit：`2e6599f`（merge）, `0675c1c`（Codex 任务）
+- push：已推送到 origin/main 和 origin/art-workbench-assistant-collapse
+
+### 未完成内容
+
+- art-workbench-assistant-collapse 分支的 spec/plan 文档已创建，但实际代码实现未完成。
+
+### 给下一位开发者
+
+- 开工前确认 Vercel Production 部署状态为 READY。
+- art-workbench-assistant-collapse 分支包含 48px 助理折叠功能的 spec/plan，可继续实现。
+
+---
+
+
 ## 2026-07-13 - Codex / 创作工作台统一升级与制作链路打通
 
 ### 本次目标
