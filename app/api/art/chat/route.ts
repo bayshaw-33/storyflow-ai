@@ -8,7 +8,7 @@ type ChatRequest = {
   message?: string;
   projectTitle?: string;
   assets?: Array<{ id: string; kind: string; name: string; role?: string; description?: string }>;
-  attachments?: Array<{ id: string; name: string; kind: string }>;
+  attachments?: Array<{ id: string; name: string; kind: string; url?: string }>;
 };
 
 export async function POST(request: Request) {
@@ -24,6 +24,8 @@ export async function POST(request: Request) {
   try {
     const user = await authenticateRequest(request);
     const saved = await resolveSavedApiConfig(user.id, "minimax").catch(() => null);
+    const attachments = (body.attachments || []).filter((attachment) => attachment.kind === "image" && attachment.url?.startsWith("http"));
+    const userContent = JSON.stringify({ projectTitle: body.projectTitle || "美术项目", message, attachments: body.attachments || [], assets: (body.assets || []).slice(0, 80) });
     const result = await callMiniMax({
       apiKeyOverride: saved?.minimaxApiKey,
       modelOverride: saved?.minimaxModel,
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
       maxTokens: 3000,
       messages: [
         { role: "system", content: systemPrompt() },
-        { role: "user", content: JSON.stringify({ projectTitle: body.projectTitle || "美术项目", message, attachments: body.attachments || [], assets: (body.assets || []).slice(0, 80) }) },
+        { role: "user", content: attachments.length ? [{ type: "text", text: userContent }, ...attachments.map((attachment) => ({ type: "image_url" as const, image_url: { url: attachment.url! } }))] : userContent },
       ],
     });
     const parsed = parseJson(result.output);

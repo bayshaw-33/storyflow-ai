@@ -30,6 +30,14 @@ const deepSeekPreferredTasks = new Set<TaskType>([
   "novel_chapter_draft",
   "novel_revision",
   "novel_export",
+  "creation_development_chat",
+  "creation_background_world",
+  "creation_character_bible",
+  "creation_plot_outline",
+  "creation_novel_unit",
+  "creation_screenplay_unit",
+  "creation_translate_unit",
+  "creation_localize_unit",
 ]);
 
 export function getProviderStatus() {
@@ -64,7 +72,7 @@ function chooseProvider(taskType: TaskType, byoApi?: ByoApiConfig): AIProviderNa
   if (byoApi?.provider === "deepseek") return "deepseek";
   if (byoApi?.provider === "minimax") return "minimax";
   if (byoApi?.provider === "custom") return "custom";
-  if (isNovelTask(taskType)) return "deepseek";
+  if (isNovelTask(taskType) || taskType.startsWith("creation_")) return "deepseek";
   const mode = getProviderMode();
   if (mode === "deepseek") return "deepseek";
   if (mode === "minimax") return "minimax";

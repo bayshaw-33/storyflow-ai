@@ -1,4 +1,6 @@
 import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
+import { normalizeCreationWorkspace } from "./creation/state.ts";
+import type { CreationWorkspaceV2 } from "./creation/types.ts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel" | "storyboard" | "video";
@@ -175,6 +177,7 @@ export type DramaProject = {
   novelContinuityNotes: string;
   novelStyleGuide: string;
   novelChapters: NovelChapter[];
+  creationWorkspace?: CreationWorkspaceV2;
   projectGroup: string;
   universeId?: string | null;
   seasonNumber?: number | null;
@@ -277,6 +280,14 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   novel_chapter_draft: "novelChapterDraft",
   novel_revision: "novelChapterDraft",
   novel_export: "deliveryPackage",
+  creation_development_chat: "novelDevelopmentNotes",
+  creation_background_world: "novelBrief",
+  creation_character_bible: "novelCharacters",
+  creation_plot_outline: "novelBible",
+  creation_novel_unit: "novelChapterDraft",
+  creation_screenplay_unit: "chineseScript",
+  creation_translate_unit: "translation",
+  creation_localize_unit: "localization",
   viral_video_analysis: "idea",
   viral_structure_remake: "idea",
   viral_export_package: "deliveryPackage",
@@ -492,6 +503,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     novelContinuityNotes: "",
     novelStyleGuide: "",
     novelChapters: [],
+    creationWorkspace: overrides.creationWorkspace,
     projectGroup: DEFAULT_PROJECT_GROUP,
     universeId: null,
     seasonNumber: null,
@@ -1146,6 +1158,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     novelContinuityNotes: project.novelContinuityNotes || "",
     novelStyleGuide: project.novelStyleGuide || "",
     novelChapters: Array.isArray(project.novelChapters) ? project.novelChapters.map(normalizeNovelChapter) : [],
+    creationWorkspace: normalizeCreationWorkspace(project.creationWorkspace, project),
     projectGroup: normalizeProjectGroup(project.projectGroup),
     universeId: typeof project.universeId === "string" ? project.universeId : null,
     seasonNumber: Number.isFinite(Number(project.seasonNumber)) ? Number(project.seasonNumber) : null,
@@ -1528,6 +1541,15 @@ const demoStepContent: Record<TaskType, string> = {
     "---CHAPTER_TITLE---\n第一章 退婚夜\n---CHAPTER_OUTLINE---\n按修改指令重写后的章节大纲。\n---CHAPTER_DRAFT---\n这是按指令重写后的完整章节示例。\n---ENDING_HOOK---\n新的章节钩子。\n---CONTINUITY_NOTES---\n修改后需要继续追踪的角色状态。",
   novel_export:
     "1. Novel Brief：月影契约。\n2. 小说 Bible：狼人族群、月神契约、身份夺回。\n3. 角色卡：女主、真正 Alpha、伪继承人。\n4. 可转短剧 Brief：退婚羞辱开场，三集内完成身份反击。",
+  creation_development_chat: "已确认创作方向，并提出下一步需要确认的问题。",
+  creation_background_world: "# 背景及世界观\n\n待生成。",
+  creation_character_bible: "# 角色圣经\n\n待生成。",
+  creation_plot_outline: "# 剧情及大纲\n\n待生成。",
+  creation_novel_unit: "# 第 1 章\n\n待生成。",
+  creation_screenplay_unit: "# EP01\n\n待生成。",
+  creation_translate_unit: "待翻译。",
+  creation_localize_unit:
+    "---LOCALIZED_CONTENT---\n待生成。\n---LOCALIZATION_CHANGES---\n待生成。\n---SIMILARITY_REPORT---\n待生成。",
   viral_video_analysis:
     "# 爆款视频结构拆解\n\n## F1 开场钩子\n前 3 秒建立强反差和明确利益点。\n\n## F2 主体结构\n用连续动作推进信息密度和情绪曲线。\n\n## F3 动作节点\n关键转折让观众重新评估结果。\n\n## F4 结果呈现\n结果必须可视化、可验证。\n\n## F5 记忆点\n保留一句可复用的结构公式。",
   viral_structure_remake:

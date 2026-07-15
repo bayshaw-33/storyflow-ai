@@ -1,40 +1,5 @@
 import { callRoutedProvider, type AIUsage } from "./providers";
-import { buildPrompt, taskNames, type GeneratePayload, type TaskType } from "./prompts";
-
-const taskTypes: TaskType[] = [
-  "market_analysis",
-  "script_import",
-  "brief",
-  "characters",
-  "structure_model",
-  "beat_cards",
-  "series_outline",
-  "existing_script",
-  "chinese_script",
-  "continuation_script",
-  "translation",
-  "localization",
-  "test_script",
-  "quality_evaluation",
-  "final_script",
-  "format_check",
-  "storyboard_script",
-  "final_delivery",
-  "song_workbench",
-  "song_development_chat",
-  "novel_development_chat",
-  "novel_brief",
-  "novel_bible",
-  "novel_characters",
-  "novel_volume_outline",
-  "novel_chapter_outline",
-  "novel_chapter_draft",
-  "novel_revision",
-  "novel_export",
-  "viral_video_analysis",
-  "viral_structure_remake",
-  "viral_export_package",
-];
+import { buildPrompt, isTaskType, taskNames, type GeneratePayload, type TaskType } from "./prompts";
 
 export type GenerateSuccess = {
   success: true;
@@ -59,9 +24,7 @@ export type GenerateFailure = {
 
 export type GenerateResponse = GenerateSuccess | GenerateFailure;
 
-export function isTaskType(value: unknown): value is TaskType {
-  return typeof value === "string" && taskTypes.includes(value as TaskType);
-}
+export { isTaskType } from "./prompts";
 
 export async function generateAIContent(payload: GeneratePayload): Promise<GenerateSuccess> {
   if (!isTaskType(payload.taskType)) {
@@ -74,8 +37,9 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
     messages: [
       {
         role: "system",
-        content:
-          "你是 Kiikis 的服务端生成器，只输出符合当前创作工作流的正文内容。严禁输出“好的”“以下是”等 AI 回复套话。用户给出优化要求时，必须执行实质改写，不能只做措辞微调。",
+        content: /^(en|en-|english)/i.test(payload.options?.interfaceLanguage || "")
+          ? "You are the Kiikis server-side creation assistant. Return only the requested workflow content without canned introductions."
+          : "你是 Kiikis 的服务端生成器，只输出符合当前创作工作流的正文内容。严禁输出“好的”“以下是”等 AI 回复套话。用户给出优化要求时，必须执行实质改写，不能只做措辞微调。",
       },
       {
         role: "user",

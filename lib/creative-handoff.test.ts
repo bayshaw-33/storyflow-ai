@@ -32,3 +32,39 @@ test("rejects a handoff for a different source project", () => {
   assert.equal(parseCreativeHandoff(serialized, "another-project"), null);
   assert.equal(parseCreativeHandoff(serialized, "project-1")?.manuscript, "小说正文");
 });
+
+test("prefers V2 screenplay content while preserving the legacy fallback", () => {
+  const result = buildCreativeHandoffPackage({
+    ...project,
+    creationWorkspace: {
+      version: 2,
+      documents: {
+        backgroundWorld: { content: "V2 背景", updatedAt: "2026-07-13T00:00:00.000Z" },
+        characterBible: { content: "V2 角色", updatedAt: "2026-07-13T00:00:00.000Z" },
+        plotOutline: { content: "V2 大纲", updatedAt: "2026-07-13T00:00:00.000Z" },
+      },
+      novel: { arcs: [], units: [] },
+      screenplay: {
+        arcs: [],
+        units: [{
+          id: "episode-1", number: 1, title: "第一集", outline: "", content: "V2 剧本", screenplay: null,
+          continuityNotes: "", status: "reviewed", versions: [], translation: "V2 Translation",
+          localizedContent: "V2 Localization", localizationChanges: "", similarityReport: "",
+          createdAt: "2026-07-13T00:00:00.000Z", updatedAt: "2026-07-13T00:00:00.000Z",
+        }],
+      },
+      settings: {
+        activeMode: "screenplay", interfaceLanguage: "zh", sourceLanguage: "中文", translationLanguage: "英文",
+        translationEnabled: true, screenplayLanguage: "中文", dialogueLanguage: "英文",
+        screenplayFormat: "international_production", generationScope: "unit",
+      },
+      createdAt: "2026-07-13T00:00:00.000Z",
+      updatedAt: "2026-07-13T00:00:00.000Z",
+    },
+  } as never, "script");
+
+  assert.equal(result.projectBackground, "V2 背景");
+  assert.match(result.manuscript, /V2 剧本/);
+  assert.equal(result.translation, "V2 Translation");
+  assert.equal(result.localization, "V2 Localization");
+});
