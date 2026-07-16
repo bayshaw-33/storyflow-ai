@@ -10,7 +10,7 @@ import { createEmptyActorInput, type ActorProfile, type ActorProfileInput, type 
 import { useI18n } from "@/lib/i18n/useI18n";
 
 type TeamWithRole = Team & { role?: string };
-type ActorStorageMode = "structured" | "project_snapshot";
+type ActorStorageMode = "structured" | "project_snapshot" | "unavailable";
 
 type ApiResult<T> = T & {
   success: boolean;

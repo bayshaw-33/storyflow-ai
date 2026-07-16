@@ -142,3 +142,50 @@ export type ProductionTimelineItem = {
   videoUrl?: string;
   status: ProductionShotStatus;
 };
+
+// Keyframe Slot 四层结构
+export type KeyframeSlotRole = "single" | "start" | "intermediate" | "end";
+export type KeyframeCandidateStatus = "draft" | "generating" | "ready" | "failed" | "archived";
+
+export interface KeyframeCandidate {
+  id: string;
+  keyframe_slot_id: string;
+  image_url?: string;
+  prompt: string;
+  negative_prompt: string;
+  provider?: string;
+  model?: string;
+  generation_job_id?: string;
+  status: KeyframeCandidateStatus;
+  is_selected: boolean;
+  sort_order: number;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KeyframeSlot {
+  id: string;
+  keyframe_set_id: string;
+  shot_id: string;
+  slot_role: KeyframeSlotRole;
+  timestamp_ratio: number; // 0.0 - 1.0
+  selected_candidate_id?: string;
+  label: string;
+  sort_order: number;
+  candidates: KeyframeCandidate[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KeyframeSet {
+  id: string;
+  project_id: string;
+  shot_id: string;
+  name: string;
+  sort_order: number;
+  slots: KeyframeSlot[];
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}

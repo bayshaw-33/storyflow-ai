@@ -27,7 +27,7 @@ type AssetRow = {
 const TEAM_WRITE_ROLES = new Set<TeamRole>(["owner", "admin", "editor"]);
 const TEAM_ADMIN_ROLES = new Set<TeamRole>(["owner", "admin"]);
 
-export type ActorLibraryStorageMode = "structured" | "project_snapshot";
+export type ActorLibraryStorageMode = "structured" | "project_snapshot" | "unavailable";
 
 export type ActorLibraryResult = {
   actors: ActorProfile[];
@@ -99,6 +99,14 @@ export async function listActorLibraryForUser(userId: string): Promise<ActorLibr
       storageMode: "structured",
     };
   } catch (error) {
+    if (isServiceKeyInvalid(error)) {
+      // service_role key 未配置或为占位值 —— 返回空列表 + 明确警告，而不是硬崩
+      return {
+        actors: [],
+        storageMode: "unavailable",
+        warning: "SUPABASE_SERVICE_ROLE_KEY 未配置或无效，演员库暂不可用。请在环境变量中填入真实的 service_role key。",
+      };
+    }
     if (isActorSchemaUnavailable(error)) {
       return {
         actors: await listFallbackActors(userId),
@@ -182,6 +190,7 @@ export async function createActorForUser(userId: string, input: ActorProfileInpu
     status: "draft",
     created_at: now,
     updated_at: now,
+    metadata: normalized.metadata || undefined,
   };
 
   if (input.uploaded_avatar_data_url?.startsWith("data:image/")) {
@@ -242,6 +251,7 @@ export async function updateActorForUser(userId: string, actorId: string, input:
     base_prompt: normalized.base_prompt,
     negative_prompt: normalized.negative_prompt,
     updated_at: new Date().toISOString(),
+    metadata: normalized.metadata || undefined,
   };
 
   if (input.uploaded_avatar_data_url?.startsWith("data:image/")) {
@@ -639,6 +649,7 @@ async function createFallbackActor(userId: string, input: ActorProfileInput) {
     status: input.uploaded_avatar_data_url?.startsWith("data:image/") ? "ready" : "draft",
     created_at: now,
     updated_at: now,
+    metadata: normalized.metadata || undefined,
   });
 
   await writeFallbackActorLibrary(userId, {
@@ -676,6 +687,7 @@ async function updateFallbackActor(userId: string, actorId: string, input: Actor
     reference_sheet_url: raw.reference_sheet_url || current.reference_sheet_url,
     status: raw.status || current.status,
     updated_at: new Date().toISOString(),
+    metadata: normalized.metadata || current.metadata || undefined,
   });
 
   await writeFallbackActorLibrary(userId, {
@@ -748,12 +760,23 @@ function isActorSchemaUnavailable(error: unknown) {
     message.includes("storyflow_team_members") ||
     message.includes("storyflow_teams") ||
     message.includes("storyflow_character_appearance_variants") ||
+    message.includes("storyflow_projects") ||
     message.includes("Could not find") ||
     message.includes("PGRST205") ||
     message.includes("PGRST204") ||
     message.includes("42P01") ||
     message.includes("42703") ||
     message.includes("ACTOR_SCHEMA_UNAVAILABLE")
+  );
+}
+
+// 401 通常是 service_role key 未配置或为占位值；交给上层返回明确提示而不是"云端数据服务暂时不可用"
+function isServiceKeyInvalid(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return (
+    message.includes("SUPABASE_SERVICE_ERROR:401") ||
+    message.includes("Invalid API key") ||
+    message.includes("MISSING_SUPABASE_SERVICE_ROLE_KEY")
   );
 }
 

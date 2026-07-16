@@ -33,16 +33,23 @@ export async function POST(request: Request) {
       text: text.trim(),
       error: null,
     });
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "UNSUPPORTED_FILE_TYPE") {
+      return NextResponse.json(
+        { success: false, text: "", error: "不支持的文件格式，请上传 txt、md、json、csv、pdf、doc、docx、xlsx 或 html 文件。" },
+        { status: 422 },
+      );
+    }
     return NextResponse.json(
-      { success: false, text: "", error: "文件解析失败，请换一个 txt、md、pdf、doc、docx、xlsx、csv 或 html 文件重试。" },
+      { success: false, text: "", error: "文件解析失败，请换一个 txt、md、json、csv、pdf、doc、docx、xlsx 或 html 文件重试。" },
       { status: 500 },
     );
   }
 }
 
 async function parseFile(fileName: string, buffer: Buffer) {
-  if (fileName.endsWith(".txt") || fileName.endsWith(".md") || fileName.endsWith(".csv")) {
+  if (fileName.endsWith(".txt") || fileName.endsWith(".md") || fileName.endsWith(".csv") || fileName.endsWith(".json")) {
     return buffer.toString("utf8");
   }
 

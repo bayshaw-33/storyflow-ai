@@ -2,6 +2,8 @@
 
 import { useState, type CSSProperties } from "react";
 import type {
+  KeyframeSlot,
+  KeyframeSlotRole,
   ProductionShot,
   ProductionShotStatus,
   ProductionAspectRatio,
@@ -328,4 +330,232 @@ export function ShotActionBar({
   }
 
   return null;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Keyframe Slot 四层结构展示                                          */
+/* ------------------------------------------------------------------ */
+
+type KeyframeSlotViewerProps = {
+  slots: KeyframeSlot[];
+  onSelectCandidate?: (slotId: string, candidateId: string) => void;
+};
+
+const slotRoleConfig: Record<KeyframeSlotRole, { label: string; background: string; color: string }> = {
+  single: { label: "Single", background: "rgba(109, 231, 223, 0.16)", color: "#6de7df" },
+  start: { label: "Start", background: "rgba(96, 165, 250, 0.18)", color: "#60a5fa" },
+  intermediate: { label: "Intermediate", background: "rgba(251, 191, 36, 0.18)", color: "#fbbf24" },
+  end: { label: "End", background: "rgba(192, 132, 252, 0.18)", color: "#c084fc" },
+};
+
+const candidateStatusLabels: Record<string, string> = {
+  draft: "草稿",
+  generating: "生成中",
+  ready: "就绪",
+  failed: "失败",
+  archived: "已归档",
+};
+
+export function KeyframeSlotViewer({ slots, onSelectCandidate }: KeyframeSlotViewerProps) {
+  if (!slots || slots.length === 0) {
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          padding: "10px 12px",
+          borderRadius: 12,
+          background: "#0d0f10",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+          color: "#5b666d",
+          fontSize: 12,
+          fontWeight: 600,
+          textAlign: "center",
+        }}
+      >
+        暂无关键帧
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        display: "grid",
+        gap: 8,
+      }}
+    >
+      {slots.map((slot) => (
+        <KeyframeSlotItem key={slot.id} slot={slot} onSelectCandidate={onSelectCandidate} />
+      ))}
+    </div>
+  );
+}
+
+type KeyframeSlotItemProps = {
+  slot: KeyframeSlot;
+  onSelectCandidate?: (slotId: string, candidateId: string) => void;
+};
+
+function KeyframeSlotItem({ slot, onSelectCandidate }: KeyframeSlotItemProps) {
+  const role = slotRoleConfig[slot.slot_role] || slotRoleConfig.single;
+  const ratioPercent = Math.round((slot.timestamp_ratio || 0) * 100);
+  const sortedCandidates = [...slot.candidates].sort((a, b) => a.sort_order - b.sort_order);
+
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        background: "#0d0f10",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        padding: 10,
+        display: "grid",
+        gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        <span
+          style={{
+            padding: "2px 8px",
+            borderRadius: 999,
+            background: role.background,
+            color: role.color,
+            fontSize: 11,
+            fontWeight: 700,
+          }}
+        >
+          {role.label}
+        </span>
+        <span
+          style={{
+            padding: "2px 8px",
+            borderRadius: 6,
+            background: "rgba(255, 255, 255, 0.08)",
+            color: "#6de7df",
+            fontSize: 11,
+            fontWeight: 700,
+          }}
+        >
+          {ratioPercent}%
+        </span>
+        {slot.label ? (
+          <span style={{ color: "#cbd5da", fontSize: 12, fontWeight: 600 }}>{slot.label}</span>
+        ) : null}
+        {sortedCandidates.length > 0 ? (
+          <span style={{ color: "#5b666d", fontSize: 11, fontWeight: 600, marginLeft: "auto" }}>
+            {sortedCandidates.length} 个候选
+          </span>
+        ) : null}
+      </div>
+
+      {sortedCandidates.length > 0 ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))",
+            gap: 6,
+          }}
+        >
+          {sortedCandidates.map((candidate) => (
+            <KeyframeCandidateThumb
+              key={candidate.id}
+              candidate={candidate}
+              isSelected={Boolean(candidate.is_selected) || slot.selected_candidate_id === candidate.id}
+              onClick={
+                onSelectCandidate
+                  ? () => onSelectCandidate(slot.id, candidate.id)
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ color: "#5b666d", fontSize: 11, fontWeight: 600, padding: "4px 2px" }}>
+          该 Slot 暂无候选关键帧
+        </div>
+      )}
+    </div>
+  );
+}
+
+type KeyframeCandidateThumbProps = {
+  candidate: {
+    id: string;
+    image_url?: string;
+    status: string;
+    prompt: string;
+  };
+  isSelected: boolean;
+  onClick?: () => void;
+};
+
+function KeyframeCandidateThumb({ candidate, isSelected, onClick }: KeyframeCandidateThumbProps) {
+  const statusLabel = candidateStatusLabels[candidate.status] || candidate.status;
+  const hasImage = Boolean(candidate.image_url);
+  const borderStyle = isSelected
+    ? "2px solid #6de7df"
+    : "1px solid rgba(255, 255, 255, 0.08)";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={candidate.prompt || statusLabel}
+      style={{
+        position: "relative",
+        display: "block",
+        width: "100%",
+        aspectRatio: "9 / 16",
+        padding: 0,
+        border: borderStyle,
+        borderRadius: 8,
+        overflow: "hidden",
+        background: "#000",
+        cursor: onClick ? "pointer" : "default",
+        boxShadow: isSelected ? "0 0 0 1px rgba(109, 231, 223, 0.35)" : "none",
+        transition: "box-shadow 0.15s ease, border-color 0.15s ease",
+      }}
+    >
+      {hasImage ? (
+        <img
+          src={candidate.image_url}
+          alt={statusLabel}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#5b666d",
+            fontSize: 18,
+          }}
+        >
+          {candidate.status === "failed" ? "⚠" : candidate.status === "generating" ? "⏳" : "🖼"}
+        </div>
+      )}
+      <span
+        style={{
+          position: "absolute",
+          left: 0,
+          bottom: 0,
+          right: 0,
+          padding: "1px 4px",
+          background: "rgba(13, 15, 16, 0.78)",
+          color: isSelected ? "#6de7df" : "#aeb8be",
+          fontSize: 10,
+          fontWeight: 700,
+          textAlign: "center",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {isSelected ? "✓ " : ""}{statusLabel}
+      </span>
+    </button>
+  );
 }

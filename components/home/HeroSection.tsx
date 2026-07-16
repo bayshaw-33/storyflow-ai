@@ -31,7 +31,7 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
             </>
           ) : (
             <>
-              <span className="hero-line">Every universe</span>
+              <span className="hero-line">Every universe</span>{" "}
               <span className="hero-line">begins with one idea.</span>
             </>
           )}

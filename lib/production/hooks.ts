@@ -643,7 +643,34 @@ export function useCardDraw(
 /* ------------------------------------------------------------------ */
 
 export type GenerationJobType = "image" | "video" | "audio";
-export type GenerationJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type GenerationJobStatus =
+  | "draft" | "pending_confirm" | "queued" | "generating" | "result_ingesting"
+  | "completed" | "partial_failure" | "failed" | "cancel_requested" | "cancelled"
+  | "moderation_blocked" | "expired" | "needs_user_action" | "provider_timeout";
+
+export const GENERATION_JOB_STATUS_LABELS: Record<GenerationJobStatus, string> = {
+  draft: "草稿",
+  pending_confirm: "待确认",
+  queued: "排队中",
+  generating: "生成中",
+  result_ingesting: "结果入库",
+  completed: "已完成",
+  partial_failure: "部分失败",
+  failed: "已失败",
+  cancel_requested: "取消请求中",
+  cancelled: "已取消",
+  moderation_blocked: "审核拦截",
+  expired: "已过期",
+  needs_user_action: "需用户操作",
+  provider_timeout: "提供商超时",
+};
+
+export const ACTIVE_JOB_STATUSES: GenerationJobStatus[] = [
+  "queued",
+  "generating",
+  "result_ingesting",
+  "cancel_requested",
+];
 
 export type GenerationJob = {
   id: string;
@@ -849,11 +876,12 @@ export function useGenerationJobs(
     setLoading(true);
     setError(null);
     try {
-      const payload = await callApi({ action: "list", status: "running", limit: 50 });
-      const running = (payload.jobs || []).map(parseJob);
-      const queuedPayload = await callApi({ action: "list", status: "queued", limit: 50 });
-      const queued = (queuedPayload.jobs || []).map(parseJob);
-      return [...running, ...queued];
+      const results = await Promise.all(
+        ACTIVE_JOB_STATUSES.map((status) =>
+          callApi({ action: "list", status, limit: 50 }),
+        ),
+      );
+      return results.flatMap((payload) => (payload.jobs || []).map(parseJob));
     } catch (err) {
       const friendly = friendlyNetworkError(err, "轮询任务失败。");
       setError(friendly.message);

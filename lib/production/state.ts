@@ -1,6 +1,10 @@
 import type { DramaProject, StoryboardEpisode, WorkflowType } from "@/lib/projects";
 import { defaultProductionProviders, parseShotDurationSeconds } from "./providers";
 import type {
+  KeyframeCandidate,
+  KeyframeSet,
+  KeyframeSlot,
+  KeyframeSlotRole,
   ProductionAspectRatio,
   ProductionChatMessage,
   ProductionHistoryItem,
@@ -807,4 +811,96 @@ ${clipEntries}
     </event>
   </library>
 </fcpxml>`;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Keyframe Slot 四层结构管理                                          */
+/* Shot → KeyframeSet → KeyframeSlot → KeyframeCandidate              */
+/* ------------------------------------------------------------------ */
+
+export function createKeyframeSet(shotId: string, projectId: string): KeyframeSet {
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const slot = createKeyframeSlot(id, shotId, "single", 0);
+  return {
+    id,
+    project_id: projectId,
+    shot_id: shotId,
+    name: "",
+    sort_order: 0,
+    slots: [slot],
+    metadata: {},
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export function createKeyframeSlot(
+  setId: string,
+  shotId: string,
+  role: KeyframeSlotRole,
+  ratio: number,
+): KeyframeSlot {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    keyframe_set_id: setId,
+    shot_id: shotId,
+    slot_role: role,
+    timestamp_ratio: clampRatio(ratio),
+    selected_candidate_id: undefined,
+    label: "",
+    sort_order: 0,
+    candidates: [],
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export function createKeyframeCandidate(slotId: string): KeyframeCandidate {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    keyframe_slot_id: slotId,
+    image_url: undefined,
+    prompt: "",
+    negative_prompt: "",
+    provider: undefined,
+    model: undefined,
+    generation_job_id: undefined,
+    status: "draft",
+    is_selected: false,
+    sort_order: 0,
+    metadata: {},
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export function selectCandidate(slot: KeyframeSlot, candidateId: string): KeyframeSlot {
+  const target = slot.candidates.find((c) => c.id === candidateId);
+  if (!target) return slot;
+  const now = new Date().toISOString();
+  return {
+    ...slot,
+    selected_candidate_id: candidateId,
+    candidates: slot.candidates.map((c) => ({
+      ...c,
+      is_selected: c.id === candidateId,
+      updated_at: now,
+    })),
+    updated_at: now,
+  };
+}
+
+export function keyframeSetToJSON(set: KeyframeSet): string {
+  return JSON.stringify(set, null, 2);
+}
+
+function clampRatio(ratio: number): number {
+  if (!Number.isFinite(ratio)) return 0;
+  if (ratio < 0) return 0;
+  if (ratio > 1) return 1;
+  return Math.round(ratio * 10000) / 10000;
 }

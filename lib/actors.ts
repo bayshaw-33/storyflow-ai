@@ -47,6 +47,14 @@ export type ActorProfile = {
   avatar_url?: string | null;
   reference_sheet_url?: string | null;
   storage_source?: "structured" | "project_snapshot";
+  metadata?: {
+    identity_passport?: {
+      identity_core_prompt?: string;
+      current_appearance_prompt?: string;
+      scene_override_prompt?: string;
+    };
+    [key: string]: unknown;
+  };
 };
 
 export type ActorProfileInput = {
@@ -65,6 +73,14 @@ export type ActorProfileInput = {
   base_prompt?: string;
   negative_prompt?: string;
   uploaded_avatar_data_url?: string;
+  metadata?: {
+    identity_passport?: {
+      identity_core_prompt?: string;
+      current_appearance_prompt?: string;
+      scene_override_prompt?: string;
+    };
+    [key: string]: unknown;
+  };
 };
 
 export type CharacterAppearanceVariant = {
@@ -136,6 +152,7 @@ export function normalizeActorInput(input: ActorProfileInput) {
     playable_roles: normalizeTags(input.playable_roles),
     base_prompt: cleanText(input.base_prompt),
     negative_prompt: cleanText(input.negative_prompt),
+    metadata: input.metadata ?? undefined,
   };
 }
 
@@ -206,6 +223,13 @@ export function createEmptyActorInput(): Required<Omit<ActorProfileInput, "uploa
     playable_roles: [],
     base_prompt: "",
     negative_prompt: "",
+    metadata: {
+      identity_passport: {
+        identity_core_prompt: "",
+        current_appearance_prompt: "",
+        scene_override_prompt: "",
+      },
+    },
   };
 }
 
