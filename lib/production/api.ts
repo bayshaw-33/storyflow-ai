@@ -316,7 +316,7 @@ export async function updateShotStatus(
     video_url?: string;
     image_task_id?: string;
     video_task_id?: string;
-    error?: string;
+    error?: string | null;
   },
 ): Promise<void> {
   const dbPatch: Record<string, unknown> = {
