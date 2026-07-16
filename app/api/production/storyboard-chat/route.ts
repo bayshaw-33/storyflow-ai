@@ -58,11 +58,12 @@ export async function POST(request: Request) {
     });
 
     // Parse shots from AI response
-    const shots = parseShotsFromReply(result.text);
+    const reply = result.output;
+    const shots = parseShotsFromReply(reply);
 
     return NextResponse.json({
       success: true,
-      reply: result.text,
+      reply,
       shots,
     });
   } catch (error) {
