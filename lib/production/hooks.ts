@@ -443,6 +443,161 @@ export function useSourceFileUpload(
 
 
 /* ------------------------------------------------------------------ */
+/* useCardDraw (抽卡 system)                                           */
+/* ------------------------------------------------------------------ */
+
+export type DrawnCard = {
+  assetId: string;
+  kind: string;
+  name: string;
+  description: string;
+  narrativeRole: string;
+  status: string;
+  rarity: string;
+  imageUrl: string | null;
+  drawnAt: string;
+};
+
+export type CardDrawRecord = {
+  id: string;
+  drawType: string;
+  poolCount: number;
+  drawnCount: number;
+  drawnCards: DrawnCard[];
+  label: string;
+  createdAt: string;
+};
+
+type CardDrawApiResponse = {
+  success: boolean;
+  drawId?: string;
+  cards?: DrawnCard[];
+  poolCount?: number;
+  draws?: Array<Record<string, unknown>>;
+  deletedCount?: number;
+  error?: string;
+};
+
+function parseDrawRecord(raw: Record<string, unknown>): CardDrawRecord {
+  return {
+    id: String(raw.id || ""),
+    drawType: String(raw.draw_type || "mixed"),
+    poolCount: Number(raw.pool_count || 0),
+    drawnCount: Number(raw.drawn_count || 0),
+    drawnCards: Array.isArray(raw.drawn_cards) ? (raw.drawn_cards as DrawnCard[]) : [],
+    label: raw.label ? String(raw.label) : "",
+    createdAt: String(raw.created_at || ""),
+  };
+}
+
+export function useCardDraw(
+  session: ProductionSession,
+  projectId: string,
+): {
+  draw: (drawType: "character" | "scene" | "prop" | "mixed", count?: number) => Promise<{ cards: DrawnCard[]; poolCount: number; drawId: string }>;
+  history: (limit?: number) => Promise<CardDrawRecord[]>;
+  clearHistory: () => Promise<number>;
+  loading: boolean;
+  error: string | null;
+} {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const draw = useCallback(
+    async (
+      drawType: "character" | "scene" | "prop" | "mixed",
+      count?: number,
+    ): Promise<{ cards: DrawnCard[]; poolCount: number; drawId: string }> => {
+      const token = getAccessToken(session);
+      setLoading(true);
+      setError(null);
+      const { controller, cancel } = createTimeoutController(30_000);
+      try {
+        const response = await fetch("/api/production/draw-cards", {
+          method: "POST",
+          headers: buildHeaders(token),
+          signal: controller.signal,
+          body: JSON.stringify({ action: "draw", drawType, count: count || 3, projectId }),
+        });
+        const payload = (await parseJsonSafely(response)) as CardDrawApiResponse | null;
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.error || "抽卡失败，请稍后再试。");
+        }
+        return {
+          cards: payload.cards || [],
+          poolCount: payload.poolCount || 0,
+          drawId: payload.drawId || "",
+        };
+      } catch (err) {
+        const friendly = friendlyNetworkError(err, "抽卡失败，请稍后再试。");
+        setError(friendly.message);
+        throw friendly;
+      } finally {
+        cancel();
+        setLoading(false);
+      }
+    },
+    [session, projectId],
+  );
+
+  const history = useCallback(async (limit?: number): Promise<CardDrawRecord[]> => {
+    const token = getAccessToken(session);
+    setLoading(true);
+    setError(null);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const response = await fetch("/api/production/draw-cards", {
+        method: "POST",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+        body: JSON.stringify({ action: "history", limit: limit || 20 }),
+      });
+      const payload = (await parseJsonSafely(response)) as CardDrawApiResponse | null;
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "查询抽卡历史失败。");
+      }
+      return (payload.draws || []).map(parseDrawRecord);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "查询抽卡历史失败。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      cancel();
+      setLoading(false);
+    }
+  }, [session, projectId]);
+
+  const clearHistory = useCallback(async (): Promise<number> => {
+    const token = getAccessToken(session);
+    setLoading(true);
+    setError(null);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const response = await fetch("/api/production/draw-cards", {
+        method: "POST",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+        body: JSON.stringify({ action: "clear" }),
+      });
+      const payload = (await parseJsonSafely(response)) as CardDrawApiResponse | null;
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "清除抽卡历史失败。");
+      }
+      return payload.deletedCount || 0;
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "清除抽卡历史失败。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      cancel();
+      setLoading(false);
+    }
+  }, [session, projectId]);
+
+  return { draw, history, clearHistory, loading, error };
+}
+
+/* ------------------------------------------------------------------ */
 /* useGenerationJobs (unified job queue)                               */
 /* ------------------------------------------------------------------ */
 
@@ -684,6 +839,7 @@ export function useProductionApi(
   video: ReturnType<typeof useShotVideo>;
   upload: ReturnType<typeof useSourceFileUpload>;
   jobs: ReturnType<typeof useGenerationJobs>;
+  cardDraw: ReturnType<typeof useCardDraw>;
 } {
   const sync = useProductionSync(session, projectId);
   const chat = useProductionChat(session, projectId);
@@ -691,6 +847,7 @@ export function useProductionApi(
   const video = useShotVideo(session, projectId);
   const upload = useSourceFileUpload(session, projectId);
   const jobs = useGenerationJobs(session, projectId);
+  const cardDraw = useCardDraw(session, projectId);
 
-  return { sync, chat, image, video, upload, jobs };
+  return { sync, chat, image, video, upload, jobs, cardDraw };
 }
