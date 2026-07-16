@@ -51,6 +51,28 @@ export default function ArtWorkbench() {
     const params = new URLSearchParams(window.location.search);
     const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
     if (handoff) {
+      // 检测 localStorage 是否已有草稿 assets，避免覆盖用户未导出的工作成果
+      let hasExistingAssets = false;
+      try {
+        const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as ArtWorkbenchState;
+          hasExistingAssets = Boolean(parsed?.assets?.length);
+        }
+      } catch { /* 解析失败视为无草稿 */ }
+      if (hasExistingAssets) {
+        const choice = window.confirm(isZh
+          ? "检测到本地已有未导出的美术资产。\n\n点击「确定」将用创作工作台的新资料覆盖现有草稿（assets 将被清空）；点击「取消」将保留现有草稿，仅继续编辑。"
+          : "Existing unsaved art assets found locally.\n\nClick OK to overwrite with new handoff materials (assets will be cleared); click Cancel to keep the existing draft.");
+        if (!choice) {
+          // 用户取消：保留草稿，从 localStorage 恢复
+          try {
+            const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+            if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
+          } catch { /* 保留当前空 state */ }
+          return () => listener?.subscription.unsubscribe();
+        }
+      }
       setState({
         ...createEmptyArtWorkbenchState(),
         projectId: handoff.sourceProjectId,
@@ -67,16 +89,46 @@ export default function ArtWorkbench() {
       return () => listener?.subscription.unsubscribe();
     }
     if (params.get("setup") === "1") {
-      localStorage.removeItem(ART_WORKBENCH_STORAGE_KEY);
-      setState(createEmptyArtWorkbenchState());
       params.delete("setup");
       window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
+      // 检测 localStorage 是否已有草稿数据，避免清空用户未导出的工作成果
+      let hasExistingDraft = false;
+      try {
+        const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as ArtWorkbenchState;
+          hasExistingDraft = Boolean(parsed?.assets?.length || parsed?.sourceText?.trim() || parsed?.sourceFiles?.length);
+        }
+      } catch { /* 解析失败视为无草稿 */ }
+      if (hasExistingDraft) {
+        // 已有草稿：提示用户选择保留或清空，默认保留
+        const choice = window.confirm(isZh
+          ? "检测到本地已有未导出的美术工作草稿。\n\n点击「确定」将清空草稿并新建空白项目；点击「取消」将保留现有草稿并继续编辑。"
+          : "Existing unsaved art workbench draft found locally.\n\nClick OK to clear it and start a new blank project; click Cancel to keep the existing draft.");
+        if (!choice) {
+          // 用户取消：保留草稿，从 localStorage 恢复
+          try {
+            const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+            if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
+          } catch { /* 保留当前空 state */ }
+          return () => listener?.subscription.unsubscribe();
+        }
+      }
+      localStorage.removeItem(ART_WORKBENCH_STORAGE_KEY);
+      setState(createEmptyArtWorkbenchState());
       return () => listener?.subscription.unsubscribe();
     }
     try {
       const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
       if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
-    } catch { /* Keep a clean local draft. */ }
+    } catch (error) {
+      // JSON 解析失败：备份损坏数据以便排查，并提示用户（不静默清空）
+      try {
+        const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+        if (saved) localStorage.setItem(`${ART_WORKBENCH_STORAGE_KEY}__corrupted_backup_${Date.now()}`, saved);
+      } catch { /* 备份失败忽略 */ }
+      setNotice(isZh ? "本地美术草稿数据损坏，已自动备份原始数据。请重新开始或联系支持。" : "Local art draft data is corrupted. Original data has been backed up.");
+    }
     return () => listener?.subscription.unsubscribe();
   }, []);
 
@@ -99,6 +151,13 @@ export default function ArtWorkbench() {
   }
 
   async function newProject() {
+    // 检测当前是否已有草稿 assets，避免误操作清空
+    if (state.assets?.length) {
+      const confirmed = window.confirm(isZh
+        ? `当前美术工作台已有 ${state.assets.length} 个资产尚未导出。\n\n新建项目将清空当前所有资产。确定继续吗？`
+        : `Current workbench has ${state.assets.length} assets not yet exported.\n\nCreating a new project will clear all current assets. Continue?`);
+      if (!confirmed) return;
+    }
     const name = window.prompt(isZh ? "请输入新项目名称" : "New project name");
     if (!name?.trim()) return;
     const next = createEmptyArtWorkbenchState();
