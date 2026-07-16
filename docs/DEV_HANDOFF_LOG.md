@@ -12,6 +12,38 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
+## 2026-07-16 - TRAE: 数据库迁移工程 — Supabase CLI 基础设施
+
+**变更类型**: 数据库基础设施
+
+**变更内容**:
+- 安装 Supabase CLI 2.109.1 并初始化 `supabase/` 目录
+- 通过 pg_dump 从生产数据库拉取基线 migration (`20260716000000_baseline.sql`)：44 表 + 67 RLS 策略 + 29 索引
+- 将 7 个历史 SQL 文件从 `docs/` 移动到 `docs/archive/supabase-legacy/`
+- 创建 `supabase/README.md` 工作流指南
+- 更新 `.env.example` 添加 `SUPABASE_PROJECT_REF` 说明 + 修正 RLS 文件路径引用
+
+**新增文件**:
+- `supabase/config.toml` — CLI 配置
+- `supabase/README.md` — 工作流指南
+- `supabase/migrations/20260716000000_baseline.sql` — 生产 schema 基线 (3236 行, 116KB)
+- `docs/archive/supabase-legacy/README.md` — 历史归档说明
+
+**移动文件** (7 个):
+- `docs/supabase-*.sql` -> `docs/archive/supabase-legacy/`
+
+**修改文件**:
+- `.env.example` — 添加 SUPABASE_PROJECT_REF 说明 + 修正路径引用
+
+**后续影响**:
+- 所有数据库 schema 变更通过 `supabase migration new` + `supabase db push` 管理
+- 不再直接在 Supabase Dashboard 执行 SQL
+- 后续 11 个子项目将通过此工作流添加新表
+
+---
+
+
+
 ## 2026-07-15 - TRAE / Codex 遗留任务推送与分支同步
 
 ### 本次目标
