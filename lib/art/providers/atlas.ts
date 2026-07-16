@@ -43,6 +43,49 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
       enable_base64_output: false,
     };
   }
+  if (profile === "seedream-edit") {
+    return {
+      model: model.id,
+      prompt: request.prompt,
+      size: seedreamSize(request.aspectRatio),
+      output_format: "jpeg",
+      images: references,
+      enable_base64_output: false,
+    };
+  }
+  if (profile === "banana-text") {
+    return {
+      model: model.id,
+      prompt: request.prompt,
+      aspect_ratio: request.aspectRatio,
+      thinking_level: "default",
+      resolution: "1k",
+      enable_base64_output: false,
+      enable_sync_mode: false,
+    };
+  }
+  if (profile === "banana-edit-lite") {
+    return {
+      model: model.id,
+      prompt: request.prompt,
+      images: references,
+      aspect_ratio: request.aspectRatio,
+      thinking_level: "default",
+      resolution: "1k",
+      enable_base64_output: false,
+      enable_sync_mode: false,
+    };
+  }
+  if (profile === "grok-text") {
+    return {
+      model: model.id,
+      prompt: request.prompt,
+      num_images: request.count,
+      aspect_ratio: request.aspectRatio,
+      resolution: "1k",
+      enable_base64_output: false,
+    };
+  }
   if (profile === "grok-edit") {
     return {
       model: model.id,
@@ -53,6 +96,37 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
       resolution: "1k",
       enable_base64_output: false,
     };
+  }
+  if (profile === "mai-text" || profile === "mai-edit") {
+    const { width, height } = maiDimensions(request.aspectRatio);
+    return compact({
+      model: model.id,
+      prompt: request.prompt,
+      width,
+      height,
+      steps: 20,
+      guidance_scale: 7.5,
+      images: profile === "mai-edit" ? references : undefined,
+    });
+  }
+  if (profile === "wan-text") {
+    return {
+      model: model.id,
+      prompt: request.prompt,
+      size: "2K",
+      n: request.count,
+      thinking_mode: true,
+      enable_base64_output: false,
+    };
+  }
+  if (profile === "qwen-text" || profile === "qwen-edit") {
+    return compact({
+      model: model.id,
+      prompt: request.prompt,
+      size: qwenSize(request.aspectRatio),
+      seed: -1,
+      images: profile === "qwen-edit" ? references : undefined,
+    });
   }
   return {
     model: model.id,
@@ -69,7 +143,7 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
 export async function generateAtlasImages(request: ArtImageRequest, model: ArtModelDescriptor, apiKeyOverride?: string): Promise<ArtImageProviderResult[]> {
   const apiKey = apiKeyOverride?.trim() || process.env.ATLASCLOUD_API_KEY?.trim();
   if (!apiKey) throw new Error("MISSING_ATLASCLOUD_API_KEY");
-  const supportsBatch = model.atlasProfile === "flux-text" || model.atlasProfile === "grok-edit";
+  const supportsBatch = model.atlasProfile === "flux-text" || model.atlasProfile === "grok-edit" || model.atlasProfile === "grok-text" || model.atlasProfile === "wan-text";
   const runs = supportsBatch ? 1 : request.count;
   const tasks = await Promise.all(Array.from({ length: runs }, async (_, index) => {
     const response = await fetch(`${ATLAS_BASE_URL}/model/generateImage`, {
@@ -124,6 +198,14 @@ function gptSize(ratio: ArtImageRequest["aspectRatio"]) {
 
 function seedreamSize(ratio: ArtImageRequest["aspectRatio"]) {
   return { "1:1": "2048*2048", "4:3": "2304*1728", "3:4": "1728*2304", "16:9": "2848*1600", "9:16": "1600*2848" }[ratio];
+}
+
+function qwenSize(ratio: ArtImageRequest["aspectRatio"]) {
+  return { "1:1": "1024*1024", "4:3": "1280*960", "3:4": "960*1280", "16:9": "1280*720", "9:16": "720*1280" }[ratio];
+}
+
+function maiDimensions(ratio: ArtImageRequest["aspectRatio"]) {
+  return { "1:1": { width: 1024, height: 1024 }, "4:3": { width: 1280, height: 960 }, "3:4": { width: 960, height: 1280 }, "16:9": { width: 1280, height: 720 }, "9:16": { width: 720, height: 1280 } }[ratio];
 }
 
 function delay(ms: number) {

@@ -50,7 +50,12 @@ export default function ArtAssetDetail() {
   const selectedVariant = asset?.variants?.find((item) => item.id === selectedVariantId) || asset?.variants?.[0];
   const selectedVersion = selectedVariant?.versions.find((item) => item.id === selectedVersionId) || selectedVariant?.versions[0];
   const hasReference = Boolean(selectedVersion?.imageUrl?.startsWith("http"));
-  const requiredCapability = hasReference ? "image-edit" : "text-to-image";
+  const masterVariant = asset?.variants?.find((item) => item.type === "master");
+  const masterVersion = masterVariant?.versions.find((item) => item.id === masterVariant?.approvedVersionId) || masterVariant?.versions[0];
+  const masterImageUrl = masterVersion?.imageUrl?.startsWith("http") ? masterVersion.imageUrl : "";
+  const fallbackReferenceUrl = selectedVariant?.type === "master" ? "" : (asset?.referenceSheetUrl || asset?.conceptUrl || asset?.threeViewUrl || masterImageUrl);
+  const effectiveReferenceUrl = hasReference ? (selectedVersion?.imageUrl || "") : fallbackReferenceUrl;
+  const requiredCapability = effectiveReferenceUrl ? "image-edit" : "text-to-image";
   const availableModels = useMemo(() => ART_MODEL_CATALOG.filter((model) =>
     (selection === "smart" || model.provider === selection) && model.capabilities.includes(requiredCapability),
   ), [selection, requiredCapability]);
@@ -116,13 +121,8 @@ export default function ArtAssetDetail() {
     setBusy("generate");
     setNotice("");
     try {
-      // Use asset reference images (referenceSheetUrl/conceptUrl) as fallback reference
-      const assetReferenceUrl = asset.referenceSheetUrl || asset.conceptUrl || asset.threeViewUrl;
-      const referenceUrls = hasReference && selectedVersion
-        ? [selectedVersion.imageUrl]
-        : assetReferenceUrl
-          ? [assetReferenceUrl]
-          : [];
+      // Use the effective reference (current version, or fall back to the master variant's latest image)
+      const referenceUrls = effectiveReferenceUrl ? [effectiveReferenceUrl] : [];
       const task = taskOverride || (asset.kind === "character" && selectedVariant.type === "master" ? "reference_sheet" : referenceUrls.length ? "edit" : "concept");
       const response = await fetch("/api/art/generate-image", {
         method: "POST",
@@ -175,7 +175,6 @@ export default function ArtAssetDetail() {
       <aside className={styles.editor}>
         <div className={styles.editorTitle}><div><small>资产编辑器</small><h1>{asset.name}</h1></div>{selectedVersion?.imageUrl ? <a href={selectedVersion.imageUrl} download><Download size={16} /></a> : null}</div>
         <label><span>名称</span><input value={asset.name} onChange={(event) => patchAsset({ name: event.target.value })} /></label>
-        <label><span>叙事功能</span><input value={asset.role} onChange={(event) => patchAsset({ role: event.target.value })} /></label>
         <label><span>{asset.kind === "character" ? "身份锚点" : "母版锚点"}</span><textarea value={asset.identityAnchor || ""} onChange={(event) => patchAsset({ identityAnchor: event.target.value })} placeholder="固定身份、结构、比例、材质和不可变化的识别特征" /></label>
         <label className={styles.prompt}><span>生成提示词</span><textarea value={selectedVariant?.prompt || ""} onChange={(event) => patchVariant({ prompt: event.target.value })} /></label>
         <div className={styles.settings}><label><span>供应商</span><div className={styles.select}><select value={selection} onChange={(event) => { setSelection(event.target.value as typeof selection); setModelId(""); }}><option value="smart">智能选择</option><option value="atlas">Atlas Cloud</option><option value="flux">FLUX</option></select><ChevronDown size={14} /></div></label><label><span>模型</span><div className={styles.select}><select value={modelId} onChange={(event) => setModelId(event.target.value)}><option value="">自动模型</option>{availableModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><ChevronDown size={14} /></div></label><label><span>候选数量</span><div className={styles.select}><select value={count} onChange={(event) => setCount(Number(event.target.value) as 1 | 2 | 4)}><option value={1}>1 张</option><option value={2}>2 张</option><option value={4}>4 张</option></select><ChevronDown size={14} /></div></label><label><span>画幅</span><input value={asset.kind === "character" && selectedVariant?.type === "master" ? "4:3 · 横版" : "16:9"} readOnly /></label></div>

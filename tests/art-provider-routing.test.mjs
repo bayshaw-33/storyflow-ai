@@ -35,13 +35,27 @@ test("manual model selection rejects a model from another provider", () => {
   }), /ART_MODEL_PROVIDER_MISMATCH/);
 });
 
-test("Atlas catalog exposes the approved six models with both Image 2 modes", () => {
+test("Atlas catalog exposes the approved twenty models across providers", () => {
   const atlasIds = ART_MODEL_CATALOG.filter((model) => model.provider === "atlas").map((model) => model.id);
 
   assert.deepEqual(atlasIds, [
     "black-forest-labs/flux-dev",
     "openai/gpt-image-2/text-to-image",
     "bytedance/seedream-v5.0-lite",
+    "bytedance/seedream-v5.0-pro/text-to-image",
+    "bytedance/seedream-v5.0-pro/edit",
+    "google/nano-banana-2-lite/text-to-image",
+    "google/nano-banana-2-lite/edit",
+    "google/nano-banana-2/text-to-image",
+    "google/nano-banana-2/edit",
+    "microsoft/mai-image-2.5/text-to-image",
+    "microsoft/mai-image-2.5/edit",
+    "alibaba/wan-2.7-pro/text-to-image",
+    "qwen/qwen-image-2.0/text-to-image",
+    "qwen/qwen-image-2.0/edit",
+    "qwen/qwen-image-2.0-pro/edit",
+    "xai/grok-imagine-image-quality/text-to-image",
+    "bytedance/seedream-v5.0-lite/edit",
     "xai/grok-imagine-image/edit",
     "openai/gpt-image-2/edit",
     "google/nano-banana-pro/edit-ultra",

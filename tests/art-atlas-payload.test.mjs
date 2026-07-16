@@ -110,6 +110,149 @@ test("Nano Banana Ultra payload requests its highest supported quality", () => {
   });
 });
 
+test("Seedream v5.0 Pro text payload reuses the Seedream 2K size schema", () => {
+  const model = findArtModel("bytedance/seedream-v5.0-pro/text-to-image");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody(request, model), {
+    model: "bytedance/seedream-v5.0-pro/text-to-image",
+    prompt: "cinematic portrait",
+    size: "1600*2848",
+    output_format: "jpeg",
+    enable_base64_output: false,
+  });
+});
+
+test("Seedream v5.0 Pro edit payload includes reference images and 2K size", () => {
+  const model = findArtModel("bytedance/seedream-v5.0-pro/edit");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, task: "edit", referenceUrls: ["https://example.com/reference.jpg"] }, model), {
+    model: "bytedance/seedream-v5.0-pro/edit",
+    prompt: "cinematic portrait",
+    size: "1600*2848",
+    output_format: "jpeg",
+    images: ["https://example.com/reference.jpg"],
+    enable_base64_output: false,
+  });
+});
+
+test("Nano Banana 2 Lite text payload uses 1k resolution and default thinking", () => {
+  const model = findArtModel("google/nano-banana-2-lite/text-to-image");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody(request, model), {
+    model: "google/nano-banana-2-lite/text-to-image",
+    prompt: "cinematic portrait",
+    aspect_ratio: "9:16",
+    thinking_level: "default",
+    resolution: "1k",
+    enable_base64_output: false,
+    enable_sync_mode: false,
+  });
+});
+
+test("Nano Banana 2 Lite edit payload uses 1k resolution with reference images", () => {
+  const model = findArtModel("google/nano-banana-2-lite/edit");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, task: "edit", referenceUrls: ["https://example.com/reference.jpg"] }, model), {
+    model: "google/nano-banana-2-lite/edit",
+    prompt: "cinematic portrait",
+    images: ["https://example.com/reference.jpg"],
+    aspect_ratio: "9:16",
+    thinking_level: "default",
+    resolution: "1k",
+    enable_base64_output: false,
+    enable_sync_mode: false,
+  });
+});
+
+test("MAI Image 2.5 text payload sends width/height and diffusion params", () => {
+  const model = findArtModel("microsoft/mai-image-2.5/text-to-image");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody(request, model), {
+    model: "microsoft/mai-image-2.5/text-to-image",
+    prompt: "cinematic portrait",
+    width: 720,
+    height: 1280,
+    steps: 20,
+    guidance_scale: 7.5,
+  });
+});
+
+test("MAI Image 2.5 edit payload includes reference images", () => {
+  const model = findArtModel("microsoft/mai-image-2.5/edit");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, task: "edit", referenceUrls: ["https://example.com/reference.jpg"] }, model), {
+    model: "microsoft/mai-image-2.5/edit",
+    prompt: "cinematic portrait",
+    width: 720,
+    height: 1280,
+    steps: 20,
+    guidance_scale: 7.5,
+    images: ["https://example.com/reference.jpg"],
+  });
+});
+
+test("Wan 2.7 Pro text payload uses 2K size and thinking mode", () => {
+  const model = findArtModel("alibaba/wan-2.7-pro/text-to-image");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, count: 2 }, model), {
+    model: "alibaba/wan-2.7-pro/text-to-image",
+    prompt: "cinematic portrait",
+    size: "2K",
+    n: 2,
+    thinking_mode: true,
+    enable_base64_output: false,
+  });
+});
+
+test("Qwen Image 2.0 text payload uses W*H size format", () => {
+  const model = findArtModel("qwen/qwen-image-2.0/text-to-image");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody(request, model), {
+    model: "qwen/qwen-image-2.0/text-to-image",
+    prompt: "cinematic portrait",
+    size: "720*1280",
+    seed: -1,
+  });
+});
+
+test("Qwen Image 2.0 edit payload includes reference images", () => {
+  const model = findArtModel("qwen/qwen-image-2.0/edit");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, task: "edit", referenceUrls: ["https://example.com/reference.jpg"] }, model), {
+    model: "qwen/qwen-image-2.0/edit",
+    prompt: "cinematic portrait",
+    size: "720*1280",
+    seed: -1,
+    images: ["https://example.com/reference.jpg"],
+  });
+});
+
+test("Grok Imagine Quality text payload supports batch and aspect ratio", () => {
+  const model = findArtModel("xai/grok-imagine-image-quality/text-to-image");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, count: 4 }, model), {
+    model: "xai/grok-imagine-image-quality/text-to-image",
+    prompt: "cinematic portrait",
+    num_images: 4,
+    aspect_ratio: "9:16",
+    resolution: "1k",
+    enable_base64_output: false,
+  });
+});
+
+test("Seedream v5.0 Lite edit payload reuses the Seedream edit schema", () => {
+  const model = findArtModel("bytedance/seedream-v5.0-lite/edit");
+  assert.ok(model);
+  assert.deepEqual(atlas.buildAtlasRequestBody({ ...request, task: "edit", referenceUrls: ["https://example.com/reference.jpg"] }, model), {
+    model: "bytedance/seedream-v5.0-lite/edit",
+    prompt: "cinematic portrait",
+    size: "1600*2848",
+    output_format: "jpeg",
+    images: ["https://example.com/reference.jpg"],
+    enable_base64_output: false,
+  });
+});
+
 test("edit profiles reject requests without a reference image", () => {
   const model = findArtModel("openai/gpt-image-2/edit");
   assert.ok(model);
