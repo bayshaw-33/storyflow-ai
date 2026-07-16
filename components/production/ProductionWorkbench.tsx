@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Clock, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Users, Video } from "lucide-react";
+import { Clock, Cpu, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Users, Video } from "lucide-react";
 import { readProjectsFromStorage } from "@/lib/projects";
 import {
   addProductionHistory,
@@ -33,6 +33,7 @@ import { ExportMenu } from "./ExportMenu";
 import { AutoAssemblyPanel } from "./AutoAssemblyPanel";
 import { CastingPanel } from "./CastingPanel";
 import { TeamPanel } from "./TeamPanel";
+import { ModelRegistryPanel } from "./ModelRegistryPanel";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -71,6 +72,7 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     const [notice, setNotice] = useState("");
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
+  const [showModelRegistry, setShowModelRegistry] = useState(false);
   const [versionList, setVersionList] = useState<VersionRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [versionDiff, setVersionDiff] = useState<VersionDiffResult | null>(null);
@@ -450,6 +452,7 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
         <div className={styles.actionRow}>
           <button className={styles.secondaryButton} type="button" onClick={openVersionHistory}><Clock size={16} /> 版本历史</button>
           <button className={styles.secondaryButton} type="button" onClick={() => setShowTeamPanel(true)}><Users size={16} /> 团队</button>
+          <button className={styles.secondaryButton} type="button" onClick={() => setShowModelRegistry(true)}><Cpu size={16} /> 模型</button>
           <button className={styles.secondaryButton} type="button" onClick={saveAll}><Save size={16} /> 保存</button>
           <ExportMenu state={state} />
         </div>
@@ -561,6 +564,9 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
       ) : null}
       {showTeamPanel ? (
         <TeamPanel onClose={() => setShowTeamPanel(false)} />
+      ) : null}
+      {showModelRegistry ? (
+        <ModelRegistryPanel onClose={() => setShowModelRegistry(false)} />
       ) : null}
     </main>
   );
