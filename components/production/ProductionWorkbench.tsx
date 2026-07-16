@@ -32,6 +32,7 @@ import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./Ve
 import { ExportMenu } from "./ExportMenu";
 import { AutoAssemblyPanel } from "./AutoAssemblyPanel";
 import { CastingPanel } from "./CastingPanel";
+import { TeamPanel } from "./TeamPanel";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -69,6 +70,7 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
   const [session, setSession] = useState<Session | null>(null);
     const [notice, setNotice] = useState("");
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [versionList, setVersionList] = useState<VersionRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [versionDiff, setVersionDiff] = useState<VersionDiffResult | null>(null);
@@ -447,6 +449,7 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
         </nav>
         <div className={styles.actionRow}>
           <button className={styles.secondaryButton} type="button" onClick={openVersionHistory}><Clock size={16} /> 版本历史</button>
+          <button className={styles.secondaryButton} type="button" onClick={() => setShowTeamPanel(true)}><Users size={16} /> 团队</button>
           <button className={styles.secondaryButton} type="button" onClick={saveAll}><Save size={16} /> 保存</button>
           <ExportMenu state={state} />
         </div>
@@ -555,6 +558,9 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
           selectedVersionId={selectedVersionId}
           onClose={closeVersionHistory}
         />
+      ) : null}
+      {showTeamPanel ? (
+        <TeamPanel onClose={() => setShowTeamPanel(false)} />
       ) : null}
     </main>
   );
