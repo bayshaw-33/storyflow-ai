@@ -153,12 +153,12 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
 
   const { pollStatus } = api.video;
   useEffect(() => {
-    const pending = state.shots.filter((shot) => shot.status === "video_generating");
+    const pending = state.shots.filter((shot) => shot.status === "video_generating" && shot.videoTaskId);
     if (pending.length === 0) return;
     const interval = setInterval(() => {
       pending.forEach(async (shot) => {
         try {
-          const result = await pollStatus(shot.id);
+          const result = await pollStatus(shot.id, shot.videoTaskId as string);
           if (result.status === "video_ready" && result.videoUrl) {
             setState((current) => updateProductionShot(current, shot.id, {
               status: "video_ready",

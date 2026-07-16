@@ -305,17 +305,21 @@ export function useShotVideo(
   projectId: string,
 ): {
   generate: (shotId: string) => Promise<{ taskId: string; status: string }>;
-  pollStatus: (shotId: string) => Promise<{ status: string; videoUrl?: string }>;
+  pollStatus: (shotId: string, taskId: string) => Promise<{ status: string; videoUrl?: string }>;
+  pollUntilDone: (shotId: string, taskId: string, options?: { maxAttempts?: number; onProgress?: (status: string) => void }) => Promise<{ status: string; videoUrl?: string }>;
+  generating: boolean;
+  polling: boolean;
   loading: boolean;
   error: string | null;
 } {
-  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const generate = useCallback(
     async (shotId: string): Promise<{ taskId: string; status: string }> => {
       const token = getAccessToken(session);
-      setLoading(true);
+      setGenerating(true);
       setError(null);
       const { controller, cancel } = createTimeoutController(75_000);
       try {
@@ -337,16 +341,16 @@ export function useShotVideo(
         throw friendly;
       } finally {
         cancel();
-        setLoading(false);
+        setGenerating(false);
       }
     },
     [session, projectId],
   );
 
   const pollStatus = useCallback(
-    async (shotId: string): Promise<{ status: string; videoUrl?: string }> => {
+    async (shotId: string, taskId: string): Promise<{ status: string; videoUrl?: string }> => {
       const token = getAccessToken(session);
-      setLoading(true);
+      setPolling(true);
       setError(null);
       const { controller, cancel } = createTimeoutController(30_000);
       try {
@@ -354,7 +358,7 @@ export function useShotVideo(
           method: "POST",
           headers: buildHeaders(token),
           signal: controller.signal,
-          body: JSON.stringify({ projectId, shotId }),
+          body: JSON.stringify({ projectId, shotId, taskId }),
         });
         const payload = (await parseJsonSafely(response)) as VideoStatusResponse | null;
         if (!response.ok || !payload?.success) {
@@ -371,13 +375,50 @@ export function useShotVideo(
         throw friendly;
       } finally {
         cancel();
-        setLoading(false);
+        setPolling(false);
       }
     },
     [session, projectId],
   );
 
-  return { generate, pollStatus, loading, error };
+  const pollUntilDone = useCallback(
+    async (
+      shotId: string,
+      taskId: string,
+      options?: { maxAttempts?: number; onProgress?: (status: string) => void },
+    ): Promise<{ status: string; videoUrl?: string }> => {
+      const maxAttempts = options?.maxAttempts ?? 30;
+      const baseDelayMs = 5000;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const result = await pollStatus(shotId, taskId);
+          options?.onProgress?.(result.status);
+
+          if (result.status === "video_ready" || result.status === "done") {
+            return result;
+          }
+          if (result.status === "error") {
+            return result;
+          }
+
+          // Exponential backoff with jitter, capped at 30s
+          const delay = Math.min(baseDelayMs * Math.pow(1.4, attempt) + Math.random() * 2000, 30_000);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } catch (err) {
+          // On poll error, wait and continue (transient failures shouldn't abort)
+          if (attempt === maxAttempts - 1) throw err;
+          const delay = Math.min(baseDelayMs * Math.pow(1.4, attempt) + Math.random() * 2000, 30_000);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+
+      return { status: "error" };
+    },
+    [pollStatus],
+  );
+
+  return { generate, pollStatus, pollUntilDone, generating, polling, loading: generating || polling, error };
 }
 
 /* ------------------------------------------------------------------ */
