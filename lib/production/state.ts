@@ -672,3 +672,138 @@ export function productionStateToExport(state: ProductionProjectState, format: E
       return { content: productionStateToMarkdown(state), mimeType: "text/markdown;charset=utf-8", extension: "md" };
   }
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Auto Assembly / 顺片                                                */
+/* ------------------------------------------------------------------ */
+
+export type AssemblyTransition = "cut" | "crossfade" | "dissolve";
+
+export type AssemblyClip = {
+  shotId: string;
+  index: number;
+  title: string;
+  durationSeconds: number;
+  startTime: number;
+  endTime: number;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  status: string;
+  transition: AssemblyTransition;
+};
+
+export type AssemblyPlan = {
+  clips: AssemblyClip[];
+  totalDuration: number;
+  totalClips: number;
+  hasGaps: boolean;
+  readyClips: number;
+};
+
+export function buildAssemblyPlan(
+  state: ProductionProjectState,
+  transition: AssemblyTransition = "cut",
+): AssemblyPlan {
+  let currentTime = 0;
+  const items = productionTimelineItems(state);
+  let readyClips = 0;
+
+  const clips: AssemblyClip[] = items.map((item) => {
+    const start = currentTime;
+    const end = currentTime + Math.max(1, item.durationSeconds);
+    currentTime = end;
+    if (item.videoUrl || item.imageUrl) readyClips++;
+    return {
+      shotId: item.shotId,
+      index: item.index,
+      title: item.title,
+      durationSeconds: item.durationSeconds,
+      startTime: start,
+      endTime: end,
+      imageUrl: item.imageUrl ?? null,
+      videoUrl: item.videoUrl ?? null,
+      status: item.status,
+      transition,
+    };
+  });
+
+  return {
+    clips,
+    totalDuration: currentTime,
+    totalClips: clips.length,
+    hasGaps: clips.some((c) => !c.videoUrl && !c.imageUrl),
+    readyClips,
+  };
+}
+
+function formatEdlTimecode(seconds: number, fps = 24): string {
+  const totalFrames = Math.round(seconds * fps);
+  const hours = Math.floor(totalFrames / (fps * 3600));
+  const minutes = Math.floor((totalFrames % (fps * 3600)) / (fps * 60));
+  const secs = Math.floor((totalFrames % (fps * 60)) / fps);
+  const frames = totalFrames % fps;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
+}
+
+export function productionStateToEDL(state: ProductionProjectState, fps = 24): string {
+  const plan = buildAssemblyPlan(state);
+  const title = (state.title || "UNTITLED").toUpperCase().replace(/[^A-Z0-9 ]/g, "");
+  const lines: string[] = [`TITLE: ${title}`, ""];
+
+  plan.clips.forEach((clip, i) => {
+    const clipNum = String(i + 1).padStart(3, "0");
+    const srcIn = formatEdlTimecode(0, fps);
+    const srcOut = formatEdlTimecode(clip.durationSeconds, fps);
+    const recIn = formatEdlTimecode(clip.startTime, fps);
+    const recOut = formatEdlTimecode(clip.endTime, fps);
+    const transitionCode = clip.transition === "crossfade" ? "D" : "C";
+
+    lines.push(`${clipNum}  AX       V     ${transitionCode}        ${srcIn} ${srcOut} ${recIn} ${recOut}`);
+    if (clip.videoUrl) {
+      lines.push(`* FROM CLIP NAME: ${clip.title}`);
+      lines.push(`* SOURCE FILE: ${clip.videoUrl}`);
+    } else if (clip.imageUrl) {
+      lines.push(`* FROM CLIP NAME: ${clip.title} (IMAGE)`);
+      lines.push(`* SOURCE FILE: ${clip.imageUrl}`);
+    } else {
+      lines.push(`* FROM CLIP NAME: ${clip.title} (MISSING)`);
+    }
+    lines.push("");
+  });
+
+  return lines.join("\n");
+}
+
+export function productionStateToFCPXML(state: ProductionProjectState, fps = 24): string {
+  const plan = buildAssemblyPlan(state);
+  const totalDuration = formatEdlTimecode(plan.totalDuration, fps);
+  const title = (state.title || "Untitled").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const clipEntries = plan.clips.map((clip) => {
+    const duration = formatEdlTimecode(clip.durationSeconds, fps);
+    const offset = formatEdlTimecode(clip.startTime, fps);
+    const name = clip.title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const ref = clip.videoUrl || clip.imageUrl || "";
+    return `        <asset-clip name="${name}" offset="${offset}" duration="${duration}" ref="${ref}" start="0" />`;
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.9">
+  <resources>
+    <format id="r1" frameDuration="1/${fps}s" width="1080" height="1920"/>
+  </resources>
+  <library>
+    <event name="${title}">
+      <project name="${title}">
+        <sequence format="r1" duration="${totalDuration}" tcStart="0s">
+          <spine>
+${clipEntries}
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>`;
+}

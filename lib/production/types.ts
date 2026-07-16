@@ -1,4 +1,4 @@
-export type ProductionMode = "planning" | "canvas" | "editor";
+export type ProductionMode = "planning" | "canvas" | "editor" | "assembly";
 export type ProductionContentType = "short_drama" | "mv";
 export type ProductionAspectRatio = "9:16" | "16:9" | "1:1";
 export type ProductionLanguage = "zh" | "en" | "bilingual";

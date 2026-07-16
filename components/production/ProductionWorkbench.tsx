@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Clock, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
+import { Clock, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
 import { readProjectsFromStorage } from "@/lib/projects";
 import {
   addProductionHistory,
@@ -30,6 +30,7 @@ import { useProductionApi } from "@/lib/production/hooks";
 import { ShotStatusBadge, ShotThumbnail, PromptViewer, ShotActionBar } from "./ShotCardParts";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
 import { ExportMenu } from "./ExportMenu";
+import { AutoAssemblyPanel } from "./AutoAssemblyPanel";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -40,6 +41,7 @@ const modeLabels: Array<{ id: ProductionMode; label: string }> = [
   { id: "planning", label: "剧本策划" },
   { id: "canvas", label: "分镜画布" },
   { id: "editor", label: "视频编辑" },
+  { id: "assembly", label: "顺片" },
 ];
 
 export function ProductionWorkbench({ initialMode = "planning" }: Props) {
@@ -517,6 +519,9 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
             ) : null}
             {state.mode === "editor" ? (
               <EditorMode state={state} selectedShot={selectedShot} timeline={timeline} selectShot={selectShot} updateShot={updateShot} />
+            ) : null}
+            {state.mode === "assembly" ? (
+              <AutoAssemblyPanel state={state} />
             ) : null}
           </div>
         </section>
