@@ -508,3 +508,167 @@ function stringValue(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return "";
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Archive Export Functions                                            */
+/* ------------------------------------------------------------------ */
+
+export type ProductionArchive = {
+  format: "kiikis-production-archive-v1";
+  exportedAt: string;
+  project: {
+    id: string;
+    title: string;
+    contentType: string;
+    aspectRatio: string;
+    language: string;
+    universeId: string | null;
+    mode: string;
+  };
+  storyBrief: unknown;
+  visualBible: unknown;
+  shots: unknown[];
+  chatMessages: unknown[];
+  sourceFiles: unknown[];
+  history: unknown[];
+  timeline: {
+    totalSeconds: number;
+    totalShots: number;
+    formattedDuration: string;
+  };
+};
+
+export function productionStateToJsonArchive(state: ProductionProjectState): string {
+  const timeline = productionTimelineItems(state);
+  const archive: ProductionArchive = {
+    format: "kiikis-production-archive-v1",
+    exportedAt: new Date().toISOString(),
+    project: {
+      id: state.projectId || state.id,
+      title: state.title,
+      contentType: state.contentType,
+      aspectRatio: state.aspectRatio,
+      language: state.language,
+      universeId: state.universeId || null,
+      mode: state.mode,
+    },
+    storyBrief: state.storyBrief,
+    visualBible: state.visualBible,
+    shots: state.shots,
+    chatMessages: state.chatMessages,
+    sourceFiles: state.sourceFiles,
+    history: state.history,
+    timeline: {
+      totalSeconds: totalTimelineSeconds(state),
+      totalShots: timeline.length,
+      formattedDuration: formatSeconds(totalTimelineSeconds(state)),
+    },
+  };
+  return JSON.stringify(archive, null, 2);
+}
+
+function formatSrtTime(seconds: number): string {
+  const totalMs = Math.max(0, Math.round(seconds * 1000));
+  const hours = Math.floor(totalMs / 3_600_000);
+  const minutes = Math.floor((totalMs % 3_600_000) / 60_000);
+  const secs = Math.floor((totalMs % 60_000) / 1000);
+  const ms = totalMs % 1000;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")},${String(ms).padStart(3, "0")}`;
+}
+
+export function productionStateToSRT(state: ProductionProjectState): string {
+  let currentTime = 0;
+  const entries: string[] = [];
+
+  state.shots.forEach((shot, index) => {
+    const duration = parseShotDurationSeconds(shot.duration);
+    const start = currentTime;
+    const end = currentTime + duration;
+    currentTime = end;
+
+    const text = [shot.dialogue, shot.description, shot.sceneTitle]
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+
+    if (text) {
+      entries.push(
+        [
+          String(index + 1),
+          `${formatSrtTime(start)} --> ${formatSrtTime(end)}`,
+          text,
+        ].join("\n"),
+      );
+    }
+  });
+
+  return entries.join("\n\n") + (entries.length > 0 ? "\n" : "");
+}
+
+function csvEscape(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+export function productionStateToCSV(state: ProductionProjectState): string {
+  const headers = [
+    "Index",
+    "Scene Title",
+    "Shot Type",
+    "Duration",
+    "Description",
+    "Composition",
+    "Camera Movement",
+    "Dialogue",
+    "Sound",
+    "Continuity",
+    "Image Prompt",
+    "Video Prompt",
+    "Image URL",
+    "Video URL",
+    "Status",
+  ];
+
+  const rows = state.shots.map((shot) =>
+    [
+      String(shot.index),
+      shot.sceneTitle,
+      shot.shotType,
+      shot.duration,
+      shot.description,
+      shot.composition,
+      shot.cameraMovement,
+      shot.dialogue || "",
+      shot.sound || "",
+      shot.continuity || "",
+      shot.imagePrompt,
+      shot.videoPrompt,
+      shot.imageUrl || "",
+      shot.videoUrl || "",
+      shot.status,
+    ]
+      .map(csvEscape)
+      .join(","),
+  );
+
+  return [headers.join(","), ...rows].join("\n");
+}
+
+export type ExportFormat = "markdown" | "json" | "srt" | "csv";
+
+export function productionStateToExport(state: ProductionProjectState, format: ExportFormat): { content: string; mimeType: string; extension: string } {
+  switch (format) {
+    case "json":
+      return { content: productionStateToJsonArchive(state), mimeType: "application/json;charset=utf-8", extension: "json" };
+    case "srt":
+      return { content: productionStateToSRT(state), mimeType: "application/x-subrip;charset=utf-8", extension: "srt" };
+    case "csv":
+      return { content: productionStateToCSV(state), mimeType: "text/csv;charset=utf-8", extension: "csv" };
+    case "markdown":
+    default:
+      return { content: productionStateToMarkdown(state), mimeType: "text/markdown;charset=utf-8", extension: "md" };
+  }
+}

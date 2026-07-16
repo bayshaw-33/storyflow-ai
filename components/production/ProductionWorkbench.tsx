@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Clock, Download, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
+import { Clock, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
 import { readProjectsFromStorage } from "@/lib/projects";
 import {
   addProductionHistory,
@@ -29,6 +29,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useProductionApi } from "@/lib/production/hooks";
 import { ShotStatusBadge, ShotThumbnail, PromptViewer, ShotActionBar } from "./ShotCardParts";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
+import { ExportMenu } from "./ExportMenu";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -413,16 +414,6 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     }
   }
 
-  function exportMarkdown() {
-    const blob = new Blob([productionStateToMarkdown(state)], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${state.title || "production-workbench"}.md`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
@@ -445,7 +436,7 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
         <div className={styles.actionRow}>
           <button className={styles.secondaryButton} type="button" onClick={openVersionHistory}><Clock size={16} /> 版本历史</button>
           <button className={styles.secondaryButton} type="button" onClick={saveAll}><Save size={16} /> 保存</button>
-          <button className={styles.primaryButton} type="button" onClick={exportMarkdown}><Download size={16} /> 导出</button>
+          <ExportMenu state={state} />
         </div>
       </header>
 
