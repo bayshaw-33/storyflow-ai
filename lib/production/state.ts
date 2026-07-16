@@ -101,6 +101,7 @@ export function createEmptyProductionState(overrides: Partial<ProductionProjectS
     providers: normalizeProviders(overrides.providers),
     chatMessages: normalizeChatMessages(overrides.chatMessages || []),
     history: normalizeHistory(overrides.history || []),
+    casting: overrides.casting || {},
     updatedAt: overrides.updatedAt || now,
   };
 }

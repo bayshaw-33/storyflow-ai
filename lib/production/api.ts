@@ -33,6 +33,7 @@ type ProductionProjectRow = {
   source_summary: string;
   chat_messages: unknown[];
   history: unknown[];
+  casting: Record<string, unknown>;
   selected_shot_id: string | null;
   created_at: string;
   updated_at: string;
@@ -211,6 +212,7 @@ function serializeStateToProjectRow(
     source_summary: state.sourceSummary,
     chat_messages: state.chatMessages as unknown[],
     history: state.history as unknown[],
+    casting: (state.casting || {}) as Record<string, unknown>,
     selected_shot_id: state.selectedShotId || null,
   };
 }
@@ -272,6 +274,7 @@ function parseProjectRowToState(
     providers: (row.providers as unknown as ProductionProviderSettings) || ({} as ProductionProviderSettings),
     chatMessages: (row.chat_messages as ProductionChatMessage[]) || [],
     history: (row.history as ProductionHistoryItem[]) || [],
+    casting: (row.casting as Record<string, string>) || {},
     updatedAt: row.updated_at,
   };
 }

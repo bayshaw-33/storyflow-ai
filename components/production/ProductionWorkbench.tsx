@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Clock, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
+import { Clock, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Users, Video } from "lucide-react";
 import { readProjectsFromStorage } from "@/lib/projects";
 import {
   addProductionHistory,
@@ -31,6 +31,7 @@ import { ShotStatusBadge, ShotThumbnail, PromptViewer, ShotActionBar } from "./S
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
 import { ExportMenu } from "./ExportMenu";
 import { AutoAssemblyPanel } from "./AutoAssemblyPanel";
+import { CastingPanel } from "./CastingPanel";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -42,6 +43,7 @@ const modeLabels: Array<{ id: ProductionMode; label: string }> = [
   { id: "canvas", label: "分镜画布" },
   { id: "editor", label: "视频编辑" },
   { id: "assembly", label: "顺片" },
+  { id: "casting", label: "选角" },
 ];
 
 export function ProductionWorkbench({ initialMode = "planning" }: Props) {
@@ -371,6 +373,14 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     }
   }
 
+  function updateCasting(characterId: string, actorId: string | null) {
+    setState((current) => ({
+      ...current,
+      casting: { ...current.casting, [characterId]: actorId || "" },
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
   async function openVersionHistory() {
     setShowVersionHistory(true);
     setVersionDiff(null);
@@ -522,6 +532,13 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
             ) : null}
             {state.mode === "assembly" ? (
               <AutoAssemblyPanel state={state} />
+            ) : null}
+            {state.mode === "casting" ? (
+              <CastingPanel
+                projectId={projectId}
+                casting={state.casting || {}}
+                onCastingChange={updateCasting}
+              />
             ) : null}
           </div>
         </section>

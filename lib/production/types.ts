@@ -1,4 +1,4 @@
-export type ProductionMode = "planning" | "canvas" | "editor" | "assembly";
+export type ProductionMode = "planning" | "canvas" | "editor" | "assembly" | "casting";
 export type ProductionContentType = "short_drama" | "mv";
 export type ProductionAspectRatio = "9:16" | "16:9" | "1:1";
 export type ProductionLanguage = "zh" | "en" | "bilingual";
@@ -129,6 +129,7 @@ export type ProductionProjectState = {
   providers: ProductionProviderSettings;
   chatMessages: ProductionChatMessage[];
   history: ProductionHistoryItem[];
+  casting: Record<string, string>;
   updatedAt: string;
 };
 
