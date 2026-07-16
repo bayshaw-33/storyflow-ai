@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
-import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Send, Sparkles, Upload, Users } from "lucide-react";
+import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Send, Sparkles, Trash2, Upload, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
@@ -15,9 +15,62 @@ import styles from "./ArtWorkbench.module.css";
 import collapseStyles from "./ArtWorkbenchCollapse.module.css";
 
 export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
+const ART_WORKBENCH_ARCHIVE_PREFIX = "kiikis_art_workbench_archive_";
+const ART_WORKBENCH_ARCHIVE_INDEX_KEY = "kiikis_art_workbench_archive_index";
+
+type ArtWorkbenchArchiveIndex = Array<{ id: string; title: string; archivedAt: string; assetCount: number }>;
 
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; note?: string };
 type PendingImage = { id: string; name: string; url: string; storagePath: string };
+
+// 归档辅助：把当前草稿保存为独立存档，避免被新建/切换项目覆盖
+function archiveCurrentDraft(draft: ArtWorkbenchState): string | null {
+  if (!draft.assets?.length && !draft.sourceText?.trim() && !draft.sourceFiles?.length) return null;
+  try {
+    const archiveId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${archiveId}`, JSON.stringify(draft));
+    // 更新归档索引
+    const indexRaw = localStorage.getItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY);
+    const index: ArtWorkbenchArchiveIndex = indexRaw ? JSON.parse(indexRaw) : [];
+    index.unshift({
+      id: archiveId,
+      title: draft.title || "未命名美术项目",
+      archivedAt: new Date().toISOString(),
+      assetCount: draft.assets?.length || 0,
+    });
+    // 限制归档数量为 20 个，超出删除最旧的
+    const trimmed = index.slice(0, 20);
+    localStorage.setItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY, JSON.stringify(trimmed));
+    // 清理被裁剪掉的归档
+    for (const item of index.slice(20)) {
+      localStorage.removeItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${item.id}`);
+    }
+    return archiveId;
+  } catch { /* localStorage 写入失败，无法归档 */ return null; }
+}
+
+function loadArchive(archiveId: string): ArtWorkbenchState | null {
+  try {
+    const raw = localStorage.getItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${archiveId}`);
+    return raw ? JSON.parse(raw) as ArtWorkbenchState : null;
+  } catch { return null; }
+}
+
+function readArchiveIndex(): ArtWorkbenchArchiveIndex {
+  try {
+    const raw = localStorage.getItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY);
+    return raw ? JSON.parse(raw) as ArtWorkbenchArchiveIndex : [];
+  } catch { return []; }
+}
+
+function deleteArchive(archiveId: string) {
+  try {
+    localStorage.removeItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${archiveId}`);
+    const index = readArchiveIndex().filter((item) => item.id !== archiveId);
+    localStorage.setItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY, JSON.stringify(index));
+  } catch { /* 忽略 */ }
+}
+
 
 export default function ArtWorkbench() {
   const { locale } = useI18n();
@@ -33,6 +86,7 @@ export default function ArtWorkbench() {
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
+  const [archiveIndex, setArchiveIndex] = useState<ArtWorkbenchArchiveIndex>([]);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
 
@@ -48,74 +102,55 @@ export default function ArtWorkbench() {
     };
     void supabase?.auth.getSession().then(({ data }) => loadSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { void loadSession(next); }) || {};
+    // 加载归档索引（用于"我的草稿"下拉）
+    setArchiveIndex(readArchiveIndex());
     const params = new URLSearchParams(window.location.search);
-    const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
-    if (handoff) {
-      // 检测 localStorage 是否已有草稿 assets，避免覆盖用户未导出的工作成果
-      let hasExistingAssets = false;
+
+    // 通用：开始新草稿前自动归档当前草稿（不丢失任何工作成果）
+    const archiveCurrentAndStartNew = (newState: ArtWorkbenchState, welcomeMessage: string) => {
       try {
         const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
         if (saved) {
-          const parsed = JSON.parse(saved) as ArtWorkbenchState;
-          hasExistingAssets = Boolean(parsed?.assets?.length);
+          const current = JSON.parse(saved) as ArtWorkbenchState;
+          const archiveId = archiveCurrentDraft(current);
+          if (archiveId) {
+            setArchiveIndex(readArchiveIndex());
+            setNotice(isZh ? `已自动保存上一份草稿《${current.title || "未命名"}》到「我的草稿」。` : `Previous draft "${current.title || "Untitled"}" auto-archived to "My Drafts".`);
+          }
         }
-      } catch { /* 解析失败视为无草稿 */ }
-      if (hasExistingAssets) {
-        const choice = window.confirm(isZh
-          ? "检测到本地已有未导出的美术资产。\n\n点击「确定」将用创作工作台的新资料覆盖现有草稿（assets 将被清空）；点击「取消」将保留现有草稿，仅继续编辑。"
-          : "Existing unsaved art assets found locally.\n\nClick OK to overwrite with new handoff materials (assets will be cleared); click Cancel to keep the existing draft.");
-        if (!choice) {
-          // 用户取消：保留草稿，从 localStorage 恢复
-          try {
-            const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
-            if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
-          } catch { /* 保留当前空 state */ }
-          return () => listener?.subscription.unsubscribe();
-        }
-      }
-      setState({
-        ...createEmptyArtWorkbenchState(),
-        projectId: handoff.sourceProjectId,
-        projectTitle: handoff.title,
-        title: `${handoff.title} 美术设定`,
-        sourceText: [
-          handoff.projectBackground ? `【项目背景】\n${handoff.projectBackground}` : "",
-          handoff.worldAndOutline ? `【世界观与大纲】\n${handoff.worldAndOutline}` : "",
-          handoff.characterBible ? `【角色 Bible】\n${handoff.characterBible}` : "",
-          handoff.manuscript ? `【${handoff.contentType === "script" ? "剧本" : "小说正文"}】\n${handoff.manuscript}` : "",
-        ].filter(Boolean).join("\n\n"),
-      });
-      setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。` }]);
+      } catch { /* 归档失败不阻塞新草稿创建 */ }
+      setState(newState);
+      setMessages([{ id: crypto.randomUUID(), role: "assistant", content: welcomeMessage }]);
+    };
+
+    const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
+    if (handoff) {
+      params.delete("handoff");
+      params.delete("sourceProjectId");
+      window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
+      archiveCurrentAndStartNew(
+        {
+          ...createEmptyArtWorkbenchState(),
+          projectId: handoff.sourceProjectId,
+          projectTitle: handoff.title,
+          title: `${handoff.title} 美术设定`,
+          sourceText: [
+            handoff.projectBackground ? `【项目背景】\n${handoff.projectBackground}` : "",
+            handoff.worldAndOutline ? `【世界观与大纲】\n${handoff.worldAndOutline}` : "",
+            handoff.characterBible ? `【角色 Bible】\n${handoff.characterBible}` : "",
+            handoff.manuscript ? `【${handoff.contentType === "script" ? "剧本" : "小说正文"}】\n${handoff.manuscript}` : "",
+          ].filter(Boolean).join("\n\n"),
+        },
+        `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。`,
+      );
       return () => listener?.subscription.unsubscribe();
     }
+
     if (params.get("setup") === "1") {
       params.delete("setup");
       window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
-      // 检测 localStorage 是否已有草稿数据，避免清空用户未导出的工作成果
-      let hasExistingDraft = false;
-      try {
-        const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as ArtWorkbenchState;
-          hasExistingDraft = Boolean(parsed?.assets?.length || parsed?.sourceText?.trim() || parsed?.sourceFiles?.length);
-        }
-      } catch { /* 解析失败视为无草稿 */ }
-      if (hasExistingDraft) {
-        // 已有草稿：提示用户选择保留或清空，默认保留
-        const choice = window.confirm(isZh
-          ? "检测到本地已有未导出的美术工作草稿。\n\n点击「确定」将清空草稿并新建空白项目；点击「取消」将保留现有草稿并继续编辑。"
-          : "Existing unsaved art workbench draft found locally.\n\nClick OK to clear it and start a new blank project; click Cancel to keep the existing draft.");
-        if (!choice) {
-          // 用户取消：保留草稿，从 localStorage 恢复
-          try {
-            const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
-            if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
-          } catch { /* 保留当前空 state */ }
-          return () => listener?.subscription.unsubscribe();
-        }
-      }
-      localStorage.removeItem(ART_WORKBENCH_STORAGE_KEY);
-      setState(createEmptyArtWorkbenchState());
+      // 自动归档当前草稿后开始新空白项目
+      archiveCurrentAndStartNew(createEmptyArtWorkbenchState(), isZh ? "已新建空白美术项目。可在「我的草稿」中找回之前的草稿。" : "Started a new blank art project. Previous drafts are in \"My Drafts\".");
       return () => listener?.subscription.unsubscribe();
     }
     try {
@@ -151,15 +186,14 @@ export default function ArtWorkbench() {
   }
 
   async function newProject() {
-    // 检测当前是否已有草稿 assets，避免误操作清空
-    if (state.assets?.length) {
-      const confirmed = window.confirm(isZh
-        ? `当前美术工作台已有 ${state.assets.length} 个资产尚未导出。\n\n新建项目将清空当前所有资产。确定继续吗？`
-        : `Current workbench has ${state.assets.length} assets not yet exported.\n\nCreating a new project will clear all current assets. Continue?`);
-      if (!confirmed) return;
-    }
     const name = window.prompt(isZh ? "请输入新项目名称" : "New project name");
     if (!name?.trim()) return;
+    // 归档当前草稿（不丢失任何工作成果）
+    const archiveId = archiveCurrentDraft(state);
+    if (archiveId) {
+      setArchiveIndex(readArchiveIndex());
+      setNotice(isZh ? `已自动保存上一份草稿《${state.title || "未命名"}》到「我的草稿」。` : `Previous draft "${state.title || "Untitled"}" auto-archived to "My Drafts".`);
+    }
     const next = createEmptyArtWorkbenchState();
     next.title = name.trim();
     const supabase = getSupabaseBrowserClient();
@@ -171,7 +205,36 @@ export default function ArtWorkbench() {
       setNotice("当前未登录，项目只保存在这台设备。登录后可创建团队云端项目。");
     }
     setState(next);
-    setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已新建《${name.trim()}》美术项目。${session ? "项目已保存到云端。" : "当前为本地草稿。"}` }]);
+    setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已新建《${name.trim()}》美术项目。${session ? "项目已保存到云端。" : "当前为本地草稿。"}${archiveId ? " 之前的草稿已自动归档。" : ""}` }]);
+  }
+
+  function loadArchivedDraft(archiveId: string) {
+    const archived = loadArchive(archiveId);
+    if (!archived) return setNotice(isZh ? "草稿加载失败，可能已损坏或被删除。" : "Draft load failed, may be corrupted or deleted.");
+    // 加载归档前，先把当前草稿也归档（如果当前有内容）
+    const currentArchiveId = archiveCurrentDraft(state);
+    if (currentArchiveId) setArchiveIndex(readArchiveIndex());
+    setState({ ...createEmptyArtWorkbenchState(), ...archived });
+    setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已加载草稿《${archived.title || "未命名"}》。${archived.assets?.length || 0} 个资产已恢复。` }]);
+  }
+
+  function deleteArchivedDraft(archiveId: string) {
+    const archived = archiveIndex.find((item) => item.id === archiveId);
+    if (!archived) return;
+    if (!window.confirm(isZh ? `确定删除草稿《${archived.title}》吗？此操作不可撤销。` : `Delete draft "${archived.title}"? This cannot be undone.`)) return;
+    deleteArchive(archiveId);
+    setArchiveIndex(readArchiveIndex());
+    setNotice(isZh ? "草稿已删除。" : "Draft deleted.");
+  }
+
+  function clearCurrentDraft() {
+    if (!state.assets?.length && !state.sourceText?.trim()) return setNotice(isZh ? "当前没有可清空的内容。" : "Nothing to clear.");
+    if (!window.confirm(isZh ? `确定清空当前草稿《${state.title}》的所有内容吗？\n\n建议先在「我的草稿」中确认已归档。此操作不可撤销。` : `Clear all content of current draft "${state.title}"?\n\nConsider archiving to "My Drafts" first. This cannot be undone.`)) return;
+    // 清空前先归档（双保险）
+    archiveCurrentDraft(state);
+    setArchiveIndex(readArchiveIndex());
+    setState(createEmptyArtWorkbenchState());
+    setMessages([{ id: crypto.randomUUID(), role: "assistant", content: isZh ? "已清空当前草稿。之前的版本已自动归档到「我的草稿」。" : "Current draft cleared. Previous version auto-archived to \"My Drafts\"." }]);
   }
 
   async function uploadSource(event: ChangeEvent<HTMLInputElement>) {
@@ -284,7 +347,9 @@ export default function ArtWorkbench() {
         <div className={styles.brand}><span>KIIKIS</span><strong>{state.title}</strong><small>美术工作台</small></div>
         <div className={styles.headerActions}>
           <label className={styles.projectSelect}><Archive size={15} /><select value={state.projectId || ""} onChange={(event) => selectProject(event.target.value)}><option value="">关联已有项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDown size={14} /></label>
-          <button type="button" onClick={newProject}><Plus size={15} />新建项目</button>
+          <label className={styles.projectSelect}><Archive size={15} /><select value="" onChange={(event) => { const id = event.target.value; if (id) loadArchivedDraft(id); event.target.value = ""; }}><option value="">{isZh ? "我的草稿" : "My Drafts"} ({archiveIndex.length})</option>{archiveIndex.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.assetCount} 项 · {new Date(item.archivedAt).toLocaleDateString()}</option>)}</select><ChevronDown size={14} /></label>
+          <button type="button" onClick={newProject}><Plus size={15} />{isZh ? "新建项目" : "New"}</button>
+          <button type="button" onClick={clearCurrentDraft} title={isZh ? "清空当前草稿（自动归档后清空）" : "Clear current draft (auto-archives first)"}><Trash2 size={15} />{isZh ? "清空" : "Clear"}</button>
           <span className={styles.provider}><Sparkles size={14} />智能选择</span>
         </div>
       </header>

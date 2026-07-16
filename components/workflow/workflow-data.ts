@@ -65,7 +65,7 @@ export const WORKFLOW_ENTRY_POINTS: WorkflowEntryPoint[] = [
     titleZh: "美术",
     description: "Extract characters, scenes, and props into production-ready visual references.",
     descriptionZh: "从剧本和项目资料中拆解角色、场景、关键道具，并生成美术参考表。",
-    href: "/art-workbench?setup=1",
+    href: "/art-workbench",
     tier: "core",
     icon: Palette,
     steps: 4,
