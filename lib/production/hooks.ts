@@ -440,6 +440,236 @@ export function useSourceFileUpload(
   return { upload, loading, error };
 }
 
+
+
+/* ------------------------------------------------------------------ */
+/* useGenerationJobs (unified job queue)                               */
+/* ------------------------------------------------------------------ */
+
+export type GenerationJobType = "image" | "video" | "audio";
+export type GenerationJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export type GenerationJob = {
+  id: string;
+  jobType: GenerationJobType;
+  provider: string;
+  model: string | null;
+  providerTaskId: string | null;
+  prompt: string;
+  inputParams: Record<string, unknown>;
+  status: GenerationJobStatus;
+  error: string | null;
+  resultUrl: string | null;
+  resultMetadata: Record<string, unknown>;
+  targetType: string;
+  targetId: string | null;
+  projectId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+type JobsApiResponse = {
+  success: boolean;
+  job?: Record<string, unknown>;
+  jobs?: Array<Record<string, unknown>>;
+  error?: string;
+};
+
+function parseJob(raw: Record<string, unknown>): GenerationJob {
+  return {
+    id: String(raw.id || ""),
+    jobType: String(raw.job_type || "image") as GenerationJobType,
+    provider: String(raw.provider || ""),
+    model: raw.model ? String(raw.model) : null,
+    providerTaskId: raw.provider_task_id ? String(raw.provider_task_id) : null,
+    prompt: String(raw.prompt || ""),
+    inputParams: (raw.input_params as Record<string, unknown>) || {},
+    status: String(raw.status || "queued") as GenerationJobStatus,
+    error: raw.error ? String(raw.error) : null,
+    resultUrl: raw.result_url ? String(raw.result_url) : null,
+    resultMetadata: (raw.result_metadata as Record<string, unknown>) || {},
+    targetType: String(raw.target_type || "standalone"),
+    targetId: raw.target_id ? String(raw.target_id) : null,
+    projectId: raw.project_id ? String(raw.project_id) : null,
+    createdAt: String(raw.created_at || ""),
+    updatedAt: String(raw.updated_at || ""),
+    completedAt: raw.completed_at ? String(raw.completed_at) : null,
+  };
+}
+
+type CreateJobInput = {
+  jobType: GenerationJobType;
+  provider: string;
+  model?: string;
+  prompt: string;
+  inputParams?: Record<string, unknown>;
+  targetType?: string;
+  targetId?: string;
+};
+
+type UpdateJobInput = {
+  status?: GenerationJobStatus;
+  providerTaskId?: string;
+  resultUrl?: string;
+  resultMetadata?: Record<string, unknown>;
+  error?: string | null;
+};
+
+export function useGenerationJobs(
+  session: ProductionSession,
+  projectId: string,
+): {
+  createJob: (input: CreateJobInput) => Promise<GenerationJob>;
+  listJobs: (filters?: { status?: GenerationJobStatus; targetType?: string; targetId?: string; limit?: number }) => Promise<GenerationJob[]>;
+  getJob: (jobId: string) => Promise<GenerationJob>;
+  updateJob: (jobId: string, patch: UpdateJobInput) => Promise<GenerationJob>;
+  cancelJob: (jobId: string) => Promise<void>;
+  pollActiveJobs: () => Promise<GenerationJob[]>;
+  loading: boolean;
+  error: string | null;
+} {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const callApi = useCallback(async (body: Record<string, unknown>): Promise<JobsApiResponse> => {
+    const token = getAccessToken(session);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const response = await fetch("/api/production/jobs", {
+        method: "POST",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+        body: JSON.stringify({ ...body, projectId }),
+      });
+      const payload = (await parseJsonSafely(response)) as JobsApiResponse | null;
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "操作失败，请稍后再试。");
+      }
+      return payload;
+    } finally {
+      cancel();
+    }
+  }, [session, projectId]);
+
+  const createJob = useCallback(async (input: CreateJobInput): Promise<GenerationJob> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await callApi({
+        action: "create",
+        jobType: input.jobType,
+        provider: input.provider,
+        model: input.model || null,
+        prompt: input.prompt,
+        inputParams: input.inputParams || {},
+        targetType: input.targetType || "standalone",
+        targetId: input.targetId || null,
+      });
+      if (!payload.job) throw new Error("创建任务失败。");
+      return parseJob(payload.job);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "创建任务失败，请稍后再试。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      setLoading(false);
+    }
+  }, [callApi]);
+
+  const listJobs = useCallback(async (filters?: {
+    status?: GenerationJobStatus;
+    targetType?: string;
+    targetId?: string;
+    limit?: number;
+  }): Promise<GenerationJob[]> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await callApi({
+        action: "list",
+        status: filters?.status,
+        targetType: filters?.targetType,
+        targetId: filters?.targetId,
+        limit: filters?.limit || 50,
+      });
+      return (payload.jobs || []).map(parseJob);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "查询任务列表失败，请稍后再试。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      setLoading(false);
+    }
+  }, [callApi]);
+
+  const getJob = useCallback(async (jobId: string): Promise<GenerationJob> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await callApi({ action: "get", jobId });
+      if (!payload.job) throw new Error("任务不存在。");
+      return parseJob(payload.job);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "查询任务失败，请稍后再试。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      setLoading(false);
+    }
+  }, [callApi]);
+
+  const updateJob = useCallback(async (jobId: string, patch: UpdateJobInput): Promise<GenerationJob> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await callApi({ action: "update", jobId, patch });
+      if (!payload.job) throw new Error("更新任务失败。");
+      return parseJob(payload.job);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "更新任务失败，请稍后再试。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      setLoading(false);
+    }
+  }, [callApi]);
+
+  const cancelJob = useCallback(async (jobId: string): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      await callApi({ action: "cancel", jobId });
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "取消任务失败，请稍后再试。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      setLoading(false);
+    }
+  }, [callApi]);
+
+  const pollActiveJobs = useCallback(async (): Promise<GenerationJob[]> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = await callApi({ action: "list", status: "running", limit: 50 });
+      const running = (payload.jobs || []).map(parseJob);
+      const queuedPayload = await callApi({ action: "list", status: "queued", limit: 50 });
+      const queued = (queuedPayload.jobs || []).map(parseJob);
+      return [...running, ...queued];
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "轮询任务失败。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      setLoading(false);
+    }
+  }, [callApi]);
+
+  return { createJob, listJobs, getJob, updateJob, cancelJob, pollActiveJobs, loading, error };
+}
+
 /* ------------------------------------------------------------------ */
 /* useProductionApi (combined)                                         */
 /* ------------------------------------------------------------------ */
@@ -453,12 +683,14 @@ export function useProductionApi(
   image: ReturnType<typeof useShotImage>;
   video: ReturnType<typeof useShotVideo>;
   upload: ReturnType<typeof useSourceFileUpload>;
+  jobs: ReturnType<typeof useGenerationJobs>;
 } {
   const sync = useProductionSync(session, projectId);
   const chat = useProductionChat(session, projectId);
   const image = useShotImage(session, projectId);
   const video = useShotVideo(session, projectId);
   const upload = useSourceFileUpload(session, projectId);
+  const jobs = useGenerationJobs(session, projectId);
 
-  return { sync, chat, image, video, upload };
+  return { sync, chat, image, video, upload, jobs };
 }
