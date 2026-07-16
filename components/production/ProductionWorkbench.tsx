@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Download, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
+import { Clock, Download, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Video } from "lucide-react";
 import { readProjectsFromStorage } from "@/lib/projects";
 import {
   addProductionHistory,
@@ -28,6 +28,7 @@ import { readCreativeHandoff } from "@/lib/creative-handoff";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useProductionApi } from "@/lib/production/hooks";
 import { ShotStatusBadge, ShotThumbnail, PromptViewer, ShotActionBar } from "./ShotCardParts";
+import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
 import styles from "./ProductionWorkbench.module.css";
 
 type Props = {
@@ -61,7 +62,11 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
   );
   const [input, setInput] = useState("");
   const [session, setSession] = useState<Session | null>(null);
-  const [notice, setNotice] = useState("");
+    const [notice, setNotice] = useState("");
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versionList, setVersionList] = useState<VersionRecord[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [versionDiff, setVersionDiff] = useState<VersionDiffResult | null>(null);
   const selectedShot = state.shots.find((shot) => shot.id === state.selectedShotId) || state.shots[0];
   const timeline = useMemo(() => productionTimelineItems(state), [state]);
   const projectId = state.projectId || state.id || "draft";
@@ -344,10 +349,67 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     }
     try {
       await api.sync.saveToCloud(state);
-      setNotice("已同步到云端。");
+      // Auto-create version snapshot
+      try {
+        await api.versions.createVersion({
+          entityType: "production_workbench",
+          entityId: projectId,
+          snapshotText: state.title,
+          snapshotJson: { productionState: state },
+          source: "manual",
+        });
+      } catch {
+        // Version snapshot failure is non-fatal
+      }
+      setNotice("已同步到云端，版本快照已保存。");
     } catch (err) {
       const message = err instanceof Error ? err.message : "云端同步失败。";
       setNotice(`云端同步失败：${message}`);
+    }
+  }
+
+  async function openVersionHistory() {
+    setShowVersionHistory(true);
+    setVersionDiff(null);
+    setSelectedVersionId(null);
+    const versions = await api.versions.listVersions("production_workbench", projectId);
+    setVersionList(versions);
+  }
+
+  function closeVersionHistory() {
+    setShowVersionHistory(false);
+    setVersionDiff(null);
+    setSelectedVersionId(null);
+  }
+
+  function handleSelectVersion(versionId: string) {
+    setSelectedVersionId(versionId);
+    setVersionDiff(null);
+  }
+
+  async function handleRestoreVersion(versionId: string) {
+    const restored = await api.versions.restoreVersion(versionId);
+    if (restored) {
+      // Reload from cloud to get the restored state
+      try {
+        const restoredState = await api.sync.loadFromCloud();
+        if (restoredState) {
+          setState(restoredState);
+          setNotice("已恢复到历史版本，请刷新查看完整状态。");
+        }
+      } catch {
+        setNotice("版本已恢复，请重新加载工作台查看。");
+      }
+      // Refresh version list
+      const versions = await api.versions.listVersions("production_workbench", projectId);
+      setVersionList(versions);
+    }
+  }
+
+  async function handleCompareVersions(versionA: string, versionB: string) {
+    const diff = await api.versions.compareVersions(versionA, versionB);
+    if (diff) {
+      setVersionDiff(diff as unknown as VersionDiffResult);
     }
   }
 
@@ -381,6 +443,7 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
           ))}
         </nav>
         <div className={styles.actionRow}>
+          <button className={styles.secondaryButton} type="button" onClick={openVersionHistory}><Clock size={16} /> 版本历史</button>
           <button className={styles.secondaryButton} type="button" onClick={saveAll}><Save size={16} /> 保存</button>
           <button className={styles.primaryButton} type="button" onClick={exportMarkdown}><Download size={16} /> 导出</button>
         </div>
@@ -467,6 +530,19 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
           </div>
         </section>
       </section>
+      {showVersionHistory ? (
+        <VersionHistory
+          versions={versionList}
+          loading={api.versions.loading}
+          error={api.versions.error}
+          onSelect={handleSelectVersion}
+          onRestore={handleRestoreVersion}
+          onCompare={handleCompareVersions}
+          diff={versionDiff}
+          selectedVersionId={selectedVersionId}
+          onClose={closeVersionHistory}
+        />
+      ) : null}
     </main>
   );
 }

@@ -412,6 +412,30 @@ export async function restoreVersion(userId: string, versionId: string) {
     await updateStoryBible(userId, version.project_id, version.snapshot_json as Partial<StoryBible>, "story_bible");
   }
 
+  if (version.entity_type === "production_workbench") {
+    // Restore production workbench state by writing the snapshot back to the
+    // delivery_package JSON column. The frontend will pick it up on next load.
+    const snapshot = version.snapshot_json as { productionState?: unknown } | null;
+    if (snapshot?.productionState) {
+      const payload = JSON.stringify({
+        productionState: snapshot.productionState,
+        exportedAt: new Date().toISOString(),
+        version: "production-storyboard-backend-v1",
+        restoredFrom: version.id,
+      });
+      await serviceFetch(
+        `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(version.project_id)}&user_id=eq.${encodeURIComponent(userId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            delivery_package: payload,
+            updated_at: new Date().toISOString(),
+          }),
+        },
+      );
+    }
+  }
+
   return version;
 }
 

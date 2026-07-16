@@ -866,6 +866,196 @@ export function useGenerationJobs(
   return { createJob, listJobs, getJob, updateJob, cancelJob, pollActiveJobs, loading, error };
 }
 
+
+/* ------------------------------------------------------------------ */
+/* useVersions (version history & restore)                             */
+/* ------------------------------------------------------------------ */
+
+export type VersionRecord = {
+  id: string;
+  versionNo: number | null;
+  source: string;
+  entityType: string;
+  entityId: string;
+  stepKey: string | null;
+  snapshotText: string | null;
+  snapshotJson: unknown;
+  diffJson: unknown;
+  createdAt: string;
+};
+
+type VersionApiResponse = {
+  success: boolean;
+  versions?: Array<Record<string, unknown>>;
+  version?: Record<string, unknown>;
+  diff?: {
+    text: { changeCount: number; changes: Array<Record<string, unknown>> };
+    json: { changeCount: number; changes: Array<Record<string, unknown>> };
+  };
+  error?: string;
+};
+
+function parseVersion(raw: Record<string, unknown>): VersionRecord {
+  return {
+    id: String(raw.id || ""),
+    versionNo: raw.version_no != null ? Number(raw.version_no) : null,
+    source: String(raw.source || raw.version_type || "manual"),
+    entityType: String(raw.entity_type || ""),
+    entityId: String(raw.entity_id || ""),
+    stepKey: raw.step_key ? String(raw.step_key) : null,
+    snapshotText: raw.snapshot_text ? String(raw.snapshot_text) : null,
+    snapshotJson: raw.snapshot_json ?? raw.content_snapshot ?? {},
+    diffJson: raw.diff_json ?? raw.diff_snapshot ?? {},
+    createdAt: String(raw.created_at || ""),
+  };
+}
+
+export function useVersions(
+  session: ProductionSession,
+  projectId: string,
+): {
+  listVersions: (entityType?: string, entityId?: string) => Promise<VersionRecord[]>;
+  createVersion: (input: { entityType: string; entityId?: string; snapshotText?: string; snapshotJson?: unknown; source?: string }) => Promise<VersionRecord | null>;
+  restoreVersion: (versionId: string) => Promise<VersionRecord | null>;
+  compareVersions: (versionA: string, versionB: string) => Promise<{ text: { changeCount: number; changes: unknown[] }; json: { changeCount: number; changes: unknown[] } } | null>;
+  loading: boolean;
+  error: string | null;
+} {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const listVersions = useCallback(async (entityType?: string, entityId?: string): Promise<VersionRecord[]> => {
+    const token = getAccessToken(session);
+    setLoading(true);
+    setError(null);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const params = new URLSearchParams({ projectId });
+      if (entityType) params.set("entityType", entityType);
+      if (entityId) params.set("entityId", entityId);
+      const response = await fetch(`/api/versions?${params.toString()}`, {
+        method: "GET",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+      });
+      const payload = (await parseJsonSafely(response)) as VersionApiResponse | null;
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error || "查询版本列表失败。");
+      }
+      return (payload.versions || []).map(parseVersion);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "查询版本列表失败。");
+      setError(friendly.message);
+      return [];
+    } finally {
+      cancel();
+      setLoading(false);
+    }
+  }, [session, projectId]);
+
+  const createVersion = useCallback(async (input: {
+    entityType: string;
+    entityId?: string;
+    snapshotText?: string;
+    snapshotJson?: unknown;
+    source?: string;
+  }): Promise<VersionRecord | null> => {
+    const token = getAccessToken(session);
+    setLoading(true);
+    setError(null);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const response = await fetch("/api/versions", {
+        method: "POST",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+        body: JSON.stringify({
+          projectId,
+          entityType: input.entityType,
+          entityId: input.entityId || "",
+          snapshotText: input.snapshotText || "",
+          snapshotJson: input.snapshotJson || {},
+          source: input.source || "manual",
+        }),
+      });
+      const payload = (await parseJsonSafely(response)) as VersionApiResponse | null;
+      if (!response.ok || !payload?.version) {
+        throw new Error(payload?.error || "创建版本失败。");
+      }
+      return parseVersion(payload.version);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "创建版本失败。");
+      setError(friendly.message);
+      return null;
+    } finally {
+      cancel();
+      setLoading(false);
+    }
+  }, [session, projectId]);
+
+  const restoreVersion = useCallback(async (versionId: string): Promise<VersionRecord | null> => {
+    const token = getAccessToken(session);
+    setLoading(true);
+    setError(null);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const response = await fetch("/api/versions", {
+        method: "PATCH",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+        body: JSON.stringify({ action: "restore", versionId }),
+      });
+      const payload = (await parseJsonSafely(response)) as VersionApiResponse | null;
+      if (!response.ok || !payload?.version) {
+        throw new Error(payload?.error || "恢复版本失败。");
+      }
+      return parseVersion(payload.version);
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "恢复版本失败。");
+      setError(friendly.message);
+      throw friendly;
+    } finally {
+      cancel();
+      setLoading(false);
+    }
+  }, [session, projectId]);
+
+  const compareVersions = useCallback(async (versionA: string, versionB: string): Promise<{
+    text: { changeCount: number; changes: unknown[] };
+    json: { changeCount: number; changes: unknown[] };
+  } | null> => {
+    const token = getAccessToken(session);
+    setLoading(true);
+    setError(null);
+    const { controller, cancel } = createTimeoutController(30_000);
+    try {
+      const params = new URLSearchParams({ projectId, versionA, versionB });
+      const response = await fetch(`/api/versions?${params.toString()}`, {
+        method: "GET",
+        headers: buildHeaders(token),
+        signal: controller.signal,
+      });
+      const payload = (await parseJsonSafely(response)) as VersionApiResponse | null;
+      if (!response.ok || !payload?.diff) {
+        throw new Error(payload?.error || "对比版本失败。");
+      }
+      return {
+        text: { changeCount: payload.diff.text?.changeCount ?? 0, changes: payload.diff.text?.changes ?? [] },
+        json: { changeCount: payload.diff.json?.changeCount ?? 0, changes: payload.diff.json?.changes ?? [] },
+      };
+    } catch (err) {
+      const friendly = friendlyNetworkError(err, "对比版本失败。");
+      setError(friendly.message);
+      return null;
+    } finally {
+      cancel();
+      setLoading(false);
+    }
+  }, [session, projectId]);
+
+  return { listVersions, createVersion, restoreVersion, compareVersions, loading, error };
+}
+
 /* ------------------------------------------------------------------ */
 /* useProductionApi (combined)                                         */
 /* ------------------------------------------------------------------ */
@@ -881,6 +1071,7 @@ export function useProductionApi(
   upload: ReturnType<typeof useSourceFileUpload>;
   jobs: ReturnType<typeof useGenerationJobs>;
   cardDraw: ReturnType<typeof useCardDraw>;
+  versions: ReturnType<typeof useVersions>;
 } {
   const sync = useProductionSync(session, projectId);
   const chat = useProductionChat(session, projectId);
@@ -889,6 +1080,7 @@ export function useProductionApi(
   const upload = useSourceFileUpload(session, projectId);
   const jobs = useGenerationJobs(session, projectId);
   const cardDraw = useCardDraw(session, projectId);
+  const versions = useVersions(session, projectId);
 
-  return { sync, chat, image, video, upload, jobs, cardDraw };
+  return { sync, chat, image, video, upload, jobs, cardDraw, versions };
 }
