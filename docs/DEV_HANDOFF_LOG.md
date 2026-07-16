@@ -12,35 +12,50 @@ docs/CODEX_HANDOFF_SOP.md
 
 ---
 
-## 2026-07-16 - TRAE: 数据库迁移工程 — Supabase CLI 基础设施
+## 2026-07-16 - TRAE: 分镜结构化后端 — Production Storyboard Backend
 
-**变更类型**: 数据库基础设施
+**变更类型**: 后端 API + 数据库
 
 **变更内容**:
-- 安装 Supabase CLI 2.109.1 并初始化 `supabase/` 目录
-- 通过 pg_dump 从生产数据库拉取基线 migration (`20260716000000_baseline.sql`)：44 表 + 67 RLS 策略 + 29 索引
-- 将 7 个历史 SQL 文件从 `docs/` 移动到 `docs/archive/supabase-legacy/`
-- 创建 `supabase/README.md` 工作流指南
-- 更新 `.env.example` 添加 `SUPABASE_PROJECT_REF` 说明 + 修正 RLS 文件路径引用
+- 创建 `storyflow_production_projects` 和 `storyflow_production_shots` 数据库表 + RLS + 索引
+- 通过 psql 直接应用到生产数据库
+- 创建 6 个 production API 路由：
+  - `/api/production/save-state` — 保存/加载 ProductionProjectState
+  - `/api/production/storyboard-chat` — AI 对话生成分镜（复用 callRoutedProvider）
+  - `/api/production/source-file` — 文件上传解析（复用现有解析逻辑）
+  - `/api/production/generate-shot-image` — 单镜头图片生成（复用 art providers）
+  - `/api/production/generate-shot-video` — 单镜头视频生成（复用 MiniMax video API）
+  - `/api/production/video-status` — 视频任务状态查询
+- 创建 `lib/production/api.ts` 共享工具模块（DB 读写、状态序列化）
+- 双写策略：结构化表 + JSON 兼容快照（deliveryPackage）
 
 **新增文件**:
-- `supabase/config.toml` — CLI 配置
-- `supabase/README.md` — 工作流指南
-- `supabase/migrations/20260716000000_baseline.sql` — 生产 schema 基线 (3236 行, 116KB)
-- `docs/archive/supabase-legacy/README.md` — 历史归档说明
+- `supabase/migrations/20260716120000_production_storyboard_backend.sql`
+- `lib/production/api.ts`
+- `app/api/production/save-state/route.ts`
+- `app/api/production/storyboard-chat/route.ts`
+- `app/api/production/source-file/route.ts`
+- `app/api/production/generate-shot-image/route.ts`
+- `app/api/production/generate-shot-video/route.ts`
+- `app/api/production/video-status/route.ts`
 
-**移动文件** (7 个):
-- `docs/supabase-*.sql` -> `docs/archive/supabase-legacy/`
+**数据库变更**:
+- 新增 2 个表：`storyflow_production_projects`, `storyflow_production_shots`
+- 4 个索引 + 8 个 RLS 策略
+- 已通过 psql 直接应用到生产数据库
 
-**修改文件**:
-- `.env.example` — 添加 SUPABASE_PROJECT_REF 说明 + 修正路径引用
+**验证结果**:
+- TypeScript 类型检查通过（`tsc --noEmit` 无 production 相关错误）
+- Vercel 部署待验证
 
 **后续影响**:
-- 所有数据库 schema 变更通过 `supabase migration new` + `supabase db push` 管理
-- 不再直接在 Supabase Dashboard 执行 SQL
-- 后续 11 个子项目将通过此工作流添加新表
+- 前端 ProductionWorkbench 可接入云端保存（后续子项目）
+- 所有分镜数据支持结构化 CRUD
+- JSON 兼容快照保持向后兼容
 
 ---
+
+
 
 
 
