@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
 import { ART_MODEL_CATALOG, findDefaultArtModel } from "@/lib/art/providers/catalog";
@@ -93,6 +93,21 @@ export default function ArtAssetDetail() {
     setSelectedVersionId("");
   }
 
+  function deleteVariant(variantId: string) {
+    if (!asset?.variants?.length) return;
+    const target = asset.variants.find((item) => item.id === variantId);
+    if (!target) return;
+    if (target.type === "master") return setNotice("角色母版不可删除，如需重置请直接生成新版本。");
+    if (!window.confirm(`确定删除变体「${target.name}」及其所有版本吗？`)) return;
+    const remaining = asset.variants.filter((item) => item.id !== variantId);
+    persist({ ...asset, variants: remaining });
+    if (selectedVariantId === variantId) {
+      const next = remaining[0];
+      setSelectedVariantId(next?.id || "");
+      setSelectedVersionId(next?.approvedVersionId || next?.versions[0]?.id || "");
+    }
+  }
+
   async function uploadVersion(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !asset || !selectedVariant) return;
@@ -168,7 +183,7 @@ export default function ArtAssetDetail() {
     {notice ? <button className={styles.notice} onClick={() => setNotice("")} type="button">{notice}</button> : null}
     <div className={styles.layout}>
       <section className={styles.mediaPanel}>
-        <div className={styles.variantTabs}>{asset.variants?.map((variant) => <button key={variant.id} type="button" className={selectedVariant?.id === variant.id ? styles.active : ""} onClick={() => { setSelectedVariantId(variant.id); setSelectedVersionId(variant.approvedVersionId || variant.versions[0]?.id || ""); }}>{variant.name}</button>)}<button type="button" onClick={addVariant}><Plus size={14} />新增变体</button></div>
+        <div className={styles.variantTabs}>{asset.variants?.map((variant) => <div key={variant.id} className={selectedVariant?.id === variant.id ? `${styles.variantTab} ${styles.active}` : styles.variantTab}><button type="button" onClick={() => { setSelectedVariantId(variant.id); setSelectedVersionId(variant.approvedVersionId || variant.versions[0]?.id || ""); }}>{variant.name}</button>{variant.type !== "master" ? <button type="button" className={styles.variantDelete} title="删除变体" onClick={() => deleteVariant(variant.id)}><X size={11} /></button> : null}</div>)}<button type="button" onClick={addVariant}><Plus size={14} />新增变体</button></div>
         <div className={styles.stage}>{selectedVersion ? <img src={selectedVersion.imageUrl} alt={asset.name} /> : <div><ImagePlus size={42} /><strong>暂无图片版本</strong><span>上传外部版本，或使用右侧设置生成</span></div>}</div>
         <div className={styles.versionStrip}>{selectedVariant?.versions.map((version, index) => <button key={version.id} type="button" className={selectedVersion?.id === version.id ? styles.selectedVersion : ""} onClick={() => setSelectedVersionId(version.id)}><img src={version.imageUrl} alt={`版本 ${index + 1}`} /><span>{version.source === "uploaded" ? "上传" : version.model || "AI"}</span>{selectedVariant.approvedVersionId === version.id ? <i><Check size={11} /></i> : null}</button>)}<button className={styles.uploadTile} type="button" onClick={() => uploadInput.current?.click()}><Upload size={18} />上传版本</button><input ref={uploadInput} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadVersion} /></div>
       </section>

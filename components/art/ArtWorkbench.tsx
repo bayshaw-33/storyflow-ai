@@ -266,7 +266,16 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
 }
 
 function AssetCard({ asset, onDelete, isZh }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean }) {
-  const image = asset.referenceSheetUrl || asset.threeViewUrl || asset.conceptUrl;
+  const image = useMemo(() => {
+    // 优先使用已设为终稿的版本图；否则取最新生成的版本图
+    const masterVariant = asset.variants?.find((item) => item.type === "master");
+    const approvedVersion = masterVariant?.versions.find((item) => item.id === masterVariant.approvedVersionId);
+    if (approvedVersion?.imageUrl?.startsWith("http")) return approvedVersion.imageUrl;
+    const latestVersion = asset.variants?.flatMap((item) => item.versions).find((item) => item.imageUrl?.startsWith("http"));
+    if (latestVersion?.imageUrl) return latestVersion.imageUrl;
+    // 回退到资产级字段（仅在未使用 variants 结构时）
+    return asset.referenceSheetUrl || asset.threeViewUrl || asset.conceptUrl;
+  }, [asset]);
   return (
     <div className={styles.assetCardWrapper}>
       <Link className={styles.assetCard} href={`/art-workbench/assets/${encodeURIComponent(asset.id)}`}>
