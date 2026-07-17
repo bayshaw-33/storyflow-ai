@@ -1,5 +1,41 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 02:19 - Codex / P3 CAS Blocker 专项验证
+
+### 本次目标
+- 独立复核 `bdc971e` 是否关闭 `expectedRevision: null` 绕过当前态 CAS 的安全 BLOCKER；其余项仅滚动记录。
+
+### 已完成
+- 结论：**CAS BLOCKER 已关闭**。`SaveRequest.expectedRevision` 已收紧为 `number`，`/api/storyboard/state` 运行时仅接受非负整数。
+- 409 的“另存快照”只调用独立 snapshot API；`createStoryboardSnapshot` 唯一数据操作是向 `storyflow_versions` 写入完整 `snapshot_json`，不查询或更新当前态、不调用 `save_storyboard_state` / `get_storyboard_state`。
+- 检出的一处 `expectedRevision ?? null` 位于视频 Job `input_params` 元数据，不进入保存 RPC，未构成旧 CAS 绕过残留。
+- 已更新 `docs/reviews/PRODUCTION-WORKBENCH-ROLLING-REVIEW.md`：CAS 标为已关闭；staging migration、真实并发/Storage/浏览器验证仍为不阻塞的 MUST FIX。
+
+### 修改文件
+- `docs/reviews/PRODUCTION-WORKBENCH-ROLLING-REVIEW.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `node --test tests/storyboard-state-api.test.mjs tests/storyboard-e2e-scenarios.test.mjs tests/storyboard-video-e2e.test.mjs`：35/35 通过。
+- `node --test tests/*.test.mjs`：214/214 通过。
+- `npx tsc --noEmit`：通过。
+- `pnpm build`：通过（仅有既有 `LOGO_PRIMARY` orphan token 警告，不影响构建）。
+- `git diff --check bdc971e^..bdc971e`：通过。
+- staging migration：未执行；当前 Supabase CLI link 指向 production，遵守零 production 写入。
+
+### Git 信息
+- commit：本地审查提交（待网络恢复后推送）。
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁。
+- push：未完成；2026-07-18 GitHub 443 网络连接超时，未绕过 pre-push 闸门重试。
+
+### 未完成 / 风险
+- 数据库幂等、临时 CDN URL 转存、首帧权威解析、刷新恢复与批量结果仍须以 staging/浏览器实测关闭；不阻塞 TRAE 后续功能开发。
+- 建议补充 `/api/storyboard/state` JSON `expectedRevision: null` 返回 400 的路由级回归测试；当前 M4 为源码检查，不能替代 HTTP 级覆盖。
+
+### 给下一位
+- 不要恢复 `expectedRevision: null` 的 current-state 保存语义；快照只允许走 `/api/storyboard/snapshots`。
+- migration 仅在 staging link 明确后由 Codex 执行并记录回滚演练，禁止 production 写入。
+
 ## 2026-07-18 18:00 - TRAE / P3 任务 1-3 Atlas Cloud + DB 幂等 + CDN 转存 + legacy 清缴
 
 ### 本次目标
