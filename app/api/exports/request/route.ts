@@ -29,6 +29,7 @@ import type { JurisdictionProfile, VisibleDisclosureMode } from "@/lib/complianc
 import { uploadExportArtifact } from "@/lib/exports/storage";
 import { recordEvidenceEvent } from "@/lib/evidence/ledger";
 import { exportEvidenceEvent } from "@/lib/evidence/hooks";
+import { isEvidenceLedgerEnabled } from "@/lib/evidence/feature-flags";
 import type {
   AiOrigin,
   ExportRequestInput,
@@ -282,7 +283,7 @@ export async function POST(request: NextRequest) {
       }),
     });
 
-    if (input.episodeId?.trim()) {
+    if (isEvidenceLedgerEnabled() && input.episodeId?.trim()) {
       await recordEvidenceEvent(exportEvidenceEvent({
         ownerId: user.id,
         projectId: input.projectId,

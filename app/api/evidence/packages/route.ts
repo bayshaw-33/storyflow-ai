@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { listEvidenceEvents, recordEvidenceEvent } from "@/lib/evidence/ledger";
 import { createServerEvidencePackageStore, materializeEvidencePackage } from "@/lib/evidence/package";
+import { isEvidenceLedgerEnabled } from "@/lib/evidence/feature-flags";
 import { authenticateRequest, hasServiceRoleConfig } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ function validScope(value: unknown): value is { projectId: string; sourceUnitId:
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasServiceRoleConfig()) return NextResponse.json({ success: false, error: "证据服务未配置。" }, { status: 503 });
+    if (!hasServiceRoleConfig() || !isEvidenceLedgerEnabled()) return NextResponse.json({ success: false, error: "证据服务未启用。" }, { status: 503 });
     const body = await request.json().catch(() => null);
     if (!validScope(body)) return NextResponse.json({ success: false, error: "缺少 projectId 或 sourceUnitId。" }, { status: 400 });
     const user = await authenticateRequest(request);

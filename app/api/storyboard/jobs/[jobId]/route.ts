@@ -18,6 +18,7 @@ import { resolveVideoProvider } from "@/lib/ai/video/provider";
 import { persistVideoArtifact } from "@/lib/ai/video/storage";
 import { recordEvidenceEvent } from "@/lib/evidence/ledger";
 import { completedGenerationEvidenceEvent } from "@/lib/evidence/hooks";
+import { isEvidenceLedgerEnabled } from "@/lib/evidence/feature-flags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -202,7 +203,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
           },
         };
         const scopedInput = job.input_params as { projectId?: unknown; sourceUnitId?: unknown };
-        if (typeof scopedInput.projectId === "string" && scopedInput.projectId && typeof scopedInput.sourceUnitId === "string" && scopedInput.sourceUnitId) {
+        if (isEvidenceLedgerEnabled() && typeof scopedInput.projectId === "string" && scopedInput.projectId && typeof scopedInput.sourceUnitId === "string" && scopedInput.sourceUnitId) {
           await recordEvidenceEvent(completedGenerationEvidenceEvent({
             ownerId: userId,
             projectId: scopedInput.projectId,

@@ -26,6 +26,7 @@
 - `pnpm exec tsc --noEmit`：通过。
 - staging：两项 Evidence migration 已应用，migration history 17/17 一致；四张表均启用 RLS、bucket 为 private、authenticated 无 append RPC 执行权而 service_role 有执行权，immutable trigger 的 `search_path=pg_catalog` 已核验。
 - 真实带认证 `POST /api/evidence/packages` / Storage 下载：待 staging 部署获得新路由后验证；production 零写入。
+- 启用条件：各部署环境必须显式设 `EVIDENCE_LEDGER_ENABLED=true`；默认关闭，防止尚未应用 migration 的环境使现有快照/导出路径失败。
 
 ### Git 信息
 - commits：`4f252c4`、`0b3469c`、`e7074c8`、`1315cc1`、`fb2fe21`（hardening 与本次交接）。
