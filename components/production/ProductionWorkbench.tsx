@@ -66,7 +66,9 @@ import {
   type PromptResultMap,
   type ShotFrameMap,
 } from "./StoryboardPanels";
+import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 import { ExportMenu } from "./ExportMenu";
+import { StoryboardExportMenu } from "./StoryboardExportMenu";
 import type { ProductionProjectState } from "@/lib/production/types";
 import styles from "./ProductionWorkbench.module.css";
 
@@ -121,6 +123,12 @@ export function ProductionWorkbench() {
   const [candidates, setCandidates] = useState<AssetCandidateMap>({});
   const [frames, setFrames] = useState<ShotFrameMap>({});
   const [prompts, setPrompts] = useState<PromptResultMap>({});
+
+  // --- 视频区状态（任务 1）---
+  const [videoJobs, setVideoJobs] = useState<VideoJobMap>({});
+  const [submittingVideoShotId, setSubmittingVideoShotId] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<BatchVideoProgress | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
 
   // --- 弹窗 ---
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -602,6 +610,158 @@ export function ProductionWorkbench() {
     }
   }
 
+  /**
+   * 任务 1：提交单个 Shot 的视频生成。
+   * 重新生成时保留旧视频直到新视频成功（不先删旧的）。
+   */
+  async function submitVideo(shotId: string) {
+    if (!projectId || !sourceUnitId || !session) {
+      setNotice("未登录或缺少 projectId/sourceUnitId，无法生成视频。");
+      return;
+    }
+    const existing = videoJobs[shotId];
+    if (existing && (existing.status === "queued" || existing.status === "running")) {
+      setNotice("该 Shot 视频正在生成中，请等待。");
+      return;
+    }
+    setSubmittingVideoShotId(shotId);
+    const idempotencyKey = `video-${shotId}-${Date.now()}`;
+    try {
+      const response = await storyboardClient.generateVideo(shotId, {
+        projectId,
+        sourceUnitId,
+        idempotencyKey,
+        expectedRevision: revision ?? undefined,
+      });
+      setVideoJobs((current) => ({
+        ...current,
+        [shotId]: {
+          jobId: response.jobId,
+          status: response.reused ? (response.status as VideoJobState["status"]) : "queued",
+          startedAt: Date.now(),
+          finishedAt: null,
+          videoUrl: existing?.videoUrl ?? null,
+          costEstimate: null,
+          durationSeconds: null,
+          error: null,
+          providerTaskId: response.providerTaskId ?? null,
+          aspectRatio: "9:16",
+        },
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "视频生成提交失败。";
+      setVideoJobs((current) => ({
+        ...current,
+        [shotId]: {
+          jobId: null,
+          status: "failed",
+          startedAt: null,
+          finishedAt: Date.now(),
+          videoUrl: existing?.videoUrl ?? null,
+          costEstimate: null,
+          durationSeconds: null,
+          error: message,
+          providerTaskId: null,
+          aspectRatio: "9:16",
+        },
+      }));
+      setNotice(`视频生成失败：${message}`);
+    } finally {
+      setSubmittingVideoShotId(null);
+    }
+  }
+
+  /** 任务 1：轮询单个 Shot 的视频 job 状态（每 5s 由 ShotVideoPanel 触发）。 */
+  async function pollVideoJob(shotId: string) {
+    const state = videoJobs[shotId];
+    if (!state?.jobId) return;
+    if (state.status !== "queued" && state.status !== "running") return;
+    try {
+      const result = await storyboardClient.queryVideoJob(state.jobId);
+      const job = result.job;
+      if (job.status === "completed" && job.result_url) {
+        const metadata = job.result_metadata as { durationSeconds?: number; costEstimate?: number };
+        setVideoJobs((current) => ({
+          ...current,
+          [shotId]: {
+            ...current[shotId],
+            status: "completed",
+            finishedAt: Date.now(),
+            videoUrl: job.result_url,
+            durationSeconds: metadata.durationSeconds ?? null,
+            costEstimate: metadata.costEstimate ?? null,
+            error: null,
+          },
+        }));
+      } else if (job.status === "failed") {
+        setVideoJobs((current) => ({
+          ...current,
+          [shotId]: {
+            ...current[shotId],
+            status: "failed",
+            finishedAt: Date.now(),
+            error: job.error ?? "视频生成失败。",
+          },
+        }));
+      }
+    } catch {
+      // 轮询失败静默，下次再试
+    }
+  }
+
+  /** 任务 2：批量提交视频生成。 */
+  async function batchSubmitVideos(shotIds: string[]) {
+    if (batchRunning) return;
+    if (shotIds.length === 0) {
+      setNotice("没有可提交的 Shot。");
+      return;
+    }
+    setBatchRunning(true);
+    setBatchProgress({ total: shotIds.length, completed: 0, failed: 0, running: 0 });
+    let completed = 0;
+    let failed = 0;
+    for (const shotId of shotIds) {
+      const existing = videoJobs[shotId];
+      if (existing && (existing.status === "queued" || existing.status === "running")) continue;
+      if (existing?.status === "completed" && existing.videoUrl) continue;
+      setBatchProgress((p) => p ? { ...p, running: p.running + 1 } : p);
+      await submitVideo(shotId);
+      const newState = videoJobs[shotId];
+      if (newState?.status === "failed") failed += 1;
+      else completed += 1;
+      setBatchProgress((p) => p ? { ...p, completed: p.completed + (newState?.status === "failed" ? 0 : 1), failed: p.failed + (newState?.status === "failed" ? 1 : 0), running: Math.max(0, p.running - 1) } : p);
+    }
+    setBatchRunning(false);
+    setNotice(`批量完成：${completed} 成功，${failed} 失败。`);
+  }
+
+  function batchAll() {
+    const all = scenes.flatMap((s) => s.shots).map((sh) => sh.id ?? sh.clientId ?? "").filter(Boolean);
+    void batchSubmitVideos(all);
+  }
+
+  function batchScene(sceneId: string) {
+    const scene = scenes.find((s) => (s.id ?? s.clientId) === sceneId);
+    if (!scene) return;
+    const ids = scene.shots.map((sh) => sh.id ?? sh.clientId ?? "").filter(Boolean);
+    void batchSubmitVideos(ids);
+  }
+
+  function batchUnfinished() {
+    const all = scenes.flatMap((s) => s.shots).map((sh) => sh.id ?? sh.clientId ?? "").filter(Boolean);
+    const unfinished = all.filter((id) => {
+      const st = videoJobs[id];
+      return !st || (st.status !== "completed" && st.status !== "queued" && st.status !== "running");
+    });
+    void batchSubmitVideos(unfinished);
+  }
+
+  function batchRetryFailed() {
+    const all = scenes.flatMap((s) => s.shots).map((sh) => sh.id ?? sh.clientId ?? "").filter(Boolean);
+    const failedIds = all.filter((id) => videoJobs[id]?.status === "failed");
+    void batchSubmitVideos(failedIds);
+  }
+
   // -------------------------------------------------------------------
   // 文件上传（剧本输入）
   // -------------------------------------------------------------------
@@ -852,6 +1012,14 @@ export function ProductionWorkbench() {
           <button className={styles.secondaryButton} type="button" onClick={saveToServer} disabled={saving}>
             <Save size={16} /> {saving ? "保存中..." : "保存"}
           </button>
+          <StoryboardExportMenu
+            projectId={projectId}
+            sourceUnitId={sourceUnitId}
+            projectTitle={projectTitle}
+            scenes={scenes}
+            revision={revision}
+            videoJobs={videoJobs}
+          />
           <ExportMenu
             state={{
               id: projectId,
@@ -993,6 +1161,16 @@ export function ProductionWorkbench() {
               }
             }}
             onUpdateShot={updateShot}
+            videoJobs={videoJobs}
+            submittingVideoShotId={submittingVideoShotId}
+            onGenerateVideo={submitVideo}
+            onPollVideo={pollVideoJob}
+            batchProgress={batchProgress}
+            onBatchAll={batchAll}
+            onBatchScene={batchScene}
+            onBatchUnfinished={batchUnfinished}
+            onBatchRetryFailed={batchRetryFailed}
+            batchRunning={batchRunning}
           />
         ) : null}
       </section>

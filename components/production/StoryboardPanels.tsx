@@ -40,6 +40,7 @@ import type {
   StoryboardShot,
 } from "@/lib/storyboard/contracts";
 import type { ProductionSourceFile } from "@/lib/production/types";
+import { ShotVideoPanel, BatchVideoProgressBar, type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 
 // ---------------------------------------------------------------------------
 // 共享类型与工具
@@ -686,14 +687,53 @@ type ShotFramesPanelProps = {
   onGeneratePrompts: (shotIds: string[]) => void;
   onToggleConfirm: (shotId: string) => void;
   onUpdateShot: (sceneId: string, shotId: string, patch: Partial<StoryboardShot>) => void;
+  // 视频区（任务 1）
+  videoJobs: VideoJobMap;
+  submittingVideoShotId: string | null;
+  onGenerateVideo: (shotId: string) => void;
+  onPollVideo: (shotId: string) => void;
+  // 批量（任务 2）
+  batchProgress: BatchVideoProgress | null;
+  onBatchAll: () => void;
+  onBatchScene: (sceneId: string) => void;
+  onBatchUnfinished: () => void;
+  onBatchRetryFailed: () => void;
+  batchRunning: boolean;
 };
 
 export function ShotFramesPanel(props: ShotFramesPanelProps) {
-  const { scenes, frames, prompts, generatingShotId, generatingPromptsForShots, onGenerateFrame, onGeneratePrompts, onToggleConfirm, onUpdateShot } = props;
+  const {
+    scenes, frames, prompts, generatingShotId, generatingPromptsForShots,
+    onGenerateFrame, onGeneratePrompts, onToggleConfirm, onUpdateShot,
+    videoJobs, submittingVideoShotId, onGenerateVideo, onPollVideo,
+    batchProgress, onBatchAll, onBatchScene, onBatchUnfinished, onBatchRetryFailed, batchRunning,
+  } = props;
   const allShots = useMemo(() => scenes.flatMap((s) => s.shots.map((shot) => ({ scene: s, shot }))), [scenes]);
 
   return (
     <section style={panelStyle}>
+      {/* 任务 2：批量视频按钮区 */}
+      <div style={{ marginBottom: 12, padding: "10px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: batchProgress ? 8 : 0, flexWrap: "wrap" }}>
+          <button type="button" style={secondaryButtonStyle} onClick={onBatchAll} disabled={batchRunning}>
+            生成全部视频
+          </button>
+          <button type="button" style={secondaryButtonStyle} onClick={() => {
+            const firstSceneId = scenes[0]?.id ?? scenes[0]?.clientId ?? "";
+            if (firstSceneId) onBatchScene(firstSceneId);
+          }} disabled={batchRunning || scenes.length === 0}>
+            生成当前场景视频
+          </button>
+          <button type="button" style={secondaryButtonStyle} onClick={onBatchUnfinished} disabled={batchRunning}>
+            生成未完成项
+          </button>
+          <button type="button" style={secondaryButtonStyle} onClick={onBatchRetryFailed} disabled={batchRunning}>
+            重试失败项
+          </button>
+        </div>
+        {batchProgress ? <BatchVideoProgressBar progress={batchProgress} /> : null}
+      </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>分镜图与即梦提示词</h2>
@@ -730,6 +770,10 @@ export function ShotFramesPanel(props: ShotFramesPanelProps) {
                 onGenerateFrame={() => onGenerateFrame(shotId)}
                 onToggleConfirm={() => onToggleConfirm(shotId)}
                 onUpdateShot={(patch) => onUpdateShot(scene.id ?? scene.clientId ?? "", shotId, patch)}
+                videoState={videoJobs[shotId]}
+                submittingVideo={submittingVideoShotId === shotId}
+                onGenerateVideo={() => onGenerateVideo(shotId)}
+                onPollVideo={() => onPollVideo(shotId)}
               />
             );
           })}
@@ -748,9 +792,14 @@ type ShotFrameCardProps = {
   onGenerateFrame: () => void;
   onToggleConfirm: () => void;
   onUpdateShot: (patch: Partial<StoryboardShot>) => void;
+  // 视频区
+  videoState?: VideoJobState;
+  submittingVideo: boolean;
+  onGenerateVideo: () => void;
+  onPollVideo: () => void;
 };
 
-function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerateFrame, onToggleConfirm, onUpdateShot }: ShotFrameCardProps) {
+function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerateFrame, onToggleConfirm, onUpdateShot, videoState, submittingVideo, onGenerateVideo, onPollVideo }: ShotFrameCardProps) {
   const shotId = shot.id ?? shot.clientId ?? "";
   return (
     <div style={cardStyle}>
@@ -804,6 +853,17 @@ function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerate
           <p style={{ ...mutedStyle, textAlign: "center", padding: 8 }}>尚未生成提示词。点击上方「为所有分镜生成提示词」。</p>
         )}
       </div>
+
+      {/* 任务 1：视频区 */}
+      <ShotVideoPanel
+        scene={scene}
+        shot={shot}
+        videoState={videoState}
+        hasFirstframe={Boolean(frame?.imageUrl)}
+        submitting={submittingVideo}
+        onGenerate={onGenerateVideo}
+        onPoll={onPollVideo}
+      />
     </div>
   );
 }

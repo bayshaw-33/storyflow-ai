@@ -207,6 +207,87 @@ export class StoryboardClient {
       expectConflict: true,
     });
   }
+
+  /**
+   * POST /api/storyboard/shots/:shotId/generate-video
+   *
+   * Submits a video generation job (image-to-video with the shot's confirmed
+   * firstframe). Returns the jobId; caller polls via queryVideoJob every 5s.
+   */
+  async generateVideo(shotId: string, input: {
+    projectId: string;
+    sourceUnitId: string;
+    idempotencyKey: string;
+    expectedRevision?: number;
+    promptOverride?: string;
+    firstframeImageUrl?: string;
+    duration?: number;
+  }): Promise<{ jobId: string; providerTaskId?: string; reused: boolean; status: string }> {
+    const encoded = encodeURIComponent(shotId);
+    return this.fetchJson({
+      method: "POST",
+      path: `/api/storyboard/shots/${encoded}/generate-video`,
+      body: input,
+      expectConflict: false,
+    });
+  }
+
+  /**
+   * GET /api/storyboard/jobs/:jobId
+   *
+   * Returns the current state of a generation job. If the job is a running
+   * video job, the route polls the provider once before returning.
+   */
+  async queryVideoJob(jobId: string): Promise<{
+    job: {
+      id: string;
+      job_type: string;
+      provider: string;
+      model: string | null;
+      provider_task_id: string | null;
+      prompt: string;
+      input_params: Record<string, unknown>;
+      status: string;
+      error: string | null;
+      result_url: string | null;
+      result_metadata: Record<string, unknown>;
+      target_type: string | null;
+      target_id: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+    warning?: string;
+  }> {
+    const encoded = encodeURIComponent(jobId);
+    return this.fetchJson({
+      method: "GET",
+      path: `/api/storyboard/jobs/${encoded}`,
+      expectConflict: false,
+    });
+  }
+
+  /**
+   * GET /api/storyboard/jobs?projectId=&sourceUnitId=&jobType=video
+   *
+   * Returns all video jobs for the current project+episode, used to restore
+   * progress after a page refresh.
+   */
+  async listVideoJobs(input: {
+    projectId: string;
+    sourceUnitId: string;
+  }): Promise<{ jobs: Array<{ id: string; status: string; target_id: string | null; result_url: string | null; error: string | null; created_at: string }> }> {
+    const query: Record<string, string> = {
+      projectId: input.projectId,
+      sourceUnitId: input.sourceUnitId,
+      jobType: "video",
+    };
+    return this.fetchJson({
+      method: "GET",
+      path: "/api/storyboard/jobs",
+      query,
+      expectConflict: false,
+    });
+  }
 }
 
 export type { AnalyzeRequest, AnalyzeResponse, PromptRequest, PromptResponse, SaveRequest, SaveResponse, StoryboardPromptResult };
