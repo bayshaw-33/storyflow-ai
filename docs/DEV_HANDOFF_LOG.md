@@ -1,5 +1,40 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-17 21:30 - Codex / KIIKIS-CX-G0-001 Gate 0A
+
+### 本次目标
+- 以 `4d3366b441cc0b8a9a6a966eaf52e7797d3a1b6d` 为固定基线，完成 EU/CN 双法域 AI 标识实施前架构、导出面、Schema、Feature Flag 与测试缺口审查。
+
+### 已完成
+- 穷举浏览器 Blob/print、API export、Provider/CDN URL、signed URL、通用 Job result URL、SRT/EDL/FCPXML、DOCX/ZIP/PDF 等导出/下载面。
+- 给出服务端唯一 Formal Export Gate、finalize→visible disclosure→machine marking→verify→hash/log→release 的修订流程。
+- 给出 `storyflow_exports`、五张合规表、幂等重试、Sidecar 绑定、RLS、服务端 Flags 和六类真实文件验证要求。
+- 核验 EU Article 50、中国《标识办法》及 `GB 45438-2025` 官方依据，并把未决适用问题列入 Legal 确认。
+
+### 修改文件
+- `docs/reviews/GATE-0A-DUAL-JURISDICTION-MARKING-PREFLIGHT.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `pnpm run build`：未执行；本任务仅新增 Markdown 审查文档，且共享工作区存在他人未提交的 `package.json`、`pnpm-lock.yaml`、`lib/compliance/` 实现，避免把在途代码纳入本次验证或干扰他人工作。
+- 测试：未执行；报告已确认基线 `package.json` 没有 test script，基线 CI 也不运行测试，并将其列为 Gate 0B 前 Must Fix。
+- 实测/截图：不适用（Gate 0A 架构审查）；已使用 `git show/git grep 4d3366b` 逐项核对路径与行号，`git diff --check` 通过。
+- 未验证的部分：审查期间 `main` 新增的 `3af9230` 及随后出现的在途 compliance 实现不属于指定基线，必须在 Gate 0B 按明确 commit range 审查。
+
+### Git 信息
+- commit：待提交；不得与共享工作区的他人改动混入同一提交。
+- 推送锁放行时间：未申请；未推送。
+
+### 未完成 / 风险
+- 生产 formal export 仍应保持阻断；本报告不是 Gate 0B 上线批准。
+- Sidecar 是否满足特定 EU/CN 格式要求需 Legal/标准专家确认，未确认组合必须 fail closed。
+
+### 给下一位
+- Kimi 先接受报告第 8 节五项实施前架构决定，再按第 9 节完成生产 Must Fix。
+- Gate 0B 需另给 `KIIKIS-CX-G0-002`、base/head commit、ADR、migration、测试入口、CI 与 staging 证据。
+
+---
+
 ## 2026-07-17 · P0-07 进行中 · trunk-based 工程基线
 
 **目标**：CI 配置 + pre-push hook + 交接日志 SOP 确认 + 禁用 force push
