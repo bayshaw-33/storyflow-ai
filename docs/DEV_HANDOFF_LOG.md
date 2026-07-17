@@ -1,5 +1,61 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 (TRAE) / KIIKIS 制作工作台新任务 1-4 完成
+
+### 基线与 commit range
+- 基线：main `64f5222`（P3 完成后绿色 main）
+- commit range：`aca4116..3a5554e`
+- 任务 1：`aca4116` — feat(navigation): 任务 1 三层导航与需求墙 + 先创作后归档 + 文案清理
+- 任务 2：`5dbbbb3`（Codex 协同 commit，含任务 2 美术工作台合并 + 引用清缴 + Universe 美术入口 + 测试断言修复）+ `d265693` fix(art): scope embedded drafts by project + `4143735` docs(review): record art draft isolation
+- 任务 3：`3a5554e` — feat(workflow): 任务 3 关联跳转 — 创作↔制作双向 + canJump 通用能力
+- 任务 4：收尾项已在 `3849de1`（kiikis-project-intro.md 移出 migrations）和 pre-push 钩子配置中完成；本轮验证无垃圾文件残留
+
+### 任务 1：三层导航与需求墙
+- workflow-data.ts 重构为 3 张需求卡分类（create/produce/adapt）+ 配音剪辑占位 + viral→改编 全站更名
+- WorkflowList.tsx 改为 3 张需求卡（点击展开子项墙），子项直达目标工作台
+- ProductionEmptyState.tsx 撤掉"三选一"空状态墙，复用需求墙设计（按 URL mode 高亮）
+- ProductionWorkbench.tsx 加"先创作后归档"：setup=1 → 自动开未命名草稿；保存时弹归档弹窗（命名/选项目/选宇宙/新建宇宙），不跳 Dashboard
+- 项目选择器过滤 song 类项目（保留小说/剧本项目）
+- 残留"剧本工作台"文案全改"创作工作台"（app/script/page.tsx、app/script-workbench/page.tsx 等）
+
+### 任务 2：美术工作台合并
+- ArtWorkbench.tsx 加 contextProjectId/contextProjectTitle props 实现嵌入模式
+- ProductionWorkbench assets tab 替换 ArtAssetsPanel → ArtWorkbench（功能不缩水）
+- next.config.ts 加 /art-workbench 301 永久重定向到 /production?mode=art
+- CreationWorkbench.tsx art-workbench 引用改 /production?mode=art&projectId=
+- ArtAssetDetail.tsx 返回链接改 /production?mode=art（2 处）
+- app/art-workbench/page.tsx 改 redirect 兜底
+- app/universes/[universeId]/page.tsx Universe 页新增独立美术入口（/production?mode=art&setup=1&universeId=）
+- tests/creation-workbench-ui.test.mjs 测试断言更新（/art-workbench → /production?mode=art）
+
+### 任务 3：关联跳转
+- 新增 lib/workflow/can-jump.ts：纯函数 canJump / canJumpToCreation / canJumpToProduction + buildCreationJumpUrl / buildProductionJumpUrl
+- ProductionWorkbench header actionRow 加「返回创作」按钮：
+  - 草稿状态隐藏（projectId 以 draft- 开头）
+  - 已归档但无 sourceUnitId 时禁用并显示 tooltip 原因
+  - 正常关联时点击 router.push 到 /novel-workbench?projectId=&sourceUnitId=
+- CreationWorkbench useEffect 加 sourceUnitId 参数解析 + focusUnitBySourceId：
+  - 搜索 novel/screenplay 两个 track 的 units
+  - 命中则切到对应 mode（setMode）+ queueMicrotask 恢复 activeUnitId
+  - 携带上下文：从制作侧跳回能定位到原单元
+- 关联作用域契约对齐 RPC：(owner_id, project_id, source_unit_id) 三元组
+- canJump 通用能力支持后续配音剪辑工作台复用
+
+### 任务 4：收尾
+- 垃圾文件：无 .writetest.tmp*、*.bak、*.new 残留（glob 验证）
+- pre-push 钩子：`.githooks/pre-push` 已配置 main/feat/*/fix* 分支放开 + build/tsc 检查
+- kiikis-project-intro.md：已移到 docs/（commit `3849de1`），migrations 目录仅含 .sql 文件 + drafts/ + rollback/ 子目录
+
+### 验证
+- tsc --noEmit：0 错误
+- pnpm build：成功
+- node --test tests/*.test.mjs：234/234 全绿（任务 3 后）
+
+### 已知风险与遗留
+- canJump 的 dub/edit 占位方向复用 production 规则，后续真实配音剪辑工作台需重新评估关联作用域
+- CreationWorkbench focusUnitBySourceId 用 queueMicrotask 处理 setMode 清空 activeUnitId 的时序，React 18 batching 下稳定，但若未来 setMode 改为同步清空需重审
+- 真实项目演示录屏需用户在浏览器环境验证（代码层面已就绪）
+
 ## 2026-07-18 +08 - Codex / production production-workbench schema recovery
 
 ### Completed
