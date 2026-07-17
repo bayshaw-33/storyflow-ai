@@ -1,5 +1,35 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 03:xx - Codex / staging migration 前置核验
+
+### 本次目标
+- 对 `cwpyolxitkcpitqizgtq` staging 执行 15 项 migration，并对视频 migration 做回滚演练和重放。
+
+### 已完成
+- `npx supabase projects list --output-format json` 核对：`cwpyolxitkcpitqizgtq` 的 NAME 为 `kiikis-staging`，状态 `ACTIVE_HEALTHY`，CLI link 指向该项目；未触碰 production `vgcafbzksizlwmylphzu`。
+- `npx supabase migration list --linked` 核对：staging remote migration history 为空，预期 15 个本地 migration 全部待应用。
+- 尝试 `npx supabase db push --linked --dry-run`；未执行写入。CLI 无法初始化登录角色，且环境中没有 `SUPABASE_DB_PASSWORD`、数据库 URL 或 Postgres 连接串。HTTPS DNS 备用解析也超时。
+
+### 修改文件
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- staging 项目身份：已确认。
+- 迁移计划：15 项待应用，尚未写入。
+- 回滚演练/重放：未开始，前置数据库认证缺失。
+- production 写入：零。
+
+### Git 信息
+- commit：待提交。
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁。
+
+### 未完成 / 风险
+- 需要以安全方式为 CLI 提供 `SUPABASE_DB_PASSWORD` 或 staging Postgres connection string；不要在对话、代码或文档中粘贴凭证。
+- 获得凭证后，严格顺序为：`db push --dry-run` → `db push --linked` → `migration list --linked` 核对 15/15 → 视频 migration rollback → 重放 migration → 再次核对。
+
+### 给下一位
+- 当前 `supabase/.temp/project-ref` 已是 `cwpyolxitkcpitqizgtq`。不得重新 link 到 production；仅在安全凭证可用后继续本任务。
+
 ## 2026-07-18 02:xx - Codex / P3 Atlas + 持久化滚动验证
 
 ### 本次目标
