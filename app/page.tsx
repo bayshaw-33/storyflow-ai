@@ -85,68 +85,76 @@ export default function LandingPage() {
       <HeroSection onStartCreating={enterWorkspaceModal} />
 
       <ContentSection
-        id="section-1"
-        kicker="KIIKIS"
-        titleZh="小说 · 剧本 · 分镜 · 视频 · 歌曲"
-        titleEn="Novel · Script · Storyboard · Video · Song"
-        subtitleZh="五个工作流。一个宇宙。无限 IP。"
-        subtitleEn="Five workflows. One Universe. Infinite IP."
-        bgImageZh={heroBg("HERO_SECTION_1")}
-        bgImageEn={heroBg("HERO_SECTION_1")}
-        align="left"
-        lightBg={false}
-      />
-
-      <ContentSection
-        id="platform"
-        kicker="KIIKIS"
-        titleZh="以宇宙为核心的超级创作工作台"
-        titleEn="The Universe-First Creative Workbench"
-        subtitleZh="五大专业工作流——小说、剧本、分镜、视频、歌曲——每个都能独立运转，通过 Universe 联动后势不可挡。角色一次定义，所有作品自动继承。"
-        subtitleEn="Five professional workflows — Novel, Script, Storyboard, Video, Song — each powerful alone, unstoppable when linked through a shared Universe. Build your characters once. Let them live everywhere."
-        bgImageZh={heroBg("HERO_SECTION_2")}
-        bgImageEn={heroBg("HERO_SECTION_2")}
-        align="right"
-        lightBg={false}
-      />
-
-      <ContentSection
-        id="workflows"
-        kicker={isZh ? "五大工作流" : "THE FIVE WORKFLOWS"}
-        titleZh="每种格式，每种形式，一个互联宇宙"
-        titleEn="Every Format. Every Form. One Connected Universe."
-        subtitleZh={"小说 · 剧本 · 分镜 · 视频 · 歌曲\n选择任意入口开始，Universe 会把资产沉淀并联动起来。"}
-        subtitleEn="Novel · Script · Storyboard · Video · Song"
-        ctaLabel={isZh ? "探索全部工作流" : "Explore All Workflows"}
-        ctaHref="/dashboard"
+        id="workspace"
+        kicker="WORKSPACE"
+        titleZh="一个人，也该拥有一整个剧组。"
+        titleEn="One creator deserves a whole studio."
+        subtitleZh="四个工作台之间没有墙。剧本写完的那一刻，分镜已经在等你。"
+        subtitleEn="Four workbenches. No walls between them. The moment the script is done, the storyboard is ready."
         bgImageZh={heroBg("HERO_SECTION_3")}
         bgImageEn={heroBg("HERO_SECTION_3")}
         align="left"
         lightBg={false}
-      />
+      >
+        <div className="workspace-doors">
+          <div className="workspace-door">
+            <p className="workspace-door-label">{isZh ? "我要原创" : "CREATE"}</p>
+            <h3 className="workspace-door-title">
+              {isZh ? "从一张白纸，到一个活着的世界。" : "From a blank page to a living world."}
+            </h3>
+            <p className="workspace-door-body">
+              {isZh
+                ? "小说、剧本与歌曲，在这里从无到有。"
+                : "Novels, scripts and songs begin here."}
+            </p>
+          </div>
+          <div className="workspace-door">
+            <p className="workspace-door-label">{isZh ? "我要制作" : "PRODUCE"}</p>
+            <h3 className="workspace-door-title">
+              {isZh ? "剧本一进来，整部戏就开始运转。" : "Bring in the script, and the whole production starts moving."}
+            </h3>
+            <p className="workspace-door-body">
+              {isZh
+                ? "美术、分镜、视频、配音、剪辑，在同一座制作工作台里完成。"
+                : "Art, storyboards, video, voice and editing — all inside one Production Workbench."}
+            </p>
+          </div>
+          <div className="workspace-door">
+            <p className="workspace-door-label">{isZh ? "我要改编" : "REMAKE"}</p>
+            <h3 className="workspace-door-title">
+              {isZh ? "看见一个爆款，不只是模仿它。" : "Don't just copy a hit."}
+            </h3>
+            <p className="workspace-door-body">
+              {isZh
+                ? "拆开它为什么成立，再用你的角色、你的世界，重新讲一遍。"
+                : "Break down why it works, then retell it with your characters, in your world."}
+            </p>
+          </div>
+        </div>
+      </ContentSection>
 
       <ContentSection
-        id="workspace"
-        kicker="WORKSPACE"
-        titleZh="你的工作台。你的规则。你的 AI。"
-        titleEn="Your Workbench. Your Rules. Your AI."
-        subtitleZh={"模块化布局。自带 API Key。在不同工作流之间无缝切换，上下文不丢失。\nPRO 创作者掌控创作环境的每一个角落。"}
-        subtitleEn="Modular layout. Bring your own API keys. Switch between workflows without losing context. PRO creators own every corner of their creative environment."
-        ctaLabel={isZh ? "了解 PRO" : "Learn PRO"}
-        ctaHref="/subscription"
-        bgImageZh={heroBg("HERO_SECTION_4")}
-        bgImageEn={heroBg("HERO_SECTION_4")}
-        align="right"
+        id="universe"
+        kicker={isZh ? "宇宙 · 核心" : "UNIVERSE · THE CORE"}
+        titleZh="你的角色，不该每一集都重新投胎。"
+        titleEn="Your characters shouldn't be reborn every episode."
+        subtitleZh={"角色是谁，世界如何运转，时间线走到哪里，哪些事永远不能被改写——这些，只需要在宇宙里定义一次。\n\n之后的每一部小说、每一集分镜、每一段视频、每一首歌、每一次改编，都会继承同一张脸、同一段过去、同一套世界规则。\n\nIP 不是一次爆款带来的运气。它是你一砖一瓦，持续积累出来的资产。"}
+        subtitleEn={"Who they are. How the world works. Where the timeline stands. What can never be rewritten. Define it once in your Universe.\n\nEvery novel, storyboard, video, song and remake that follows inherits the same face, the same history, the same world.\n\nIP is not the luck of one viral hit. It is an asset you build, brick by brick."}
+        ctaLabel={isZh ? "建立你的宇宙" : "Build Your Universe"}
+        ctaHref="/universes"
+        bgImageZh={heroBg("HERO_SECTION_6")}
+        bgImageEn={heroBg("HERO_SECTION_6")}
+        align="left"
         lightBg={false}
       />
 
       <ContentSection
         id="actors"
         kicker={isZh ? "演员 · 角色资产" : "ACTORS · CHARACTER ASSETS"}
-        titleZh="先确定谁来演，再确定角色如何出现。"
-        titleEn="Cast the actor. Shape the role."
-        subtitleZh="虚拟演员保存在演员库，角色 canon 留在 Universe，项目形象版本沉淀在具体作品中。"
-        subtitleEn="Virtual actors live in the Actor Library, canon stays in Universe, and project-specific appearances stay with each production."
+        titleZh="选一次角，演一辈子。"
+        titleEn="Cast once. Star forever."
+        subtitleZh={"虚拟演员住进演员库。\n脸属于演员，人物设定属于宇宙，造型属于每一部戏。\n\n下一次开拍，不必重新选角。你只需要喊一声：开机。"}
+        subtitleEn={"Virtual actors live in your Actor Library.\nThe face belongs to the actor. The canon belongs to the Universe. The look belongs to each production.\n\nNext time you shoot, there is no need to cast again. You just call action."}
         ctaLabel={isZh ? "打开演员库" : "Open Actor Library"}
         ctaHref="/actors"
         bgImageZh={heroBg("HERO_SECTION_5")}
@@ -156,32 +164,17 @@ export default function LandingPage() {
       />
 
       <ContentSection
-        id="universe"
-        kicker={isZh ? "宇宙 · 核心" : "UNIVERSE · THE CORE"}
-        titleZh="一个宇宙，所有故事自动继承"
-        titleEn="One Universe. Every Story Inherits It."
-        subtitleZh={"一次定义角色、世界观、时间线和正史规则——此后你创作的每部小说、剧本、分镜、视频和歌曲都自动继承它们。\n你的 IP 宇宙随项目生长，而非互相矛盾。"}
-        subtitleEn="Define your characters, worlds, timelines, and canon rules once — then every novel, script, storyboard, video, and song you create inherits them automatically. Your IP universe grows with every project, not against it."
-        ctaLabel={isZh ? "建造你的宇宙" : "Build Your Universe"}
-        ctaHref="/universes"
-        bgImageZh={heroBg("HERO_SECTION_6")}
-        bgImageEn={heroBg("HERO_SECTION_6")}
-        align="left"
-        lightBg={false}
-      />
-
-      <ContentSection
-        id="join"
-        kicker="JOIN KIIKIS"
-        titleZh="今天进入你的宇宙"
-        titleEn="Your Universe Starts Today"
-        subtitleZh={"免费注册即获 3,000 创作积分，开始搭建。\n邀请一位创作者好友，每位奖励 5,000 积分（最多 3 位）。\n随时升级，解锁五大创作格式的高级工作流。"}
-        subtitleEn={"Sign up free — get 3,000 creation credits to start building.\nInvite a creator friend and earn 5,000 more credits per referral (up to 3 friends).\nUpgrade anytime to unlock advanced workflows across all five creative formats."}
-        ctaLabel={isZh ? "免费开始建造" : "Start Building Free"}
+        id="provenance"
+        kicker={isZh ? "留痕确权 · IP 系统" : "PROVENANCE · IP SYSTEM"}
+        titleZh="你的 IP，从第一天起就有来历可查。"
+        titleEn="Your IP has a traceable history from day one."
+        subtitleZh={`从第一句提示词，到最后一版成片，每一次生成、每一个版本、每一次修改，都被持续记录。\n\n什么时候发生，用了什么模型，改过哪些内容，从哪个版本演变而来——创作过程不再散落在聊天记录、文件夹和记忆里。\n\n当有人问："凭什么说这是你的？"你不需要临时拼证据。创作链路，本来就在那里。`}
+        subtitleEn={`From the first prompt to the final cut, every generation, version and revision is continuously recorded.\n\nWhen it happened. Which model was used. What changed. Which version it came from. Your creative process no longer disappears across chats, folders and memory.\n\nWhen someone asks, "What proves this is yours?" You do not have to rebuild the story afterward. The creative trail is already there.`}
+        ctaLabel={isZh ? "了解留痕确权" : "See How Provenance Works"}
         ctaHref="/dashboard"
         bgImageZh={heroBg("HERO_SECTION_7")}
         bgImageEn={heroBg("HERO_SECTION_7")}
-        align="center"
+        align="left"
         lightBg={false}
       />
     </main>
