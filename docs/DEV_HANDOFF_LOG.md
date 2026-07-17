@@ -1,5 +1,15 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 +08 - Codex / embedded art-draft project isolation
+
+### Completed
+- During the production-workbench art-tab review, found that embedded ArtWorkbench reused the global localStorage draft and archive keys, then overwrote only `projectId`; assets and source text from another project could therefore appear in the new project.
+- `d265693` scopes embedded draft, archive, archive-index, and corruption-backup keys by project ID. Embedded mode does not read the standalone global draft and only persists after scoped state hydration, preventing an initial empty render from overwriting an existing scoped draft.
+- Added a regression test covering project-scoped draft and archive keys.
+
+### Verification
+- Isolated `d265693`: `tsc --noEmit`, `node --test tests/*.test.mjs` (220/220), and production build all pass.
+
 ## 2026-07-18 +08 - Codex / P0 staging migration revalidation and cloud-sync schema repair
 
 ### Scope

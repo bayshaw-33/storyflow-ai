@@ -3,7 +3,7 @@
 > Governing PRD: KIIKIS 制作工作台 PRD —— Codex（安全与验证）
 > Reviewed baseline: `719c9a0..b6adf17` on `main`
 > Policy: only security items are BLOCKER. Functional and reliability gaps remain in this list for unified acceptance; they do not stop TRAE feature development.
-> Latest rolling review: `bdc971e..aca4116`, plus the current staging schema verification on 2026-07-18.
+> Latest rolling review: `bdc971e..d265693`, plus the current staging schema verification on 2026-07-18.
 
 ## BLOCKER
 
@@ -12,6 +12,10 @@
 Resolved by `bdc971e` and independently reviewed on 2026-07-18. `SaveRequest.expectedRevision` is now `number`; `/api/storyboard/state` accepts only a non-negative integer at runtime. The 409 “另存快照” exit calls the separate snapshot API, whose only data operation is `POST storyflow_versions`; it neither queries nor writes the current storyboard state and never calls `save_storyboard_state`.
 
 **Decision: CLOSED for the current-state CAS path.** The one remaining `expectedRevision ?? null` occurrence belongs to video-job metadata only; it does not invoke the storyboard state RPC or modify Scene/Shot current state.
+
+### Closed — embedded art drafts no longer cross project boundaries
+
+The production-workbench art tab initially reused the global art-workbench localStorage key and merged its prior contents into a newly supplied `projectId`. That could carry source text, assets, or archives from one project into another. `d265693` now derives the active draft key and archive keys from the embedded `projectId`, never reads the standalone global key in embedded mode, and delays persistence until the scoped draft has loaded. A regression test locks this behaviour.
 
 ### Closed — staging migration execution and cloud-sync column
 
@@ -22,7 +26,6 @@ The CLI link was verified as `cwpyolxitkcpitqizgtq` (`kiikis-staging`) before mi
 - Transfer failure is unsafe: when provider download, Storage upload, or Storage signing fails, `jobs/[jobId]` writes `status=completed` and the provider temporary URL into `result_url`. The job cannot subsequently be retried by normal polling and violates the no-provider-URL binding requirement. Mark it retriable/transfer-failed without a playable `result_url` instead.
 - Successful transfers store a seven-day signed URL, but no completed-job re-sign path uses `storage_path`; an expired URL remains `completed` and cannot be refreshed. Add server-side re-signing before UI/export access.
 - Independently verify in staging the database unique-conflict return path, confirmed-first-frame resolution, refresh restoration, batch totals, and the full download → private Storage → re-sign lifecycle. Injected-fetch tests do not prove these external effects.
-- Pending uncommitted navigation transition: the working tree changes the art handoff to `/production?mode=art&projectId=...`, but `tests/creation-workbench-ui.test.mjs` still requires `/art-workbench`. When that route change is submitted, update the assertion and preserve a context assertion for the project ID. This is not a failure in committed `aca4116`.
 
 ## Resolved MUST FIX
 
@@ -40,8 +43,7 @@ The CLI link was verified as `cwpyolxitkcpitqizgtq` (`kiikis-staging`) before mi
 
 - Targeted save/CAS suite (`storyboard-state-api`, `storyboard-e2e-scenarios`, `storyboard-video-e2e`): 35/35 passing, including M4.
 - `pnpm exec tsc --noEmit`: passing.
-- Clean committed `aca4116` (isolated worktree): `node --test tests/*.test.mjs` 219/219, typecheck and build all pass.
-- Current shared working tree: 218/219 tests pass; the sole failure is the pending uncommitted art-route/test mismatch recorded above. Its typecheck and build pass.
+- Clean committed `d265693` (isolated worktree): `node --test tests/*.test.mjs` 220/220, typecheck and build all pass.
 - The existing `LOGO_PRIMARY` orphan-token warning remains non-fatal.
 - `git diff --check bdc971e^..bdc971e`: passing.
 - `git diff --check bdc971e..2644c9a`: passing.
