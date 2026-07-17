@@ -139,12 +139,11 @@ export type SaveRequest = {
   projectId: string;
   sourceUnitId: string;
   /**
-   * CAS 期望 revision。null = "另存快照"语义：跳过 CAS 检查，把本地内容
-   * 当作新版本直接写入（仅在用户明确选择"基于当前内容另存快照"时使用）。
-   * 服务端 save_storyboard_state RPC 在 p_expected_revision IS NULL 时
-   * 因 NULL 比较跳过 REVISION_CONFLICT 检查，天然支持此语义。
+   * CAS 期望 revision。必须为非负整数；CAS 失败抛 REVISION_CONFLICT 409。
+   * "另存快照"语义由独立 snapshot API（createStoryboardSnapshot）承担，
+   * 不通过此字段绕过 CAS（避免 current-state 数据丢失）。
    */
-  expectedRevision: number | null;
+  expectedRevision: number;
   scenes: StoryboardScene[];
   deletedSceneIds: string[];
   deletedShotIds: string[];
@@ -161,12 +160,26 @@ export type SaveResponse = {
 export type SnapshotRequest = {
   projectId: string;
   sourceUnitId: string;
+  /**
+   * 本地基线 revision（用户基于此 revision 做的本地修改正在被快照保留）。
+   * 仅作为快照元数据写入 storyflow_versions.snapshot_json.baseRevision，
+   * 不参与 CAS 校验、不读不写 current state。
+   */
   expectedRevision: number;
   reason: "manual" | "before_reanalysis" | "restore";
+  /**
+   * 本地完整 Scene/Shot 数据，原样写入 storyflow_versions.snapshot_json.scenes。
+   * 409 冲突 "另存快照" 出口：把本地未提交内容保留为不可变版本，绝不触碰当前工作态。
+   * 后续可通过版本历史恢复（读取 snapshot_json.scenes 重建本地状态）。
+   */
+  scenes: StoryboardScene[];
+  deletedSceneIds: string[];
+  deletedShotIds: string[];
 };
 
 export type SnapshotResponse = {
   snapshotId: string;
+  /** 快照保留的本地基线 revision（等于 request.expectedRevision） */
   revision: number;
 };
 

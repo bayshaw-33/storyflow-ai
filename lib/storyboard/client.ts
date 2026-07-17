@@ -21,6 +21,8 @@ import type {
   PromptResponse,
   SaveRequest,
   SaveResponse,
+  SnapshotRequest,
+  SnapshotResponse,
   StoryboardPromptResult,
 } from "./contracts";
 
@@ -288,6 +290,25 @@ export class StoryboardClient {
       expectConflict: false,
     });
   }
+
+  /**
+   * POST /api/storyboard/snapshots
+   *
+   * P3 BLOCKER v2: 把本地完整内容（scenes + 删除清单）保留为不可变独立版本
+   * （storyflow_versions.snapshot_json）。绝不触碰当前工作态——后端不查 current state、
+   * 不调 save_storyboard_state RPC、不做 CAS 校验。
+   *
+   * 用于 409 冲突 "另存快照" 出口：把本地未提交修改存为快照后，loadFromServer()
+   * 拉服务端最新到本地继续工作。快照未来可从版本历史恢复。
+   */
+  async createSnapshot(request: SnapshotRequest): Promise<SnapshotResponse> {
+    return this.fetchJson<SnapshotResponse>({
+      method: "POST",
+      path: "/api/storyboard/snapshots",
+      body: request,
+      expectConflict: true,
+    });
+  }
 }
 
-export type { AnalyzeRequest, AnalyzeResponse, PromptRequest, PromptResponse, SaveRequest, SaveResponse, StoryboardPromptResult };
+export type { AnalyzeRequest, AnalyzeResponse, PromptRequest, PromptResponse, SaveRequest, SaveResponse, SnapshotRequest, SnapshotResponse, StoryboardPromptResult };

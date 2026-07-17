@@ -54,20 +54,28 @@ export async function loadStoryboardState(
   return response === null ? null : assertSaveResponse(response);
 }
 
+/**
+ * P3 BLOCKER v2: 把本地完整内容（scenes + 删除清单）保留为不可变快照版本。
+ *
+ * 关键契约（用户明确要求）：
+ *   1. 绝不触碰当前工作态：不查询 storyflow_production_projects，不调用
+ *      save_storyboard_state RPC，不更新 current state 的 revision/scenes。
+ *   2. 不绕过 CAS：本函数不做 CAS 校验也不需要——快照只是把"本地内容副本"
+ *      原样写入 storyflow_versions.snapshot_json，与 current state 完全隔离。
+ *      current state 的 CAS 由 saveStoryboardState 独立负责，强约束 expectedRevision: number。
+ *   3. 完整可恢复：snapshot_json 含 scenes / deletedSceneIds / deletedShotIds /
+ *      baseRevision / reason / createdAt，未来读取此 version 即可重建本地状态。
+ *
+ * 调用方：409 冲突 "基于当前内容另存快照" 出口。本地未提交修改被保留为快照后，
+ * 调用方再 loadFromServer() 拉服务端最新到本地继续工作。
+ */
 export async function createStoryboardSnapshot(
   ownerId: string,
   request: SnapshotRequest,
   fetcher: StoryboardFetch = serviceFetch,
 ): Promise<SnapshotResponse> {
-  const states = await fetcher<Array<{ id: string; revision: number }>>(
-    `/rest/v1/storyflow_production_projects?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(request.projectId)}&source_unit_id=eq.${encodeURIComponent(request.sourceUnitId)}&select=id,revision&limit=1`,
-  );
-  const state = states[0];
-  if (!state) throw new Error("STORYBOARD_STATE_NOT_FOUND");
-  if (state.revision !== request.expectedRevision) {
-    throw new RevisionConflictError(state.revision);
-  }
-
+  // 直接 INSERT storyflow_versions；不读 current state，不调 save_storyboard_state RPC。
+  // entity_id 用 projectId:sourceUnitId 组合（不依赖 current state.id），保证与当前态解耦。
   const versions = await fetcher<Array<{ id: string }>>("/rest/v1/storyflow_versions", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -75,19 +83,24 @@ export async function createStoryboardSnapshot(
       user_id: ownerId,
       project_id: request.projectId,
       entity_type: "storyboard_state",
-      entity_id: `${state.id}:${request.sourceUnitId}`,
+      entity_id: `${request.projectId}:${request.sourceUnitId}`,
       version_type: request.reason,
       source: request.reason === "before_reanalysis" ? "ai" : "manual",
       snapshot_json: {
         sourceUnitId: request.sourceUnitId,
-        revision: state.revision,
+        baseRevision: request.expectedRevision,
         reason: request.reason,
+        createdAt: new Date().toISOString(),
+        scenes: request.scenes,
+        deletedSceneIds: request.deletedSceneIds,
+        deletedShotIds: request.deletedShotIds,
       },
     }),
   });
   const version = versions[0];
   if (!version?.id) throw new Error("STORYBOARD_SNAPSHOT_WRITE_FAILED");
-  return { snapshotId: version.id, revision: state.revision };
+  // 返回的 revision 是"快照保留的本地基线 revision"，不是 current state 的 revision。
+  return { snapshotId: version.id, revision: request.expectedRevision };
 }
 
 function assertSaveResponse(value: unknown): SaveResponse {

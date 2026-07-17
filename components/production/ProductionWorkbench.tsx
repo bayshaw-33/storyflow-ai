@@ -315,9 +315,15 @@ export function ProductionWorkbench() {
 
   /**
    * 409 出口 2：基于当前内容另存快照。
-   * 把本地内容当作新版本强制提交（expectedRevision 设为 null 绕过 CAS），
-   * 服务端 save_storyboard_state RPC 在 expectedRevision IS NULL 时直接插入新版本。
-   * 仅在用户明确选择"另存快照"时调用，不破坏正常 CAS 协议。
+   *
+   * P3 BLOCKER v2 契约（用户明确要求）：
+   *   - 把本地未提交内容（scenes + 删除清单）原样写入 storyflow_versions.snapshot_json，
+   *     作为不可变独立版本保留，绝不触碰当前工作态（不调 save_storyboard_state RPC）。
+   *   - expectedRevision 传本地基线 revision（用户基于此 revision 做的修改），不是
+   *     conflictRevision——快照记录的是"本地内容副本"，与 current state 完全隔离。
+   *   - 不产生 CAS 绕过：createStoryboardSnapshot 不查 current state、不做 CAS 校验。
+   *   - 快照完成后 loadFromServer() 拉服务端最新到本地继续工作；本地未提交修改已存为
+   *     快照，未来可从版本历史恢复。
    */
   async function saveAsSnapshot() {
     if (!session) {
@@ -328,24 +334,34 @@ export function ProductionWorkbench() {
       setNotice("缺少 projectId 或 sourceUnitId，无法另存快照。");
       return;
     }
+    if (conflictRevision === null) {
+      setNotice("无冲突 revision，无法另存快照。");
+      return;
+    }
     setSaving(true);
-    setConflictRevision(null);
-    const request: SaveRequest = {
-      projectId,
-      sourceUnitId,
-      // null 信号：服务端跳过 CAS 检查，直接插入新版本（"另存快照"语义）
-      expectedRevision: null,
-      scenes,
-      deletedSceneIds,
-      deletedShotIds,
-    };
     try {
-      const response: SaveResponse = await storyboardClient.saveState(request);
-      applyServerResponse(response);
-      setNotice(`已另存为快照（revision ${response.revision}）。原冲突已解除。`);
+      const snapshot = await storyboardClient.createSnapshot({
+        projectId,
+        sourceUnitId,
+        expectedRevision: revision,
+        reason: "manual",
+        scenes,
+        deletedSceneIds,
+        deletedShotIds,
+      });
+      setConflictRevision(null);
+      await loadFromServer();
+      setNotice(`已为本地当前内容创建快照（snapshotId ${snapshot.snapshotId.slice(0, 8)}，基线 revision ${snapshot.revision}），并加载服务端最新版本。本地未提交修改已存为快照，可从版本历史恢复。`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "另存快照失败。";
-      setNotice(`另存快照失败：${message}`);
+      // createStoryboardSnapshot 不做 CAS、不查 current state，理论上不会抛 RevisionConflictError；
+      // 保留 catch 仅作防御——若未来加回 CAS 校验可复用。
+      if (err instanceof StoryboardRevisionConflictError) {
+        setConflictRevision(err.currentRevision);
+        setNotice(`快照失败：服务端 revision 又被更新为 ${err.currentRevision}。请重新选择出口。`);
+      } else {
+        const message = err instanceof Error ? err.message : "另存快照失败。";
+        setNotice(`另存快照失败：${message}`);
+      }
     } finally {
       setSaving(false);
     }

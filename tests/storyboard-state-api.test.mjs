@@ -69,19 +69,35 @@ test("load scopes the current state by authenticated owner, project, and source 
   assert.equal(result.revision, 4);
 });
 
-test("snapshot rejects a stale revision before it writes a version", async () => {
+// P3 BLOCKER v2: createStoryboardSnapshot 不再做 CAS 校验
+//   - 不查 current state（不读 storyflow_production_projects）
+//   - 不调 save_storyboard_state RPC（不触碰当前工作态）
+//   - 直接 INSERT storyflow_versions（含完整 scenes）
+//   - expectedRevision 任意值都成功（snapshot 与 CAS 体系完全隔离）
+test("snapshot writes a version without CAS check (P3 BLOCKER v2: never touches current state)", async () => {
   const calls = [];
-  await assert.rejects(
-    () => createStoryboardSnapshot(OWNER, {
-      projectId: "project-1",
-      sourceUnitId: "episode-1",
-      expectedRevision: 2,
-      reason: "manual",
-    }, async (path, init) => {
-      calls.push({ path, init });
-      return [{ id: "production-1", revision: 3 }];
-    }),
-    (error) => error instanceof RevisionConflictError && error.currentRevision === 3,
-  );
-  assert.equal(calls.length, 1, "stale snapshots must not write storyflow_versions");
+  const result = await createStoryboardSnapshot(OWNER, {
+    projectId: "project-1",
+    sourceUnitId: "episode-1",
+    expectedRevision: 2,
+    reason: "manual",
+    scenes: [],
+    deletedSceneIds: [],
+    deletedShotIds: [],
+  }, async (path, init) => {
+    calls.push({ path, init });
+    if (path.startsWith("/rest/v1/storyflow_versions")) {
+      return [{ id: "version-1" }];
+    }
+    throw new Error(`UNEXPECTED FETCH: ${path}`);
+  });
+  assert.equal(result.snapshotId, "version-1", "返回新 version id");
+  assert.equal(result.revision, 2, "返回本地基线 revision");
+  assert.equal(calls.length, 1, "仅一次 fetch（直接写 version，不查 current state）");
+  assert.ok(calls[0].path.startsWith("/rest/v1/storyflow_versions"), "唯一 fetch 是 versions 表");
+  // 验证不触碰 current state
+  for (const c of calls) {
+    assert.ok(!c.path.includes("save_storyboard_state"), "不调 save_storyboard_state RPC");
+    assert.ok(!c.path.includes("storyflow_production_projects"), "不查 current state 表");
+  }
 });

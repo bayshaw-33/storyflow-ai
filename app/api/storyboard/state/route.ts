@@ -43,7 +43,7 @@ function isSaveRequest(value: SaveRequest): value is SaveRequest {
     value &&
       typeof value.projectId === "string" && value.projectId.trim() &&
       typeof value.sourceUnitId === "string" && value.sourceUnitId.trim() &&
-      (value.expectedRevision === null || (Number.isInteger(value.expectedRevision) && value.expectedRevision >= 0)) &&
+      (Number.isInteger(value.expectedRevision) && value.expectedRevision >= 0) &&
       Array.isArray(value.scenes) &&
       Array.isArray(value.deletedSceneIds) &&
       Array.isArray(value.deletedShotIds),

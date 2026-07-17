@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "请求格式不正确，请提交 JSON。" }, { status: 400 });
   }
   if (!isSnapshotRequest(body)) {
-    return NextResponse.json({ success: false, error: "快照请求缺少作用域或 revision。" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "快照请求缺少作用域、revision 或 scenes 数据。" }, { status: 400 });
   }
 
   try {
@@ -39,6 +39,9 @@ function isSnapshotRequest(value: SnapshotRequest): value is SnapshotRequest {
       typeof value.projectId === "string" && value.projectId.trim() &&
       typeof value.sourceUnitId === "string" && value.sourceUnitId.trim() &&
       Number.isInteger(value.expectedRevision) && value.expectedRevision >= 0 &&
-      (value.reason === "manual" || value.reason === "before_reanalysis" || value.reason === "restore"),
+      (value.reason === "manual" || value.reason === "before_reanalysis" || value.reason === "restore") &&
+      Array.isArray(value.scenes) &&
+      Array.isArray(value.deletedSceneIds) &&
+      Array.isArray(value.deletedShotIds),
   );
 }
