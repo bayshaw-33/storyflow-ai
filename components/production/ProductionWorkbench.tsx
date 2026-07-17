@@ -3,7 +3,6 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Clock, Cpu, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Users, Video } from "lucide-react";
-import { readProjectsFromStorage } from "@/lib/projects";
 import {
   addProductionHistory,
   createEmptyProductionState,
@@ -12,7 +11,6 @@ import {
   deleteProductionShot,
   formatSeconds,
   moveProductionShot,
-  productionStateFromProject,
   productionStateToMarkdown,
   productionTimelineItems,
   totalTimelineSeconds,
@@ -25,7 +23,9 @@ import type {
   ProductionShot,
 } from "@/lib/production/types";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
+import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } from "@/lib/storyboard/draft";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import { useProductionApi } from "@/lib/production/hooks";
 import { ShotStatusBadge, ShotThumbnail, PromptViewer, ShotActionBar } from "./ShotCardParts";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
@@ -67,9 +67,13 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
       ],
     }),
   );
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [session, setSession] = useState<Session | null>(null);
     const [notice, setNotice] = useState("");
+  const [sourceUnitId, setSourceUnitId] = useState<string>("");
+  const [scopeError, setScopeError] = useState<string>("");
+  const [saveConflict, setSaveConflict] = useState<string>("");
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [showModelRegistry, setShowModelRegistry] = useState(false);
@@ -84,9 +88,20 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlProjectId = params.get("projectId");
+    const urlSourceUnitId = params.get("sourceUnitId");
     const mode = params.get("mode") as ProductionMode | null;
-    const saved = localStorage.getItem("kiikis_production_workbench_state");
-    const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(urlProjectId) : null;
+
+    // BLOCKER 3 (KIIKIS-P1-TRAE-002 §2): 必须同时有 projectId + sourceUnitId。
+    // 拒绝不匹配的 local handoff，删除全局 fallback。
+    if (!urlProjectId || !urlSourceUnitId) {
+      setScopeError("缺少 projectId 或 sourceUnitId 参数。请从剧本工作台「生成分镜」按钮进入。");
+      return;
+    }
+    setSourceUnitId(urlSourceUnitId);
+
+    // 优先读取 creative handoff（CreationWorkbench.openDownstream 写入）。
+    // readCreativeHandoff 会校验 sourceProjectId + sourceUnitId，跨项目/跨集返回 null。
+    const handoff = readCreativeHandoff(urlProjectId, urlSourceUnitId);
     if (handoff) {
       setState(createEmptyProductionState({
         projectId: handoff.sourceProjectId,
@@ -113,29 +128,30 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
         chatMessages: [{
           id: createProductionId("chat"),
           role: "assistant",
-          content: `已接收《${handoff.title}》的创作资料、正文与 Universe。请告诉我分镜节奏、画幅或镜头数量要求，我会生成可编辑分镜。`,
+          content: `已接收《${handoff.title}》当前集的创作资料与正文。请告诉我分镜节奏、画幅或镜头数量要求，我会生成可编辑分镜。`,
           createdAt: new Date().toISOString(),
         }],
         shots: handoff.manuscript ? [createProductionShot({ index: 1, sceneTitle: handoff.title, description: handoff.manuscript.slice(0, 600), imagePrompt: handoff.manuscript.slice(0, 600) })] : [],
       }));
       return;
     }
-    if (urlProjectId) {
-      const project = readProjectsFromStorage().find((item) => item.id === urlProjectId);
-      if (project) {
-        setState(productionStateFromProject(project, mode || initialMode));
-        return;
-      }
+
+    // 无 handoff：尝试读取同作用域本地草稿作为恢复候选。
+    // 草稿 key: kiikis:storyboard:v1:<userId|anon>:<projectId>:<sourceUnitId>
+    const draftScope: StoryboardDraftScope = {
+      userId: session?.user?.id || null,
+      projectId: urlProjectId,
+      sourceUnitId: urlSourceUnitId,
+    };
+    const draft = readStoryboardDraft(draftScope);
+    if (draft) {
+      setState(createEmptyProductionState({ ...draft, mode: mode || draft.mode || initialMode }));
+      return;
     }
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Partial<ProductionProjectState>;
-        setState(createEmptyProductionState({ ...parsed, mode: mode || parsed.mode || initialMode }));
-      } catch {
-        // Ignore stale local state.
-      }
-    }
-  }, [initialMode]);
+
+    // 无 handoff 且无草稿：保持默认空状态，等用户上传或分析
+    if (mode) patchState({ mode });
+  }, [initialMode, session?.user?.id]);
 
   useEffect(() => {
     const client = getSupabaseBrowserClient();
@@ -350,8 +366,14 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
   }
 
   async function saveAll() {
-    localStorage.setItem("kiikis_production_workbench_state", JSON.stringify(state));
-    setState((current) => addProductionHistory(current, { type: "save", title: "保存工作台", detail: "已保存到本地工作台状态。" }));
+    // BLOCKER 3: 作用域草稿，key = kiikis:storyboard:v1:<userId|anon>:<projectId>:<sourceUnitId>
+    if (projectId && sourceUnitId) {
+      writeStoryboardDraft(
+        { userId: session?.user?.id || null, projectId, sourceUnitId },
+        state,
+      );
+    }
+    setState((current) => addProductionHistory(current, { type: "save", title: "保存工作台", detail: "已保存到本地作用域草稿。" }));
     if (!session) {
       setNotice("已保存到本地（未登录，未同步云端）。");
       return;
@@ -430,6 +452,20 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     }
   }
 
+  if (scopeError) {
+    return (
+      <main className={styles.shell}>
+        <div style={{ padding: "64px 24px", textAlign: "center", color: "#ff6b6b" }}>
+          <h2 style={{ fontSize: 20, marginBottom: 12 }}>无法进入分镜制作台</h2>
+          <p style={{ fontSize: 14, marginBottom: 24 }}>{scopeError}</p>
+          <button className={styles.secondaryButton} type="button" onClick={() => router.push("/creation-workbench")}>
+            返回剧本工作台
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className={styles.shell}>
       <header className={styles.header}>
@@ -473,6 +509,24 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
           }}
         >
           {notice}
+        </div>
+      ) : null}
+
+      {saveConflict ? (
+        <div
+          role="alert"
+          style={{
+            margin: "12px 24px 0",
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "rgba(255, 107, 107, 0.12)",
+            border: "1px solid rgba(255, 107, 107, 0.35)",
+            color: "#ff6b6b",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {saveConflict}
         </div>
       ) : null}
 

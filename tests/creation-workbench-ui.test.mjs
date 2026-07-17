@@ -55,7 +55,8 @@ test("keeps Universe, art, and storyboard-video handoffs in a responsive 38/62 s
   const css = await readFile(cssPath, "utf8");
   assert.match(source, /Universe/);
   assert.match(source, /\/art-workbench/);
-  assert.match(source, /\/production-workbench/);
+  // KIIKIS-P1-TRAE-002: 现在跳转到 /production?projectId=&sourceUnit=
+  assert.match(source, /\/production\?projectId=/);
   assert.match(css, /grid-template-columns:\s*minmax\([^;]+38fr\)\s+minmax\([^;]+62fr\)/);
   assert.match(css, /@media \(max-width: 720px\)/);
 });

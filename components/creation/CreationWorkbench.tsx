@@ -618,11 +618,22 @@ export function CreationWorkbench() {
 
   async function openDownstream(target: "art" | "production") {
     await saveProject();
-    writeCreativeHandoff(buildCreativeHandoffPackage(project, mode === "novel" ? "novel" : "script"));
+    // BLOCKER 3 (KIIKIS-P1-TRAE-002 §2): production handoff 必须锁定当前集，
+    // 不允许导入整部剧本或串到其他项目。sourceUnitId = activeUnitId。
+    if (target === "production" && !activeUnit) {
+      setStatus(isZh ? "请先选择或创建一集剧本，再进入分镜制作台。" : "Select or create an episode first.");
+      return;
+    }
+    const contentType = mode === "novel" ? "novel" : "script";
+    const sourceUnitId = target === "production" ? activeUnit?.id : undefined;
+    writeCreativeHandoff(buildCreativeHandoffPackage(project, contentType, sourceUnitId));
     const source = encodeURIComponent(project.id);
-    router.push(target === "art"
-      ? `/art-workbench?handoff=creative&sourceProjectId=${source}`
-      : `/production-workbench?handoff=creative&sourceProjectId=${source}&mode=planning`);
+    if (target === "art") {
+      router.push(`/art-workbench?handoff=creative&sourceProjectId=${source}`);
+      return;
+    }
+    const unit = encodeURIComponent(sourceUnitId || "");
+    router.push(`/production?projectId=${source}&sourceUnitId=${unit}`);
   }
 
   function editorValue() {

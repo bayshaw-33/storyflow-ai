@@ -8,6 +8,13 @@ export type CreativeContentType = "novel" | "script";
 export type CreativeHandoffPackage = {
   version: 1;
   sourceProjectId: string;
+  /**
+   * 当前集 / 来源单元 ID。
+   * 任务卡 KIIKIS-P1-TRAE-002 §2 BLOCKER 3：必须锁定当前集，
+   * 不允许导入整部剧本或串到其他项目。
+   * 由 CreationWorkbench.openDownstream 传入 activeUnitId。
+   */
+  sourceUnitId?: string;
   sourceUpdatedAt: string;
   title: string;
   contentType: CreativeContentType;
@@ -24,6 +31,7 @@ export type CreativeHandoffPackage = {
 export function buildCreativeHandoffPackage(
   project: DramaProject,
   contentType: CreativeContentType,
+  sourceUnitId?: string,
 ): CreativeHandoffPackage {
   const workspace = project.creationWorkspace;
   const novelManuscript = workspace?.novel.units.length
@@ -38,6 +46,7 @@ export function buildCreativeHandoffPackage(
   return {
     version: 1,
     sourceProjectId: project.id,
+    sourceUnitId,
     sourceUpdatedAt: project.updatedAt,
     title: project.title,
     contentType,
@@ -56,18 +65,31 @@ export function writeCreativeHandoff(pkg: CreativeHandoffPackage) {
   window.localStorage.setItem(CREATIVE_HANDOFF_STORAGE_KEY, JSON.stringify(pkg));
 }
 
-export function parseCreativeHandoff(raw: string | null, sourceProjectId?: string | null): CreativeHandoffPackage | null {
+export function parseCreativeHandoff(
+  raw: string | null,
+  sourceProjectId?: string | null,
+  sourceUnitId?: string | null,
+): CreativeHandoffPackage | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<CreativeHandoffPackage>;
     if (value.version !== 1 || !value.sourceProjectId || !value.title || !value.contentType) return null;
     if (sourceProjectId && value.sourceProjectId !== sourceProjectId) return null;
+    // BLOCKER 3: 若调用方传了 sourceUnitId，必须与 handoff 包内一致
+    if (sourceUnitId && value.sourceUnitId && value.sourceUnitId !== sourceUnitId) return null;
     return value as CreativeHandoffPackage;
   } catch {
     return null;
   }
 }
 
-export function readCreativeHandoff(sourceProjectId?: string | null) {
-  return parseCreativeHandoff(window.localStorage.getItem(CREATIVE_HANDOFF_STORAGE_KEY), sourceProjectId);
+export function readCreativeHandoff(
+  sourceProjectId?: string | null,
+  sourceUnitId?: string | null,
+) {
+  return parseCreativeHandoff(
+    window.localStorage.getItem(CREATIVE_HANDOFF_STORAGE_KEY),
+    sourceProjectId,
+    sourceUnitId,
+  );
 }
