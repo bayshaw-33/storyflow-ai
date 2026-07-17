@@ -1,5 +1,42 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 00:xx - Codex / KIIKIS-P2-CODEX-002 Phase 2 migration gate and video quick review
+
+### 本次目标
+- 执行第一阶段稳定保存 migration 的 staging 闸门与非破坏性回滚演练；快审 Phase 2 Shot→视频契约。
+
+### 已完成
+- 开工基线：`df201cd652efa0c741acaf5ea66c5204d280d9f2`。
+- 已执行 `pnpm install`；依赖已与 lockfile 同步。
+- 输出 `docs/reviews/PHASE2-VIDEO-QUICK-REVIEW.md`：视频链路当前为 BLOCK，列出 migration、Atlas Key、幂等、稳定 Shot 绑定、临时 CDN URL、持久任务与批量并发的最小修复要求。
+- 只读确认 `ProductionWorkbench` 已接入 `/api/storyboard/state`、idMap 与 409 UI；但 `lib/production/hooks.ts` 和旧视频路由仍依赖 `/api/production/save-state` / legacy production state，尚不能标为保存切换零残留。
+
+### 修改文件
+- `docs/reviews/PHASE2-VIDEO-QUICK-REVIEW.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `pnpm install`：通过（Already up to date）。
+- `pnpm run test:unit`：183/183 通过。
+- `pnpm exec tsc --noEmit`：未通过，原因是并行在途的 `app/api/storyboard/analyze/route.ts` 引用了未导入的 `runAnalyze`，以及 `generate-image` route 导出了 Next.js route 不允许的 helper；均不在本卡修改范围。
+- `git diff --check`：通过。
+- staging migration / rollback：未执行。Docker 命令不可用；Supabase CLI 未登录；仓库 link 指向接入说明中登记的 production ref。`.env.staging` 是不同 ref，但没有可用的 staging-only CLI migration 连接路径。未对 production 执行任何写。
+- 实测/截图：不适用；本卡的真实视频验收前置 `ATLASCLOUD_API_KEY` 和额度尚未就位，未使用 mock 冒充真实链路。
+- 未验证的部分：迁移 RPC、Stage B 保存回归、Atlas 单 Shot 视频、Storage 转存、批量和 ZIP 视频导出。
+
+### Git 信息
+- commit：待本轮审查记录验证后提交。
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁。
+
+### 未完成 / 风险
+- H0 BLOCKER：需要明确 staging project ref 和仅 staging 的 Supabase CLI/DB 访问方式；不能使用当前 production link。
+- H0 BLOCKER：需要在 staging/Vercel server 环境配置 `ATLASCLOUD_API_KEY` 并确认测试额度；密钥不得写入仓库。
+- Kimi 的 video job migration/API 尚未出现在当前 main；其最小 schema/contract 要求见 quick review。
+
+### 给下一位
+- staging 就绪后，由 migration 作者按 `migration list/dry-run → db push → rollback SQL → replay → RPC tests` 执行，并在本日志粘贴无凭证结果。
+- Kimi 首个视频提交出来后，交 Codex 复查：服务端 DB 幂等、confirmed first-frame version、server-owned poll、Storage SHA-256 bind、批量并发和旧视频版本保留。
+
 ## 2026-07-17 23:xx - Codex / KIIKIS-P1-CODEX-001B 稳定保存与关键补丁
 
 ### 本次目标
