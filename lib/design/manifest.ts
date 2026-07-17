@@ -11,10 +11,6 @@ const KK = "/design/kk";
 
 export const ASSET = {
   HERO_MAIN: `${HERO}/hero-main.png`,
-  // T01 六色三时 — 三场景按时段自动切换
-  HERO_TIME_GOLD: `${HERO}/hero-gold.png`,
-  HERO_TIME_BLUE: `${HERO}/hero-blue.png`,
-  HERO_TIME_PURPLE: `${HERO}/hero-purple.png`,
   HERO_SECTION_1: `${HERO}/section-1.png`,
   HERO_SECTION_2: `${HERO}/section-2.png`,
   HERO_SECTION_3: `${HERO}/section-3.png`,

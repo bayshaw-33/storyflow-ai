@@ -1,28 +1,3 @@
-## 2026-07-18 07:25 - TRAE / T01 落地页「六色三时」改版
-
-**范围**：仅落地页（`app/page.tsx` + `components/home/*` + `components/layout/ThemeTimeSync.tsx` + `lib/time-slot/*` + `app/globals.css` 末段 + `lib/design/manifest.ts`）。未碰任何工作台页面。
-
-**交付**：
-- 三场景 Hero（金草原/蓝海边/紫红房顶）按本地时间自动切换（08-16 gold / 17-19 purple / 20-4 blue / 5-7 purple），每分钟校准，手动切换后停止自动
-- slogan 三行入场动画（0.9s，0.14s 间隔），`念头 ×` / `one idea.` 用 `--time-accent-bright` 着色 + 辉光
-- 星光闪烁层（4.5s 交替）+ 左→右压暗渐变
-- 猫标导航（`/brand/kiikis-cat-mark.png`）+ 单 CTA（hover 时段色辉光 + 上移 2px）
-- 点亮演示区 v0（左未点亮黑/白/水泥灰卡 → 右点亮金/蓝/紫红星球卡，静态 mock）
-- 页脚（版权 + `mailto:hello@kiikis.com` + LanguageToggle，无死链）
-- 旧版四屏 ContentSection 从 `app/page.tsx` 下线（组件文件保留以便回滚）
-
-**文件变更**：5 修改 + 4 新增（含 3 张 Hero 背景图）+ 1 新建交接日志
-
-**验证**：`tsc` 0 错误 / `pnpm build` exit 0 / 红线 grep 全过（0 `#000000`、0 v1 暮光色值、0 衬线字体、slogan 逐字一致）
-
-**待用户验证**：4G 节流 LCP ≤2.5s / Lighthouse 评分 / 真实浏览器三时段截图
-
-**回滚**：`git revert <hash>`（未走 feature flag，用户决策直接替换）
-
-详细交接：`docs/ops/交接日志.md`
-
----
-
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
 ## 2026-07-18 (TRAE) / KIIKIS 制作工作台新任务 1-4 完成
