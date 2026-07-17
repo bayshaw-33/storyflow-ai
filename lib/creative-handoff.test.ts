@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCreativeHandoffPackage, parseCreativeHandoff } from "./creative-handoff.ts";
+import type { DramaProject } from "./projects.ts";
 
 const project = {
   id: "project-1",
@@ -14,7 +15,7 @@ const project = {
   translation: "Translation",
   localization: "Localization",
   updatedAt: "2026-07-10T10:00:00.000Z",
-} as never;
+} as unknown as DramaProject;
 
 test("builds a complete creative handoff package", () => {
   const result = buildCreativeHandoffPackage(project, "script");
@@ -54,14 +55,14 @@ test("prefers V2 screenplay content while preserving the legacy fallback", () =>
         }],
       },
       settings: {
-        activeMode: "screenplay", interfaceLanguage: "zh", sourceLanguage: "中文", translationLanguage: "英文",
+        activeMode: "screenplay", interfaceLanguage: "zh", targetMarket: "", genre: "", sourceLanguage: "中文", translationLanguage: "英文",
         translationEnabled: true, screenplayLanguage: "中文", dialogueLanguage: "英文",
         screenplayFormat: "international_production", generationScope: "unit",
       },
       createdAt: "2026-07-13T00:00:00.000Z",
       updatedAt: "2026-07-13T00:00:00.000Z",
     },
-  } as never, "script");
+  }, "script");
 
   assert.equal(result.projectBackground, "V2 背景");
   assert.match(result.manuscript, /V2 剧本/);

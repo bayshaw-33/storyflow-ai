@@ -813,6 +813,23 @@ function buildContext(payload: GeneratePayload) {
 }
 
 function buildOptions(payload: GeneratePayload) {
+  if (isCreationTask(payload.taskType)) {
+    return {
+      market: payload.options?.market || payload.market || "未确认",
+      genre: payload.options?.genre || payload.genre || "未确认",
+      sourceLanguage: payload.options?.sourceLanguage || "中文",
+      targetLanguage: payload.options?.targetLanguage || "",
+      interfaceLanguage: payload.options?.interfaceLanguage || "zh-CN",
+      contentMode: payload.options?.contentMode || "novel",
+      translationLanguage: payload.options?.translationLanguage || "",
+      screenplayLanguage: payload.options?.screenplayLanguage || payload.options?.sourceLanguage || "中文",
+      dialogueLanguage: payload.options?.dialogueLanguage || payload.options?.sourceLanguage || "中文",
+      screenplayFormat: payload.options?.screenplayFormat || "international_production",
+      generationScope: payload.options?.generationScope || "unit",
+      unitNo: payload.options?.unitNo || payload.options?.chapterNo || 1,
+      arcTitle: payload.options?.arcTitle || "",
+    };
+  }
   return {
     market: payload.options?.market || payload.market || "未选择",
     genre: payload.options?.genre || payload.genre || "未选择",

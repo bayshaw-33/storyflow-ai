@@ -135,6 +135,8 @@ export function createCreationWorkspace(source: LegacyCreationSource = {}): Crea
     settings: {
       activeMode: "novel",
       interfaceLanguage: "zh",
+      targetMarket: "",
+      genre: "",
       sourceLanguage: source.targetLanguage || "中文",
       translationLanguage: "",
       translationEnabled: false,
@@ -181,6 +183,8 @@ export function normalizeCreationWorkspace(value: unknown, source: LegacyCreatio
     settings: {
       activeMode: settings.activeMode === "screenplay" ? "screenplay" : "novel",
       interfaceLanguage: text(settings.interfaceLanguage) || "zh",
+      targetMarket: text(settings.targetMarket),
+      genre: text(settings.genre),
       sourceLanguage: text(settings.sourceLanguage) || fallback.settings.sourceLanguage,
       translationLanguage: text(settings.translationLanguage),
       translationEnabled: settings.translationEnabled === true,
@@ -191,6 +195,29 @@ export function normalizeCreationWorkspace(value: unknown, source: LegacyCreatio
     },
     createdAt: text(workspace.createdAt) || fallback.createdAt,
     updatedAt: timestamp,
+  };
+}
+
+export function applyUnitTranslation(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  translation: string,
+  updatedAt = now(),
+): CreationWorkspaceV2 {
+  const track = workspace[mode];
+  if (!track.units.some((unit) => unit.id === unitId)) {
+    throw new Error(`Creation unit not found: ${unitId}`);
+  }
+  return {
+    ...workspace,
+    [mode]: {
+      ...track,
+      units: track.units.map((unit) => unit.id === unitId
+        ? { ...unit, translation, updatedAt }
+        : unit),
+    },
+    updatedAt,
   };
 }
 

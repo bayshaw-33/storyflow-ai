@@ -26,8 +26,8 @@ import type { TaskType } from "@/lib/ai/prompts";
 import { buildDeliveryManifest } from "@/lib/creation/assembly";
 import { downloadDeliveryZip, downloadDocx, downloadMarkdown } from "@/lib/creation/downloads";
 import { applyUnitGeneration, parseArcStructure, parseBatchUnitOutput } from "@/lib/creation/parsers";
-import { renderScreenplayEpisode } from "@/lib/creation/screenplay";
-import { createCreationWorkspace, normalizeCreationWorkspace } from "@/lib/creation/state";
+import { buildTranslationSource, renderScreenplayEpisode } from "@/lib/creation/screenplay";
+import { applyUnitTranslation, createCreationWorkspace, normalizeCreationWorkspace } from "@/lib/creation/state";
 import type {
   CreationArc,
   CreationMode,
@@ -110,7 +110,22 @@ function ensureProject(project: DramaProject): DramaProject {
 }
 
 function freshProject() {
-  return ensureProject(createNovelProject({ title: "未命名创作项目", projectGroup: DEFAULT_PROJECT_GROUP }));
+  return ensureProject(createNovelProject({
+    title: "未命名创作项目",
+    projectGroup: DEFAULT_PROJECT_GROUP,
+    market: "",
+    genre: "",
+    targetLanguage: "",
+    novelSettings: {
+      type: "",
+      targetPlatform: "",
+      targetLanguage: "",
+      targetWordCount: 0,
+      serializationFrequency: "",
+      targetReader: "",
+      retentionHook: "",
+    },
+  }));
 }
 
 function syncLegacy(project: DramaProject, workspace: CreationWorkspaceV2): DramaProject {
@@ -181,6 +196,8 @@ export function CreationWorkbench() {
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
   const sourceInput = useRef<HTMLInputElement>(null);
+  const projectRef = useRef(project);
+  projectRef.current = project;
 
   const workspace = project.creationWorkspace || createCreationWorkspace(project);
   const mode = workspace.settings.activeMode;
@@ -237,8 +254,11 @@ export function CreationWorkbench() {
     if (track.arcs.length && !track.arcs.some((arc) => arc.id === activeArcId)) setActiveArcId(track.arcs[0].id);
   }, [activeArcId, track.arcs]);
 
-  function commitWorkspace(next: CreationWorkspaceV2) {
-    const nextProject = syncLegacy(project, next);
+  function commitWorkspace(updater: (current: CreationWorkspaceV2) => CreationWorkspaceV2) {
+    const currentProject = projectRef.current;
+    const currentWorkspace = currentProject.creationWorkspace || createCreationWorkspace(currentProject);
+    const nextProject = syncLegacy(currentProject, updater(currentWorkspace));
+    projectRef.current = nextProject;
     setProject(nextProject);
     return nextProject;
   }
@@ -338,6 +358,9 @@ export function CreationWorkbench() {
 
   async function callAI(taskType: TaskType, input: string) {
     if (!session?.access_token) throw new Error(isZh ? "请先登录后使用 AI。" : "Sign in to use AI.");
+    const requestProject = projectRef.current;
+    const requestWorkspace = requestProject.creationWorkspace || createCreationWorkspace(requestProject);
+    const requestMode = requestWorkspace.settings.activeMode;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), AI_TIMEOUT);
     try {
@@ -347,30 +370,30 @@ export function CreationWorkbench() {
         signal: controller.signal,
         body: JSON.stringify({
           taskType,
-          projectId: project.id,
-          projectTitle: project.title,
-          market: project.market,
-          genre: project.genre,
-          idea: project.idea,
+          projectId: requestProject.id,
+          projectTitle: requestProject.title,
+          market: requestWorkspace.settings.targetMarket,
+          genre: requestWorkspace.settings.genre,
+          idea: requestProject.idea,
           input,
           context: contextText(),
           options: {
             interfaceLanguage: locale,
-            contentMode: mode,
-            sourceLanguage: workspace.settings.sourceLanguage,
-            translationLanguage: workspace.settings.translationLanguage,
-            screenplayLanguage: workspace.settings.screenplayLanguage,
-            dialogueLanguage: workspace.settings.dialogueLanguage,
-            screenplayFormat: workspace.settings.screenplayFormat,
-            generationScope: workspace.settings.generationScope,
+            contentMode: requestMode,
+            sourceLanguage: requestMode === "screenplay" ? requestWorkspace.settings.screenplayLanguage : requestWorkspace.settings.sourceLanguage,
+            translationLanguage: requestWorkspace.settings.translationLanguage,
+            screenplayLanguage: requestWorkspace.settings.screenplayLanguage,
+            dialogueLanguage: requestWorkspace.settings.dialogueLanguage,
+            screenplayFormat: requestWorkspace.settings.screenplayFormat,
+            generationScope: requestWorkspace.settings.generationScope,
             unitNo: activeUnit?.number || 1,
             arcTitle: activeArc?.title || "",
-            targetLanguage: workspace.settings.translationLanguage || workspace.settings.dialogueLanguage,
+            targetLanguage: requestWorkspace.settings.translationLanguage || requestWorkspace.settings.dialogueLanguage,
           },
           allSteps: {
-            creation_background_world: workspace.documents.backgroundWorld.content,
-            creation_character_bible: workspace.documents.characterBible.content,
-            creation_plot_outline: workspace.documents.plotOutline.content,
+            creation_background_world: requestWorkspace.documents.backgroundWorld.content,
+            creation_character_bible: requestWorkspace.documents.characterBible.content,
+            creation_plot_outline: requestWorkspace.documents.plotOutline.content,
           },
           byoApi: readByoApiConfig("novel"),
         }),
@@ -388,8 +411,10 @@ export function CreationWorkbench() {
     if (!input || busy) return;
     setChatInput("");
     setMessages((current) => [...current, message("user", input)]);
-    const notes = appendNotes(project.novelDevelopmentNotes, "USER", input);
-    const recorded = { ...project, idea: project.idea || input, novelDevelopmentNotes: notes, updatedAt: new Date().toISOString() };
+    const currentProject = projectRef.current;
+    const notes = appendNotes(currentProject.novelDevelopmentNotes, "USER", input);
+    const recorded = { ...currentProject, idea: currentProject.idea || input, novelDevelopmentNotes: notes, updatedAt: new Date().toISOString() };
+    projectRef.current = recorded;
     setProject(recorded);
     upsertProject(recorded);
     if (!session?.access_token) {
@@ -401,7 +426,9 @@ export function CreationWorkbench() {
     try {
       const output = await callAI("creation_development_chat", input);
       setMessages((current) => [...current, message("assistant", output)]);
-      const next = { ...recorded, novelDevelopmentNotes: appendNotes(notes, "AI", output), updatedAt: new Date().toISOString() };
+      const latest = projectRef.current;
+      const next = { ...latest, novelDevelopmentNotes: appendNotes(latest.novelDevelopmentNotes, "AI", output), updatedAt: new Date().toISOString() };
+      projectRef.current = next;
       setProject(next);
       await saveProject(next);
     } catch (reason) {
@@ -414,58 +441,79 @@ export function CreationWorkbench() {
   async function generateStage() {
     const taskType = stageTask();
     if (!taskType || stage === "export" || busy) return;
-    if ((stage === "manuscript" || stage === "translation" || stage === "localization") && activeUnit?.status === "locked") {
+    if (stage === "manuscript" && activeUnit?.status === "locked") {
       setError(isZh ? "当前章/集已锁定，解锁后才能更新。" : "The current unit is locked.");
       return;
+    }
+    const translationSource = activeUnit ? buildTranslationSource(workspace, mode, activeUnit) : "";
+    if (stage === "translation") {
+      const sourceLanguage = mode === "screenplay" ? workspace.settings.screenplayLanguage : workspace.settings.sourceLanguage;
+      if (!workspace.settings.translationLanguage) {
+        setError(isZh ? "请先选择翻译语言；如不需要翻译，可直接跳过本阶段。" : "Select a translation language, or skip this optional stage.");
+        return;
+      }
+      if (sourceLanguage.trim().toLowerCase() === workspace.settings.translationLanguage.trim().toLowerCase()) {
+        setError(isZh ? "翻译语言不能与原文语言相同。" : "The translation language must differ from the source language.");
+        return;
+      }
+      if (!translationSource) {
+        setError(isZh ? "当前章/集没有可翻译的正文。" : "The current unit has no source content to translate.");
+        return;
+      }
     }
     setBusy(true);
     setError("");
     setStatus(isZh ? "正在生成当前阶段…" : "Generating the current stage…");
     try {
       const input = stage === "translation"
-        ? activeUnit?.content || ""
+        ? translationSource
         : stage === "localization"
-          ? activeUnit?.translation || activeUnit?.content || ""
+          ? activeUnit?.translation || translationSource
           : chatInput.trim() || project.idea || contextText();
       const output = await callAI(taskType, input);
-      let nextWorkspace = workspace;
-      if (stage === "background" || stage === "characters" || stage === "outline") {
-        const key = stage === "background" ? "backgroundWorld" : stage === "characters" ? "characterBible" : "plotOutline";
-        nextWorkspace = {
-          ...workspace,
-          documents: { ...workspace.documents, [key]: { content: output, updatedAt: new Date().toISOString() } },
-        };
-      } else if (stage === "manuscript" && activeUnit) {
-        if (workspace.settings.generationScope === "arc" && activeArc) {
-          const parsed = parseBatchUnitOutput(output, mode);
-          let batchWorkspace = workspace;
-          parsed.forEach((unit, index) => {
-            const unitId = activeArc.unitIds[index];
-            if (!unitId) return;
-            batchWorkspace = applyUnitGeneration(batchWorkspace, mode, unitId, `<CREATION_OUTPUT>\n${JSON.stringify(unit)}\n</CREATION_OUTPUT>`, {
-              model: "routed", instruction: chatInput, scope: "arc",
-            });
-          });
-          nextWorkspace = batchWorkspace;
-        } else {
-          nextWorkspace = applyUnitGeneration(workspace, mode, activeUnit.id, output, {
+      if (!output.trim()) throw new Error(isZh ? "AI 没有返回可保存的内容，当前版本未覆盖。" : "AI returned no savable content; the current version was preserved.");
+      const nextProject = commitWorkspace((currentWorkspace) => {
+        if (stage === "background" || stage === "characters" || stage === "outline") {
+          const key = stage === "background" ? "backgroundWorld" : stage === "characters" ? "characterBible" : "plotOutline";
+          return {
+            ...currentWorkspace,
+            documents: { ...currentWorkspace.documents, [key]: { content: output, updatedAt: new Date().toISOString() } },
+          };
+        }
+        if (stage === "manuscript" && activeUnit) {
+          if (workspace.settings.generationScope === "arc" && activeArc) {
+            const parsed = parseBatchUnitOutput(output, mode);
+            return parsed.reduce((batchWorkspace, unit, index) => {
+              const unitId = activeArc.unitIds[index];
+              if (!unitId) return batchWorkspace;
+              return applyUnitGeneration(batchWorkspace, mode, unitId, `<CREATION_OUTPUT>\n${JSON.stringify(unit)}\n</CREATION_OUTPUT>`, {
+                model: "routed", instruction: chatInput, scope: "arc",
+              });
+            }, currentWorkspace);
+          }
+          return applyUnitGeneration(currentWorkspace, mode, activeUnit.id, output, {
             model: "routed", instruction: chatInput, scope: "unit",
           });
         }
-      } else if (stage === "translation" && activeUnit) {
-        nextWorkspace = {
-          ...workspace,
-          [mode]: { ...track, units: track.units.map((unit) => unit.id === activeUnit.id ? { ...unit, translation: output, updatedAt: new Date().toISOString() } : unit) },
-        };
-      } else if (stage === "localization" && activeUnit) {
-        const localized = parseLocalization(output);
-        if (!localized.localizedContent || !localized.localizationChanges || !localized.similarityReport) throw new Error(isZh ? "AI 返回缺少本土化三段内容，当前版本未覆盖。" : "Localization output is incomplete; the current version was preserved.");
-        nextWorkspace = {
-          ...workspace,
-          [mode]: { ...track, units: track.units.map((unit) => unit.id === activeUnit.id ? { ...unit, ...localized, updatedAt: new Date().toISOString() } : unit) },
-        };
-      }
-      const nextProject = commitWorkspace(nextWorkspace);
+        if (stage === "translation" && activeUnit) {
+          return applyUnitTranslation(currentWorkspace, mode, activeUnit.id, output);
+        }
+        if (stage === "localization" && activeUnit) {
+          const localized = parseLocalization(output);
+          if (!localized.localizedContent || !localized.localizationChanges || !localized.similarityReport) throw new Error(isZh ? "AI 返回缺少本土化三段内容，当前版本未覆盖。" : "Localization output is incomplete; the current version was preserved.");
+          const currentTrack = currentWorkspace[mode];
+          return {
+            ...currentWorkspace,
+            [mode]: {
+              ...currentTrack,
+              units: currentTrack.units.map((unit) => unit.id === activeUnit.id
+                ? { ...unit, ...localized, updatedAt: new Date().toISOString() }
+                : unit),
+            },
+          };
+        }
+        return currentWorkspace;
+      });
       await saveProject(nextProject);
       setMessages((current) => [...current, message("assistant", isZh ? `已更新：${STAGES.find((item) => item.key === stage)?.zh}${activeUnit ? `，第 ${activeUnit.number} ${mode === "novel" ? "章" : "集"}` : ""}。` : `Updated ${STAGES.find((item) => item.key === stage)?.en}${activeUnit ? `, unit ${activeUnit.number}` : ""}.`)]);
       setStatus(isZh ? "生成完成并已保存。" : "Generated and saved.");
@@ -513,9 +561,9 @@ export function CreationWorkbench() {
         form: {
           name: `${project.title} Universe`,
           description: workspace.documents.backgroundWorld.content || project.idea,
-          genre: project.genre,
+          genre: workspace.settings.genre,
           default_language: workspace.settings.sourceLanguage,
-          target_markets: [project.market].filter(Boolean),
+          target_markets: [workspace.settings.targetMarket].filter(Boolean),
           tone: "",
         },
       });
@@ -645,6 +693,8 @@ export function CreationWorkbench() {
           <details className="creation-project-settings">
             <summary>{isZh ? "项目与语言设定" : "Project & language settings"}</summary>
             <label>{isZh ? "故事想法" : "Story idea"}<textarea value={project.idea} onChange={(event) => setProject((current) => ({ ...current, idea: event.target.value }))} /></label>
+            <label>{isZh ? "目标市场（待确认可留空）" : "Target market (optional)"}<input value={workspace.settings.targetMarket} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, targetMarket: event.target.value } }))} /></label>
+            <label>{isZh ? "题材（待确认可留空）" : "Genre (optional)"}<input value={workspace.settings.genre} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, genre: event.target.value } }))} /></label>
             <label>{isZh ? "作品主要语言" : "Primary work language"}<select value={workspace.settings.sourceLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, sourceLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label>
           </details>
 
@@ -698,7 +748,16 @@ export function CreationWorkbench() {
 
           {stage === "localization" ? <div className="creation-segmented creation-localization-tabs"><button className={localizationView === "content" ? "active" : ""} type="button" onClick={() => setLocalizationView("content")}>{isZh ? "本土化后内容" : "Localized content"}</button><button className={localizationView === "changes" ? "active" : ""} type="button" onClick={() => setLocalizationView("changes")}>{isZh ? "本土化修改" : "Changes"}</button><button className={localizationView === "similarity" ? "active" : ""} type="button" onClick={() => setLocalizationView("similarity")}>{isZh ? "雷同查验" : "Similarity report"}</button></div> : null}
 
-          {stage !== "export" ? <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={editorValue()} disabled={activeUnit?.status === "locked" && ["manuscript", "translation", "localization"].includes(stage)} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "当前阶段的 Markdown 内容会显示在这里，可直接编辑。" : "The active Markdown document appears here and can be edited directly."} /> : <div className="creation-export-panel">
+          {stage === "translation" && activeUnit ? <div className="creation-translation-editors">
+            <section>
+              <header><strong>{isZh ? "原文" : "Source"}</strong><span>{mode === "screenplay" ? workspace.settings.screenplayLanguage : workspace.settings.sourceLanguage}</span></header>
+              <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={buildTranslationSource(workspace, mode, activeUnit)} readOnly aria-label={isZh ? "翻译原文" : "Translation source"} />
+            </section>
+            <section>
+              <header><strong>{isZh ? "译文" : "Translation"}</strong><span>{workspace.settings.translationLanguage || (isZh ? "未选择语言" : "No language selected")}</span></header>
+              <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={activeUnit.translation} onChange={(event) => editValue(event.target.value)} aria-label={isZh ? "译文编辑器" : "Translation editor"} placeholder={isZh ? "选择翻译语言后生成，或直接编辑译文。" : "Select a language to generate, or edit the translation directly."} />
+            </section>
+          </div> : stage !== "export" ? <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={editorValue()} disabled={activeUnit?.status === "locked" && stage === "manuscript"} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "当前阶段的 Markdown 内容会显示在这里，可直接编辑。" : "The active Markdown document appears here and can be edited directly."} /> : <div className="creation-export-panel">
             <div className="creation-export-head"><div><FileArchive size={20} /><h2>{isZh ? "交付文件" : "Delivery files"}</h2></div><button className="primary-button" type="button" onClick={() => void downloadDeliveryZip(deliveryItems, `${project.title}-complete-delivery`)}><Download size={16} />{isZh ? "完整交付包 ZIP" : "Complete delivery ZIP"}</button></div>
             {deliveryItems.map((item) => <article className="creation-export-row" key={item.id}><div><FileText size={18} /><span><strong>{item.label}</strong><small>{item.baseFilename}</small></span></div><div><button className="secondary-button" type="button" onClick={() => downloadMarkdown(item.document, item.baseFilename)}>MD</button><button className="secondary-button" type="button" onClick={() => void downloadDocx(item.document, item.baseFilename)}>DOCX</button></div></article>)}
           </div>}

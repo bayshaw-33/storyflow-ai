@@ -1,4 +1,7 @@
 import type {
+  CreationMode,
+  CreationUnit,
+  CreationWorkspaceV2,
   ScreenplayBlock,
   ScreenplayEpisode,
   ScreenplayFormat,
@@ -103,6 +106,18 @@ export function renderScreenplayEpisode(
     .join("\n\n");
 }
 
+export function buildTranslationSource(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unit: CreationUnit,
+) {
+  if (mode !== "screenplay" || !unit.screenplay) return unit.content.trim();
+  return renderScreenplayEpisode(unit.screenplay, workspace.settings.screenplayFormat, {
+    screenplayLanguage: workspace.settings.screenplayLanguage,
+    dialogueLanguage: workspace.settings.dialogueLanguage,
+  }).trim();
+}
+
 export function validateScreenplayEpisode(
   episode: ScreenplayEpisode,
   format: ScreenplayFormat,
@@ -148,4 +163,3 @@ export function autoFixScreenplayEpisode(
     })),
   };
 }
-

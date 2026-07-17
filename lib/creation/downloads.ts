@@ -54,19 +54,22 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 export function downloadMarkdown(document: AssembledDocument, baseFilename: string) {
   downloadBlob(new Blob([document.markdown], { type: "text/markdown;charset=utf-8" }), `${baseFilename}.md`);
 }
 
 export async function downloadDocx(document: AssembledDocument, baseFilename: string) {
   const bytes = await buildDocxBytes(document);
-  const buffer = bytes.slice();
-  downloadBlob(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), `${baseFilename}.docx`);
+  downloadBlob(new Blob([toArrayBuffer(bytes)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), `${baseFilename}.docx`);
 }
 
 export async function downloadDeliveryZip(items: DeliveryItem[], baseFilename: string) {
   const bytes = await buildDeliveryZipBytes(items);
-  const buffer = bytes.slice();
-  downloadBlob(new Blob([buffer], { type: "application/zip" }), `${baseFilename}.zip`);
+  downloadBlob(new Blob([toArrayBuffer(bytes)], { type: "application/zip" }), `${baseFilename}.zip`);
 }
-

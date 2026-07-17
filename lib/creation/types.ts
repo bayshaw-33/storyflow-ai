@@ -86,6 +86,8 @@ export type CreationWorkspaceV2 = {
   settings: {
     activeMode: CreationMode;
     interfaceLanguage: string;
+    targetMarket: string;
+    genre: string;
     sourceLanguage: string;
     translationLanguage: string;
     translationEnabled: boolean;
@@ -97,4 +99,3 @@ export type CreationWorkspaceV2 = {
   createdAt: string;
   updatedAt: string;
 };
-

@@ -766,6 +766,39 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.7;
 }
 
+.creation-translation-editors {
+  display: grid;
+  flex: 1;
+  min-height: 520px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.creation-translation-editors section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.creation-translation-editors header {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-secondary);
+}
+
+.creation-translation-editors header span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.creation-translation-editors .creation-markdown-editor {
+  min-height: 0;
+  height: 100%;
+}
+
 .creation-localization-tabs {
   align-self: flex-start;
 }
@@ -878,6 +911,15 @@ input:focus, textarea:focus, select:focus {
 
   .creation-language-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .creation-translation-editors {
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .creation-translation-editors .creation-markdown-editor {
+    min-height: 42vh;
   }
 
   .creation-markdown-editor,
