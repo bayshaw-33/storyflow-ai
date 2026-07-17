@@ -1,5 +1,88 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 19:50 +08 - TRAE / 制作工作台 PRD 三项紧急任务 + 收尾
+
+### 本次目标
+- 任务 1：多入口直达制作工作台（消灭报错页）——路由归一 + 空状态页 + 美术入口打通
+- 任务 2：旧剧本工作台备份后删除 + Script 入口改指 novel-workbench
+- 任务 3：制作工作台布局与视觉整体重做（成品级暗色）
+- 收尾项：pre-push 钩子放开 feat/*/fix*、垃圾文件清理、migrations 目录清理
+
+### 基线
+- main `2644c9a`（214/214 测试全绿）
+
+### 已完成
+
+#### 任务 1（commit `2b58a4c`）
+- 路由归一：`/production-workbench` → `/production` 301 重定向（next.config.ts `redirects()`）
+- 空状态页替代报错页：新增 `components/production/ProductionEmptyState.tsx`（416 行）
+  - 按 `entryMode`（planning→分镜表 / editor→分镜图）展示对应功能区
+  - 三个动作卡片：上传剧本开始、从已有项目选择（直查 Supabase）、新建项目/宇宙
+  - 项目 picker 两级选择（项目→集次），onPickProject 回调更新 URL 触发 ProductionWorkbench 正常加载
+- ProductionWorkbench：scopeError 改 isEmptyState + entryMode；URL 参数缺失时进空状态页
+- 美术入口打通：ArtWorkbench 关联项目后显示"制作工作台"跳转按钮；制作工作台 assets tab 显示"在美术工作台打开"链接
+
+#### 任务 2（commit `d1497d6`）
+- 备份：`.backups/old-script-workbench-20260718.tar.gz`（23KB，含 3 个旧页面文件）
+- 旧页面 3 个替换为 redirect：
+  - `app/script/page.tsx` → `/novel-workbench?new=1&setup=1&mode=screenplay`
+  - `app/script-workbench/page.tsx` → 同上
+  - `app/projects/[projectId]/page.tsx` → `/novel-workbench?projectId=...`
+- 全站引用清缴：dashboard wizard、templates、universes、ProjectList、workflow-data、lib/universe/graph
+- Dashboard Script 入口落 novel-workbench Screenplay Tab（mode=screenplay）
+- API 路由全部保留，仅删除页面文件
+- 全站搜索确认无死链、无悬挂 import
+
+#### 任务 3（commit `dca6c2b`）
+- **ProductionWorkbench.module.css 完全重写**（458 → 290 行，删除大量废弃旧类）
+  - 全部改用 `var(--xxx)` CSS 变量，与全站暗色统一（删除 #070808/#111314/#090a0b 硬编码）
+  - `.workspace` 改单列，内容区撑满视口（max-width 1840px），各 tab 内部自负责栅格——消灭窄列双栏
+  - 顶栏 sticky + backdrop-blur，滚动时保持可见
+  - 新增 `.secondaryMenu` / `.secondaryMenuDropdown` / `.secondaryMenuItem` 类支持次级菜单
+  - notice/conflict 改 module class（替代 inline style），区分 success/error 配色
+- **ProductionWorkbench.tsx 顶栏整理**
+  - 去掉重复 ExportMenu（保留 StoryboardExportMenu 分镜专用导出）
+  - 版本/团队/模型三按钮收进"更多"次级菜单（popover + 外击关闭 + aria-expanded/haspopup）
+  - 保存改为 primaryButton（高对比白底），导出保留次级
+  - assets tab 合并：art-workbench 链接条 + ArtAssetsPanel 一体化（删除双重 activeTab === "assets" 块）
+  - 删除 noticeStyle / conflictStyle 两个 inline const
+- **StoryboardPanels.tsx ShotFramesPanel 批量按钮吸顶**
+  - 批量视频按钮区改 sticky（top: 64px，配 backdrop-blur + 半透明 bg-elevated）
+
+#### 收尾项
+- pre-push 钩子放开 feat/*/fix* 分支（commit `ec895e0`，tracked .githooks/ 目录 + package.json prepare 脚本）
+- supabase/migrations/kiikis-project-intro.md 移出迁移目录到 docs/（commit `3849de1`）
+- 工作区垃圾文件（.writetest.tmp*、*.bak、*.txt、*.new）已清理干净，untracked 列表无残留
+
+### 修改文件
+- 任务 1：next.config.ts、components/production/ProductionEmptyState.tsx（新）、components/production/ProductionWorkbench.tsx、components/art/ArtWorkbench.tsx
+- 任务 2：app/script/page.tsx、app/script-workbench/page.tsx、app/projects/[projectId]/page.tsx、app/dashboard/page.tsx、app/templates/page.tsx、app/universes/[universeId]/page.tsx、components/home/ProjectList.tsx、components/workflow/workflow-data.ts、lib/universe/graph.ts、.backups/old-script-workbench-20260718.tar.gz（新）
+- 任务 3：components/production/ProductionWorkbench.module.css、components/production/ProductionWorkbench.tsx、components/production/StoryboardPanels.tsx
+
+### 验证结果
+- `npx tsc --noEmit`：0 错误
+- `pnpm build`：成功
+- `node --test tests/*.test.mjs`：214/214 全绿
+- 全站搜索 `/projects/` 非路径引用：0 结果
+- 全站搜索 `script-workbench`/`/script` 悬挂引用：仅 e2e/legacy-redirects.spec.ts（合理，验证 redirect 落地非 404）
+
+### Git 信息
+- commit range：`2644c9a..dca6c2b`（基于 P3 视频链路完成点）
+- 任务 1：`2b58a4c` / 任务 2：`d1497d6` / 任务 3：`dca6c2b`
+- pre-push 钩子全部通过（build + tsc），直接推送 origin/main
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁
+
+### 未完成 / 风险
+- staging 迁移执行完后，真实浏览器 E2E + 演示录屏需用户环境验证（代码层面 214/214 已覆盖契约）
+- 闸门类（保存链路回归）需 Codex 确认
+- 任务 3 视觉成品级在真实浏览器中需用户验收（栅格、配色、间距、吸顶批量条表现）
+
+### 给下一位
+- 三个任务的页面入口都已归一到 `/production`（制作工作台）和 `/novel-workbench`（创作工作台）
+- 制作工作台空状态页 ProductionEmptyState 是新增组件，任何入口参数缺失都进空状态页（不再报错）
+- 旧剧本工作台页面已删除，需要时从 `.backups/old-script-workbench-20260718.tar.gz` 或 git 历史 `2644c9a` 之前恢复
+- 制作工作台视觉重做后，所有暗色 token 走 `var(--xxx)`，新增面板请复用同一套 CSS 变量
+
 ## 2026-07-18 03:28 +08 - Codex / staging migration 执行、回滚与重放
 
 ### 本次目标
