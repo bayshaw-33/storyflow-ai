@@ -1,5 +1,55 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 09:xx - TRAE / KIIKIS-P2-TRAE-002 闸门+视频生成+批量+导出+E2E
+
+### 本次目标
+- 闸门 H0-H3：工作台旧保存调用切换到 PUT /api/storyboard/state；idMap 同步；409 冲突双出口（加载最新/另存快照）；严禁静默覆盖；projectId+episodeId 隔离。
+- 任务 1：Shot 卡片视频区（生成按钮+前置条件+状态+5s 轮询+video 播放器+重新生成保留旧视频+下载+复制链接）。
+- 任务 2：批量按钮（全部/当前场景/未完成/重试失败）+ 进度条 + 过滤 + 失败恢复。
+- 任务 3：导出 ZIP 升级（videos/ + video-list.csv + jimeng-prompts.md 视频引用）。
+- 任务 4：E2E 自测 16 场景。
+
+### 已完成
+- 闸门 commit `719c9a0`（单独提交便于 Codex 审查）：contracts.ts expectedRevision 改 `number | null`；state/route.ts 验证接受 null；ProductionWorkbench 重写 409 UI（可读文案+两个出口+关闭）；saveAsSnapshot 用 expectedRevision=null 绕过 CAS；loadLatestAndClearConflict 拉服务端最新。
+- 任务 1-4 commit `620587c`：
+  - `app/api/storyboard/shots/[shotId]/generate-video/route.ts`（幂等键+首帧校验+MiniMax image-to-video）
+  - `app/api/storyboard/jobs/[jobId]/route.ts`（轮询时主动 queryVideoTask 刷新）
+  - `app/api/storyboard/jobs/route.ts`（列表，刷新恢复用）
+  - `components/production/ShotVideoPanel.tsx`（ShotVideoPanel + BatchVideoProgressBar + 类型导出）
+  - `components/production/StoryboardExportMenu.tsx`（JSZip 前端打包 videos/+video-list.csv+jimeng-prompts.md+README）
+  - `components/production/StoryboardPanels.tsx`（批量按钮区+ShotVideoPanel 嵌入）
+  - `components/production/ProductionWorkbench.tsx`（视频 state+submitVideo 保留旧视频+pollVideoJob+4 个 batch 函数+409 双出口+ExportMenu）
+  - `lib/storyboard/client.ts`（generateVideo/queryVideoJob/listVideoJobs）
+  - `tests/storyboard-video-e2e.test.mjs`（16 场景 G1-G4/V1-V6/B1-B3/E1-E3）
+
+### 验证结果
+- `npx tsc --noEmit`：0 错误
+- `pnpm build`：成功（pre-push 检查通过）
+- `node --test tests/*.test.mjs`：199/199 通过（含新 16 视频 E2E + P1 12 场景全过）
+- 闸门 H0-H3 由 P1 E2E scenario 1/3/5/6/7/11 + 新 G1-G4 共同覆盖
+
+### Git 信息
+- 闸门 commit：`719c9a0` feat(storyboard): KIIKIS-P2-TRAE-002 闸门 H0-H3 保存契约切换完成
+- 任务 1-4 commit：`620587c` feat(storyboard): KIIKIS-P2-TRAE-002 任务 1-4 视频生成+批量+导出+E2E
+- commit range：`719c9a0..620587c`（基于 `f58f8a3` 即 P1-KIMI-002 之后）
+- 已 push 到 `origin/main`
+
+### 未完成 / 风险
+- 真实项目演示录屏/截图：需用户在浏览器环境验证（代码层面已就绪，所有 API+UI+E2E 通过）。
+- 闸门解除需 Codex 做保存链路回归后确认（H0-H3 单测已过，等 Codex 复核）。
+- 视频生成依赖 MiniMax provider 可用性 + Supabase storyflow_generation_jobs 表（已存在）。
+- 导出 ZIP 在前端用 JSZip 打包，视频通过 fetch 拉取 blob；大视频可能受浏览器内存限制（当前未做分片）。
+- 409 "另存快照" 路径：RPC `save_storyboard_state` 的 `p_expected_revision IS NULL` 天然跳过 CAS（NULL 比较语义），未新增 migration。
+
+### 给下一位（Codex）
+- 闸门审查入口：commit `719c9a0`（3 文件：contracts.ts + state/route.ts + ProductionWorkbench.tsx）。
+- 保存链路回归：跑 `node --test tests/storyboard-state-api.test.mjs tests/storyboard-e2e-scenarios.test.mjs tests/storyboard-video-e2e.test.mjs`，全部通过即可解除闸门。
+- 视频契约：POST `/api/storyboard/shots/:id/generate-video` 返回 `{jobId, providerTaskId, status, reused}`；GET `/api/storyboard/jobs/:jobId` 返回 `{job: VideoJobRow}`；GET `/api/storyboard/jobs?projectId=&sourceUnitId=&jobType=video` 返回 `{jobs: VideoJobRow[]}`。
+- VideoJobRow 字段：`id, job_type, target_type, target_id, status, provider, provider_task_id, result_url, error_message, input_params, created_at, updated_at`。
+- 重新生成保留旧视频契约：submitVideo catch 分支 `videoUrl: existing?.videoUrl ?? null`（不先删旧的成功结果）。
+- 批量过滤双保险：前端跳过 generating/completed + 服务端幂等键 `input_params->>idempotencyKey`。
+
+
 ## 2026-07-18 00:xx - Codex / KIIKIS-P2-CODEX-002 Phase 2 migration gate and video quick review
 
 ### 本次目标
