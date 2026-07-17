@@ -10,8 +10,6 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- PostgreSQL database dump
 --
 
-\restrict VXMuhuVtOIh5yFwIDfnWucFqQImCjrbQpIklQvZpdsQrp1Mgh5JYd96jW6pJhTm
-
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.4
 
@@ -31,7 +29,7 @@ SET row_security = off;
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
-CREATE SCHEMA public;
+CREATE SCHEMA IF NOT EXISTS public;
 
 
 --
@@ -3239,6 +3237,4 @@ CREATE POLICY viral_versions_update ON public.storyflow_viral_versions FOR UPDAT
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict VXMuhuVtOIh5yFwIDfnWucFqQImCjrbQpIklQvZpdsQrp1Mgh5JYd96jW6pJhTm
 

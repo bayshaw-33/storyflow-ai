@@ -1,5 +1,40 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 03:28 +08 - Codex / staging migration 执行、回滚与重放
+
+### 本次目标
+- 对 `kiikis-staging` 应用 15 项 migration，并完成视频 migration 的回滚演练与重放。
+
+### 已完成
+- 项目身份复核：`cwpyolxitkcpitqizgtq` = `kiikis-staging`，`ACTIVE_HEALTHY`；production `vgcafbzksizlwmylphzu` 未被 link 或写入。
+- 首次 `db push` 在 baseline 的 pg_dump `\\restrict` 元命令处停止，remote migration history 仍为空；仅 `pgcrypto` 的幂等 `CREATE EXTENSION IF NOT EXISTS` 留下通知，无迁移记录。
+- 最小修复 `20260716000000_baseline.sql`：移除 `\\restrict` / `\\unrestrict` 非 SQL 元命令，并把 `CREATE SCHEMA public` 改为 `IF NOT EXISTS`；不改业务 schema 对象。
+- dry-run 确认 15 项后，`db push --linked` 成功应用全部 15 项。
+- 视频 migration 回滚演练：执行 rollback SQL，实测唯一索引、`idempotency_hash` / `storage_path` 两列、两条 Storage policy 均为 0；随后 `migration repair --status reverted 20260718100000` 并用 `db push` 重放成功。
+- 最终远端核验：15/15 history 一致；`uq_generation_jobs_idempotency_hash` partial unique index、两列、私有 `storyboard-videos` bucket 与两条 owner policy 均存在。
+
+### 修改文件
+- `supabase/migrations/20260716000000_baseline.sql`
+- `docs/reviews/PRODUCTION-WORKBENCH-ROLLING-REVIEW.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `supabase migration list --linked`：15/15 local/remote version 一致。
+- DB query：唯一 index、两列、private bucket、两条 policy 均存在。
+- 回滚演练：index/columns/policies 均已撤销；重放后均恢复。
+- production 写入：零。
+- CLI 的 Docker catalog cache 警告：仅本地 Docker 未运行，不影响远端 migration 执行或核验。
+
+### Git 信息
+- commit：待提交。
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁。
+
+### 未完成 / 风险
+- 视频转存失败时仍会把 provider 临时 URL 写入 completed job，及 completed signed URL 无重签路径；继续作为非阻塞 MUST FIX。
+
+### 给下一位
+- staging migration 环境前置已完成。不要把 `.env.local` 的数据库密码写入代码、文档、日志或对话。
+
 ## 2026-07-18 03:xx - Codex / staging migration 前置核验
 
 ### 本次目标

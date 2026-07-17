@@ -13,13 +13,12 @@ Resolved by `bdc971e` and independently reviewed on 2026-07-18. `SaveRequest.exp
 
 **Decision: CLOSED for the current-state CAS path.** The one remaining `expectedRevision ?? null` occurrence belongs to video-job metadata only; it does not invoke the storyboard state RPC or modify Scene/Shot current state.
 
-### Migration execution must not use the current Supabase link
+### Closed — migration execution stayed on the staging link
 
-The checked-in Supabase CLI link is the production project. Before any migration execution, it must be switched to the designated staging project and the command output recorded without credentials. Production database writes remain prohibited.
+The CLI link was verified as `cwpyolxitkcpitqizgtq` (`kiikis-staging`) before migration execution. All 15 local migrations are now present in the staging history; the video migration was rolled back, history-repaired, and replayed. Production database writes remain prohibited and were not performed.
 
 ## MUST FIX
 
-- Before the paid-video path is enabled, execute `20260718100000_video_idempotency_and_storage.sql` in the designated staging project and perform its documented rollback rehearsal. The migration defines a real PostgreSQL partial unique index on `(owner_id, idempotency_hash)`, but it is not an active database invariant until staging execution is evidenced. The current CLI link is production, so no migration execution is authorized yet.
 - Transfer failure is unsafe: when provider download, Storage upload, or Storage signing fails, `jobs/[jobId]` writes `status=completed` and the provider temporary URL into `result_url`. The job cannot subsequently be retried by normal polling and violates the no-provider-URL binding requirement. Mark it retriable/transfer-failed without a playable `result_url` instead.
 - Successful transfers store a seven-day signed URL, but no completed-job re-sign path uses `storage_path`; an expired URL remains `completed` and cannot be refreshed. Add server-side re-signing before UI/export access.
 - Independently verify in staging the database unique-conflict return path, confirmed-first-frame resolution, refresh restoration, batch totals, and the full download → private Storage → re-sign lifecycle. Injected-fetch tests do not prove these external effects.
@@ -27,6 +26,8 @@ The checked-in Supabase CLI link is the production project. Before any migration
 ## Resolved MUST FIX
 
 - [x] `expectedRevision: null` runtime regression: `7a617f8` extracts the validator used by `PUT /api/storyboard/state`; M4 executes it and rejects `null`, `undefined`, negative, string, and `NaN` revisions. The route returns 400 on that false result.
+- [x] Staging migration prerequisite: `cwpyolxitkcpitqizgtq` (`kiikis-staging`) received all 15 migrations. `20260718100000_video_idempotency_and_storage.sql` was rolled back, history-repaired to `reverted`, and replayed successfully.
+- [x] Database schema evidence: staging contains the partial unique index `uq_generation_jobs_idempotency_hash` on `(owner_id, idempotency_hash)`, `idempotency_hash` and `storage_path`, private `storyboard-videos`, and both owner Storage policies.
 
 ## NIT
 
