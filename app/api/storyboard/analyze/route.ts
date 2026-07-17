@@ -19,8 +19,8 @@ import type {
   PersistedStoryboardScene,
   PersistedStoryboardShot,
 } from "@/lib/storyboard/contracts";
-import { runStoryboardAnalyze } from "@/lib/storyboard/analyze";
-import type { ExistingStateScope } from "@/lib/storyboard/analyze/types";
+import { runAnalyze } from "@/lib/storyboard/analyze";
+import type { AnalyzeDependencies, ExistingStateScope } from "@/lib/storyboard/analyze/types";
 import { parseAnalyzeJsonBody, validateAnalyzeRequest } from "@/lib/storyboard/analyze/schema";
 import { isStoryboardError, StoryboardError } from "@/lib/storyboard/analyze/types";
 
@@ -146,29 +146,26 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await runStoryboardAnalyze(
-      validated.value,
-      { ownerId: userId },
-      {
-        callAI: async ({ systemPrompt, userPrompt }) => {
-          try {
-            const result = await callRoutedProvider({
-              taskType: "storyboard_script",
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt },
-              ],
-              temperature: 0.2,
-            });
-            return result.output;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new StoryboardError("AI_CALL_FAILED", `AI 调用失败: ${message}`);
-          }
-        },
-        loadExistingState: (scope) => loadExistingState(scope),
+    const dependencies: AnalyzeDependencies = {
+      callAI: async ({ systemPrompt, userPrompt }) => {
+        try {
+          const result = await callRoutedProvider({
+            taskType: "storyboard_script",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            temperature: 0.2,
+          });
+          return result.output;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new StoryboardError("AI_CALL_FAILED", `AI 调用失败: ${message}`);
+        }
       },
-    );
+      loadExistingState: (scope) => loadExistingState(scope),
+    };
+    const response = await runAnalyze(dependencies, validated.value, { ownerId: userId });
     return ok(response);
   } catch (error) {
     if (isStoryboardError(error)) {

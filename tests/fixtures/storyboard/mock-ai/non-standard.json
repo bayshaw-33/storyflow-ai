@@ -1,0 +1,137 @@
+{
+  "scenes": [
+    {
+      "heading": "INT. 老公寓 - 夜",
+      "location": "老公寓",
+      "timeOfDay": "夜",
+      "summary": "陈默雨夜回到老公寓，发现被水汽晕开的字条，凌晨拒接电话。",
+      "sourceText": "雨下了一整夜。陈默回到那间老公寓时，楼道灯坏了，他摸黑上到四楼，钥匙转了两圈才打开门。\n屋里还是离开时的样子。餐桌上压着一张字条，字迹被水汽晕开了一半。他拿起字条看了很久，然后把它折好，放进衬衫口袋。\n电话在凌晨两点响起。陈默没有接。他站在窗前，看对面楼一户人家的灯亮起来，又灭掉。",
+      "characters": ["陈默"],
+      "props": ["字条"],
+      "shots": [
+        {
+          "sourceText": "雨下了一整夜。陈默回到那间老公寓时，楼道灯坏了，他摸黑上到四楼，钥匙转了两圈才打开门。",
+          "storyBeat": "雨夜归家",
+          "visualDescription": "坏掉楼道灯的老公寓楼梯间，陈默摸黑上楼，钥匙转两圈打开房门，肩头有雨痕",
+          "characters": ["陈默"],
+          "location": "老公寓",
+          "props": [],
+          "shotSize": "中景",
+          "cameraMovement": "跟",
+          "angle": "平视",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "疲惫",
+          "continuity": "雨夜，楼道漆黑，陈默深色衬衫肩头湿"
+        },
+        {
+          "sourceText": "屋里还是离开时的样子。餐桌上压着一张字条，字迹被水汽晕开了一半。他拿起字条看了很久，然后把它折好，放进衬衫口袋。",
+          "storyBeat": "发现字条",
+          "visualDescription": "餐桌玻璃杯下压着一张字条，字迹被水汽晕开；陈默拿起看了很久，折好放进衬衫口袋",
+          "characters": ["陈默"],
+          "location": "老公寓",
+          "props": ["字条"],
+          "shotSize": "特写",
+          "cameraMovement": "缓推",
+          "angle": "俯拍",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "怅然",
+          "continuity": "字条折痕明显，内容不展示给观众"
+        },
+        {
+          "sourceText": "电话在凌晨两点响起。陈默没有接。他站在窗前，看对面楼一户人家的灯亮起来，又灭掉。",
+          "storyBeat": "凌晨拒接",
+          "visualDescription": "凌晨两点，手机屏幕在黑暗中亮起又暗下；陈默站在窗前，对面楼一户灯亮又灭",
+          "characters": ["陈默"],
+          "location": "老公寓",
+          "props": [],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "孤独",
+          "continuity": "手机屏光为唯一光源"
+        }
+      ]
+    },
+    {
+      "heading": "INT. 老公寓 - 清晨",
+      "location": "老公寓",
+      "timeOfDay": "清晨",
+      "summary": "天亮前陈默收拾行李离开公寓。",
+      "sourceText": "天亮之前，他拖出床底的行李箱，把墙上的照片一张张取下来，放进箱子最底层。最后他回头看了一眼这间屋子，关上了门。",
+      "characters": ["陈默"],
+      "props": ["行李箱"],
+      "shots": [
+        {
+          "sourceText": "天亮之前，他拖出床底的行李箱，把墙上的照片一张张取下来，放进箱子最底层。",
+          "storyBeat": "收拾离去",
+          "visualDescription": "天光未亮，陈默从床底拖出行李箱，把墙上照片一张张取下放进箱底",
+          "characters": ["陈默"],
+          "location": "老公寓",
+          "props": ["行李箱"],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "微俯",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "决绝",
+          "continuity": "行李箱为旧款深棕色"
+        },
+        {
+          "sourceText": "最后他回头看了一眼这间屋子，关上了门。",
+          "storyBeat": "关门告别",
+          "visualDescription": "陈默在门口回头看一眼空荡的屋子，轻轻关上门，门内光线被切断",
+          "characters": ["陈默"],
+          "location": "老公寓",
+          "props": ["行李箱"],
+          "shotSize": "近景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "告别",
+          "continuity": "门缝合光作为全段收尾"
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "characters": [
+      {
+        "name": "陈默",
+        "aliases": [],
+        "scriptBasis": "陈默回到那间老公寓",
+        "description": "38岁中国男性，消瘦，深色衬衫，眼底有倦色，沉默寡言的气质",
+        "visualKeywords": ["写实", "都市", "文艺"]
+      }
+    ],
+    "locations": [
+      {
+        "name": "老公寓",
+        "aliases": [],
+        "scriptBasis": "那间老公寓",
+        "description": "九十年代老公寓单间，旧木家具，墙面泛黄，窗外是密集的居民楼",
+        "visualKeywords": ["老公寓", "怀旧"]
+      }
+    ],
+    "props": [
+      {
+        "name": "字条",
+        "aliases": [],
+        "scriptBasis": "餐桌上压着一张字条，字迹被水汽晕开了一半",
+        "description": "普通白纸字条，字迹被水汽晕开一半，有明显折痕",
+        "visualKeywords": ["字条", "旧物"]
+      },
+      {
+        "name": "行李箱",
+        "aliases": [],
+        "scriptBasis": "拖出床底的行李箱",
+        "description": "旧款深棕色行李箱，布面磨损，拉杆松动",
+        "visualKeywords": ["行李箱", "旧物"]
+      }
+    ]
+  }
+}

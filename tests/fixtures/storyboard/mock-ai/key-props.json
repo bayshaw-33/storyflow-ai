@@ -1,0 +1,221 @@
+{
+  "scenes": [
+    {
+      "heading": "INT. 律师事务所会议室 - 日",
+      "location": "律师事务所会议室",
+      "timeOfDay": "日",
+      "summary": "顾蔓在签股权转让合同前犹豫，要求确认附件三。",
+      "sourceText": "长桌上，一份股权转让合同摊开。顾蔓转动无名指上的婚戒，迟迟没有拔笔帽。\n律师：顾女士，签完字，股权即刻生效。\n顾蔓：我再确认一遍附件三。",
+      "characters": ["顾蔓", "律师"],
+      "props": ["股权转让合同", "婚戒"],
+      "shots": [
+        {
+          "sourceText": "长桌上，一份股权转让合同摊开。顾蔓转动无名指上的婚戒，迟迟没有拔笔帽。",
+          "storyBeat": "签字前的犹豫",
+          "visualDescription": "长桌上股权转让合同摊开，顾蔓无意识转动无名指上的婚戒，笔帽未拔",
+          "characters": ["顾蔓"],
+          "location": "律师事务所会议室",
+          "props": ["股权转让合同", "婚戒"],
+          "shotSize": "特写",
+          "cameraMovement": "缓推",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "迟疑",
+          "continuity": "婚戒为铂金素圈，合同翻开在签字页"
+        },
+        {
+          "sourceText": "律师：顾女士，签完字，股权即刻生效。",
+          "storyBeat": "律师催促",
+          "visualDescription": "律师坐在对面，双手交叠，公式化地提示",
+          "characters": ["律师"],
+          "location": "律师事务所会议室",
+          "props": ["股权转让合同"],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "顾女士，签完字，股权即刻生效。",
+          "emotion": "职业化催促",
+          "continuity": "律师深色套装，桌上同一合同"
+        },
+        {
+          "sourceText": "顾蔓：我再确认一遍附件三。",
+          "storyBeat": "女主要求复核",
+          "visualDescription": "顾蔓把合同翻到附件页，指尖压住纸面，目光逐行扫过",
+          "characters": ["顾蔓"],
+          "location": "律师事务所会议室",
+          "props": ["股权转让合同"],
+          "shotSize": "近景",
+          "cameraMovement": "固定",
+          "angle": "微俯",
+          "durationSeconds": 5,
+          "dialogue": "我再确认一遍附件三。",
+          "emotion": "警觉",
+          "continuity": "合同翻至附件三页"
+        }
+      ]
+    },
+    {
+      "heading": "INT. 走廊 - 日",
+      "location": "律所走廊",
+      "timeOfDay": "日",
+      "summary": "顾蔓拒接丈夫来电并关机。",
+      "sourceText": "顾蔓的手机震动，屏幕亮起\"老公\"。她挂断，把手机反扣在窗台。手机又震，她直接关机。",
+      "characters": ["顾蔓"],
+      "props": ["手机"],
+      "shots": [
+        {
+          "sourceText": "顾蔓的手机震动，屏幕亮起\"老公\"。她挂断，把手机反扣在窗台。",
+          "storyBeat": "拒接来电",
+          "visualDescription": "走廊窗台，手机震动屏幕亮起来电人\"老公\"，顾蔓挂断并把手机反扣在窗台",
+          "characters": ["顾蔓"],
+          "location": "律所走廊",
+          "props": ["手机"],
+          "shotSize": "特写",
+          "cameraMovement": "固定",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "冷决",
+          "continuity": "手机为黑色直板智能机"
+        },
+        {
+          "sourceText": "手机又震，她直接关机。",
+          "storyBeat": "关机断联",
+          "visualDescription": "反扣的手机再次震动，顾蔓拿起手机长按关机，屏幕彻底黑掉",
+          "characters": ["顾蔓"],
+          "location": "律所走廊",
+          "props": ["手机"],
+          "shotSize": "特写",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "斩断退路",
+          "continuity": "手机最终处于黑屏关机状态"
+        }
+      ]
+    },
+    {
+      "heading": "INT. 律师事务所会议室 - 日（二）",
+      "location": "律师事务所会议室",
+      "timeOfDay": "日",
+      "summary": "顾蔓摘下婚戒放在合同旁，签字完成切割。",
+      "sourceText": "顾蔓回到桌前，拔开笔帽。签字前，她摘下婚戒，轻轻放在合同旁边。\n顾蔓：现在，它跟这份合同没关系了。\n她签下名字。镜头扫过桌面：合同、婚戒、黑屏的手机。",
+      "characters": ["顾蔓"],
+      "props": ["股权转让合同", "婚戒", "手机"],
+      "shots": [
+        {
+          "sourceText": "顾蔓回到桌前，拔开笔帽。签字前，她摘下婚戒，轻轻放在合同旁边。",
+          "storyBeat": "摘戒明志",
+          "visualDescription": "顾蔓回到桌前拔开笔帽，签字前摘下婚戒轻轻放在合同旁边",
+          "characters": ["顾蔓"],
+          "location": "律师事务所会议室",
+          "props": ["股权转让合同", "婚戒"],
+          "shotSize": "特写",
+          "cameraMovement": "缓推",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "仪式感",
+          "continuity": "婚戒从手上移至合同左侧桌面"
+        },
+        {
+          "sourceText": "顾蔓：现在，它跟这份合同没关系了。",
+          "storyBeat": "宣言切割",
+          "visualDescription": "顾蔓看着桌上的婚戒说出这句话，律师在对面愣住",
+          "characters": ["顾蔓", "律师"],
+          "location": "律师事务所会议室",
+          "props": ["婚戒", "股权转让合同"],
+          "shotSize": "近景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "现在，它跟这份合同没关系了。",
+          "emotion": "平静决裂",
+          "continuity": "接上镜摆位"
+        },
+        {
+          "sourceText": "她签下名字。镜头扫过桌面：合同、婚戒、黑屏的手机。",
+          "storyBeat": "签字收尾",
+          "visualDescription": "顾蔓签下名字；镜头缓缓扫过桌面：签好的合同、铂金婚戒、黑屏手机三样东西并排",
+          "characters": ["顾蔓"],
+          "location": "律师事务所会议室",
+          "props": ["股权转让合同", "婚戒", "手机"],
+          "shotSize": "特写",
+          "cameraMovement": "摇",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "尘埃落定",
+          "continuity": "三样关键道具同框收尾"
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "characters": [
+      {
+        "name": "顾蔓",
+        "aliases": ["顾女士"],
+        "scriptBasis": "顾蔓转动无名指上的婚戒",
+        "description": "30岁中国女性，精致干练，低盘发，米色西装套裙，无名指戴铂金素圈婚戒",
+        "visualKeywords": ["写实", "都市女性"]
+      },
+      {
+        "name": "律师",
+        "aliases": [],
+        "scriptBasis": "律师：顾女士，签完字，股权即刻生效",
+        "description": "40岁中国男性，金丝眼镜，深色三件套西装，职业化表情",
+        "visualKeywords": ["写实", "商务"]
+      }
+    ],
+    "locations": [
+      {
+        "name": "律师事务所会议室",
+        "aliases": ["会议室"],
+        "scriptBasis": "INT. 律师事务所会议室 - 日",
+        "description": "高端律所会议室，浅木长桌，落地百叶窗日光，墙面挂法律典籍",
+        "visualKeywords": ["律所", "商务"]
+      },
+      {
+        "name": "律所走廊",
+        "aliases": [],
+        "scriptBasis": "INT. 走廊 - 日",
+        "description": "律所安静走廊，大理石窗台，冷白光，尽头有绿植",
+        "visualKeywords": ["走廊", "冷调"]
+      }
+    ],
+    "props": [
+      {
+        "name": "婚戒",
+        "aliases": ["戒指"],
+        "scriptBasis": "顾蔓转动无名指上的婚戒",
+        "description": "铂金素圈婚戒，内圈有细微刻字，佩戴痕迹明显",
+        "visualKeywords": ["婚戒", "铂金"]
+      },
+      {
+        "name": "婚戒",
+        "aliases": ["铂金戒指", "戒指"],
+        "scriptBasis": "她摘下婚戒，轻轻放在合同旁边。这枚戒指是她结婚时丈夫送的",
+        "description": "铂金素圈婚戒，三年前婚礼上的对戒之一，内圈刻有两人名字缩写，圈口略松",
+        "visualKeywords": ["婚戒", "铂金", "对戒", "婚姻象征"]
+      },
+      {
+        "name": "手机",
+        "aliases": [],
+        "scriptBasis": "顾蔓的手机震动，屏幕亮起\"老公\"",
+        "description": "黑色直板智能手机，细边金属框，屏幕有轻微划痕",
+        "visualKeywords": ["手机"]
+      },
+      {
+        "name": "股权转让合同",
+        "aliases": ["合同"],
+        "scriptBasis": "一份股权转让合同摊开",
+        "description": "蓝色封皮装订合同，内页含附件三，签字页留白待签",
+        "visualKeywords": ["合同", "文件"]
+      }
+    ]
+  }
+}

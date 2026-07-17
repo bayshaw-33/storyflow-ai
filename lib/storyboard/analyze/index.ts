@@ -1,37 +1,58 @@
 /**
- * Storyboard analyze pipeline — orchestration entry point.
+ * Storyboard analyze — orchestration (parse → assemble → normalize → merge).
  *
  * Task card: KIIKIS-P1-KIMI-002 §1
  *
- * Responsibilities:
- *   1. Call AI via injected callAI boundary (or default callRoutedProvider).
- *   2. Strictly parse the model output: reject markdown fences, reject
- *      trailing commentary, reject missing required fields. NEVER silently
- *      substitute an empty-scenes response — every failure throws
- *      StoryboardError so the route can surface a visible error to the UI.
- *   3. Build StoryboardScene[] + asset usages with stable client IDs and
- *      return a contract-shaped AnalyzeResponse.
+ * Trust boundaries:
+ *   - AI output is NEVER trusted: strict parse (parse.ts), server-assigned
+ *     clientIds (p_scene_<order> / p_shot_<sceneOrder>_<shotOrder> /
+ *     p_asset_<kind>_<n>), idSource "client"; model-provided ids are
+ *     discarded before assembly.
+ *   - Unresolved character/prop/location names AUTO-CREATE minimal asset
+ *     entries so references never dangle.
+ *   - Analyze is READ-ONLY / proposal-only: no database writes. The
+ *     idempotencyKey is accepted for contract symmetry, but every call
+ *     returns a FRESH analysisId; dedup happens at Codex's save layer.
  *
- * Fail-visible contract: if the model returns anything that is not a strict
- * JSON object of shape AiAnalyzeOutput, we throw ANALYZE_OUTPUT_INVALID.
- * The route MUST NOT clear the existing scenes on this error — the UI keeps
- * the last good state and shows the error inline.
+ * Duration normalization: when Σ shot durations deviates from
+ * targetDurationSeconds by more than 20%, every duration is scaled
+ * proportionally, rounded to 1 decimal, and clamped to [2, 10] seconds
+ * (short-drama single-shot bounds).
  *
- * ERASABLE SYNTAX ONLY (Node type-stripping).
+ * Compatibility: `runStoryboardAnalyze` / `parseStrictAnalyzeJson` are kept
+ * for the TRAE-002 call sites; the canonical entry point is `runAnalyze`.
+ *
+ * ERASABLE SYNTAX ONLY (Node type-stripping). This module is imported by
+ * node:test directly — the default AI boundary is a LAZY dynamic import so
+ * module scope stays node-importable.
  */
 
-import { callRoutedProvider } from "../../ai/providers/index.ts";
-import type { AIMessage } from "../../ai/providers/index.ts";
+import { sha256Hex } from "../../compliance/manifest.ts";
+import type {
+  AnalyzeResponse,
+  StoryboardAssetKind,
+  StoryboardAssetUsage,
+  StoryboardScene,
+  StoryboardShot,
+  PersistedStoryboardScene,
+} from "../contracts.ts";
 import {
-  buildAnalyzeSystemPrompt,
-  buildAnalyzeUserPrompt,
-} from "./prompt.ts";
+  allocateAssetClientId,
+  createMinimalAssetUsage,
+  extractAssetUsages,
+  findAssetByName,
+  type StoryboardAssetUsageWithAliases,
+} from "../assets/extract.ts";
+import { buildAnalyzeSystemPrompt, buildAnalyzeUserPrompt } from "./prompt.ts";
+import { parseAnalyzeOutput } from "./parse.ts";
+import {
+  findPersistedScene,
+  mergeFullProposal,
+  mergeSceneProposal,
+} from "./merge.ts";
 import {
   StoryboardError,
   type AiAnalyzeOutput,
-  type AiAssetOutput,
-  type AiSceneOutput,
-  type AiShotOutput,
   type AnalyzeContext,
   type AnalyzeDependencies,
   type CallStoryboardAI,
@@ -39,244 +60,99 @@ import {
   type LoadExistingStoryboardState,
   type ValidatedAnalyzeRequest,
 } from "./types.ts";
-import type {
-  AnalyzeResponse,
-  PersistedStoryboardScene,
-  StoryboardAssetUsage,
-  StoryboardScene,
-  StoryboardShot,
-} from "../contracts.ts";
-import { extractAssetUsages, createMinimalAssetUsage, findAssetByName, type StoryboardAssetUsageWithAliases } from "../assets/extract.ts";
 
-const ANALYZE_AI_TASK_TYPE = "storyboard_script" as const;
+const DURATION_DEVIATION_TOLERANCE = 0.2;
+const SHOT_MIN_SECONDS = 2;
+const SHOT_MAX_SECONDS = 10;
 
-/** Default AI boundary: route through the project's provider router. */
-const defaultCallAI: CallStoryboardAI = async (scope) => {
-  const messages: AIMessage[] = [
-    { role: "system", content: scope.systemPrompt },
-    { role: "user", content: scope.userPrompt },
-  ];
-  const result = await callRoutedProvider({
-    taskType: ANALYZE_AI_TASK_TYPE,
-    messages,
-  });
-  // AIProviderResult stores text under `output` (not `text`) per project convention.
-  const output = result.output;
-  if (typeof output !== "string" || output.trim().length === 0) {
-    throw new StoryboardError("AI_CALL_FAILED", "AI 返回为空，无法解析分镜。");
-  }
-  return output;
-};
-
-/** Strict JSON parser: rejects markdown fences, trailing text, non-objects. */
-export function parseStrictAnalyzeJson(raw: string): AiAnalyzeOutput {
-  let text = raw.trim();
-  if (!text) throw new StoryboardError("ANALYZE_OUTPUT_INVALID", "AI 返回为空字符串。");
-
-  // Strip a single pair of ```json / ``` fences if present — but reject if
-  // anything other than whitespace surrounds them.
-  const fenceMatch = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  if (fenceMatch) text = fenceMatch[1].trim();
-
-  if (!text.startsWith("{") || !text.endsWith("}")) {
-    throw new StoryboardError(
-      "ANALYZE_OUTPUT_INVALID",
-      "AI 返回不是 JSON 对象（首字符不是 { 或末字符不是 }）。",
-      { head: text.slice(0, 80), tail: text.slice(-80) },
-    );
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    throw new StoryboardError(
-      "ANALYZE_OUTPUT_INVALID",
-      "AI 返回的 JSON 解析失败。",
-      { error: err instanceof Error ? err.message : String(err) },
-    );
-  }
-
-  return assertAiAnalyzeOutput(parsed);
+export function computeSourceHash(source: string): string {
+  return `sha256:${sha256Hex(new TextEncoder().encode(source))}`;
 }
 
-function assertString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `字段 ${field} 不是字符串。`);
-  }
-  return value;
+/** Proportional scaling to hit the target duration (see module docstring). */
+export function normalizeDurations(
+  scenes: StoryboardScene[],
+  targetDurationSeconds: number,
+): StoryboardScene[] {
+  const all = scenes.flatMap((scene) => scene.shots);
+  const sum = all.reduce((total, shot) => total + shot.durationSeconds, 0);
+  if (sum <= 0 || targetDurationSeconds <= 0) return scenes;
+  const deviation = Math.abs(sum - targetDurationSeconds) / targetDurationSeconds;
+  if (deviation <= DURATION_DEVIATION_TOLERANCE) return scenes;
+
+  const scale = targetDurationSeconds / sum;
+  return scenes.map((scene) => ({
+    ...scene,
+    shots: scene.shots.map((shot) => {
+      const scaled = Math.round(shot.durationSeconds * scale * 10) / 10;
+      const clamped = Math.min(SHOT_MAX_SECONDS, Math.max(SHOT_MIN_SECONDS, scaled));
+      return { ...shot, durationSeconds: clamped };
+    }),
+  }));
 }
 
-function assertStringArray(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `字段 ${field} 不是数组。`);
-  }
-  return value.map((item, i) => {
-    if (typeof item !== "string") {
-      throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `字段 ${field}[${i}] 不是字符串。`);
+function resolveAssets(
+  names: string[],
+  kind: StoryboardAssetKind,
+  assets: StoryboardAssetUsageWithAliases[],
+): string[] {
+  const ids: string[] = [];
+  for (const name of names) {
+    const found = findAssetByName(assets, kind, name);
+    if (found) {
+      if (!ids.includes(found.assetId)) ids.push(found.assetId);
+      continue;
     }
-    return item;
-  });
+    // Auto-create a minimal entry so the reference never dangles.
+    const created = createMinimalAssetUsage(kind, name, assets);
+    assets.push(created);
+    ids.push(created.assetId);
+  }
+  return ids;
 }
 
-function assertNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `字段 ${field} 不是有效数字。`);
-  }
-  return value;
+function resolveLocationAsset(
+  locationName: string | null,
+  assets: StoryboardAssetUsageWithAliases[],
+): string | null {
+  if (!locationName || locationName.trim().length === 0) return null;
+  const found = findAssetByName(assets, "location", locationName);
+  if (found) return found.assetId;
+  const created = createMinimalAssetUsage("location", locationName, assets);
+  assets.push(created);
+  return created.assetId;
 }
 
-function assertAiShotOutput(value: unknown, index: number): AiShotOutput {
-  if (!value || typeof value !== "object") {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `shots[${index}] 不是对象。`);
-  }
-  const shot = value as Record<string, unknown>;
-  return {
-    sourceText: assertString(shot.sourceText, `shots[${index}].sourceText`),
-    storyBeat: assertString(shot.storyBeat, `shots[${index}].storyBeat`),
-    visualDescription: assertString(shot.visualDescription, `shots[${index}].visualDescription`),
-    characters: shot.characters === undefined ? [] : assertStringArray(shot.characters, `shots[${index}].characters`),
-    location: shot.location === null || shot.location === undefined ? null : assertString(shot.location, `shots[${index}].location`),
-    props: shot.props === undefined ? [] : assertStringArray(shot.props, `shots[${index}].props`),
-    shotSize: assertString(shot.shotSize, `shots[${index}].shotSize`),
-    cameraMovement: assertString(shot.cameraMovement, `shots[${index}].cameraMovement`),
-    angle: assertString(shot.angle, `shots[${index}].angle`),
-    durationSeconds: assertNumber(shot.durationSeconds, `shots[${index}].durationSeconds`),
-    dialogue: assertString(shot.dialogue, `shots[${index}].dialogue`),
-    emotion: assertString(shot.emotion, `shots[${index}].emotion`),
-    continuity: assertString(shot.continuity, `shots[${index}].continuity`),
-  };
-}
+function assembleScenes(
+  aiScenes: AiAnalyzeOutput["scenes"],
+  assets: StoryboardAssetUsageWithAliases[],
+  sourceHash: string,
+  revision: number,
+): StoryboardScene[] {
+  return aiScenes.map((aiScene, sceneIndex) => {
+    const sceneOrder = sceneIndex + 1;
+    const sceneClientId = `p_scene_${sceneOrder}`;
 
-function assertAiSceneOutput(value: unknown, index: number): AiSceneOutput {
-  if (!value || typeof value !== "object") {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `scenes[${index}] 不是对象。`);
-  }
-  const scene = value as Record<string, unknown>;
-  const shots = scene.shots;
-  if (!Array.isArray(shots)) {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `scenes[${index}].shots 不是数组。`);
-  }
-  return {
-    heading: assertString(scene.heading, `scenes[${index}].heading`),
-    location: assertString(scene.location, `scenes[${index}].location`),
-    timeOfDay: assertString(scene.timeOfDay, `scenes[${index}].timeOfDay`),
-    summary: assertString(scene.summary, `scenes[${index}].summary`),
-    sourceText: assertString(scene.sourceText, `scenes[${index}].sourceText`),
-    characters: scene.characters === undefined ? [] : assertStringArray(scene.characters, `scenes[${index}].characters`),
-    props: scene.props === undefined ? [] : assertStringArray(scene.props, `scenes[${index}].props`),
-    shots: shots.map((shot, i) => assertAiShotOutput(shot, i)),
-  };
-}
-
-function assertAiAssetOutput(value: unknown, kind: string, index: number): AiAssetOutput {
-  if (!value || typeof value !== "object") {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `assets.${kind}[${index}] 不是对象。`);
-  }
-  const asset = value as Record<string, unknown>;
-  return {
-    name: assertString(asset.name, `assets.${kind}[${index}].name`),
-    aliases: asset.aliases === undefined ? [] : assertStringArray(asset.aliases, `assets.${kind}[${index}].aliases`),
-    scriptBasis: assertString(asset.scriptBasis, `assets.${kind}[${index}].scriptBasis`),
-    description: assertString(asset.description, `assets.${kind}[${index}].description`),
-    visualKeywords: asset.visualKeywords === undefined ? [] : assertStringArray(asset.visualKeywords, `assets.${kind}[${index}].visualKeywords`),
-  };
-}
-
-function assertAiAnalyzeOutput(value: unknown): AiAnalyzeOutput {
-  if (!value || typeof value !== "object") {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", "AI 输出不是对象。");
-  }
-  const root = value as Record<string, unknown>;
-  if (!Array.isArray(root.scenes)) {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", "AI 输出缺少 scenes 数组。");
-  }
-  if (!root.assets || typeof root.assets !== "object") {
-    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", "AI 输出缺少 assets 对象。");
-  }
-  const assets = root.assets as Record<string, unknown>;
-  const characters = Array.isArray(assets.characters) ? assets.characters : [];
-  const locations = Array.isArray(assets.locations) ? assets.locations : [];
-  const props = Array.isArray(assets.props) ? assets.props : [];
-  return {
-    scenes: root.scenes.map((scene, i) => assertAiSceneOutput(scene, i)),
-    assets: {
-      characters: characters.map((a, i) => assertAiAssetOutput(a, "characters", i)),
-      locations: locations.map((a, i) => assertAiAssetOutput(a, "locations", i)),
-      props: props.map((a, i) => assertAiAssetOutput(a, "props", i)),
-    },
-  };
-}
-
-/** Build a stable clientId for a scene or shot (deterministic across runs). */
-function buildSceneClientId(index: number): string {
-  return `p_scene_${index + 1}`;
-}
-function buildShotClientId(sceneClientId: string, index: number): string {
-  return `${sceneClientId}_shot_${index + 1}`;
-}
-
-/**
- * Map validated AI output to contract-shaped StoryboardScene[] + asset usages.
- * - Auto-create minimal asset usages for any name referenced by a scene/shot
- *   but absent from the AI asset list (references must never dangle).
- * - Map character/scene/prop NAMES in each shot to assetIds using the dedupe
- *   key (so the UI can later bind selectedVersionId -> referenceVersionIds).
- */
-function buildStoryboardScenes(
-  ai: AiAnalyzeOutput,
-  usages: StoryboardAssetUsageWithAliases[],
-): { scenes: StoryboardScene[]; analysisVersion: number } {
-  const scenes: StoryboardScene[] = ai.scenes.map((aiScene, sceneIndex) => {
-    const sceneClientId = buildSceneClientId(sceneIndex);
-    const characterAssetIds = aiScene.characters
-      .map((name) => findAssetByName(usages, "character", name)?.assetId)
-      .filter((id): id is string => Boolean(id));
-    const propAssetIds = aiScene.props
-      .map((name) => findAssetByName(usages, "prop", name)?.assetId)
-      .filter((id): id is string => Boolean(id));
-    const locationAsset = aiScene.location
-      ? findAssetByName(usages, "location", aiScene.location)
-      : null;
+    const sceneCharacterIds = resolveAssets(aiScene.characters, "character", assets);
+    const scenePropIds = resolveAssets(aiScene.props, "prop", assets);
 
     const shots: StoryboardShot[] = aiScene.shots.map((aiShot, shotIndex) => {
-      const shotClientId = buildShotClientId(sceneClientId, shotIndex);
-      const shotCharacterAssetIds = aiShot.characters.map((name) => {
-        const existing = findAssetByName(usages, "character", name);
-        if (existing) return existing.assetId;
-        const created = createMinimalAssetUsage("character", name, usages);
-        usages.push(created);
-        return created.assetId;
-      });
-      const shotPropAssetIds = aiShot.props.map((name) => {
-        const existing = findAssetByName(usages, "prop", name);
-        if (existing) return existing.assetId;
-        const created = createMinimalAssetUsage("prop", name, usages);
-        usages.push(created);
-        return created.assetId;
-      });
-      const shotSceneAssetId = aiShot.location
-        ? (() => {
-            const existing = findAssetByName(usages, "location", aiShot.location);
-            if (existing) return existing.assetId;
-            const created = createMinimalAssetUsage("location", aiShot.location, usages);
-            usages.push(created);
-            return created.assetId;
-          })()
-        : locationAsset?.assetId ?? null;
+      const shotOrder = shotIndex + 1;
+      const characterAssetIds = resolveAssets(aiShot.characters, "character", assets);
+      const propAssetIds = resolveAssets(aiShot.props, "prop", assets);
+      const sceneAssetId = resolveLocationAsset(aiShot.location ?? aiScene.location, assets);
 
       return {
-        id: undefined,
-        clientId: shotClientId,
+        clientId: `p_shot_${sceneOrder}_${shotOrder}`,
         idSource: "client" as const,
         sceneId: sceneClientId,
-        order: shotIndex + 1,
+        order: shotOrder,
         sourceText: aiShot.sourceText,
         storyBeat: aiShot.storyBeat,
         visualDescription: aiShot.visualDescription,
-        characterAssetIds: shotCharacterAssetIds,
-        sceneAssetId: shotSceneAssetId,
-        propAssetIds: shotPropAssetIds,
+        characterAssetIds,
+        sceneAssetId,
+        propAssetIds,
         shotSize: aiShot.shotSize,
         cameraMovement: aiShot.cameraMovement,
         angle: aiShot.angle,
@@ -289,17 +165,20 @@ function buildStoryboardScenes(
         locked: false,
         userEdited: false,
         confirmed: false,
-        revision: 0,
-        analysisVersion: 0,
-        sourceHash: "",
+        revision,
+        analysisVersion: 1,
+        sourceHash,
       };
     });
 
+    // Scene-level asset references union the shot-level ones.
+    const characterAssetIds = [...new Set([...sceneCharacterIds, ...shots.flatMap((s) => s.characterAssetIds)])];
+    const propAssetIds = [...new Set([...scenePropIds, ...shots.flatMap((s) => s.propAssetIds)])];
+
     return {
-      id: undefined,
       clientId: sceneClientId,
       idSource: "client" as const,
-      order: sceneIndex + 1,
+      order: sceneOrder,
       heading: aiScene.heading,
       location: aiScene.location,
       timeOfDay: aiScene.timeOfDay,
@@ -311,88 +190,131 @@ function buildStoryboardScenes(
       locked: false,
       userEdited: false,
       confirmed: false,
-      revision: 0,
-      analysisVersion: 0,
-      sourceHash: "",
+      revision,
+      analysisVersion: 1,
+      sourceHash,
     };
   });
+}
 
+function groupAssets(assets: StoryboardAssetUsageWithAliases[]): AnalyzeResponse["assets"] {
   return {
-    scenes,
-    analysisVersion: 1,
+    characters: assets.filter((asset) => asset.kind === "character"),
+    locations: assets.filter((asset) => asset.kind === "location"),
+    props: assets.filter((asset) => asset.kind === "prop"),
   };
 }
 
 /**
- * Run the full analyze pipeline.
- *
- * Behavior:
- *   - mode="full": re-analyze the entire source text; returns brand-new
- *     scenes + assets. The route replaces existing scenes atomically via
- *     save_storyboard_state (caller's responsibility).
- *   - mode="scene": re-analyze ONE scene identified by request.sceneId. The
- *     returned scenes array contains exactly one scene; the caller splices
- *     it into the existing state at the position of the original scene.
- *
- * On failure: throws StoryboardError — the route surfaces it as a visible
- * error and MUST NOT clear the existing scenes (BLOCKER 4 contract).
+ * Run the full analyze pipeline. Throws StoryboardError on any validation /
+ * AI-output failure — callers must surface the error code, never a fake 200.
+ */
+export async function runAnalyze(
+  deps: AnalyzeDependencies,
+  request: ValidatedAnalyzeRequest,
+  context: AnalyzeContext,
+): Promise<AnalyzeResponse> {
+  const sourceHash = computeSourceHash(request.source);
+  const revision = request.expectedRevision + 1;
+
+  const existing = await deps.loadExistingState({
+    ownerId: context.ownerId,
+    projectId: request.projectId,
+    sourceUnitId: request.sourceUnitId,
+  });
+
+  let sceneSourceText: string | undefined;
+  let targetScene: PersistedStoryboardScene | null = null;
+  if (request.mode === "scene") {
+    targetScene = findPersistedScene(existing.scenes, request.sceneId ?? "");
+    if (!targetScene) {
+      throw new StoryboardError("SCENE_NOT_FOUND", `未找到要重新分析的场景: ${request.sceneId}`, {
+        sceneId: request.sceneId,
+      });
+    }
+    sceneSourceText = targetScene.sourceText;
+  }
+
+  const systemPrompt = buildAnalyzeSystemPrompt(request);
+  const userPrompt = buildAnalyzeUserPrompt(request, { sceneSourceText });
+  const rawOutput = await deps.callAI({ systemPrompt, userPrompt });
+
+  const aiOutput = parseAnalyzeOutput(rawOutput);
+
+  const assets = extractAssetUsages(aiOutput.assets);
+  const proposalScenes = assembleScenes(aiOutput.scenes, assets, sourceHash, revision);
+  const normalized = normalizeDurations(proposalScenes, request.targetDurationSeconds);
+
+  const scenes =
+    request.mode === "scene" && targetScene
+      ? [mergeSceneProposal(targetScene, normalized)]
+      : mergeFullProposal(existing.scenes, normalized);
+
+  // Cheap insurance against future refactors: asset ids must stay unique
+  // even after auto-creation.
+  const seen = new Set<string>();
+  for (const asset of assets) {
+    if (seen.has(asset.assetId)) {
+      asset.assetId = allocateAssetClientId(asset.kind, assets);
+    }
+    seen.add(asset.assetId);
+  }
+
+  return {
+    analysisId: crypto.randomUUID(),
+    analysisVersion: 1,
+    sourceHash,
+    revision,
+    scenes,
+    assets: groupAssets(assets),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// TRAE-002 compatibility surface
+// ---------------------------------------------------------------------------
+
+/** Strict JSON parse kept under the TRAE-002 name; delegates to parse.ts. */
+export function parseStrictAnalyzeJson(raw: string): AiAnalyzeOutput {
+  return parseAnalyzeOutput(raw);
+}
+
+/** Default AI boundary: lazy dynamic import keeps this module node-importable. */
+const defaultCallAI: CallStoryboardAI = async (scope) => {
+  const { callRoutedProvider } = await import("../../ai/providers/index.ts");
+  const result = await callRoutedProvider({
+    taskType: "storyboard_script",
+    messages: [
+      { role: "system", content: scope.systemPrompt },
+      { role: "user", content: scope.userPrompt },
+    ],
+  });
+  const output = result.output;
+  if (typeof output !== "string" || output.trim().length === 0) {
+    throw new StoryboardError("AI_CALL_FAILED", "AI 返回为空，无法解析分镜。");
+  }
+  return output;
+};
+
+const defaultLoadExistingState: LoadExistingStoryboardState = async () => ({ scenes: [] });
+
+/**
+ * TRAE-002 call signature — compatibility wrapper over `runAnalyze`.
+ * Prefer `runAnalyze(deps, request, context)` in new code.
  */
 export async function runStoryboardAnalyze(
   request: ValidatedAnalyzeRequest,
   context: AnalyzeContext,
   dependencies?: Partial<AnalyzeDependencies>,
 ): Promise<AnalyzeResponse> {
-  const callAI = dependencies?.callAI ?? defaultCallAI;
-  const loadExistingState = dependencies?.loadExistingState;
-
-  // For scene-mode re-analysis, we need the original scene's sourceText
-  // from the existing state. The route layer is responsible for ensuring
-  // the request is consistent — we only need the sourceText to feed the AI.
-  let sceneSourceText: string | undefined;
-  if (request.mode === "scene" && request.sceneId && loadExistingState) {
-    const existing = await loadExistingState({
-      ownerId: context.ownerId,
-      projectId: request.projectId,
-      sourceUnitId: request.sourceUnitId,
-    });
-    const scene = existing.scenes.find((s) => s.id === request.sceneId);
-    if (!scene) {
-      throw new StoryboardError("SCENE_NOT_FOUND", `未找到场景 ${request.sceneId}，无法重新分析。`);
-    }
-    sceneSourceText = scene.sourceText;
-  }
-
-  const systemPrompt = buildAnalyzeSystemPrompt(request);
-  const userPrompt = buildAnalyzeUserPrompt(request, { sceneSourceText });
-  const raw = await callAI({ systemPrompt, userPrompt });
-  const ai = parseStrictAnalyzeJson(raw);
-
-  const usages = extractAssetUsages(ai.assets);
-  const { scenes, analysisVersion } = buildStoryboardScenes(ai, usages);
-
-  const assetUsages: StoryboardAssetUsage[] = usages.map((u) => ({
-    assetId: u.assetId,
-    kind: u.kind,
-    name: u.name,
-    scriptBasis: u.scriptBasis,
-    description: u.description,
-    visualKeywords: u.visualKeywords,
-    prompt: u.prompt,
-    selectedVersionId: u.selectedVersionId,
-  }));
-
-  return {
-    analysisId: `analysis_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    analysisVersion,
-    sourceHash: "",
-    revision: request.expectedRevision,
-    scenes,
-    assets: {
-      characters: assetUsages.filter((u) => u.kind === "character"),
-      locations: assetUsages.filter((u) => u.kind === "location"),
-      props: assetUsages.filter((u) => u.kind === "prop"),
+  return runAnalyze(
+    {
+      callAI: dependencies?.callAI ?? defaultCallAI,
+      loadExistingState: dependencies?.loadExistingState ?? defaultLoadExistingState,
     },
-  };
+    request,
+    context,
+  );
 }
 
 export {
@@ -402,6 +324,7 @@ export {
   type CallStoryboardAI,
   type ExistingStoryboardState,
   type LoadExistingStoryboardState,
+  type StoryboardAssetUsage,
   type ValidatedAnalyzeRequest,
 };
 export type { PersistedStoryboardScene };
