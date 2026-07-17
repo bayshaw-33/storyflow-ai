@@ -14,7 +14,6 @@ export function WorkflowGrid({ isZh, onNavigate }: WorkflowGridProps) {
     title: isZh ? workflow.titleZh : workflow.title,
     description: isZh ? workflow.descriptionZh : workflow.description,
     href: workflow.href,
-    tier: workflow.tier,
     icon: workflow.icon,
   }));
 

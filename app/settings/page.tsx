@@ -223,7 +223,7 @@ const workflowRouteOptions: Array<{ id: WorkflowModelRoute; zh: string; en: stri
   { id: "storyboard", zh: "分镜创作", en: "Storyboard" },
   { id: "video", zh: "视频创作", en: "Video" },
   { id: "song", zh: "歌曲创作", en: "Song Creation" },
-  { id: "viral", zh: "爆款创作", en: "Viral Creation" },
+  { id: "viral", zh: "改编创作", en: "Adaptation" },
 ];
 
 function normalizePlan(value: string | null | undefined): PlanId {

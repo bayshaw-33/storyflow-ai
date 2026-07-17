@@ -354,6 +354,96 @@
   border-color: var(--glass-border-hover);
 }
 
+/* ----------------- 归档弹窗 ----------------- */
+.archiveOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--modal-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.archiveModal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.archiveHeader {
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.archiveHeader h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink-primary);
+}
+
+.archiveHeader p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+}
+
+.archiveBody {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.archiveField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.archiveField span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  letter-spacing: 0.02em;
+}
+
+.archiveField input,
+.archiveField select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--ink-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.archiveField input:focus,
+.archiveField select:focus {
+  border-color: var(--accent-blue);
+}
+
+.archiveActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px 20px;
+  border-top: 1px solid var(--divider);
+}
+
 /* ----------------- 响应式 ----------------- */
 @media (max-width: 980px) {
   .header {

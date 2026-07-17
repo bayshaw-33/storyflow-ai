@@ -11,7 +11,7 @@ export type WorkflowCardData = {
   title: string;
   description: string;
   href: string;
-  tier: WorkflowTier;
+  tier?: WorkflowTier;
   icon: LucideIcon;
 };
 
@@ -26,6 +26,7 @@ export function WorkflowCard({ workflow, onNavigate }: WorkflowCardProps) {
     "workspace-workflow-card",
     workflow.tier === "core" ? "is-core" : "is-extended",
   ].filter(Boolean).join(" ");
+  void workflow.tier;
 
   return (
     <Link className={className} href={workflow.href} onClick={onNavigate}>

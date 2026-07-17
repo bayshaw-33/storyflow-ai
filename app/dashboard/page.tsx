@@ -354,7 +354,7 @@ export default function ProjectListPage() {
             </div>
           </header>
 
-          <WorkflowList onSelectWorkflow={openWizard} />
+          <WorkflowList />
           <ProjectList
             groupedProjects={groupedProjects}
             groups={groups}

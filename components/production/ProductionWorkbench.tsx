@@ -52,6 +52,8 @@ import { readCreativeHandoff } from "@/lib/creative-handoff";
 import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } from "@/lib/storyboard/draft";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createProductionId } from "@/lib/production/state";
+import { createContinuationProject, createProject, upsertProject } from "@/lib/projects";
+import { upsertProjectToSupabase } from "@/lib/supabase/projects";
 import type { ProductionSourceFile } from "@/lib/production/types";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
 import { TeamPanel } from "./TeamPanel";
@@ -141,6 +143,11 @@ export function ProductionWorkbench() {
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [showModelRegistry, setShowModelRegistry] = useState(false);
   const [showSecondaryMenu, setShowSecondaryMenu] = useState(false);
+  // 任务 1.4「先创作后归档」：draft 草稿保存时弹归档弹窗
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveTitle, setArchiveTitle] = useState("");
+  const [archiveWorkflowType, setArchiveWorkflowType] = useState<"creation" | "continuation">("creation");
+  const [archiving, setArchiving] = useState(false);
   const [versionList, setVersionList] = useState<VersionRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [versionDiff, setVersionDiff] = useState<VersionDiffResult | null>(null);
@@ -155,11 +162,26 @@ export function ProductionWorkbench() {
     const params = new URLSearchParams(window.location.search);
     const urlProjectId = params.get("projectId");
     const urlSourceUnitId = params.get("sourceUnitId");
+    const setup = params.get("setup");
+    const mode = params.get("mode") || "planning";
+
     if (!urlProjectId || !urlSourceUnitId) {
-      // 空状态页：按入口 mode 决定初始 Tab（planning → 分镜表 / editor → 分镜图）
-      const mode = params.get("mode") === "editor" ? "editor" : "planning";
-      setEntryMode(mode);
-      setActiveTab(mode === "editor" ? "frames" : "table");
+      // 任务 1.4「先创作后归档」：带 setup=1（从需求墙来）时自动开未命名草稿，立即可用
+      if (setup === "1") {
+        const draftId = `draft-production-${Date.now()}`;
+        const draftUnitId = `draft-unit-${Date.now()}`;
+        setProjectId(draftId);
+        setSourceUnitId(draftUnitId);
+        setIsEmptyState(false);
+        setProjectTitle("未命名草稿");
+        // mode → Tab 映射（art → 美术物料 / planning → 分镜表 / editor → 分镜图 / dub|edit → 剧本输入占位）
+        const tabForMode: Tab = mode === "editor" ? "frames" : mode === "art" ? "assets" : mode === "planning" ? "table" : "script";
+        setActiveTab(tabForMode);
+        setEntryMode(mode as EntryMode);
+        return;
+      }
+      // 无 setup：显示需求墙（任务 1.3）
+      setEntryMode(mode as EntryMode);
       setIsEmptyState(true);
       return;
     }
@@ -312,6 +334,12 @@ export function ProductionWorkbench() {
   }
 
   async function saveToServer() {
+    // 任务 1.4：draft 草稿先归档为真实项目再保存
+    if (projectId.startsWith("draft-")) {
+      setArchiveTitle(projectTitle || "未命名草稿");
+      setArchiveOpen(true);
+      return;
+    }
     if (!session) {
       setNotice("已保存到本地草稿（未登录，未同步云端）。");
       return;
@@ -345,6 +373,73 @@ export function ProductionWorkbench() {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** 任务 1.4：归档 draft 草稿为真实项目，归档后自动保存到云端。 */
+  async function archiveDraft() {
+    const title = archiveTitle.trim() || "未命名项目";
+    setArchiving(true);
+    try {
+      const base = {
+        title,
+        workflowType: archiveWorkflowType,
+        genre: "逆袭复仇",
+        targetLanguage: "中文",
+        market: "北美",
+        episodeCount: 1,
+        episodeDuration: "2 分钟",
+      };
+      const project = archiveWorkflowType === "continuation"
+        ? createContinuationProject(base)
+        : createProject(base);
+      upsertProject(project);
+      void upsertProjectToSupabase(project, { accessToken: session?.access_token });
+      const newProjectId = project.id;
+      const newUnitId = `ep-${newProjectId}-1`;
+      setProjectId(newProjectId);
+      setSourceUnitId(newUnitId);
+      setProjectTitle(title);
+      // 更新 URL
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("projectId", newProjectId);
+        url.searchParams.set("sourceUnitId", newUnitId);
+        url.searchParams.delete("setup");
+        window.history.replaceState({}, "", url.toString());
+      }
+      setArchiveOpen(false);
+      setNotice(`已归档为项目「${title}」，正在同步云端…`);
+      // 归档后立即保存到云端（用真实 ID）
+      setSaving(true);
+      try {
+        const request: SaveRequest = {
+          projectId: newProjectId,
+          sourceUnitId: newUnitId,
+          expectedRevision: revision,
+          scenes,
+          deletedSceneIds,
+          deletedShotIds,
+        };
+        const response: SaveResponse = await storyboardClient.saveState(request);
+        applyServerResponse(response);
+        setNotice(`已归档并同步云端（revision ${response.revision}）。`);
+      } catch (err) {
+        if (err instanceof StoryboardRevisionConflictError) {
+          setConflictRevision(err.currentRevision);
+          setNotice(`归档成功但同步被拒：服务器 revision ${err.currentRevision}。请重试。`);
+        } else {
+          const message = err instanceof Error ? err.message : "云端同步失败。";
+          setNotice(`已归档到本地，云端同步失败：${message}`);
+        }
+      } finally {
+        setSaving(false);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "归档失败。";
+      setNotice(`归档失败：${message}`);
+    } finally {
+      setArchiving(false);
     }
   }
 
@@ -1030,20 +1125,7 @@ export function ProductionWorkbench() {
 
   if (isEmptyState) {
     return (
-      <ProductionEmptyState
-        supabaseClient={supabaseClient}
-        entryMode={entryMode}
-        onPickProject={(pid, suId) => {
-          setIsEmptyState(false);
-          setProjectId(pid);
-          setSourceUnitId(suId);
-          // 更新 URL（不刷新页面），让后续 useEffect 正常触发
-          const url = new URL(window.location.href);
-          url.searchParams.set("projectId", pid);
-          url.searchParams.set("sourceUnitId", suId);
-          window.history.replaceState({}, "", url.toString());
-        }}
-      />
+      <ProductionEmptyState entryMode={typeof entryMode === "string" ? entryMode : undefined} />
     );
   }
 
@@ -1292,6 +1374,57 @@ export function ProductionWorkbench() {
       ) : null}
       {showTeamPanel ? <TeamPanel onClose={() => setShowTeamPanel(false)} /> : null}
       {showModelRegistry ? <ModelRegistryPanel onClose={() => setShowModelRegistry(false)} /> : null}
+
+      {archiveOpen ? (
+        <div role="dialog" aria-modal="true" aria-label="归档草稿" className={styles.archiveOverlay}>
+          <div className={styles.archiveModal}>
+            <div className={styles.archiveHeader}>
+              <h2>归档草稿为项目</h2>
+              <p>为这份草稿命名并选择类型，归档后将自动同步到云端。</p>
+            </div>
+            <div className={styles.archiveBody}>
+              <label className={styles.archiveField}>
+                <span>项目名称</span>
+                <input
+                  type="text"
+                  value={archiveTitle}
+                  onChange={(e) => setArchiveTitle(e.target.value)}
+                  placeholder="未命名项目"
+                  autoFocus
+                />
+              </label>
+              <label className={styles.archiveField}>
+                <span>类型</span>
+                <select
+                  value={archiveWorkflowType}
+                  onChange={(e) => setArchiveWorkflowType(e.target.value as "creation" | "continuation")}
+                >
+                  <option value="creation">原创</option>
+                  <option value="continuation">续作</option>
+                </select>
+              </label>
+            </div>
+            <div className={styles.archiveActions}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => setArchiveOpen(false)}
+                disabled={archiving}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={archiveDraft}
+                disabled={archiving || !archiveTitle.trim()}
+              >
+                {archiving ? "归档中…" : "归档并保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

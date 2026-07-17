@@ -66,24 +66,24 @@ const VIRAL_BUCKET = "viral-assets";
 const copy = {
   zh: {
     back: "返回工作台",
-    kicker: "爆款创作",
-    title: "爆款创作",
+    kicker: "改编创作",
+    title: "改编创作",
     localSaved: "本地自动保存",
     uploadVideo: "上传视频",
     uploading: "上传中…",
     uploadHint: "支持 video/*，单个文件不超过 100MB",
     leftKicker: "视频输入",
-    leftTitle: "爆款样本",
+    leftTitle: "改编样本",
     rewriteLabel: "改写要求",
     rewritePlaceholder: "描述你的改写方向，例如：保留结构，换成宠物赛道，主角是一只会拆家的柯基...",
     attachmentLabel: "改写附件",
     outputKicker: "结构分析",
-    outputTitle: "爆款结构输出",
-    emptyTitle: "上传视频后点击「分析爆款结构」开始",
+    outputTitle: "改编结构输出",
+    emptyTitle: "上传视频后点击「分析改编结构」开始",
     emptyBody: "系统会先拆解开场钩子、主体节奏、动作节点、结果呈现和记忆点，再生成同结构改写。",
     aiKicker: "AI 工具",
     aiTitle: "任务控制",
-    analyze: "分析爆款结构",
+    analyze: "分析改编结构",
     analyzing: "分析中…",
     remake: "同结构改写",
     remaking: "改写中…",
@@ -381,7 +381,7 @@ export default function ViralWorkbenchPage() {
   async function createViralProjectStub(viralProjectId: string, fileName: string) {
     if (!session?.access_token) return;
 
-    const title = fileName.replace(/\.[^/.]+$/, "") || (language === "zh" ? "未命名爆款创作" : "Untitled viral creation");
+    const title = fileName.replace(/\.[^/.]+$/, "") || (language === "zh" ? "未命名改编创作" : "Untitled viral creation");
     try {
       const dashboardProject = createProject({
         id: `viral-${viralProjectId}`,
@@ -834,7 +834,7 @@ function downloadText(fileName: string, content: string) {
 function inferViralTitle(analysis: ViralAnalysis, fileName: string) {
   const formula = analysis.f5_memory?.formula?.trim();
   if (formula) return formula.length > 48 ? `${formula.slice(0, 48)}...` : formula;
-  return fileName.replace(/\.[^/.]+$/, "") || "未命名爆款创作";
+  return fileName.replace(/\.[^/.]+$/, "") || "未命名改编创作";
 }
 
 function readWorkspaceEntryDraft(workflowId: string): WorkspaceEntryDraft | null {
