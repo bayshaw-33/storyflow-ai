@@ -232,12 +232,40 @@ type SupabaseOptions = {
   accessToken?: string | null;
 };
 
+/**
+ * 客户端安全版：仅依据 profile.plan 判定，不读取任何环境变量。
+ * 用作客户端 useState 初始值（保守返回 canUse:false），真实权限由服务端
+ * readUniverseEntitlement → resolveUniverseEntitlement 计算。
+ *
+ * 安全说明：NEXT_PUBLIC_UNIVERSE_ALLOWLIST_EMAILS / NEXT_PUBLIC_UNIVERSE_DEV_UNLOCK
+ * 已迁移为服务端变量 UNIVERSE_ALLOWLIST_EMAILS / UNIVERSE_DEV_UNLOCK，
+ * 不再通过 NEXT_PUBLIC_ 前缀暴露到客户端 bundle。
+ */
 export function canUseUniverseEngine(input?: { email?: string | null; plan?: string | null } | null): UniverseEntitlement {
   const plan = (input?.plan || "").toLowerCase();
+  const canUse = getPlanEntitlement(plan).features.universe;
+  return {
+    canUse,
+    readOnly: !canUse,
+    plan: plan || "free",
+    reason: canUse ? "Universe enabled" : "Universe plan required",
+  };
+}
+
+/**
+ * 服务端版：在 canUseUniverseEngine 基础上叠加服务端环境变量门控。
+ * 仅在服务端调用（readUniverseEntitlement → 此处），不在客户端组件中直接调用。
+ *
+ * - UNIVERSE_ENGINE_ENABLED=true：全局强制开启（生产灰度用）
+ * - UNIVERSE_DEV_UNLOCK：仅非生产环境生效，默认开启；设为 "false" 关闭
+ * - UNIVERSE_ALLOWLIST_EMAILS：逗号分隔的 email 白名单（服务端私密，不进客户端）
+ */
+export function resolveUniverseEntitlement(input?: { email?: string | null; plan?: string | null } | null): UniverseEntitlement {
+  const plan = (input?.plan || "").toLowerCase();
   const email = (input?.email || "").toLowerCase();
-  const enabledInDev = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_UNIVERSE_DEV_UNLOCK !== "false";
-  const forceEnabled = process.env.NEXT_PUBLIC_UNIVERSE_ENGINE_ENABLED === "true";
-  const allowlist = (process.env.NEXT_PUBLIC_UNIVERSE_ALLOWLIST_EMAILS || "")
+  const enabledInDev = process.env.NODE_ENV !== "production" && process.env.UNIVERSE_DEV_UNLOCK !== "false";
+  const forceEnabled = process.env.UNIVERSE_ENGINE_ENABLED === "true";
+  const allowlist = (process.env.UNIVERSE_ALLOWLIST_EMAILS || "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
@@ -270,7 +298,7 @@ export async function readCurrentProfile(options: SupabaseOptions = {}) {
 
 export async function readUniverseEntitlement(options: SupabaseOptions = {}) {
   const profile = await readCurrentProfile(options);
-  return canUseUniverseEngine(profile);
+  return resolveUniverseEntitlement(profile);
 }
 
 export async function listUniverses(options: SupabaseOptions = {}): Promise<Universe[]> {
