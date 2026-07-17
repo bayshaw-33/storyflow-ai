@@ -210,22 +210,46 @@ export function CreationWorkbench() {
     setMessages((current) => current.map((item) => item.id === "welcome" ? message("assistant", welcome(isZh), "welcome") : item));
   }, [isZh]);
 
+  // 任务 3：制作工作台 → 创作工作台 定位到 sourceUnitId 对应单元（携带上下文）
+  const focusUnitBySourceId = (target: DramaProject, sourceUnitId: string | null) => {
+    if (!sourceUnitId) return;
+    const ws = target.creationWorkspace || createCreationWorkspace(target);
+    const inScreenplay = ws.screenplay.units.some((u) => u.id === sourceUnitId);
+    const inNovel = ws.novel.units.some((u) => u.id === sourceUnitId);
+    if (!inScreenplay && !inNovel) return;
+    const currentMode = ws.settings.activeMode;
+    if (inScreenplay && currentMode !== "screenplay") {
+      setMode("screenplay");
+    } else if (inNovel && currentMode !== "novel") {
+      setMode("novel");
+    }
+    // setMode 内部会清空 activeUnitId，需在 microtask 中恢复到目标 unit
+    queueMicrotask(() => setActiveUnitId(sourceUnitId));
+  };
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     const projectId = searchParams.get("projectId");
     const forceNew = searchParams.get("new") === "1";
+    const urlSourceUnitId = searchParams.get("sourceUnitId");
     void supabase?.auth.getSession().then(async ({ data }) => {
       setSession(data.session || null);
       if (forceNew || !projectId) return;
       const local = readProjectsFromStorage();
       const localProject = local.find((item) => item.id === projectId);
       if (localProject) {
-        setProject(ensureProject(localProject));
+        const ensured = ensureProject(localProject);
+        setProject(ensured);
+        focusUnitBySourceId(ensured, urlSourceUnitId);
         return;
       }
       const synced = await syncProjectsWithSupabase(local, { accessToken: data.session?.access_token || null });
       const cloudProject = synced.projects.find((item) => item.id === projectId);
-      if (cloudProject) setProject(ensureProject(cloudProject));
+      if (cloudProject) {
+        const ensured = ensureProject(cloudProject);
+        setProject(ensured);
+        focusUnitBySourceId(ensured, urlSourceUnitId);
+      }
     });
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
     return () => listener?.subscription.unsubscribe();

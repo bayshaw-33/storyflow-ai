@@ -28,7 +28,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { AlertTriangle, Clock, Cpu, Film, Save, Settings, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock, Cpu, Film, Save, Settings, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -72,6 +72,7 @@ import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from ".
 import { StoryboardExportMenu } from "./StoryboardExportMenu";
 import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
 import ArtWorkbench from "@/components/art/ArtWorkbench";
+import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
 import styles from "./ProductionWorkbench.module.css";
 
@@ -157,6 +158,15 @@ export function ProductionWorkbench() {
     () => StoryboardClient.fromSupabase(supabaseClient),
     [supabaseClient],
   );
+
+  // 任务 3：关联跳转 — 制作工作台 → 创作工作台（无关联时隐藏或禁用并说明）
+  const backToCreation = useMemo(() => {
+    if (!projectId) return { visible: false, ok: false, reason: undefined as string | undefined };
+    const isDraft = projectId.startsWith("draft-");
+    if (isDraft) return { visible: false, ok: false, reason: undefined as string | undefined };
+    const result = canJumpToCreation({ projectId, sourceUnitId, isDraft: false });
+    return { visible: true, ok: result.ok, reason: result.reason };
+  }, [projectId, sourceUnitId]);
 
   // --- URL 参数 + scope 校验 + handoff/draft 加载 ---
   useEffect(() => {
@@ -1156,6 +1166,21 @@ export function ProductionWorkbench() {
           ))}
         </nav>
         <div className={styles.actionRow}>
+          {backToCreation.visible ? (
+            <button
+              className={styles.secondaryButton}
+              type="button"
+              onClick={() => {
+                if (!backToCreation.ok || !projectId || !sourceUnitId) return;
+                router.push(buildCreationJumpUrl({ projectId, sourceUnitId }));
+              }}
+              disabled={!backToCreation.ok || saving}
+              title={backToCreation.ok ? "返回创作工作台对应单元" : backToCreation.reason}
+              aria-label="返回创作工作台"
+            >
+              <ArrowLeft size={16} /> 返回创作
+            </button>
+          ) : null}
           <button className={styles.primaryButton} type="button" onClick={saveToServer} disabled={saving}>
             <Save size={16} /> {saving ? "保存中..." : "保存"}
           </button>
