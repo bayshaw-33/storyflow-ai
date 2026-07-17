@@ -30,6 +30,15 @@ test("setup entry resets stale local state and cloud projects are merged", async
   assert.match(component, /mergeArtProjects/);
 });
 
+test("embedded art workbench scopes local drafts and archives to the project", async () => {
+  const component = await read("../components/art/ArtWorkbench.tsx");
+
+  assert.match(component, /function getArtWorkbenchStorageKey\(projectId\?: string\)/);
+  assert.match(component, /\$\{ART_WORKBENCH_STORAGE_KEY\}:\$\{projectId\}/);
+  assert.match(component, /const storageKey = getArtWorkbenchStorageKey\(contextProjectId\)/);
+  assert.match(component, /getArtWorkbenchArchiveIndexKey\(storageKey\)/);
+});
+
 test("reference images are uploaded and sent to MiniMax as image_url content", async () => {
   const [component, route, storage] = await Promise.all([
     read("../components/art/ArtWorkbench.tsx"),

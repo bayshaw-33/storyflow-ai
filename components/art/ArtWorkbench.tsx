@@ -15,8 +15,18 @@ import styles from "./ArtWorkbench.module.css";
 import collapseStyles from "./ArtWorkbenchCollapse.module.css";
 
 export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
-const ART_WORKBENCH_ARCHIVE_PREFIX = "kiikis_art_workbench_archive_";
-const ART_WORKBENCH_ARCHIVE_INDEX_KEY = "kiikis_art_workbench_archive_index";
+
+function getArtWorkbenchStorageKey(projectId?: string) {
+  return projectId ? `${ART_WORKBENCH_STORAGE_KEY}:${projectId}` : ART_WORKBENCH_STORAGE_KEY;
+}
+
+function getArtWorkbenchArchivePrefix(storageKey: string) {
+  return `${storageKey}__archive_`;
+}
+
+function getArtWorkbenchArchiveIndexKey(storageKey: string) {
+  return `${storageKey}__archive_index`;
+}
 
 type ArtWorkbenchArchiveIndex = Array<{ id: string; title: string; archivedAt: string; assetCount: number }>;
 
@@ -24,13 +34,15 @@ type ChatMessage = { id: string; role: "user" | "assistant"; content: string; no
 type PendingImage = { id: string; name: string; url: string; storagePath: string };
 
 // 归档辅助：把当前草稿保存为独立存档，避免被新建/切换项目覆盖
-function archiveCurrentDraft(draft: ArtWorkbenchState): string | null {
+function archiveCurrentDraft(draft: ArtWorkbenchState, storageKey: string): string | null {
   if (!draft.assets?.length && !draft.sourceText?.trim() && !draft.sourceFiles?.length) return null;
   try {
     const archiveId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    localStorage.setItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${archiveId}`, JSON.stringify(draft));
+    const archivePrefix = getArtWorkbenchArchivePrefix(storageKey);
+    localStorage.setItem(`${archivePrefix}${archiveId}`, JSON.stringify(draft));
     // 更新归档索引
-    const indexRaw = localStorage.getItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY);
+    const archiveIndexKey = getArtWorkbenchArchiveIndexKey(storageKey);
+    const indexRaw = localStorage.getItem(archiveIndexKey);
     const index: ArtWorkbenchArchiveIndex = indexRaw ? JSON.parse(indexRaw) : [];
     index.unshift({
       id: archiveId,
@@ -40,34 +52,34 @@ function archiveCurrentDraft(draft: ArtWorkbenchState): string | null {
     });
     // 限制归档数量为 20 个，超出删除最旧的
     const trimmed = index.slice(0, 20);
-    localStorage.setItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY, JSON.stringify(trimmed));
+    localStorage.setItem(archiveIndexKey, JSON.stringify(trimmed));
     // 清理被裁剪掉的归档
     for (const item of index.slice(20)) {
-      localStorage.removeItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${item.id}`);
+      localStorage.removeItem(`${archivePrefix}${item.id}`);
     }
     return archiveId;
   } catch { /* localStorage 写入失败，无法归档 */ return null; }
 }
 
-function loadArchive(archiveId: string): ArtWorkbenchState | null {
+function loadArchive(archiveId: string, storageKey: string): ArtWorkbenchState | null {
   try {
-    const raw = localStorage.getItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${archiveId}`);
+    const raw = localStorage.getItem(`${getArtWorkbenchArchivePrefix(storageKey)}${archiveId}`);
     return raw ? JSON.parse(raw) as ArtWorkbenchState : null;
   } catch { return null; }
 }
 
-function readArchiveIndex(): ArtWorkbenchArchiveIndex {
+function readArchiveIndex(storageKey: string): ArtWorkbenchArchiveIndex {
   try {
-    const raw = localStorage.getItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY);
+    const raw = localStorage.getItem(getArtWorkbenchArchiveIndexKey(storageKey));
     return raw ? JSON.parse(raw) as ArtWorkbenchArchiveIndex : [];
   } catch { return []; }
 }
 
-function deleteArchive(archiveId: string) {
+function deleteArchive(archiveId: string, storageKey: string) {
   try {
-    localStorage.removeItem(`${ART_WORKBENCH_ARCHIVE_PREFIX}${archiveId}`);
-    const index = readArchiveIndex().filter((item) => item.id !== archiveId);
-    localStorage.setItem(ART_WORKBENCH_ARCHIVE_INDEX_KEY, JSON.stringify(index));
+    localStorage.removeItem(`${getArtWorkbenchArchivePrefix(storageKey)}${archiveId}`);
+    const index = readArchiveIndex(storageKey).filter((item) => item.id !== archiveId);
+    localStorage.setItem(getArtWorkbenchArchiveIndexKey(storageKey), JSON.stringify(index));
   } catch { /* 忽略 */ }
 }
 
@@ -93,10 +105,13 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
   const [notice, setNotice] = useState("");
   const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
   const [archiveIndex, setArchiveIndex] = useState<ArtWorkbenchArchiveIndex>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
+  const storageKey = getArtWorkbenchStorageKey(contextProjectId);
 
   useEffect(() => {
+    setIsHydrated(false);
     const supabase = getSupabaseBrowserClient();
     const localProjects = readProjectsFromStorage();
     setProjects(localProjects);
@@ -109,18 +124,18 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
     void supabase?.auth.getSession().then(({ data }) => loadSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { void loadSession(next); }) || {};
     // 加载归档索引（用于"我的草稿"下拉）
-    setArchiveIndex(readArchiveIndex());
+    setArchiveIndex(readArchiveIndex(storageKey));
     const params = new URLSearchParams(window.location.search);
 
     // 通用：开始新草稿前自动归档当前草稿（不丢失任何工作成果）
     const archiveCurrentAndStartNew = (newState: ArtWorkbenchState, welcomeMessage: string) => {
       try {
-        const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+        const saved = localStorage.getItem(storageKey);
         if (saved) {
           const current = JSON.parse(saved) as ArtWorkbenchState;
-          const archiveId = archiveCurrentDraft(current);
+          const archiveId = archiveCurrentDraft(current, storageKey);
           if (archiveId) {
-            setArchiveIndex(readArchiveIndex());
+            setArchiveIndex(readArchiveIndex(storageKey));
             setNotice(isZh ? `已自动保存上一份草稿《${current.title || "未命名"}》到「我的草稿」。` : `Previous draft "${current.title || "Untitled"}" auto-archived to "My Drafts".`);
           }
         }
@@ -131,13 +146,19 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
 
     // 任务 2：嵌入模式（制作工作台美术 Tab）——用传入的项目上下文初始化
     if (contextProjectId) {
-      const existing = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
-      const baseState = existing ? { ...createEmptyArtWorkbenchState(), ...JSON.parse(existing) as ArtWorkbenchState } : createEmptyArtWorkbenchState();
-      setState({
-        ...baseState,
-        projectId: contextProjectId,
-        projectTitle: contextProjectTitle || baseState.projectTitle || "",
-      });
+      try {
+        const existing = localStorage.getItem(storageKey);
+        const baseState = existing ? { ...createEmptyArtWorkbenchState(), ...JSON.parse(existing) as ArtWorkbenchState } : createEmptyArtWorkbenchState();
+        setState({
+          ...baseState,
+          projectId: contextProjectId,
+          projectTitle: contextProjectTitle || baseState.projectTitle || "",
+        });
+      } catch {
+        setState({ ...createEmptyArtWorkbenchState(), projectId: contextProjectId, projectTitle: contextProjectTitle || "" });
+        setNotice(isZh ? "当前项目的本地美术草稿数据损坏，已隔离并新建空白草稿。" : "The local art draft for this project is corrupted and was isolated.");
+      }
+      setIsHydrated(true);
       return () => listener?.subscription.unsubscribe();
     }
 
@@ -161,6 +182,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
         },
         `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。`,
       );
+      setIsHydrated(true);
       return () => listener?.subscription.unsubscribe();
     }
 
@@ -169,25 +191,28 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
       window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
       // 自动归档当前草稿后开始新空白项目
       archiveCurrentAndStartNew(createEmptyArtWorkbenchState(), isZh ? "已新建空白美术项目。可在「我的草稿」中找回之前的草稿。" : "Started a new blank art project. Previous drafts are in \"My Drafts\".");
+      setIsHydrated(true);
       return () => listener?.subscription.unsubscribe();
     }
     try {
-      const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
     } catch (error) {
       // JSON 解析失败：备份损坏数据以便排查，并提示用户（不静默清空）
       try {
-        const saved = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
-        if (saved) localStorage.setItem(`${ART_WORKBENCH_STORAGE_KEY}__corrupted_backup_${Date.now()}`, saved);
+        const saved = localStorage.getItem(storageKey);
+        if (saved) localStorage.setItem(`${storageKey}__corrupted_backup_${Date.now()}`, saved);
       } catch { /* 备份失败忽略 */ }
       setNotice(isZh ? "本地美术草稿数据损坏，已自动备份原始数据。请重新开始或联系支持。" : "Local art draft data is corrupted. Original data has been backed up.");
     }
+    setIsHydrated(true);
     return () => listener?.subscription.unsubscribe();
-  }, []);
+  }, [contextProjectId, contextProjectTitle, isZh, storageKey]);
 
   useEffect(() => {
-    try { localStorage.setItem(ART_WORKBENCH_STORAGE_KEY, JSON.stringify(state)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
-  }, [state]);
+    if (!isHydrated) return;
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
+  }, [isHydrated, state, storageKey]);
 
   const visibleAssets = useMemo(() => state.assets.filter((asset) => asset.kind === selectedKind && (!query.trim() || `${asset.name} ${asset.role} ${asset.description}`.toLowerCase().includes(query.trim().toLowerCase()))), [state.assets, selectedKind, query]);
   const counts = useMemo(() => ({ character: state.assets.filter((asset) => asset.kind === "character").length, scene: state.assets.filter((asset) => asset.kind === "scene").length, prop: state.assets.filter((asset) => asset.kind === "prop").length }), [state.assets]);
@@ -207,9 +232,9 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
     const name = window.prompt(isZh ? "请输入新项目名称" : "New project name");
     if (!name?.trim()) return;
     // 归档当前草稿（不丢失任何工作成果）
-    const archiveId = archiveCurrentDraft(state);
+    const archiveId = archiveCurrentDraft(state, storageKey);
     if (archiveId) {
-      setArchiveIndex(readArchiveIndex());
+      setArchiveIndex(readArchiveIndex(storageKey));
       setNotice(isZh ? `已自动保存上一份草稿《${state.title || "未命名"}》到「我的草稿」。` : `Previous draft "${state.title || "Untitled"}" auto-archived to "My Drafts".`);
     }
     const next = createEmptyArtWorkbenchState();
@@ -227,11 +252,11 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
   }
 
   function loadArchivedDraft(archiveId: string) {
-    const archived = loadArchive(archiveId);
+    const archived = loadArchive(archiveId, storageKey);
     if (!archived) return setNotice(isZh ? "草稿加载失败，可能已损坏或被删除。" : "Draft load failed, may be corrupted or deleted.");
     // 加载归档前，先把当前草稿也归档（如果当前有内容）
-    const currentArchiveId = archiveCurrentDraft(state);
-    if (currentArchiveId) setArchiveIndex(readArchiveIndex());
+    const currentArchiveId = archiveCurrentDraft(state, storageKey);
+    if (currentArchiveId) setArchiveIndex(readArchiveIndex(storageKey));
     setState({ ...createEmptyArtWorkbenchState(), ...archived });
     setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已加载草稿《${archived.title || "未命名"}》。${archived.assets?.length || 0} 个资产已恢复。` }]);
   }
@@ -240,8 +265,8 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
     const archived = archiveIndex.find((item) => item.id === archiveId);
     if (!archived) return;
     if (!window.confirm(isZh ? `确定删除草稿《${archived.title}》吗？此操作不可撤销。` : `Delete draft "${archived.title}"? This cannot be undone.`)) return;
-    deleteArchive(archiveId);
-    setArchiveIndex(readArchiveIndex());
+    deleteArchive(archiveId, storageKey);
+    setArchiveIndex(readArchiveIndex(storageKey));
     setNotice(isZh ? "草稿已删除。" : "Draft deleted.");
   }
 
@@ -249,8 +274,8 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
     if (!state.assets?.length && !state.sourceText?.trim()) return setNotice(isZh ? "当前没有可清空的内容。" : "Nothing to clear.");
     if (!window.confirm(isZh ? `确定清空当前草稿《${state.title}》的所有内容吗？\n\n建议先在「我的草稿」中确认已归档。此操作不可撤销。` : `Clear all content of current draft "${state.title}"?\n\nConsider archiving to "My Drafts" first. This cannot be undone.`)) return;
     // 清空前先归档（双保险）
-    archiveCurrentDraft(state);
-    setArchiveIndex(readArchiveIndex());
+    archiveCurrentDraft(state, storageKey);
+    setArchiveIndex(readArchiveIndex(storageKey));
     setState(createEmptyArtWorkbenchState());
     setMessages([{ id: crypto.randomUUID(), role: "assistant", content: isZh ? "已清空当前草稿。之前的版本已自动归档到「我的草稿」。" : "Current draft cleared. Previous version auto-archived to \"My Drafts\"." }]);
   }
