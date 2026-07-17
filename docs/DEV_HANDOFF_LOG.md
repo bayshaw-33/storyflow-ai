@@ -1,5 +1,40 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-17 22:08 - Codex / P0-02 Dashboard 入口死链验收
+
+### 本次目标
+- 验证并关闭 Dashboard “Enter the Studio” 死链任务，补齐有效路由、EN/CN 文案和截图证据。
+
+### 已完成
+- 确认当前 `main` 已移除原 “Enter the Studio” 死链按钮，首页主 CTA 改为有效的登录/创作入口流程。
+- 新增 Playwright 回归：验证 `/dashboard` 返回成功且渲染欢迎标题；验证 EN `Start Your Universe` 与 CN `进入你的宇宙` 点击后均打开登录入口且不出现 404。
+- 生成并人工检查 EN/CN 视口截图。
+
+### 修改文件
+- `e2e/dashboard-entry.spec.ts`
+- `docs/uat/p0-02-dashboard-entry-en.png`
+- `docs/uat/p0-02-dashboard-entry-zh.png`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `pnpm run build`：通过（77/77 静态页面生成完成）。
+- 测试：P0-02 定向 Chromium 3/3 通过；全量 Chromium E2E 10/10 通过；`node --test tests/*.test.mjs` 97/97 通过。
+- 实测/截图：EN/CN 登录入口弹窗均正常显示，截图位于 `docs/uat/p0-02-dashboard-entry-*.png`。
+- 未验证的部分：未运行 WebKit/Firefox；任务验收只要求死链与双语页面证据。
+- 基线问题：`pnpm run test:unit` 当前执行 `node --test tests/`，在本机 Node v26.5.0 把目录当模块并报 `MODULE_NOT_FOUND`；实际测试文件用显式 glob 全部通过。该脚本属于 P0-07 范围，本卡未修改。
+
+### Git 信息
+- commit：待提交。
+- 推送锁放行时间：用户于本任务前明确取消后续 Claw 推送锁要求；本次按用户指令直接推送。
+
+### 未完成 / 风险
+- 任务板状态仍由 Claw 维护；代码侧 P0-02 验收证据已齐。
+
+### 给下一位
+- P0-07 应把 `test:unit` 改为可跨 Node 版本正确展开测试文件的命令，并把测试真正接入 CI。
+
+---
+
 ## 2026-07-17 21:30 - Codex / KIIKIS-CX-G0-001 Gate 0A
 
 ### 本次目标
