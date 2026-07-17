@@ -1,5 +1,43 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 17:35 - TRAE / P3 BLOCKER v2 — 移除 CAS bypass + 扩展 snapshot API
+
+### 本次目标
+- 响应 Codex 滚动审查中定的唯一安全 BLOCKER：移除 `expectedRevision: null` 绕过 CAS 的路径。
+- 扩展独立 snapshot API 落完整 Scene/Shot 数据，使 409 "另存快照" 出口不再触碰当前工作态。
+
+### 已完成（commit `bdc971e`，单独一个 commit 供 Codex 针对性复查）
+- `lib/storyboard/contracts.ts`：`SaveRequest.expectedRevision` 恢复为 `number` 强约束（删除 `| null`）；`SnapshotRequest` 扩展 `scenes / deletedSceneIds / deletedShotIds` 字段。
+- `lib/storyboard/state-api.ts`：重写 `createStoryboardSnapshot`，直接 INSERT `storyflow_versions`（含完整 scenes），**不查 current state、不调 `save_storyboard_state` RPC、不做 CAS 校验**。
+- `app/api/storyboard/state/route.ts`：移除 `expectedRevision === null` 接受分支。
+- `app/api/storyboard/snapshots/route.ts`：`isSnapshotRequest` 增加 scenes/删除清单数组验证。
+- `lib/storyboard/client.ts`：新增 `createSnapshot` 方法。
+- `components/production/ProductionWorkbench.tsx`：`saveAsSnapshot` 改传本地 `scenes + revision`（不是 `conflictRevision`），调用独立 snapshot API。
+- 测试：G2 重写 + S1/S2/S3 新增（snapshot 不触碰 current state / 不做 CAS / 可恢复）；G3 改为读 contracts.ts 验证类型无 null 分支。
+
+### 关键契约
+- `SaveRequest.expectedRevision: number`（强约束，tsc 编译期拒绝 null）。
+- `createStoryboardSnapshot` 与 CAS 体系完全隔离：唯一 fetch 是 `POST /rest/v1/storyflow_versions`，不读不写 `storyflow_production_projects`，不调 `save_storyboard_state` / `get_storyboard_state` RPC。
+- `snapshot_json` 含 `scenes / deletedSceneIds / deletedShotIds / baseRevision / reason / createdAt`，未来读取该 version 即可重建本地状态。
+- 409 UI 第二出口文案保持 "基于当前内容另存快照"，行为改为调用 `POST /api/storyboard/snapshots`。
+
+### 验证结果
+- `npx tsc --noEmit`：0 错误。
+- `node --test tests/storyboard-state-api.test.mjs tests/storyboard-video-e2e.test.mjs`：BLOCKER v2 相关 23/23 通过（G1/G2/G3/G4/S1/S2/S3 + V1-V6 + B1-B3 + E1-E3）。
+- `pnpm build`：通过（pre-push 钩子验证）。
+- pre-push 钩子放行：`096eac7..bdc971e  main -> main`。
+
+### Git 信息
+- commit：`bdc971e`（fast-forward 合入 main，保留独立 hash）。
+- 基于：`096eac7`（P2 闸门修正后基线）。
+- push：已推送 origin/main。
+- 分支：`feat/p3-blocker-v2-snapshot`（保留，后续 P3 任务在此分支继续）。
+
+### 未完成 / 风险
+- P3 任务 1（视频 Provider 切换 Atlas Cloud）、任务 2（DB 幂等 + CDN 转存 migration）、任务 3（清缴 legacy save-state）仍在 feature 分支 working tree，未提交。
+- atlas e2e 6 个测试失败（require not defined / mock json 不是函数 / A3 outputs[0] 兼容）需 Step 6 修复。
+- migration 脚本待 Codex 在 staging 执行（TRAE 不自行执行迁移）。
+
 ## 2026-07-18 01:29 - Codex / 制作工作台安全与验证滚动审查
 
 ### 本次目标
