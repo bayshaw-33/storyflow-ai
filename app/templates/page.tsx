@@ -93,7 +93,7 @@ export default function TemplatesPage() {
     });
 
     upsertProject(project);
-    router.push(`/projects/${project.id}?template=${template.id}`);
+    router.push(`/novel-workbench?projectId=${encodeURIComponent(project.id)}&mode=screenplay&template=${encodeURIComponent(template.id)}`);
   }
 
   return (

@@ -893,7 +893,7 @@ function routeForCreatedProject(project: DramaProject) {
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
   if (project.workflowType === "storyboard") return `/production?projectId=${encodeURIComponent(project.id)}&mode=planning`;
   if (project.workflowType === "video") return `/production?projectId=${encodeURIComponent(project.id)}&mode=editor`;
-  return `/projects/${project.id}`;
+  return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
 }
 
 function buildUniverseInheritanceSummary(bundle: UniverseBundle) {

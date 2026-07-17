@@ -214,7 +214,7 @@ export default function ProjectListPage() {
     upsertProject(project);
     void upsertProjectToSupabase(project, { accessToken: session?.access_token });
     setWizardOpen(false);
-    router.push(`/projects/${project.id}?mode=${wizardData.workflowType}`);
+    router.push(`/novel-workbench?projectId=${encodeURIComponent(project.id)}&mode=screenplay`);
   }
 
   function addGroup() {

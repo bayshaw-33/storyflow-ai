@@ -39,7 +39,7 @@ export const WORKFLOW_ENTRY_POINTS: WorkflowEntryPoint[] = [
     titleZh: "剧本",
     description: "From scene outlines to production-ready scripts.",
     descriptionZh: "从场景大纲到可直接投产的剧本。",
-    href: "/dashboard?workflow=script&setup=1",
+    href: "/novel-workbench?new=1&setup=1&mode=screenplay",
     tier: "core",
     icon: Clapperboard,
     steps: 14,

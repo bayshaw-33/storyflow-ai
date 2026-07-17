@@ -77,7 +77,7 @@ function getProjectHref(project: DramaProject) {
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${encodeURIComponent(project.id)}`;
   }
   if (project.workflowType === "novel") return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
-  return `/projects/${project.id}`;
+  return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
 }
 
 function formatUpdatedAt(value: string) {
