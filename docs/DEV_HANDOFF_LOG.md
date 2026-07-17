@@ -1,5 +1,24 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 +08 - Codex / P0 staging migration revalidation and cloud-sync schema repair
+
+### Scope
+- Revalidate the staging migration baseline, rehearse the video rollback/replay, and repair the missing legacy production snapshot column that caused `delivery_package does not exist`.
+
+### Completed on `kiikis-staging` (`cwpyolxitkcpitqizgtq`)
+- Confirmed the linked project is staging and healthy; no production database was linked or written.
+- Verified the existing P0 migration history plus Evidence migrations: 17/17 matched before this run.
+- Found that none of those migrations created `public.storyflow_projects.delivery_package`, while cloud production state reads/writes that snake-case column. Added the minimal idempotent migration `20260719100000_add_storyflow_projects_delivery_package.sql`.
+- Dry-run listed exactly that migration; applied it and verified `delivery_package text` through a read-only database query. Final history is 18/18 local/remote matched.
+- Video migration rollback rehearsal: before rollback, the expected two columns, three indexes, and two Storage policies existed (2/3/2); rollback reduced all to 0/0/0. Marked only `20260718100000` reverted, dry-ran `--include-all` (exactly that one migration), replayed it, and verified 2/3/2 again.
+
+### Production status
+- Production target is confirmed as `StoryFlow` (`vgcafbzksizlwmylphzu`), but this checkout has only the explicitly labelled staging database password and no production database URL/password. Production snapshot and migration have therefore not started; do not reuse the staging credential by assumption.
+- Before production execution: obtain the production password or a secure production DB URL, take a schema snapshot and migration-history record, dry-run the exact pending set, apply only after that set is approved, then verify `storyflow_projects.delivery_package` and replay the affected cloud-sync route.
+
+### Notes
+- Supabase CLI reported the local Docker catalog-cache warning during `db push`; remote migration application and database-query verification both completed successfully.
+
 ## 2026-07-18 05:08 +08 - Codex / Evidence Ledger 与私有证据包
 
 ### 本次目标

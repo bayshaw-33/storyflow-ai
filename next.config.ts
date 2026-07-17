@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
         destination: "/production",
         permanent: true, // 301
       },
+      {
+        source: "/art-workbench",
+        destination: "/production?mode=art",
+        permanent: true, // 301（任务 2：美术工作台合并入制作工作台美术 Tab）
+      },
     ];
   },
 };

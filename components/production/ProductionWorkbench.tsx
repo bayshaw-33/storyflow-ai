@@ -71,6 +71,7 @@ import {
 import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 import { StoryboardExportMenu } from "./StoryboardExportMenu";
 import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
+import ArtWorkbench from "@/components/art/ArtWorkbench";
 import type { ProductionProjectState } from "@/lib/production/types";
 import styles from "./ProductionWorkbench.module.css";
 
@@ -1306,24 +1307,7 @@ export function ProductionWorkbench() {
           />
         ) : null}
         {activeTab === "assets" ? (
-          <>
-            <div className={styles.assetsHeader}>
-              {projectId ? (
-                <a className={styles.assetsHeaderLink} href={`/art-workbench?handoff=creative&sourceProjectId=${encodeURIComponent(projectId)}`}>
-                  在美术工作台打开 →
-                </a>
-              ) : null}
-            </div>
-            <ArtAssetsPanel
-            assets={assets}
-            candidates={candidates}
-            generatingAssetId={generatingAssetId}
-            onGenerateCandidates={generateAssetCandidates}
-            onSelectMainVersion={selectMainVersion}
-            onUploadReplacement={uploadAssetReplacement}
-            onAssetClick={(assetId) => setNotice(`资产 ${assetId} 关联的 Shot：${scenes.flatMap((s) => s.shots).filter((sh) => sh.characterAssetIds.includes(assetId) || sh.sceneAssetId === assetId || sh.propAssetIds.includes(assetId)).map((sh) => sh.id ?? sh.clientId).join(", ") || "无"}`)}
-          />
-          </>
+          <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} />
         ) : null}
         {activeTab === "frames" ? (
           <ShotFramesPanel

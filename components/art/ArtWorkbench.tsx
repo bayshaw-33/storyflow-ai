@@ -72,7 +72,13 @@ function deleteArchive(archiveId: string) {
 }
 
 
-export default function ArtWorkbench() {
+type ArtWorkbenchProps = {
+  /** 嵌入模式：制作工作台美术 Tab 传入的项目上下文（任务 2 合并） */
+  contextProjectId?: string;
+  contextProjectTitle?: string;
+};
+
+export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: ArtWorkbenchProps = {}) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
@@ -122,6 +128,18 @@ export default function ArtWorkbench() {
       setState(newState);
       setMessages([{ id: crypto.randomUUID(), role: "assistant", content: welcomeMessage }]);
     };
+
+    // 任务 2：嵌入模式（制作工作台美术 Tab）——用传入的项目上下文初始化
+    if (contextProjectId) {
+      const existing = localStorage.getItem(ART_WORKBENCH_STORAGE_KEY);
+      const baseState = existing ? { ...createEmptyArtWorkbenchState(), ...JSON.parse(existing) as ArtWorkbenchState } : createEmptyArtWorkbenchState();
+      setState({
+        ...baseState,
+        projectId: contextProjectId,
+        projectTitle: contextProjectTitle || baseState.projectTitle || "",
+      });
+      return () => listener?.subscription.unsubscribe();
+    }
 
     const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
     if (handoff) {

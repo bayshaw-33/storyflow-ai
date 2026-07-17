@@ -54,7 +54,8 @@ test("keeps Universe, art, and storyboard-video handoffs in a responsive 38/62 s
   const source = await readFile(componentPath, "utf8");
   const css = await readFile(cssPath, "utf8");
   assert.match(source, /Universe/);
-  assert.match(source, /\/art-workbench/);
+  // KIIKIS-任务2: art-workbench 合并入 /production?mode=art&projectId=
+  assert.match(source, /\/production\?mode=art/);
   // KIIKIS-P1-TRAE-002: 现在跳转到 /production?projectId=&sourceUnit=
   assert.match(source, /\/production\?projectId=/);
   assert.match(css, /grid-template-columns:\s*minmax\([^;]+38fr\)\s+minmax\([^;]+62fr\)/);

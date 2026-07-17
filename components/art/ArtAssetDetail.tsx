@@ -176,10 +176,10 @@ export default function ArtAssetDetail() {
     setNotice("已生成 Universe 发布记录。正式同步将在 Supabase migration 执行后写入云端。 ");
   }
 
-  if (!asset) return <main className={styles.missing}><p>{notice || "没有找到这个美术资产。"}</p><Link href="/art-workbench">返回美术仓库</Link></main>;
+  if (!asset) return <main className={styles.missing}><p>{notice || "没有找到这个美术资产。"}</p><Link href="/production?mode=art">返回美术仓库</Link></main>;
 
   return <main className={styles.page}>
-    <header className={styles.header}><div><Link href="/art-workbench"><ArrowLeft size={17} />返回美术仓库</Link><strong>{asset.name}</strong><span>{asset.kind === "character" ? "角色详情" : asset.kind === "scene" ? "场景详情" : "道具详情"}</span></div><div>{asset.publishedVersionId ? <span className={styles.published}><Check size={14} />已发布</span> : asset.status === "ready" ? <span className={styles.approved}><LockKeyhole size={14} />已锁定</span> : <span>草稿</span>}<button type="button" onClick={() => persist(asset)}>保存</button></div></header>
+    <header className={styles.header}><div><Link href="/production?mode=art"><ArrowLeft size={17} />返回美术仓库</Link><strong>{asset.name}</strong><span>{asset.kind === "character" ? "角色详情" : asset.kind === "scene" ? "场景详情" : "道具详情"}</span></div><div>{asset.publishedVersionId ? <span className={styles.published}><Check size={14} />已发布</span> : asset.status === "ready" ? <span className={styles.approved}><LockKeyhole size={14} />已锁定</span> : <span>草稿</span>}<button type="button" onClick={() => persist(asset)}>保存</button></div></header>
     {notice ? <button className={styles.notice} onClick={() => setNotice("")} type="button">{notice}</button> : null}
     <div className={styles.layout}>
       <section className={styles.mediaPanel}>

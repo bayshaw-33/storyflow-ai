@@ -629,7 +629,7 @@ export function CreationWorkbench() {
     writeCreativeHandoff(buildCreativeHandoffPackage(project, contentType, sourceUnitId));
     const source = encodeURIComponent(project.id);
     if (target === "art") {
-      router.push(`/art-workbench?handoff=creative&sourceProjectId=${source}`);
+      router.push(`/production?mode=art&projectId=${source}`);
       return;
     }
     const unit = encodeURIComponent(sourceUnitId || "");

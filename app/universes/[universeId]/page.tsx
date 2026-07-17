@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle, Palette} from "lucide-react";
 import {
   createContinuationProject,
   createNovelProject,
@@ -374,6 +374,9 @@ export default function UniverseDetailPage() {
         <div className="header-actions">
           <button className="secondary-button" onClick={() => exportBundle("json")}><Download size={17} /> JSON</button>
           <button className="secondary-button" onClick={() => exportBundle("md")}><Download size={17} /> MD</button>
+          <Link className="secondary-button" href={`/production?mode=art&setup=1&universeId=${encodeURIComponent(params.universeId)}`}>
+            <Palette size={17} /> 美术工作台
+          </Link>
           <button className="primary-button" onClick={() => setCreateOpen(true)} disabled={!entitlement.canUse}>
             <FilePlus2 size={17} /> Create Project
           </button>
