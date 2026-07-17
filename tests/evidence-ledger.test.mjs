@@ -4,6 +4,7 @@ import test from "node:test";
 import JSZip from "jszip";
 
 const migrationPath = new URL("../supabase/migrations/20260719000000_evidence_ledger.sql", import.meta.url);
+const hardeningMigrationPath = new URL("../supabase/migrations/20260719010000_harden_evidence_ledger.sql", import.meta.url);
 
 test("evidence ledger migration enforces append-only, scoped server writes", async () => {
   const sql = await readFile(migrationPath, "utf8");
@@ -18,6 +19,8 @@ test("evidence ledger migration enforces append-only, scoped server writes", asy
   assert.match(sql, /CREATE OR REPLACE FUNCTION public\.append_evidence_event/i);
   assert.match(sql, /FOR UPDATE/i);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.append_evidence_event[\s\S]*TO service_role/i);
+  const hardeningSql = await readFile(hardeningMigrationPath, "utf8");
+  assert.match(hardeningSql, /evidence_events_immutable[\s\S]*SET search_path = pg_catalog/i);
 });
 
 test("ledger accepts only allowlisted, scoped facts and detects tampering", async () => {

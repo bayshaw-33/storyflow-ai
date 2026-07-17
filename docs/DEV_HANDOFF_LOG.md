@@ -6,7 +6,7 @@
 - 实现无感、可验证的 Project + Episode 证据留痕，以及按需下载的私有证据包。
 
 ### 已完成
-- 新增 append-only Evidence Ledger migration：Case、Event、Document、Package 四张表与私有 `evidence-artifacts` bucket。
+- 新增 append-only Evidence Ledger migration：Case、Event、Document、Package 四张表与私有 `evidence-artifacts` bucket；随后补充 migration 固定 immutable trigger 的 `search_path=pg_catalog`。
 - Event 由 service-role-only RPC 在事务中锁定 Case、递增 sequence、计算 SHA-256 链并写入；authenticated 只有 owner-scoped SELECT，Event trigger 拒绝更新与删除。
 - 新增服务器 Evidence Ledger 契约：只接收 snapshot/generation/reference/export/package 五类事件，拒绝 prompt、URL、path、token、email、embedding、biometric、provider response 等敏感 payload 字段。
 - 新增 `POST /api/evidence/packages` 和 `GET /api/evidence/packages/:packageId/download`：按固定 Event 高水位生成 allowlist ZIP（manifest/timeline/可校验权属文件），以内容 hash 存入私有 bucket，下载 URL 最长 300 秒。
@@ -24,10 +24,11 @@
 ### 验证结果
 - `node --test tests/evidence-ledger.test.mjs`：4/4 通过（schema/RLS、敏感字段拒绝、链篡改检测、ZIP 隔离/TTL、hook payload）。
 - `pnpm exec tsc --noEmit`：通过。
-- staging migration / 真实 Storage 下载：待本代码提交并在 staging 应用新 migration 后执行；production 零写入。
+- staging：两项 Evidence migration 已应用，migration history 17/17 一致；四张表均启用 RLS、bucket 为 private、authenticated 无 append RPC 执行权而 service_role 有执行权，immutable trigger 的 `search_path=pg_catalog` 已核验。
+- 真实带认证 `POST /api/evidence/packages` / Storage 下载：待 staging 部署获得新路由后验证；production 零写入。
 
 ### Git 信息
-- commits：`4f252c4`、`0b3469c`、`e7074c8`；自动 hook 与交接待提交。
+- commits：`4f252c4`、`0b3469c`、`e7074c8`、`1315cc1`；hardening 与本次交接待提交。
 - 推送锁：按用户长期指令直接推送；仍须通过本地 pre-push build/typecheck。
 
 ### 未完成 / 风险
@@ -35,7 +36,7 @@
 - 视频转存失败仍是既有 MUST FIX；该路径不会写 `generation_completed` evidence event。
 
 ### 给下一位
-- 应用 `20260719000000_evidence_ledger.sql` 仅限 staging 后先做真实 POST/package/download 验证；不要为方便接入而放宽 Event 的 server-only 与不可变约束。
+- staging 已具备 schema；先部署后做真实 POST/package/download 验证。不要为方便接入而放宽 Event 的 server-only 与不可变约束。
 
 ## 2026-07-18 19:50 +08 - TRAE / 制作工作台 PRD 三项紧急任务 + 收尾
 
