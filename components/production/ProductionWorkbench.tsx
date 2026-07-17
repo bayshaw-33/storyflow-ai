@@ -26,7 +26,7 @@
  *   - /api/storyboard/shots/:id/generate-image — 单 shot 分镜图
  */
 
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, Clock, Cpu, Film, Save, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -129,6 +129,11 @@ export function ProductionWorkbench() {
   const [submittingVideoShotId, setSubmittingVideoShotId] = useState<string | null>(null);
   const [batchProgress, setBatchProgress] = useState<BatchVideoProgress | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
+  // ref 镜像 videoJobs，避免 batchSubmitVideos 循环中 stale closure（Codex MUST FIX）
+  const videoJobsRef = useRef<VideoJobMap>(videoJobs);
+  useEffect(() => {
+    videoJobsRef.current = videoJobs;
+  }, [videoJobs]);
 
   // --- 弹窗 ---
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -273,6 +278,29 @@ export function ProductionWorkbench() {
       }
     } catch {
       // 静默：未登录或未保存时直接保留本地草稿
+    }
+    // 刷新恢复视频 job 状态（Codex MUST FIX: listVideoJobs 未被调用）
+    try {
+      const resp = await storyboardClient.listVideoJobs({ projectId, sourceUnitId });
+      const map: VideoJobMap = {};
+      for (const job of resp.jobs) {
+        if (!job.target_id) continue;
+        map[job.target_id] = {
+          jobId: job.id,
+          status: job.status as VideoJobState["status"],
+          startedAt: new Date(job.created_at).getTime(),
+          finishedAt: job.status === "completed" || job.status === "failed" ? Date.now() : null,
+          videoUrl: job.result_url,
+          error: job.error,
+          costEstimate: null,
+          durationSeconds: null,
+          providerTaskId: null,
+          aspectRatio: "16:9",
+        };
+      }
+      setVideoJobs(map);
+    } catch {
+      // 静默：未登录或无 job 时忽略
     }
   }
 
@@ -733,19 +761,30 @@ export function ProductionWorkbench() {
       return;
     }
     setBatchRunning(true);
-    setBatchProgress({ total: shotIds.length, completed: 0, failed: 0, running: 0 });
+    // 用本地 accumulator 避免 stale React state（Codex MUST FIX: batch progress reads stale state）
     let completed = 0;
     let failed = 0;
+    let running = 0;
+    const setProgress = (next: { completed: number; failed: number; running: number }) => {
+      setBatchProgress({ total: shotIds.length, ...next });
+    };
+    setProgress({ completed: 0, failed: 0, running: 0 });
     for (const shotId of shotIds) {
-      const existing = videoJobs[shotId];
+      // 用 ref 风格读取最新 videoJobs（避免闭包 stale）
+      const existing = videoJobsRef.current[shotId];
       if (existing && (existing.status === "queued" || existing.status === "running")) continue;
       if (existing?.status === "completed" && existing.videoUrl) continue;
-      setBatchProgress((p) => p ? { ...p, running: p.running + 1 } : p);
+      running += 1;
+      setProgress({ completed, failed, running });
       await submitVideo(shotId);
-      const newState = videoJobs[shotId];
-      if (newState?.status === "failed") failed += 1;
-      else completed += 1;
-      setBatchProgress((p) => p ? { ...p, completed: p.completed + (newState?.status === "failed" ? 0 : 1), failed: p.failed + (newState?.status === "failed" ? 1 : 0), running: Math.max(0, p.running - 1) } : p);
+      const newState = videoJobsRef.current[shotId];
+      running = Math.max(0, running - 1);
+      if (newState?.status === "failed") {
+        failed += 1;
+      } else {
+        completed += 1;
+      }
+      setProgress({ completed, failed, running });
     }
     setBatchRunning(false);
     setNotice(`批量完成：${completed} 成功，${failed} 失败。`);

@@ -219,11 +219,17 @@ export class StoryboardClient {
   async generateVideo(shotId: string, input: {
     projectId: string;
     sourceUnitId: string;
-    idempotencyKey: string;
+    /**
+     * 兼容字段（服务端忽略）。幂等由 idempotencyHash 强制：
+     * sha256(shotId + prompt + firstframeUrl + duration)，由服务端计算。
+     */
+    idempotencyKey?: string;
     expectedRevision?: number;
+    /** 允许文本覆盖；默认服务端读 shot.jimengPromptZh */
     promptOverride?: string;
-    firstframeImageUrl?: string;
     duration?: number;
+    /** 画幅，如 "16:9" / "9:16" */
+    aspectRatio?: string;
   }): Promise<{ jobId: string; providerTaskId?: string; reused: boolean; status: string }> {
     const encoded = encodeURIComponent(shotId);
     return this.fetchJson({
