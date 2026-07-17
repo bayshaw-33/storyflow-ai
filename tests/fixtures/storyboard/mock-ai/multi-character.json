@@ -1,0 +1,169 @@
+{
+  "scenes": [
+    {
+      "heading": "INT. 集团会议室 - 日",
+      "location": "集团会议室",
+      "timeOfDay": "日",
+      "summary": "唐董追责三亿亏损，苏黎甩出凭证，小麦意外补刀，韩岳被封锁在会议室。",
+      "sourceText": "长桌尽头，唐董把财报摔在桌面。苏黎坐在右侧，指尖轻敲钢笔。副总裁韩岳站在投影前，额头冒汗。角落里，实习生小麦抱着记录本，屏住呼吸。\n唐董：亏损三个亿。韩岳，你给我一个不解雇你的理由。\n韩岳：东南亚的账是苏总批的，我只是执行。\n苏黎：（笑）我批的是预算，不是假账。唐董，原始凭证在我这。\n小麦：对、对不起……（低声）凭证编号我昨晚核对过，第三册是后补的。\n唐董：保安。会议室现在封锁，谁也不许走。",
+      "characters": ["唐董", "苏黎", "韩岳", "小麦"],
+      "props": ["财报", "U盘", "钢笔"],
+      "shots": [
+        {
+          "sourceText": "长桌尽头，唐董把财报摔在桌面。",
+          "storyBeat": "董事长震怒开场",
+          "visualDescription": "长桌尽头，唐董把一叠财报摔在桌面上，纸页散开，满座高管噤声",
+          "characters": ["唐董", "苏黎", "韩岳", "小麦"],
+          "location": "集团会议室",
+          "props": ["财报"],
+          "shotSize": "全景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "震怒",
+          "continuity": "日光会议室，长桌座次固定：唐董主位，苏黎右侧，韩岳投影前，小麦角落"
+        },
+        {
+          "sourceText": "唐董：亏损三个亿。韩岳，你给我一个不解雇你的理由。",
+          "storyBeat": "点名追责",
+          "visualDescription": "唐董手指点向韩岳，韩岳站在投影前额头冒汗",
+          "characters": ["唐董", "韩岳"],
+          "location": "集团会议室",
+          "props": ["财报"],
+          "shotSize": "中景",
+          "cameraMovement": "缓推",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "亏损三个亿。韩岳，你给我一个不解雇你的理由。",
+          "emotion": "压迫",
+          "continuity": "接上场座次"
+        },
+        {
+          "sourceText": "韩岳：东南亚的账是苏总批的，我只是执行。",
+          "storyBeat": "韩岳甩锅苏黎",
+          "visualDescription": "韩岳擦汗，抬手指向苏黎，苏黎指尖停住钢笔",
+          "characters": ["韩岳", "苏黎"],
+          "location": "集团会议室",
+          "props": ["钢笔"],
+          "shotSize": "中景",
+          "cameraMovement": "摇",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "东南亚的账是苏总批的，我只是执行。",
+          "emotion": "慌乱推诿",
+          "continuity": "苏黎手中钢笔为前款"
+        },
+        {
+          "sourceText": "苏黎：（笑）我批的是预算，不是假账。唐董，原始凭证在我这。\n苏黎把 U 盘推到桌子中央。",
+          "storyBeat": "苏黎亮出凭证",
+          "visualDescription": "苏黎轻笑，把一枚U盘沿桌面推到长桌中央，所有人目光跟过去",
+          "characters": ["苏黎", "唐董"],
+          "location": "集团会议室",
+          "props": ["U盘"],
+          "shotSize": "特写",
+          "cameraMovement": "跟",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "我批的是预算，不是假账。唐董，原始凭证在我这。",
+          "emotion": "胸有成竹",
+          "continuity": "U盘银色金属外壳"
+        },
+        {
+          "sourceText": "小麦的笔掉在地上，所有人看向她。\n小麦：对、对不起……（低声）凭证编号我昨晚核对过，第三册是后补的。",
+          "storyBeat": "实习生意外补刀",
+          "visualDescription": "小麦的笔掉在地上，全桌人转头看她；她抱紧记录本低声说出核对结果",
+          "characters": ["小麦", "唐董", "韩岳"],
+          "location": "集团会议室",
+          "props": [],
+          "shotSize": "近景",
+          "cameraMovement": "缓推",
+          "angle": "微俯",
+          "durationSeconds": 5,
+          "dialogue": "对、对不起……凭证编号我昨晚核对过，第三册是后补的。",
+          "emotion": "紧张失言",
+          "continuity": "小麦抱着牛皮纸记录本"
+        },
+        {
+          "sourceText": "唐董：保安。会议室现在封锁，谁也不许走。\n唐董看向韩岳，韩岳后退半步。",
+          "storyBeat": "封锁会议室",
+          "visualDescription": "唐董看向韩岳，韩岳不自觉后退半步；门口保安入场站定",
+          "characters": ["唐董", "韩岳"],
+          "location": "集团会议室",
+          "props": [],
+          "shotSize": "全景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "保安。会议室现在封锁，谁也不许走。",
+          "emotion": "雷霆手段",
+          "continuity": "保安深色制服站在门口"
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "characters": [
+      {
+        "name": "唐董",
+        "aliases": ["董事长"],
+        "scriptBasis": "唐董把财报摔在桌面",
+        "description": "58岁中国男性，集团董事长，花白背头，深色中山装式西装，不怒自威",
+        "visualKeywords": ["写实", "商战", "董事长"]
+      },
+      {
+        "name": "苏黎",
+        "aliases": ["苏总"],
+        "scriptBasis": "苏黎坐在右侧，指尖轻敲钢笔",
+        "description": "32岁中国女性，集团财务总监，齐肩短发，剪裁利落的白色西装，笑容冷静锋利",
+        "visualKeywords": ["写实", "商战", "女强人"]
+      },
+      {
+        "name": "韩岳",
+        "aliases": ["韩总"],
+        "scriptBasis": "副总裁韩岳站在投影前，额头冒汗",
+        "description": "45岁中国男性，集团副总裁，微胖，灰色西装领口汗渍，眼神闪躲",
+        "visualKeywords": ["写实", "商战", "反派高管"]
+      },
+      {
+        "name": "小麦",
+        "aliases": ["实习生小麦"],
+        "scriptBasis": "实习生小麦抱着记录本，屏住呼吸",
+        "description": "22岁中国女性，实习生，马尾辫， oversized 西装外套，抱牛皮纸记录本",
+        "visualKeywords": ["写实", "职场新人"]
+      }
+    ],
+    "locations": [
+      {
+        "name": "集团会议室",
+        "aliases": [],
+        "scriptBasis": "INT. 集团会议室 - 日",
+        "description": "高层集团会议室，整面落地窗日光，深色实木长桌，投影幕布，皮椅环绕",
+        "visualKeywords": ["会议室", "现代商务"]
+      }
+    ],
+    "props": [
+      {
+        "name": "财报",
+        "aliases": ["财务报表"],
+        "scriptBasis": "把财报摔在桌面",
+        "description": "厚册财务报告，白色封面印有集团logo，内页密密麻麻表格",
+        "visualKeywords": ["文件", "财报"]
+      },
+      {
+        "name": "U盘",
+        "aliases": [],
+        "scriptBasis": "把 U 盘推到桌子中央",
+        "description": "银色金属外壳U盘，体积小巧，挂有黑色挂绳",
+        "visualKeywords": ["U盘", "证据"]
+      },
+      {
+        "name": "钢笔",
+        "aliases": [],
+        "scriptBasis": "指尖轻敲钢笔",
+        "description": "黑色金属钢笔，金色笔夹，商务款",
+        "visualKeywords": ["钢笔"]
+      }
+    ]
+  }
+}

@@ -1,0 +1,212 @@
+"use client";
+
+/**
+ * Storyboard browser client.
+ *
+ * Task card: KIIKIS-P1-TRAE-002 §4
+ *
+ * One unified entry point for ProductionWorkbench to talk to the storyboard
+ * backend. All four Kimi APIs + the state GET/PUT go through this client so
+ * error handling (401 / 409 / 422) is centralized and consistent.
+ *
+ * BLOCKER 3 rule: every call MUST carry projectId + sourceUnitId scope —
+ * the server enforces this but we double-check on the client to fail fast.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  AnalyzeRequest,
+  AnalyzeResponse,
+  PromptRequest,
+  PromptResponse,
+  SaveRequest,
+  SaveResponse,
+  StoryboardPromptResult,
+} from "./contracts";
+
+export class StoryboardRevisionConflictError extends Error {
+  readonly code = "REVISION_CONFLICT" as const;
+  readonly currentRevision: number;
+  constructor(currentRevision: number) {
+    super(`REVISION_CONFLICT:${currentRevision}`);
+    this.currentRevision = currentRevision;
+  }
+}
+
+export class StoryboardClientError extends Error {
+  readonly code: string;
+  readonly details?: Record<string, unknown>;
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.code = code;
+    if (details) this.details = details;
+  }
+}
+
+type SessionSupplier = () => Promise<string | null>;
+
+type StoryboardClientOptions = {
+  /** Returns the current access token (or null if logged out). */
+  getSessionToken: SessionSupplier;
+  /** Optional fetch override (testing / custom transport). Defaults to globalThis.fetch. */
+  fetchImpl?: typeof fetch;
+};
+
+type FetchOptions = {
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  body?: unknown;
+  /** Search params appended to the URL. */
+  query?: Record<string, string>;
+  /** Accept 409 → throw StoryboardRevisionConflictError. */
+  expectConflict?: boolean;
+};
+
+async function readJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function buildUrl(path: string, query?: Record<string, string>): string {
+  if (!query || Object.keys(query).length === 0) return path;
+  const params = new URLSearchParams(query);
+  return `${path}?${params.toString()}`;
+}
+
+export class StoryboardClient {
+  private readonly getSessionToken: SessionSupplier;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: StoryboardClientOptions) {
+    this.getSessionToken = options.getSessionToken;
+    this.fetchImpl = options.fetchImpl ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args));
+  }
+
+  static fromSupabase(client: SupabaseClient | null): StoryboardClient {
+    const supplier: SessionSupplier = async () => {
+      if (!client) return null;
+      try {
+        const { data } = await client.auth.getSession();
+        return data.session?.access_token ?? null;
+      } catch {
+        return null;
+      }
+    };
+    return new StoryboardClient({ getSessionToken: supplier });
+  }
+
+  private async fetchJson<T>(options: FetchOptions): Promise<T> {
+    const token = await this.getSessionToken();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await this.fetchImpl(buildUrl(options.path, options.query), {
+      method: options.method,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+
+    const payload = (await readJson(response)) as Record<string, unknown> | null;
+
+    if (response.status === 401) {
+      throw new StoryboardClientError("UNAUTHORIZED", "请先登录后再使用分镜功能。");
+    }
+    if (response.status === 409 && options.expectConflict) {
+      const currentRevision = Number(payload?.currentRevision ?? 0);
+      throw new StoryboardRevisionConflictError(currentRevision);
+    }
+    if (!response.ok) {
+      const code = (payload?.code as string) || "STORYBOARD_CLIENT_ERROR";
+      const message = (payload?.error as string) || `请求失败 (${response.status})。`;
+      throw new StoryboardClientError(code, message, payload as Record<string, unknown> | undefined);
+    }
+    if (!payload || payload.success !== true) {
+      throw new StoryboardClientError(
+        "STORYBOARD_CLIENT_ERROR",
+        (payload?.error as string) || "响应缺少 success 字段。",
+      );
+    }
+    return payload as unknown as T;
+  }
+
+  /** GET /api/storyboard/state?projectId=&sourceUnitId= */
+  async loadState(projectId: string, sourceUnitId: string): Promise<SaveResponse | null> {
+    const payload = await this.fetchJson<{ state: SaveResponse | null }>({
+      method: "GET",
+      path: "/api/storyboard/state",
+      query: { projectId, sourceUnitId },
+    });
+    return payload.state ?? null;
+  }
+
+  /** PUT /api/storyboard/state — atomic save with expectedRevision. */
+  async saveState(request: SaveRequest): Promise<SaveResponse> {
+    return this.fetchJson<SaveResponse>({
+      method: "PUT",
+      path: "/api/storyboard/state",
+      body: request,
+      expectConflict: true,
+    });
+  }
+
+  /** POST /api/storyboard/analyze — full or scene-mode AI analysis. */
+  async analyze(request: AnalyzeRequest): Promise<AnalyzeResponse> {
+    return this.fetchJson<AnalyzeResponse>({
+      method: "POST",
+      path: "/api/storyboard/analyze",
+      body: request,
+    });
+  }
+
+  /** POST /api/storyboard/prompts — build image + jimeng prompts for shots. */
+  async generatePrompts(request: PromptRequest): Promise<PromptResponse> {
+    return this.fetchJson<PromptResponse>({
+      method: "POST",
+      path: "/api/storyboard/prompts",
+      body: request,
+      expectConflict: true,
+    });
+  }
+
+  /** POST /api/storyboard/assets/generate — 4 candidates for one asset. */
+  async generateAssetCandidates(input: {
+    projectId: string;
+    sourceUnitId: string;
+    assetId: string;
+    idempotencyKey: string;
+    referenceVersionIds?: string[];
+    count?: number;
+    expectedRevision: number;
+  }): Promise<{ assetId: string; candidates: Array<{ imageUrl: string; provider: string; model: string; inputHash: string }> }> {
+    return this.fetchJson({
+      method: "POST",
+      path: "/api/storyboard/assets/generate",
+      body: input,
+      expectConflict: true,
+    });
+  }
+
+  /** POST /api/storyboard/shots/:shotId/generate-image — one storyboard frame. */
+  async generateShotImage(shotId: string, input: {
+    projectId: string;
+    sourceUnitId: string;
+    idempotencyKey: string;
+    referenceVersionIds?: string[];
+    expectedRevision: number;
+  }): Promise<{ shotId: string; imageUrl: string; provider: string; model: string; inputHash: string }> {
+    const encoded = encodeURIComponent(shotId);
+    return this.fetchJson({
+      method: "POST",
+      path: `/api/storyboard/shots/${encoded}/generate-image`,
+      body: input,
+      expectConflict: true,
+    });
+  }
+}
+
+export type { AnalyzeRequest, AnalyzeResponse, PromptRequest, PromptResponse, SaveRequest, SaveResponse, StoryboardPromptResult };

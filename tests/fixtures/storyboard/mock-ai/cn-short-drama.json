@@ -1,0 +1,262 @@
+{
+  "scenes": [
+    {
+      "id": "evil-model-scene-id-1",
+      "heading": "INT. 沈家别墅客厅 - 夜",
+      "location": "沈家别墅客厅",
+      "timeOfDay": "夜",
+      "summary": "沈砚以手术费要挟林晚签婚前协议，林晚反指沈父害死其父。",
+      "sourceText": "水晶灯冷光。林晚站在玄关，礼服湿透。沈砚坐在沙发上，把一份婚前协议推到茶几另一端。\n沈砚：签了它，你母亲的手术费，我出。\n林晚：（盯着协议）如果我说是你父亲害死了他呢？\n沈砚：（起身，逼近）那你更要签。沈家不养仇人，只养听话的人。",
+      "characters": ["林晚", "沈砚"],
+      "props": ["婚前协议"],
+      "shots": [
+        {
+          "id": "evil-model-shot-id-1",
+          "sourceText": "水晶灯冷光。林晚站在玄关，礼服湿透。",
+          "storyBeat": "女主雨夜归来，气场对峙开始",
+          "visualDescription": "水晶灯冷光下，林晚湿礼服贴在身上，站在玄关一动不动，水珠滴落大理石地面",
+          "characters": ["林晚"],
+          "location": "沈家别墅客厅",
+          "props": [],
+          "shotSize": "全景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "压抑",
+          "continuity": "林晚湿礼服、盘发，客厅水晶灯冷光"
+        },
+        {
+          "sourceText": "沈砚：签了它，你母亲的手术费，我出。",
+          "storyBeat": "男主抛出交易",
+          "visualDescription": "沈砚坐在沙发中，两指把婚前协议推过茶几，抬眼看向玄关的林晚",
+          "characters": ["沈砚"],
+          "location": "沈家别墅客厅",
+          "props": ["婚前协议"],
+          "shotSize": "中景",
+          "cameraMovement": "缓推",
+          "angle": "平视",
+          "durationSeconds": 6,
+          "dialogue": "签了它，你母亲的手术费，我出。",
+          "emotion": "冷漠掌控",
+          "continuity": "婚前协议在茶几上，沈砚深色家居服"
+        },
+        {
+          "sourceText": "林晚：（盯着协议）如果我说是你父亲害死了他呢？",
+          "storyBeat": "女主反手指控",
+          "visualDescription": "林晚走近两步，死死盯着茶几上的协议，抬眼直视沈砚",
+          "characters": ["林晚"],
+          "location": "沈家别墅客厅",
+          "props": ["婚前协议"],
+          "shotSize": "近景",
+          "cameraMovement": "固定",
+          "angle": "微仰",
+          "durationSeconds": 6,
+          "dialogue": "如果我说是你父亲害死了他呢？",
+          "emotion": "隐忍爆发",
+          "continuity": "接上场，林晚湿发贴脸"
+        },
+        {
+          "sourceText": "沈砚：（起身，逼近）那你更要签。沈家不养仇人，只养听话的人。\n林晚的手指掐进掌心，没有接笔。",
+          "storyBeat": "男主逼近施压，女主拒笔",
+          "visualDescription": "沈砚起身逼近林晚，居高临下；特写林晚手指掐进掌心，没有接笔",
+          "characters": ["沈砚", "林晚"],
+          "location": "沈家别墅客厅",
+          "props": ["婚前协议"],
+          "shotSize": "特写",
+          "cameraMovement": "缓推",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "那你更要签。沈家不养仇人，只养听话的人。",
+          "emotion": "压迫",
+          "continuity": "笔放在协议上未被拿起"
+        }
+      ]
+    },
+    {
+      "heading": "INT. 沈家书房 - 夜",
+      "location": "沈家书房",
+      "timeOfDay": "夜",
+      "summary": "林晚潜入书房找到刻字旧婚戒，被沈砚当场堵住。",
+      "sourceText": "书房暗。林晚用发夹撬开抽屉，翻出一枚旧婚戒，内圈刻字。身后门把手转动。\n林晚：（低声）妈，你看清楚，这不是意外……\n她迅速把婚戒攥进手心，转身时沈砚已靠在门框上。\n沈砚：找什么？\n林晚：找你藏起来的真相。",
+      "characters": ["林晚", "沈砚"],
+      "props": ["旧婚戒"],
+      "shots": [
+        {
+          "sourceText": "书房暗。林晚用发夹撬开抽屉，翻出一枚旧婚戒，内圈刻字。",
+          "storyBeat": "女主发现关键证物",
+          "visualDescription": "黑暗书房中，林晚用手机微光照亮抽屉，发夹撬锁，翻出一枚旧婚戒，指尖翻转看见内圈刻字",
+          "characters": ["林晚"],
+          "location": "沈家书房",
+          "props": ["旧婚戒"],
+          "shotSize": "特写",
+          "cameraMovement": "缓推",
+          "angle": "俯拍",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "紧张",
+          "continuity": "书房无顶灯，仅手机屏幕微光；婚戒为旧金戒"
+        },
+        {
+          "sourceText": "林晚：（低声）妈，你看清楚，这不是意外……",
+          "storyBeat": "女主低语立誓",
+          "visualDescription": "林晚攥紧婚戒贴近胸口，眼眶发红，低声自语",
+          "characters": ["林晚"],
+          "location": "沈家书房",
+          "props": ["旧婚戒"],
+          "shotSize": "近景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "妈，你看清楚，这不是意外……",
+          "emotion": "悲痛决绝",
+          "continuity": "接上场，婚戒攥在右手"
+        },
+        {
+          "sourceText": "沈砚：找什么？\n林晚：找你藏起来的真相。",
+          "storyBeat": "男主当场堵住，正面对峙",
+          "visualDescription": "林晚转身，沈砚靠在门框上逆着走廊光；两人隔着书桌对峙",
+          "characters": ["林晚", "沈砚", "管家"],
+          "location": "沈家书房",
+          "props": [],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "沈砚：找什么？林晚：找你藏起来的真相。",
+          "emotion": "剑拔弩张",
+          "continuity": "走廊暖光切入门框，管家身影在走廊尽头"
+        }
+      ]
+    },
+    {
+      "heading": "EXT. 沈家花园 - 日",
+      "location": "沈家花园",
+      "timeOfDay": "日",
+      "summary": "林晚亮出婚戒内圈刻字摊牌，沈砚夺走婚戒并软禁林晚。",
+      "sourceText": "暴雨初歇。林晚把婚戒举到沈砚眼前，佣人们远远避开。\n林晚：内圈刻的是你母亲的名字。我爸替你们沈家顶了罪。\n沈砚：（沉默三秒，夺过婚戒）从今天起，你搬去西翼。没有我的允许，不准离开半步。",
+      "characters": ["林晚", "沈砚"],
+      "props": ["旧婚戒"],
+      "shots": [
+        {
+          "sourceText": "暴雨初歇。林晚把婚戒举到沈砚眼前，佣人们远远避开。",
+          "storyBeat": "女主亮证摊牌",
+          "visualDescription": "雨后花园地面反光，林晚把婚戒举到沈砚眼前，远处佣人回避散开",
+          "characters": ["林晚", "沈砚"],
+          "location": "沈家花园",
+          "props": ["旧婚戒"],
+          "shotSize": "中景",
+          "cameraMovement": "缓推",
+          "angle": "平视",
+          "durationSeconds": 6,
+          "dialogue": "",
+          "emotion": "决绝",
+          "continuity": "雨后湿润反光，林晚已换干礼服"
+        },
+        {
+          "sourceText": "林晚：内圈刻的是你母亲的名字。我爸替你们沈家顶了罪。",
+          "storyBeat": "真相揭露",
+          "visualDescription": "婚戒特写，内圈刻字清晰；林晚声音发抖但字字清晰",
+          "characters": ["林晚"],
+          "location": "沈家花园",
+          "props": ["旧婚戒"],
+          "shotSize": "特写",
+          "cameraMovement": "固定",
+          "angle": "微俯",
+          "durationSeconds": 6,
+          "dialogue": "内圈刻的是你母亲的名字。我爸替你们沈家顶了罪。",
+          "emotion": "悲愤",
+          "continuity": "婚戒内圈刻字为关键信息点"
+        },
+        {
+          "sourceText": "沈砚：（沉默三秒，夺过婚戒）从今天起，你搬去西翼。没有我的允许，不准离开半步。",
+          "storyBeat": "男主夺戒软禁",
+          "visualDescription": "沈砚沉默三秒后劈手夺过婚戒，攥进掌心，转身背对林晚下令",
+          "characters": ["沈砚", "林晚"],
+          "location": "沈家花园",
+          "props": ["旧婚戒"],
+          "shotSize": "近景",
+          "cameraMovement": "跟",
+          "angle": "平视",
+          "durationSeconds": 6,
+          "dialogue": "从今天起，你搬去西翼。没有我的允许，不准离开半步。",
+          "emotion": "冷酷",
+          "continuity": "婚戒由林晚手转至沈砚手"
+        },
+        {
+          "sourceText": "暴雨初歇。林晚把婚戒举到沈砚眼前，佣人们远远避开。",
+          "storyBeat": "收尾空镜，软禁开始",
+          "visualDescription": "空镜：花园铁艺大门缓缓关上，林晚站在庭院中央，沈砚背影远去",
+          "characters": ["林晚"],
+          "location": "沈家花园",
+          "props": [],
+          "shotSize": "远景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 4,
+          "dialogue": "",
+          "emotion": "压抑收束",
+          "continuity": "铁门关闭作为本场结束点"
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "characters": [
+      {
+        "id": "evil-model-asset-id-1",
+        "name": "林晚",
+        "aliases": ["晚晚"],
+        "scriptBasis": "林晚站在玄关，礼服湿透；用发夹撬开抽屉",
+        "description": "25岁中国女性，清丽倔强，黑长直发，丹凤眼，身形纤细，先着湿透的浅色礼服后换干礼服，气质隐忍带锋芒",
+        "visualKeywords": ["写实", "豪门短剧", "清冷女主"]
+      },
+      {
+        "name": "沈砚",
+        "aliases": ["沈总"],
+        "scriptBasis": "沈砚坐在沙发上，把一份婚前协议推到茶几另一端",
+        "description": "28岁中国男性，沈氏继承人，剑眉薄唇，身材挺拔，深色高定家居服，气场冷漠强势",
+        "visualKeywords": ["写实", "豪门短剧", "冷面总裁"]
+      }
+    ],
+    "locations": [
+      {
+        "name": "沈家别墅客厅",
+        "aliases": [],
+        "scriptBasis": "水晶灯冷光",
+        "description": "挑高豪华客厅，水晶吊灯冷白光，大理石地面，欧式沙发与长茶几，整体冷色调",
+        "visualKeywords": ["豪宅", "冷色调"]
+      },
+      {
+        "name": "沈家书房",
+        "aliases": [],
+        "scriptBasis": "书房暗。林晚用发夹撬开抽屉",
+        "description": "深色实木书房，整墙书柜，厚重窗帘遮光，只有走廊暖光切入门框",
+        "visualKeywords": ["书房", "暗调"]
+      },
+      {
+        "name": "沈家花园",
+        "aliases": [],
+        "scriptBasis": "暴雨初歇",
+        "description": "欧式庭院花园，雨后地面反光，铁艺大门，修剪整齐的绿篱",
+        "visualKeywords": ["庭院", "雨后"]
+      }
+    ],
+    "props": [
+      {
+        "name": "婚前协议",
+        "aliases": ["协议"],
+        "scriptBasis": "把一份婚前协议推到茶几另一端",
+        "description": "白色A4打印合同，黑色活页夹，首页印有沈氏集团logo，边缘微卷",
+        "visualKeywords": ["合同", "文件"]
+      },
+      {
+        "name": "旧婚戒",
+        "aliases": ["婚戒"],
+        "scriptBasis": "翻出一枚旧婚戒，内圈刻字",
+        "description": "旧式黄金戒指，表面有岁月磨痕，内圈刻有女性名字，款式为上世纪九十年代风格",
+        "visualKeywords": ["戒指", "旧物", "关键证物"]
+      }
+    ]
+  }
+}

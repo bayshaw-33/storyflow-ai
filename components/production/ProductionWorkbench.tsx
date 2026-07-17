@@ -1,143 +1,161 @@
 "use client";
 
+/**
+ * ProductionWorkbench — 分镜制作台主壳（四区页面重构版）。
+ *
+ * Task card: KIIKIS-P1-TRAE-002 §3 (任务 2/6)
+ *
+ * 4 个 tab（取代旧的 planning/canvas/editor/assembly/casting 5 mode）：
+ *   1. script  — 剧本输入
+ *   2. table   — 分镜表
+ *   3. assets  — 美术物料
+ *   4. frames  — 分镜图与即梦提示词
+ *
+ * BLOCKER 3 (已完成 commit 4b92347):
+ *   - 必须从 /production?projectId=&sourceUnitId= 进入
+ *   - 跨项目/跨集 handoff 拒绝
+ *
+ * BLOCKER 1/2 (Codex migration + RPC, commit ed893f9/21a1a43):
+ *   - /api/storyboard/state GET/PUT 接入
+ *   - 409 REVISION_CONFLICT 不覆盖本地，弹冲突提示
+ *
+ * BLOCKER 4/5 (TRAE 接入 Kimi 实现, 本会话):
+ *   - /api/storyboard/analyze        — 分析剧本/单场重分析
+ *   - /api/storyboard/prompts        — 生成 image/jimeng 提示词
+ *   - /api/storyboard/assets/generate — 资产 4 候选
+ *   - /api/storyboard/shots/:id/generate-image — 单 shot 分镜图
+ */
+
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Clock, Cpu, Film, FileUp, ImagePlus, MessageSquareText, Plus, Save, Send, Trash2, Users, Video } from "lucide-react";
-import {
-  addProductionHistory,
-  createEmptyProductionState,
-  createProductionId,
-  createProductionShot,
-  deleteProductionShot,
-  formatSeconds,
-  moveProductionShot,
-  productionStateToMarkdown,
-  productionTimelineItems,
-  totalTimelineSeconds,
-  updateProductionShot,
-} from "@/lib/production/state";
+import { AlertTriangle, Clock, Cpu, Film, Save, Users, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import type {
-  ProductionImageProvider,
-  ProductionMode,
-  ProductionProjectState,
-  ProductionShot,
-} from "@/lib/production/types";
+  AnalyzeRequest,
+  AnalyzeResponse,
+  PromptRequest,
+  PromptResponse,
+  SaveRequest,
+  SaveResponse,
+  StoryboardAssetUsage,
+  StoryboardScene,
+  StoryboardShot,
+} from "@/lib/storyboard/contracts";
+import {
+  StoryboardClient,
+  StoryboardClientError,
+  StoryboardRevisionConflictError,
+} from "@/lib/storyboard/client";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } from "@/lib/storyboard/draft";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
-import { useProductionApi } from "@/lib/production/hooks";
-import { ShotStatusBadge, ShotThumbnail, PromptViewer, ShotActionBar } from "./ShotCardParts";
+import { createProductionId } from "@/lib/production/state";
+import type { ProductionSourceFile } from "@/lib/production/types";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
-import { ExportMenu } from "./ExportMenu";
-import { AutoAssemblyPanel } from "./AutoAssemblyPanel";
-import { CastingPanel } from "./CastingPanel";
 import { TeamPanel } from "./TeamPanel";
 import { ModelRegistryPanel } from "./ModelRegistryPanel";
+import {
+  ArtAssetsPanel,
+  ScriptInputPanel,
+  ShotFramesPanel,
+  StoryboardTablePanel,
+  type AssetCandidate,
+  type AssetCandidateMap,
+  type PromptResultMap,
+  type ShotFrameMap,
+} from "./StoryboardPanels";
+import { ExportMenu } from "./ExportMenu";
+import type { ProductionProjectState } from "@/lib/production/types";
 import styles from "./ProductionWorkbench.module.css";
 
-type Props = {
-  initialMode?: ProductionMode;
+type Tab = "script" | "table" | "assets" | "frames";
+
+type StoryboardAssets = {
+  characters: StoryboardAssetUsage[];
+  locations: StoryboardAssetUsage[];
+  props: StoryboardAssetUsage[];
 };
 
-const modeLabels: Array<{ id: ProductionMode; label: string }> = [
-  { id: "planning", label: "剧本策划" },
-  { id: "canvas", label: "分镜画布" },
-  { id: "editor", label: "视频编辑" },
-  { id: "assembly", label: "顺片" },
-  { id: "casting", label: "选角" },
+const tabLabels: Array<{ id: Tab; label: string }> = [
+  { id: "script", label: "剧本输入" },
+  { id: "table", label: "分镜表" },
+  { id: "assets", label: "美术物料" },
+  { id: "frames", label: "分镜图与即梦提示词" },
 ];
 
-export function ProductionWorkbench({ initialMode = "planning" }: Props) {
-  const [state, setState] = useState<ProductionProjectState>(() =>
-    createEmptyProductionState({
-      title: "连光都不肯碰我半分",
-      mode: initialMode,
-      shots: [
-        createProductionShot({
-          index: 1,
-          sceneTitle: "浴缸边缘",
-          duration: "5s",
-          description: "镜头紧贴浴缸边缘，以极低频率水平滑行。浴缸内墨汁般的黑色液体静谧深邃。",
-          composition: "极低机位，边缘构图，浴缸边缘占据画面下 1/3。",
-          cameraMovement: "极慢速横移 Track，营造黑色电影压迫感。",
-          imagePrompt: "经典黑白电影质感，极低机位拍摄白色浴缸，黑色液体微微反光，35mm 胶片颗粒。",
-          videoPrompt: "镜头沿浴缸边缘缓慢横移，黑色液体保持轻微波纹，压抑安静。",
-        }),
-      ],
-    }),
-  );
+const EMPTY_ASSETS: StoryboardAssets = { characters: [], locations: [], props: [] };
+
+export function ProductionWorkbench() {
   const router = useRouter();
-  const [input, setInput] = useState("");
+
+  // --- 顶层状态 ---
+  const [activeTab, setActiveTab] = useState<Tab>("script");
   const [session, setSession] = useState<Session | null>(null);
-    const [notice, setNotice] = useState("");
+  const [supabaseClient, setSupabaseClient] = useState<SupabaseClient | null>(null);
+  const [projectId, setProjectId] = useState<string>("");
   const [sourceUnitId, setSourceUnitId] = useState<string>("");
+  const [projectTitle, setProjectTitle] = useState<string>("");
+  const [manuscript, setManuscript] = useState<string>("");
+  const [sourceFiles, setSourceFiles] = useState<ProductionSourceFile[]>([]);
   const [scopeError, setScopeError] = useState<string>("");
-  const [saveConflict, setSaveConflict] = useState<string>("");
+  const [notice, setNotice] = useState<string>("");
+
+  // --- Storyboard 状态（contracts.ts）---
+  const [scenes, setScenes] = useState<StoryboardScene[]>([]);
+  const [assets, setAssets] = useState<StoryboardAssets>(EMPTY_ASSETS);
+  const [revision, setRevision] = useState<number>(0);
+  const [deletedSceneIds, setDeletedSceneIds] = useState<string[]>([]);
+  const [deletedShotIds, setDeletedShotIds] = useState<string[]>([]);
+
+  // --- 异步操作状态 ---
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzingSceneId, setAnalyzingSceneId] = useState<string | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [conflictRevision, setConflictRevision] = useState<number | null>(null);
+  const [generatingAssetId, setGeneratingAssetId] = useState<string | null>(null);
+  const [generatingShotId, setGeneratingShotId] = useState<string | null>(null);
+  const [generatingPromptsForShots, setGeneratingPromptsForShots] = useState<string[] | null>(null);
+  const [candidates, setCandidates] = useState<AssetCandidateMap>({});
+  const [frames, setFrames] = useState<ShotFrameMap>({});
+  const [prompts, setPrompts] = useState<PromptResultMap>({});
+
+  // --- 弹窗 ---
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [showModelRegistry, setShowModelRegistry] = useState(false);
   const [versionList, setVersionList] = useState<VersionRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [versionDiff, setVersionDiff] = useState<VersionDiffResult | null>(null);
-  const selectedShot = state.shots.find((shot) => shot.id === state.selectedShotId) || state.shots[0];
-  const timeline = useMemo(() => productionTimelineItems(state), [state]);
-  const projectId = state.projectId || state.id || "draft";
-  const api = useProductionApi(session, projectId);
 
+  const storyboardClient = useMemo(
+    () => StoryboardClient.fromSupabase(supabaseClient),
+    [supabaseClient],
+  );
+
+  // --- URL 参数 + scope 校验 + handoff/draft 加载 ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlProjectId = params.get("projectId");
     const urlSourceUnitId = params.get("sourceUnitId");
-    const mode = params.get("mode") as ProductionMode | null;
-
-    // BLOCKER 3 (KIIKIS-P1-TRAE-002 §2): 必须同时有 projectId + sourceUnitId。
-    // 拒绝不匹配的 local handoff，删除全局 fallback。
     if (!urlProjectId || !urlSourceUnitId) {
       setScopeError("缺少 projectId 或 sourceUnitId 参数。请从剧本工作台「生成分镜」按钮进入。");
       return;
     }
+    setProjectId(urlProjectId);
     setSourceUnitId(urlSourceUnitId);
 
-    // 优先读取 creative handoff（CreationWorkbench.openDownstream 写入）。
-    // readCreativeHandoff 会校验 sourceProjectId + sourceUnitId，跨项目/跨集返回 null。
+    // 优先 handoff
     const handoff = readCreativeHandoff(urlProjectId, urlSourceUnitId);
     if (handoff) {
-      setState(createEmptyProductionState({
-        projectId: handoff.sourceProjectId,
-        id: handoff.sourceProjectId,
-        title: handoff.title,
-        mode: mode || "planning",
-        universeId: handoff.universeId,
-        sourceSummary: handoff.manuscript,
-        storyBrief: {
-          logline: "",
-          targetPlatform: "TikTok / Reels / Shorts",
-          targetAudience: "overseas short drama viewers",
-          storySummary: [handoff.projectBackground, handoff.worldAndOutline].filter(Boolean).join("\n\n"),
-          notes: handoff.characterBible,
-        },
-        visualBible: {
-          visualStyle: "cinematic vertical short drama, realistic lighting, production-ready visual continuity",
-          colorPalette: "natural contrast, controlled highlights, production-ready skin tones",
-          cameraRules: "prioritize readable 9:16 composition, emotional close-ups, and stable continuity",
-          characterRules: handoff.characterBible || "keep face, wardrobe, age, body shape, and key props consistent",
-          sceneRules: "keep location geography, lighting direction, and important props consistent",
-          negativePrompt: "watermark, logo, unreadable text, distorted hands, inconsistent faces, low quality",
-        },
-        chatMessages: [{
-          id: createProductionId("chat"),
-          role: "assistant",
-          content: `已接收《${handoff.title}》当前集的创作资料与正文。请告诉我分镜节奏、画幅或镜头数量要求，我会生成可编辑分镜。`,
-          createdAt: new Date().toISOString(),
-        }],
-        shots: handoff.manuscript ? [createProductionShot({ index: 1, sceneTitle: handoff.title, description: handoff.manuscript.slice(0, 600), imagePrompt: handoff.manuscript.slice(0, 600) })] : [],
-      }));
+      setProjectTitle(handoff.title);
+      setManuscript(handoff.manuscript);
       return;
     }
 
-    // 无 handoff：尝试读取同作用域本地草稿作为恢复候选。
-    // 草稿 key: kiikis:storyboard:v1:<userId|anon>:<projectId>:<sourceUnitId>
+    // 尝试本地草稿
     const draftScope: StoryboardDraftScope = {
       userId: session?.user?.id || null,
       projectId: urlProjectId,
@@ -145,25 +163,38 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     };
     const draft = readStoryboardDraft(draftScope);
     if (draft) {
-      setState(createEmptyProductionState({ ...draft, mode: mode || draft.mode || initialMode }));
-      return;
+      setProjectTitle(draft.title || "");
+      setManuscript(draft.sourceSummary || "");
+      setSourceFiles(draft.sourceFiles || []);
+      // 草稿中的 storyboard 字段（如果之前保存过）
+      const draftScenes = (draft as ProductionProjectState & { storyboardScenes?: StoryboardScene[] }).storyboardScenes;
+      if (Array.isArray(draftScenes) && draftScenes.length > 0) {
+        setScenes(draftScenes);
+        const draftAssets = (draft as ProductionProjectState & { storyboardAssets?: StoryboardAssets }).storyboardAssets;
+        if (draftAssets) setAssets(draftAssets);
+        const draftRevision = (draft as ProductionProjectState & { storyboardRevision?: number }).storyboardRevision;
+        if (typeof draftRevision === "number") setRevision(draftRevision);
+      }
     }
+  }, [session?.user?.id]);
 
-    // 无 handoff 且无草稿：保持默认空状态，等用户上传或分析
-    if (mode) patchState({ mode });
-  }, [initialMode, session?.user?.id]);
-
+  // --- Supabase session ---
   useEffect(() => {
     const client = getSupabaseBrowserClient();
     if (!client) return;
+    setSupabaseClient(client);
     let active = true;
     void (async () => {
       try {
         const { data } = await client.auth.getSession();
         if (!active) return;
         setSession(data.session);
+        // 登录后尝试从云端加载最新 storyboard state
+        if (data.session && projectId && sourceUnitId) {
+          void loadFromServer();
+        }
       } catch {
-        // Ignore session hydration errors.
+        // ignore
       }
     })();
     const { data: sub } = client.auth.onAuthStateChange((_event, newSession) => {
@@ -173,284 +204,562 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, sourceUnitId]);
 
+  // --- 自动 notice 消失 ---
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 5_000);
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const { pollStatus } = api.video;
+  // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
   useEffect(() => {
-    const pending = state.shots.filter((shot) => shot.status === "video_generating" && shot.videoTaskId);
-    if (pending.length === 0) return;
-    const interval = setInterval(() => {
-      pending.forEach(async (shot) => {
-        try {
-          const result = await pollStatus(shot.id, shot.videoTaskId as string);
-          if (result.status === "video_ready" && result.videoUrl) {
-            setState((current) => updateProductionShot(current, shot.id, {
-              status: "video_ready",
-              videoUrl: result.videoUrl,
-            }));
-          } else if (result.status === "error") {
-            setState((current) => updateProductionShot(current, shot.id, {
-              status: "error",
-              error: "视频生成失败",
-            }));
-          }
-        } catch {
-          // Ignore polling errors, will retry next interval.
-        }
-      });
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [state.shots, pollStatus]);
+    if (!projectId || !sourceUnitId) return;
+    const scope: StoryboardDraftScope = {
+      userId: session?.user?.id || null,
+      projectId,
+      sourceUnitId,
+    };
+    const draftPayload = {
+      id: projectId,
+      projectId,
+      title: projectTitle,
+      workflowType: "storyboard" as const,
+      contentType: "short_drama" as const,
+      aspectRatio: "9:16" as const,
+      language: "zh" as const,
+      sourceFiles,
+      sourceSummary: manuscript,
+      storyBrief: { logline: "", targetPlatform: "", targetAudience: "", storySummary: "", notes: "" },
+      visualBible: { visualStyle: "", colorPalette: "", cameraRules: "", characterRules: "", sceneRules: "", negativePrompt: "" },
+      shots: [],
+      mode: "planning" as const,
+      providers: { imageProvider: "minimax" as const, videoProvider: "minimax" as const },
+      chatMessages: [],
+      history: [],
+      casting: {},
+      updatedAt: new Date().toISOString(),
+      storyboardScenes: scenes,
+      storyboardAssets: assets,
+      storyboardRevision: revision,
+    } as unknown as ProductionProjectState;
+    writeStoryboardDraft(scope, draftPayload);
+  }, [scenes, assets, revision, projectId, sourceUnitId, session, projectTitle, sourceFiles, manuscript]);
 
-  function patchState(patch: Partial<ProductionProjectState>) {
-    setState((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
-  }
+  // -------------------------------------------------------------------
+  // 服务端加载/保存
+  // -------------------------------------------------------------------
 
-  function selectMode(mode: ProductionMode) {
-    patchState({ mode });
-  }
-
-  function selectShot(shotId: string) {
-    patchState({ selectedShotId: shotId });
-  }
-
-  function addShot() {
-    setState((current) => {
-      const shot = createProductionShot({
-        index: current.shots.length + 1,
-        sceneTitle: `分镜 ${current.shots.length + 1}`,
-        duration: "5s",
-        description: "新的分镜画面。",
-      });
-      return addProductionHistory(
-        {
-          ...current,
-          shots: [...current.shots, shot],
-          selectedShotId: shot.id,
-          mode: current.mode === "planning" ? current.mode : "canvas",
-        },
-        { type: "edit", title: "新增分镜", detail: `新增分镜 ${shot.index}`, shotId: shot.id },
-      );
-    });
-  }
-
-  function updateShot(shotId: string, patch: Partial<ProductionShot>) {
-    setState((current) => updateProductionShot(current, shotId, patch));
-  }
-
-  function removeShot(shotId: string) {
-    setState((current) => addProductionHistory(deleteProductionShot(current, shotId), { type: "delete", title: "删除分镜", detail: `删除分镜 ${shotId}`, shotId }));
-  }
-
-  function copyShot(shotId: string) {
-    setState((current) => {
-      const source = current.shots.find((shot) => shot.id === shotId);
-      if (!source) return current;
-      const copy = createProductionShot({
-        index: current.shots.length + 1,
-        sceneTitle: source.sceneTitle,
-        shotType: source.shotType,
-        duration: source.duration,
-        description: source.description,
-        composition: source.composition,
-        cameraMovement: source.cameraMovement,
-        imagePrompt: source.imagePrompt,
-        videoPrompt: source.videoPrompt,
-        dialogue: source.dialogue,
-        sound: source.sound,
-        continuity: source.continuity,
-        characterRefs: source.characterRefs,
-        sceneRefs: source.sceneRefs,
-      });
-      return addProductionHistory(
-        {
-          ...current,
-          shots: [...current.shots, copy],
-          selectedShotId: copy.id,
-        },
-        { type: "edit", title: "复制分镜", detail: `复制分镜 ${source.index}`, shotId: copy.id },
-      );
-    });
-  }
-
-  async function sendMessage() {
-    const content = input.trim();
-    if (!content || api.chat.loading) return;
-    const now = new Date().toISOString();
-    setInput("");
-    setState((current) => addProductionHistory({
-      ...current,
-      chatMessages: [
-        ...current.chatMessages,
-        { id: createProductionId("chat"), role: "user", content, createdAt: now },
-      ],
-    }, { type: "chat", title: "对话更新", detail: content }));
+  async function loadFromServer() {
+    if (!projectId || !sourceUnitId) return;
     try {
-      const result = await api.chat.send(content, state);
-      setState((current) => addProductionHistory({
-        ...current,
-        shots: result.shots.length ? result.shots : current.shots,
-        selectedShotId: current.selectedShotId || result.shots[0]?.id || current.shots[0]?.id || "",
-        chatMessages: [
-          ...current.chatMessages,
-          { id: createProductionId("chat"), role: "assistant", content: result.reply, createdAt: new Date().toISOString() },
-        ],
-      }, { type: "chat", title: "AI 回复", detail: result.reply.slice(0, 80) }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "对话失败，请稍后再试。";
-      setNotice(message);
+      const state = await storyboardClient.loadState(projectId, sourceUnitId);
+      if (state) {
+        setScenes(state.scenes);
+        setRevision(state.revision);
+        setDeletedSceneIds([]);
+        setDeletedShotIds([]);
+        // 服务端目前不返回 assets 列表，保留客户端现有
+      }
+    } catch {
+      // 静默：未登录或未保存时直接保留本地草稿
     }
   }
 
-  async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const sourceFile = await api.upload.upload(file);
-      setState((current) => addProductionHistory({
-        ...current,
-        sourceFiles: [sourceFile, ...current.sourceFiles],
-        sourceSummary: [sourceFile.extractedText?.slice(0, 1600) || "", current.sourceSummary].filter(Boolean).join("\n\n"),
-        chatMessages: [
-          ...current.chatMessages,
-          {
-            id: createProductionId("chat"),
-            role: "assistant",
-            content: `已读取资料《${file.name}》，可以基于它拆分镜。`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      }, { type: "upload", title: "上传资料", detail: file.name }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "文件上传失败，请稍后再试。";
-      setNotice(message);
-    } finally {
-      event.target.value = "";
-    }
-  }
-
-  async function generateImage(shotId: string) {
-    updateShot(shotId, { status: "image_generating", error: undefined });
-    try {
-      const result = await api.image.generate(shotId);
-      updateShot(shotId, {
-        imageUrl: result.imageUrl,
-        status: "image_ready",
-        imageProvider: result.provider as ProductionImageProvider,
-      });
-      setNotice("图片生成完成。");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "图片生成失败，请稍后再试。";
-      updateShot(shotId, { status: "error", error: message });
-      setNotice(message);
-    }
-  }
-
-  async function generateVideo(shotId: string) {
-    updateShot(shotId, { status: "video_generating", error: undefined });
-    try {
-      const result = await api.video.generate(shotId);
-      updateShot(shotId, { videoTaskId: result.taskId });
-      setNotice("视频生成已提交，正在轮询状态。");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "视频生成请求失败，请稍后再试。";
-      updateShot(shotId, { status: "error", error: message });
-      setNotice(message);
-    }
-  }
-
-  async function saveAll() {
-    // BLOCKER 3: 作用域草稿，key = kiikis:storyboard:v1:<userId|anon>:<projectId>:<sourceUnitId>
-    if (projectId && sourceUnitId) {
-      writeStoryboardDraft(
-        { userId: session?.user?.id || null, projectId, sourceUnitId },
-        state,
-      );
-    }
-    setState((current) => addProductionHistory(current, { type: "save", title: "保存工作台", detail: "已保存到本地作用域草稿。" }));
+  async function saveToServer() {
     if (!session) {
-      setNotice("已保存到本地（未登录，未同步云端）。");
+      setNotice("已保存到本地草稿（未登录，未同步云端）。");
       return;
     }
+    if (!projectId || !sourceUnitId) {
+      setNotice("缺少 projectId 或 sourceUnitId，无法保存到云端。");
+      return;
+    }
+    setSaving(true);
+    setConflictRevision(null);
+    const request: SaveRequest = {
+      projectId,
+      sourceUnitId,
+      expectedRevision: revision,
+      scenes,
+      deletedSceneIds,
+      deletedShotIds,
+    };
     try {
-      await api.sync.saveToCloud(state);
-      // Auto-create version snapshot
-      try {
-        await api.versions.createVersion({
-          entityType: "production_workbench",
-          entityId: projectId,
-          snapshotText: state.title,
-          snapshotJson: { productionState: state },
-          source: "manual",
-        });
-      } catch {
-        // Version snapshot failure is non-fatal
-      }
-      setNotice("已同步到云端，版本快照已保存。");
+      const response: SaveResponse = await storyboardClient.saveState(request);
+      // 应用服务端返回的稳定 ID 映射
+      applyServerResponse(response);
+      setNotice(`已同步到云端（revision ${response.revision}）。`);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "云端同步失败。";
-      setNotice(`云端同步失败：${message}`);
+      if (err instanceof StoryboardRevisionConflictError) {
+        setConflictRevision(err.currentRevision);
+        setNotice(`保存被拒绝：服务器 revision ${err.currentRevision}，本地 ${revision}。请刷新后重试。`);
+      } else {
+        const message = err instanceof Error ? err.message : "云端同步失败。";
+        setNotice(`云端同步失败：${message}`);
+      }
+    } finally {
+      setSaving(false);
     }
   }
 
-  function updateCasting(characterId: string, actorId: string | null) {
-    setState((current) => ({
-      ...current,
-      casting: { ...current.casting, [characterId]: actorId || "" },
-      updatedAt: new Date().toISOString(),
+  function applyServerResponse(response: SaveResponse) {
+    setScenes((current) => {
+      const next = current.map((scene) => {
+        const sceneId = scene.id ?? scene.clientId ?? "";
+        const mapped = response.idMap[sceneId];
+        if (mapped) {
+          return {
+            ...scene,
+            id: mapped,
+            idSource: "server" as const,
+            clientId: scene.clientId,
+            shots: scene.shots.map((shot) => {
+              const shotId = shot.id ?? shot.clientId ?? "";
+              const shotMapped = response.idMap[shotId];
+              return shotMapped
+                ? { ...shot, id: shotMapped, idSource: "server" as const, clientId: shot.clientId, sceneId: mapped }
+                : { ...shot, sceneId: mapped };
+            }),
+          };
+        }
+        return scene;
+      });
+      return next;
+    });
+    setRevision(response.revision);
+    setDeletedSceneIds([]);
+    setDeletedShotIds([]);
+  }
+
+  // -------------------------------------------------------------------
+  // 剧本分析（任务 7）
+  // -------------------------------------------------------------------
+
+  async function analyzeScript(mode: "full" | "scene" = "full", sceneId: string | null = null) {
+    if (!projectId || !sourceUnitId) {
+      setAnalyzeError("缺少 projectId 或 sourceUnitId。");
+      return;
+    }
+    if (mode === "full") setAnalyzing(true);
+    else setAnalyzingSceneId(sceneId);
+    setAnalyzeError("");
+
+    const idempotencyKey = `${mode}-${projectId}-${sourceUnitId}-${Date.now()}`;
+    const request: AnalyzeRequest = {
+      projectId,
+      sourceUnitId,
+      source: manuscript,
+      aspectRatio: "9:16",
+      targetDurationSeconds: 90,
+      visualStyle: "cinematic vertical short drama",
+      outputLanguage: "zh-CN",
+      mode,
+      sceneId,
+      expectedRevision: revision,
+      idempotencyKey,
+    };
+    try {
+      const response: AnalyzeResponse = await storyboardClient.analyze(request);
+      if (mode === "scene" && sceneId) {
+        // 单场重分析：替换该场景，保留 locked shots
+        setScenes((current) => {
+          const idx = current.findIndex((s) => (s.id ?? s.clientId) === sceneId);
+          if (idx < 0 || response.scenes.length === 0) return current;
+          const original = current[idx];
+          const incoming = response.scenes[0];
+          // 合并：保留原场景的 locked shots，新增 incoming 中未匹配的 shots
+          const lockedShots = original.shots.filter((s) => s.locked);
+          const mergedShots = [...lockedShots, ...incoming.shots.map((s, i) => ({ ...s, order: lockedShots.length + i + 1 }))];
+          const next = [...current];
+          next[idx] = { ...incoming, id: original.id, idSource: original.idSource, clientId: original.clientId, locked: original.locked, confirmed: original.confirmed, shots: mergedShots } as StoryboardScene;
+          return next;
+        });
+        setNotice(`已完成场景 ${sceneId} 的重分析（已保留 ${scenes.find((s) => (s.id ?? s.clientId) === sceneId)?.shots.filter((s) => s.locked).length ?? 0} 个锁定分镜）。`);
+      } else {
+        // 全量分析：直接替换
+        setScenes(response.scenes);
+        setAssets(response.assets);
+        setRevision(response.revision);
+        setDeletedSceneIds([]);
+        setDeletedShotIds([]);
+        setNotice(`已分析剧本：${response.scenes.length} 场 · ${response.scenes.reduce((n, s) => n + s.shots.length, 0)} 个分镜。`);
+        setActiveTab("table");
+      }
+    } catch (err) {
+      // BLOCKER 4 contract: 不清场，保留现有 scenes
+      if (err instanceof StoryboardRevisionConflictError) {
+        setConflictRevision(err.currentRevision);
+        setAnalyzeError(`REVISION_CONFLICT：服务器 revision ${err.currentRevision}，本地 ${revision}。请刷新后重试。`);
+      } else if (err instanceof StoryboardClientError) {
+        setAnalyzeError(`${err.code}: ${err.message}`);
+      } else {
+        setAnalyzeError(err instanceof Error ? err.message : "分析失败，请稍后重试。");
+      }
+    } finally {
+      setAnalyzing(false);
+      setAnalyzingSceneId(null);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // 提示词生成
+  // -------------------------------------------------------------------
+
+  async function generatePromptsForShots(shotIds: string[]) {
+    if (!projectId || !sourceUnitId || shotIds.length === 0) return;
+    setGeneratingPromptsForShots(shotIds);
+    const request: PromptRequest = {
+      projectId,
+      sourceUnitId,
+      analysisVersion: 1,
+      shotIds,
+      language: "zh",
+      expectedRevision: revision,
+      idempotencyKey: `prompts-${projectId}-${sourceUnitId}-${Date.now()}`,
+    };
+    try {
+      const response: PromptResponse = await storyboardClient.generatePrompts(request);
+      setPrompts((current) => {
+        const next = { ...current };
+        for (const result of response.prompts) {
+          next[result.shotId] = {
+            imagePrompt: result.imagePrompt,
+            jimengVideoPrompt: result.jimengVideoPrompt,
+            negativePrompt: result.negativePrompt,
+            referenceVersionIds: result.referenceVersionIds,
+            inputHash: result.inputHash,
+          };
+        }
+        return next;
+      });
+      // 同步 prompts 回 scenes（让保存时 imagePrompt/jimengPromptZh 也持久化）
+      setScenes((current) => current.map((scene) => ({
+        ...scene,
+        shots: scene.shots.map((shot) => {
+          const id = shot.id ?? shot.clientId ?? "";
+          const p = response.prompts.find((r) => r.shotId === id);
+          return p ? { ...shot, imagePrompt: p.imagePrompt, jimengPromptZh: p.jimengVideoPrompt } : shot;
+        }),
+      })));
+      setNotice(`已生成 ${response.prompts.length} 组提示词。`);
+    } catch (err) {
+      if (err instanceof StoryboardRevisionConflictError) {
+        setConflictRevision(err.currentRevision);
+        setNotice(`提示词生成被拒绝：服务器 revision ${err.currentRevision}。请刷新后重试。`);
+      } else {
+        setNotice(`提示词生成失败：${err instanceof Error ? err.message : "未知错误"}`);
+      }
+    } finally {
+      setGeneratingPromptsForShots(null);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // 资产候选生成
+  // -------------------------------------------------------------------
+
+  async function generateAssetCandidates(assetId: string) {
+    if (!projectId || !sourceUnitId) return;
+    setGeneratingAssetId(assetId);
+    try {
+      const response = await storyboardClient.generateAssetCandidates({
+        projectId,
+        sourceUnitId,
+        assetId,
+        count: 4,
+        idempotencyKey: `asset-${assetId}-${Date.now()}`,
+        referenceVersionIds: [],
+        expectedRevision: revision,
+      });
+      setCandidates((current) => ({ ...current, [assetId]: response.candidates }));
+      setNotice(`已为资产生成 ${response.candidates.length} 张候选图。`);
+    } catch (err) {
+      if (err instanceof StoryboardRevisionConflictError) {
+        setConflictRevision(err.currentRevision);
+      } else {
+        setNotice(`候选图生成失败：${err instanceof Error ? err.message : "未知错误"}`);
+      }
+    } finally {
+      setGeneratingAssetId(null);
+    }
+  }
+
+  function selectMainVersion(assetId: string, candidateImageUrl: string) {
+    setAssets((current) => {
+      const update = (list: StoryboardAssetUsage[]) => list.map((a) => a.assetId === assetId ? { ...a, selectedVersionId: candidateImageUrl } : a);
+      return {
+        characters: update(current.characters),
+        locations: update(current.locations),
+        props: update(current.props),
+      };
+    });
+    setNotice(`已将 ${assetId} 的主参考版本切换为 ${candidateImageUrl.slice(0, 60)}...`);
+  }
+
+  function uploadAssetReplacement(assetId: string, file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      setCandidates((current) => {
+        const existing = current[assetId] ?? [];
+        const newCandidate: AssetCandidate = {
+          imageUrl: dataUrl,
+          provider: "upload",
+          model: file.name,
+          inputHash: `upload-${Date.now()}`,
+        };
+        return { ...current, [assetId]: [newCandidate, ...existing] };
+      });
+      setNotice(`已上传 ${file.name} 作为 ${assetId} 的候选图。`);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // -------------------------------------------------------------------
+  // Shot 分镜图生成
+  // -------------------------------------------------------------------
+
+  async function generateShotFrame(shotId: string) {
+    if (!projectId || !sourceUnitId) return;
+    setGeneratingShotId(shotId);
+    try {
+      const response = await storyboardClient.generateShotImage(shotId, {
+        projectId,
+        sourceUnitId,
+        idempotencyKey: `frame-${shotId}-${Date.now()}`,
+        referenceVersionIds: [],
+        expectedRevision: revision,
+      });
+      setFrames((current) => ({
+        ...current,
+        [shotId]: { imageUrl: response.imageUrl, provider: response.provider, model: response.model, inputHash: response.inputHash },
+      }));
+      // 同步到 scenes 的 storyboardImageVersionId（便于持久化）
+      setScenes((current) => current.map((scene) => ({
+        ...scene,
+        shots: scene.shots.map((shot) => {
+          const id = shot.id ?? shot.clientId ?? "";
+          return id === shotId ? { ...shot, storyboardImageVersionId: response.imageUrl } : shot;
+        }),
+      })));
+      setNotice(`分镜 ${shotId} 已生成。`);
+    } catch (err) {
+      if (err instanceof StoryboardRevisionConflictError) {
+        setConflictRevision(err.currentRevision);
+      } else {
+        setNotice(`分镜图生成失败：${err instanceof Error ? err.message : "未知错误"}`);
+      }
+    } finally {
+      setGeneratingShotId(null);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // 文件上传（剧本输入）
+  // -------------------------------------------------------------------
+
+  function handleFileUpload(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const sourceFile: ProductionSourceFile = {
+        id: createProductionId("source"),
+        name: file.name,
+        mimeType: file.type || "text/plain",
+        size: file.size,
+        textPreview: text.slice(0, 500),
+        extractedText: text,
+        uploadedAt: new Date().toISOString(),
+      };
+      setSourceFiles((current) => [sourceFile, ...current]);
+      setManuscript((current) => [text, current].filter(Boolean).join("\n\n"));
+      setNotice(`已读取资料《${file.name}》，可点击「分析剧本」。`);
+    };
+    reader.readAsText(file);
+  }
+
+  // -------------------------------------------------------------------
+  // Scene/Shot 编辑（任务 3）
+  // -------------------------------------------------------------------
+
+  function updateScene(sceneId: string, patch: Partial<StoryboardScene>) {
+    setScenes((current) => current.map((s) => {
+      const id = s.id ?? s.clientId ?? "";
+      return id === sceneId ? { ...s, ...patch, userEdited: true } as StoryboardScene : s;
     }));
   }
 
-  async function openVersionHistory() {
-    setShowVersionHistory(true);
-    setVersionDiff(null);
-    setSelectedVersionId(null);
-    const versions = await api.versions.listVersions("production_workbench", projectId);
-    setVersionList(versions);
+  function updateShot(sceneId: string, shotId: string, patch: Partial<StoryboardShot>) {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      return {
+        ...s,
+        shots: s.shots.map((shot) => {
+          const id = shot.id ?? shot.clientId ?? "";
+          return id === shotId ? { ...shot, ...patch, userEdited: true } as StoryboardShot : shot;
+        }),
+      };
+    }));
   }
 
-  function closeVersionHistory() {
-    setShowVersionHistory(false);
-    setVersionDiff(null);
-    setSelectedVersionId(null);
+  function addShot(sceneId: string) {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      const newShot: StoryboardShot = {
+        id: undefined,
+        clientId: `p_shot_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        idSource: "client",
+        sceneId,
+        order: s.shots.length + 1,
+        sourceText: "",
+        storyBeat: "",
+        visualDescription: "",
+        characterAssetIds: [],
+        sceneAssetId: null,
+        propAssetIds: [],
+        shotSize: "中景",
+        cameraMovement: "固定",
+        angle: "平视",
+        durationSeconds: 4,
+        dialogue: "",
+        emotion: "",
+        continuity: "",
+        imagePrompt: "",
+        jimengPromptZh: "",
+        locked: false,
+        userEdited: true,
+        confirmed: false,
+        revision: 0,
+        analysisVersion: 0,
+        sourceHash: "",
+      };
+      return { ...s, shots: [...s.shots, newShot] };
+    }));
   }
 
-  function handleSelectVersion(versionId: string) {
-    setSelectedVersionId(versionId);
-    setVersionDiff(null);
-  }
-
-  async function handleRestoreVersion(versionId: string) {
-    const restored = await api.versions.restoreVersion(versionId);
-    if (restored) {
-      // Reload from cloud to get the restored state
-      try {
-        const restoredState = await api.sync.loadFromCloud();
-        if (restoredState) {
-          setState(restoredState);
-          setNotice("已恢复到历史版本，请刷新查看完整状态。");
+  function deleteShot(sceneId: string, shotId: string) {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      return { ...s, shots: s.shots.filter((shot) => {
+        const id = shot.id ?? shot.clientId ?? "";
+        if (id === shotId) {
+          if (shot.idSource === "server" && shot.id) setDeletedShotIds((cur) => [...cur, shot.id as string]);
+          return false;
         }
-      } catch {
-        setNotice("版本已恢复，请重新加载工作台查看。");
-      }
-      // Refresh version list
-      const versions = await api.versions.listVersions("production_workbench", projectId);
-      setVersionList(versions);
-    }
+        return true;
+      }).map((shot, i) => ({ ...shot, order: i + 1 })) };
+    }));
   }
 
-  async function handleCompareVersions(versionA: string, versionB: string) {
-    const diff = await api.versions.compareVersions(versionA, versionB);
-    if (diff) {
-      setVersionDiff(diff as unknown as VersionDiffResult);
-    }
+  function splitShot(sceneId: string, shotId: string) {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      const idx = s.shots.findIndex((shot) => (shot.id ?? shot.clientId) === shotId);
+      if (idx < 0) return s;
+      const original = s.shots[idx];
+      if (original.locked) return s; // 锁定不允许拆
+      const first: StoryboardShot = { ...original, visualDescription: `${original.visualDescription}（上半）`, durationSeconds: Math.max(1, Math.floor(original.durationSeconds / 2)) };
+      const second: StoryboardShot = {
+        ...original,
+        id: undefined,
+        clientId: `p_shot_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        idSource: "client" as const,
+        order: original.order + 1,
+        visualDescription: `${original.visualDescription}（下半）`,
+        userEdited: true,
+      };
+      const newShots = [...s.shots];
+      newShots.splice(idx, 1, first, second);
+      return { ...s, shots: newShots.map((shot, i) => ({ ...shot, order: i + 1 })) };
+    }));
   }
+
+  function moveShot(sceneId: string, shotId: string, direction: "up" | "down") {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      const idx = s.shots.findIndex((shot) => (shot.id ?? shot.clientId) === shotId);
+      if (idx < 0) return s;
+      const target = direction === "up" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= s.shots.length) return s;
+      const newShots = [...s.shots];
+      [newShots[idx], newShots[target]] = [newShots[target], newShots[idx]];
+      return { ...s, shots: newShots.map((shot, i) => ({ ...shot, order: i + 1 })) };
+    }));
+  }
+
+  function toggleShotLock(sceneId: string, shotId: string) {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      return {
+        ...s,
+        shots: s.shots.map((shot) => {
+          const id = shot.id ?? shot.clientId ?? "";
+          return id === shotId ? { ...shot, locked: !shot.locked } : shot;
+        }),
+      };
+    }));
+  }
+
+  function toggleShotConfirm(sceneId: string, shotId: string) {
+    setScenes((current) => current.map((s) => {
+      const sid = s.id ?? s.clientId ?? "";
+      if (sid !== sceneId) return s;
+      return {
+        ...s,
+        shots: s.shots.map((shot) => {
+          const id = shot.id ?? shot.clientId ?? "";
+          return id === shotId ? { ...shot, confirmed: !shot.confirmed } : shot;
+        }),
+      };
+    }));
+  }
+
+  function addScene() {
+    const newScene: StoryboardScene = {
+      id: undefined,
+      clientId: `p_scene_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      idSource: "client",
+      order: scenes.length + 1,
+      heading: `新场景 ${scenes.length + 1}`,
+      location: "",
+      timeOfDay: "",
+      summary: "",
+      sourceText: "",
+      characterAssetIds: [],
+      propAssetIds: [],
+      shots: [],
+      locked: false,
+      userEdited: true,
+      confirmed: false,
+      revision: 0,
+      analysisVersion: 0,
+      sourceHash: "",
+    };
+    setScenes((current) => [...current, newScene]);
+  }
+
+  function deleteScene(sceneId: string) {
+    setScenes((current) => {
+      const target = current.find((s) => (s.id ?? s.clientId) === sceneId);
+      if (target?.idSource === "server" && target.id) {
+        setDeletedSceneIds((cur) => [...cur, target.id as string]);
+      }
+      return current.filter((s) => (s.id ?? s.clientId) !== sceneId).map((s, i) => ({ ...s, order: i + 1 }));
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------
 
   if (scopeError) {
     return (
@@ -470,382 +779,193 @@ export function ProductionWorkbench({ initialMode = "planning" }: Props) {
     <main className={styles.shell}>
       <header className={styles.header}>
         <div className={styles.titleBlock}>
-          <p className={styles.eyebrow}>Kiikis Production Workbench</p>
-          <input className={styles.titleInput} value={state.title} onChange={(event) => patchState({ title: event.target.value })} aria-label="Project title" />
+          <p className={styles.eyebrow}>Kiikis Production Workbench · 四区分镜台</p>
+          <input
+            className={styles.titleInput}
+            value={projectTitle}
+            onChange={(e) => setProjectTitle(e.target.value)}
+            aria-label="Project title"
+            placeholder="项目标题"
+          />
         </div>
-        <nav className={styles.modeSwitch} aria-label="Production mode">
-          {modeLabels.map((mode) => (
+        <nav className={styles.modeSwitch} aria-label="Storyboard zones">
+          {tabLabels.map((tab) => (
             <button
-              className={`${styles.modeButton} ${state.mode === mode.id ? styles.modeButtonActive : ""}`}
-              key={mode.id}
+              className={`${styles.modeButton} ${activeTab === tab.id ? styles.modeButtonActive : ""}`}
+              key={tab.id}
               type="button"
-              onClick={() => selectMode(mode.id)}
+              onClick={() => setActiveTab(tab.id)}
             >
-              {mode.label}
+              {tab.label}
             </button>
           ))}
         </nav>
         <div className={styles.actionRow}>
-          <button className={styles.secondaryButton} type="button" onClick={openVersionHistory}><Clock size={16} /> 版本历史</button>
+          <button className={styles.secondaryButton} type="button" onClick={() => setShowVersionHistory(true)}><Clock size={16} /> 版本</button>
           <button className={styles.secondaryButton} type="button" onClick={() => setShowTeamPanel(true)}><Users size={16} /> 团队</button>
           <button className={styles.secondaryButton} type="button" onClick={() => setShowModelRegistry(true)}><Cpu size={16} /> 模型</button>
-          <button className={styles.secondaryButton} type="button" onClick={saveAll}><Save size={16} /> 保存</button>
-          <ExportMenu state={state} />
+          <button className={styles.secondaryButton} type="button" onClick={saveToServer} disabled={saving}>
+            <Save size={16} /> {saving ? "保存中..." : "保存"}
+          </button>
+          <ExportMenu
+            state={{
+              id: projectId,
+              projectId,
+              title: projectTitle,
+              workflowType: "storyboard",
+              contentType: "short_drama",
+              aspectRatio: "9:16",
+              language: "zh",
+              sourceFiles,
+              sourceSummary: manuscript,
+              storyBrief: { logline: "", targetPlatform: "", targetAudience: "", storySummary: "", notes: "" },
+              visualBible: { visualStyle: "", colorPalette: "", cameraRules: "", characterRules: "", sceneRules: "", negativePrompt: "" },
+              shots: [],
+              mode: "planning",
+              providers: { imageProvider: "minimax", videoProvider: "minimax" },
+              chatMessages: [],
+              history: [],
+              casting: {},
+              updatedAt: new Date().toISOString(),
+            }}
+          />
         </div>
       </header>
 
       {notice ? (
-        <div
-          role="status"
-          style={{
-            margin: "12px 24px 0",
-            padding: "10px 14px",
-            borderRadius: 10,
-            background: "rgba(117, 219, 198, 0.12)",
-            border: "1px solid rgba(117, 219, 198, 0.35)",
-            color: "#75dbc6",
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
+        <div role="status" style={noticeStyle}>
           {notice}
+          <button type="button" onClick={() => setNotice("")} style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", marginLeft: 8 }} aria-label="关闭">
+            <X size={14} />
+          </button>
         </div>
       ) : null}
 
-      {saveConflict ? (
-        <div
-          role="alert"
-          style={{
-            margin: "12px 24px 0",
-            padding: "12px 14px",
-            borderRadius: 10,
-            background: "rgba(255, 107, 107, 0.12)",
-            border: "1px solid rgba(255, 107, 107, 0.35)",
-            color: "#ff6b6b",
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {saveConflict}
+      {conflictRevision !== null ? (
+        <div role="alert" style={conflictStyle}>
+          <AlertTriangle size={14} style={{ marginRight: 6 }} />
+          REVISION_CONFLICT：服务器当前 revision 为 {conflictRevision}，本地期望 {revision}。
+          本地数据未被覆盖。请刷新工作台或重新分析以同步服务端状态。
+          <button type="button" onClick={() => setConflictRevision(null)} style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", marginLeft: 8 }} aria-label="关闭">
+            <X size={14} />
+          </button>
         </div>
       ) : null}
 
       <section className={styles.workspace}>
-        <aside className={styles.chatPanel}>
-          <div className={styles.panelHeader}>
-            <h2><MessageSquareText size={17} /> AI 制片对话</h2>
-            <p>上传剧本、设定或直接提出修改意见。右侧分镜会保持可编辑状态。</p>
-          </div>
-
-          <div className={styles.messages}>
-            {state.chatMessages.length === 0 ? (
-              <div className={styles.message}>
-                <span className={styles.messageMeta}>KK</span>
-                创作者大人，请上传剧本或告诉我你想做的短剧 / MV。我会先生成可编辑分镜，再进入图片和视频制作。
-              </div>
-            ) : null}
-            {state.chatMessages.map((message) => (
-              <div className={`${styles.message} ${message.role === "user" ? styles.messageUser : ""}`} key={message.id}>
-                <span className={styles.messageMeta}>{message.role === "user" ? "你" : "KK"}</span>
-                {message.content}
-              </div>
-            ))}
-          </div>
-
-          <label className={styles.uploadBox}>
-            <FileUp size={16} /> {api.upload.loading ? "解析资料中..." : "上传剧本 / 背景设定 / 角色设定"}
-            <input className={styles.fileInput} type="file" accept=".txt,.md,.json,.csv,.doc,.docx,.pdf,.html,.xlsx" onChange={handleFileUpload} disabled={api.upload.loading} />
-          </label>
-
-          {selectedShot ? <CurrentShotPanel shot={selectedShot} onUpdate={(patch) => updateShot(selectedShot.id, patch)} /> : null}
-
-          <div className={styles.composer}>
-            <textarea
-              className={styles.textarea}
-              value={input}
-              placeholder="输入你的想法，例如：把总镜头控制在30个以内，增加长镜头，强化男女主对峙。"
-              onChange={(event) => setInput(event.target.value)}
-            />
-            <button className={styles.primaryButton} type="button" onClick={sendMessage} disabled={api.chat.loading} aria-label="Send message"><Send size={18} /></button>
-          </div>
-        </aside>
-
-        <section className={styles.mainPanel}>
-          <div className={styles.mainHeader}>
-            <div>
-              <h2 className={styles.sectionTitle}>{modeLabels.find((mode) => mode.id === state.mode)?.label}</h2>
-              <p className={styles.muted}>{state.shots.length} 个分镜 · 预计 {formatSeconds(totalTimelineSeconds(state))} · {state.aspectRatio}</p>
-            </div>
-            <div className={styles.actionRow}>
-              <button className={styles.secondaryButton} type="button" onClick={addShot}><Plus size={16} /> 新增分镜</button>
-            </div>
-          </div>
-          <div className={styles.mainBody}>
-            {state.mode === "planning" ? (
-              <PlanningMode state={state} patchState={patchState} updateShot={updateShot} removeShot={removeShot} selectShot={selectShot} copyShot={copyShot} generateImage={generateImage} />
-            ) : null}
-            {state.mode === "canvas" ? (
-              <CanvasMode state={state} selectShot={selectShot} removeShot={removeShot} moveShot={(id, direction) => setState((current) => moveProductionShot(current, id, direction))} generateImage={generateImage} generateVideo={generateVideo} />
-            ) : null}
-            {state.mode === "editor" ? (
-              <EditorMode state={state} selectedShot={selectedShot} timeline={timeline} selectShot={selectShot} updateShot={updateShot} />
-            ) : null}
-            {state.mode === "assembly" ? (
-              <AutoAssemblyPanel state={state} />
-            ) : null}
-            {state.mode === "casting" ? (
-              <CastingPanel
-                projectId={projectId}
-                casting={state.casting || {}}
-                onCastingChange={updateCasting}
-              />
-            ) : null}
-          </div>
-        </section>
+        {activeTab === "script" ? (
+          <ScriptInputPanel
+            projectId={projectId}
+            sourceUnitId={sourceUnitId}
+            projectTitle={projectTitle}
+            manuscript={manuscript}
+            sourceFiles={sourceFiles}
+            analyzing={analyzing}
+            analyzeError={analyzeError}
+            onUploadFile={handleFileUpload}
+            onAnalyze={() => analyzeScript("full")}
+            onClearAnalyzeError={() => setAnalyzeError("")}
+          />
+        ) : null}
+        {activeTab === "table" ? (
+          <StoryboardTablePanel
+            scenes={scenes}
+            revision={revision}
+            analyzingSceneId={analyzingSceneId}
+            conflictRevision={conflictRevision}
+            onUpdateScene={updateScene}
+            onUpdateShot={updateShot}
+            onAddShot={addShot}
+            onDeleteShot={deleteShot}
+            onAddScene={addScene}
+            onDeleteScene={deleteScene}
+            onSplitShot={splitShot}
+            onMergeShot={() => { /* TODO: 任务 8 配套 */ }}
+            onMoveShot={moveShot}
+            onToggleShotLock={toggleShotLock}
+            onToggleShotConfirm={toggleShotConfirm}
+            onReanalyzeScene={(sceneId) => analyzeScript("scene", sceneId)}
+            onClearConflict={() => setConflictRevision(null)}
+          />
+        ) : null}
+        {activeTab === "assets" ? (
+          <ArtAssetsPanel
+            assets={assets}
+            candidates={candidates}
+            generatingAssetId={generatingAssetId}
+            onGenerateCandidates={generateAssetCandidates}
+            onSelectMainVersion={selectMainVersion}
+            onUploadReplacement={uploadAssetReplacement}
+            onAssetClick={(assetId) => setNotice(`资产 ${assetId} 关联的 Shot：${scenes.flatMap((s) => s.shots).filter((sh) => sh.characterAssetIds.includes(assetId) || sh.sceneAssetId === assetId || sh.propAssetIds.includes(assetId)).map((sh) => sh.id ?? sh.clientId).join(", ") || "无"}`)}
+          />
+        ) : null}
+        {activeTab === "frames" ? (
+          <ShotFramesPanel
+            scenes={scenes}
+            assets={assets}
+            frames={frames}
+            prompts={prompts}
+            generatingShotId={generatingShotId}
+            generatingPromptsForShots={generatingPromptsForShots}
+            onGenerateFrame={generateShotFrame}
+            onGeneratePrompts={generatePromptsForShots}
+            onToggleConfirm={(shotId) => {
+              for (const scene of scenes) {
+                const sid = scene.id ?? scene.clientId ?? "";
+                if (scene.shots.some((sh) => (sh.id ?? sh.clientId) === shotId)) {
+                  toggleShotConfirm(sid, shotId);
+                  return;
+                }
+              }
+            }}
+            onUpdateShot={updateShot}
+          />
+        ) : null}
       </section>
+
       {showVersionHistory ? (
         <VersionHistory
           versions={versionList}
-          loading={api.versions.loading}
-          error={api.versions.error}
-          onSelect={handleSelectVersion}
-          onRestore={handleRestoreVersion}
-          onCompare={handleCompareVersions}
+          loading={false}
+          error={null}
+          onSelect={(id) => setSelectedVersionId(id)}
+          onRestore={async () => { setNotice("版本恢复请使用 /api/versions PATCH 接口（任务 8 配套）。"); }}
+          onCompare={async (a, b) => { setVersionDiff(null); setNotice(`对比 ${a} ↔ ${b}：待 E2E 配套实现。`); }}
           diff={versionDiff}
           selectedVersionId={selectedVersionId}
-          onClose={closeVersionHistory}
+          onClose={() => setShowVersionHistory(false)}
         />
       ) : null}
-      {showTeamPanel ? (
-        <TeamPanel onClose={() => setShowTeamPanel(false)} />
-      ) : null}
-      {showModelRegistry ? (
-        <ModelRegistryPanel onClose={() => setShowModelRegistry(false)} />
-      ) : null}
+      {showTeamPanel ? <TeamPanel onClose={() => setShowTeamPanel(false)} /> : null}
+      {showModelRegistry ? <ModelRegistryPanel onClose={() => setShowModelRegistry(false)} /> : null}
     </main>
   );
 }
 
-function CurrentShotPanel({ shot, onUpdate }: { shot: ProductionShot; onUpdate: (patch: Partial<ProductionShot>) => void }) {
-  return (
-    <div className={styles.currentShot}>
-      <strong>当前分镜 {shot.index}</strong>
-      <p className={styles.muted}>{shot.sceneTitle} · {shot.duration} · {shot.status}</p>
-      <div className={styles.promptBlock}>
-        <strong>图片提示词</strong>
-        <textarea className={styles.shotTextarea} value={shot.imagePrompt} onChange={(event) => onUpdate({ imagePrompt: event.target.value })} />
-      </div>
-      <div className={styles.promptBlock}>
-        <strong>视频提示词</strong>
-        <textarea className={styles.shotTextarea} value={shot.videoPrompt} onChange={(event) => onUpdate({ videoPrompt: event.target.value })} />
-      </div>
-    </div>
-  );
-}
+const noticeStyle: React.CSSProperties = {
+  margin: "12px 24px 0",
+  padding: "10px 14px",
+  borderRadius: 10,
+  background: "rgba(117, 219, 198, 0.12)",
+  border: "1px solid rgba(117, 219, 198, 0.35)",
+  color: "#75dbc6",
+  fontSize: 13,
+  fontWeight: 600,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+};
 
-function PlanningMode({
-  state,
-  patchState,
-  updateShot,
-  removeShot,
-  selectShot,
-  copyShot,
-  generateImage,
-}: {
-  state: ProductionProjectState;
-  patchState: (patch: Partial<ProductionProjectState>) => void;
-  updateShot: (shotId: string, patch: Partial<ProductionShot>) => void;
-  removeShot: (shotId: string) => void;
-  selectShot: (shotId: string) => void;
-  copyShot: (shotId: string) => void;
-  generateImage: (shotId: string) => void;
-}) {
-  return (
-    <div className={styles.planningGrid}>
-      <aside className={styles.settingsPanel}>
-        <h3 className={styles.sectionTitle}>项目设定</h3>
-        <div className={styles.formGrid}>
-          <label>内容类型
-            <select className={styles.select} value={state.contentType} onChange={(event) => patchState({ contentType: event.target.value as ProductionProjectState["contentType"] })}>
-              <option value="short_drama">短剧</option>
-              <option value="mv">MV</option>
-            </select>
-          </label>
-          <label>画幅
-            <select className={styles.select} value={state.aspectRatio} onChange={(event) => patchState({ aspectRatio: event.target.value as ProductionProjectState["aspectRatio"] })}>
-              <option value="9:16">9:16</option>
-              <option value="16:9">16:9</option>
-              <option value="1:1">1:1</option>
-            </select>
-          </label>
-          <label>故事概况
-            <textarea
-              className={styles.shotTextarea}
-              value={state.storyBrief.storySummary}
-              onChange={(event) => patchState({ storyBrief: { ...state.storyBrief, storySummary: event.target.value } })}
-            />
-          </label>
-          <label>视觉风格
-            <textarea
-              className={styles.shotTextarea}
-              value={state.visualBible.visualStyle}
-              onChange={(event) => patchState({ visualBible: { ...state.visualBible, visualStyle: event.target.value } })}
-            />
-          </label>
-        </div>
-      </aside>
-      <section className={styles.documentPanel}>
-        <h3 className={styles.sectionTitle}>分镜剧本</h3>
-        {state.shots.map((shot) => (
-          <article className={styles.documentShot} key={shot.id}>
-            <h3>分镜 {shot.index}</h3>
-            <ul>
-              <li>画面类型：{shot.shotType}</li>
-              <li>分镜时长：{shot.duration}</li>
-              <li>画面描述：{shot.description}</li>
-              <li>构图设计：{shot.composition}</li>
-              <li>运镜调度：{shot.cameraMovement}</li>
-            </ul>
-            <div className={styles.shotActions}>
-              <button className={styles.secondaryButton} type="button" onClick={() => selectShot(shot.id)}>编辑</button>
-              <button className={styles.secondaryButton} type="button" onClick={() => copyShot(shot.id)}>复制</button>
-              <button className={styles.secondaryButton} type="button" onClick={() => generateImage(shot.id)}><ImagePlus size={15} /> 生成图片</button>
-              <button className={styles.iconButton} type="button" onClick={() => removeShot(shot.id)} aria-label="删除分镜"><Trash2 size={15} /></button>
-            </div>
-          </article>
-        ))}
-      </section>
-    </div>
-  );
-}
-
-function CanvasMode({
-  state,
-  selectShot,
-  removeShot,
-  moveShot,
-  generateImage,
-  generateVideo,
-}: {
-  state: ProductionProjectState;
-  selectShot: (shotId: string) => void;
-  removeShot: (shotId: string) => void;
-  moveShot: (shotId: string, direction: "up" | "down") => void;
-  generateImage: (shotId: string) => void;
-  generateVideo: (shotId: string) => void;
-}) {
-  return (
-    <div className={styles.canvasGrid}>
-      {state.shots.map((shot) => (
-        <div
-          className={`${styles.shotCard} ${state.selectedShotId === shot.id ? styles.shotCardActive : ""}`}
-          key={shot.id}
-          role="button"
-          tabIndex={0}
-          onClick={() => selectShot(shot.id)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              selectShot(shot.id);
-            }
-          }}
-        >
-          <ShotThumbnail imageUrl={shot.imageUrl} videoUrl={shot.videoUrl} status={shot.status} aspectRatio={state.aspectRatio} />
-          <h3>分镜 {shot.index}</h3>
-          <p className={styles.muted}>{shot.description.slice(0, 82) || "暂无画面描述"}</p>
-          <div className={styles.badgeRow}>
-            <span className={styles.badge}>{shot.shotType}</span>
-            <span className={styles.badge}>{shot.duration}</span>
-            <ShotStatusBadge status={shot.status} />
-          </div>
-          <div onClick={(event) => event.stopPropagation()}>
-            <ShotActionBar
-              status={shot.status}
-              mode="canvas"
-              onGenerateImage={() => generateImage(shot.id)}
-              onGenerateVideo={() => generateVideo(shot.id)}
-              onDelete={() => removeShot(shot.id)}
-              onMoveUp={() => moveShot(shot.id, "up")}
-              onMoveDown={() => moveShot(shot.id, "down")}
-              onSelect={() => selectShot(shot.id)}
-            />
-          </div>
-          <PromptViewer imagePrompt={shot.imagePrompt} videoPrompt={shot.videoPrompt} shotType={shot.shotType} duration={shot.duration} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EditorMode({
-  state,
-  selectedShot,
-  timeline,
-  selectShot,
-  updateShot,
-}: {
-  state: ProductionProjectState;
-  selectedShot?: ProductionShot;
-  timeline: ReturnType<typeof productionTimelineItems>;
-  selectShot: (shotId: string) => void;
-  updateShot: (shotId: string, patch: Partial<ProductionShot>) => void;
-}) {
-  return (
-    <div className={styles.editorGrid}>
-      <aside className={styles.editorAside}>
-        <h3 className={styles.sectionTitle}>当前镜头</h3>
-        {selectedShot ? (
-          <div className={styles.formGrid}>
-            <label>场景标题
-              <input className={styles.field} value={selectedShot.sceneTitle} onChange={(event) => updateShot(selectedShot.id, { sceneTitle: event.target.value })} />
-            </label>
-            <label>时长
-              <input className={styles.field} value={selectedShot.duration} onChange={(event) => updateShot(selectedShot.id, { duration: event.target.value })} />
-            </label>
-            <label>画面描述
-              <textarea className={styles.shotTextarea} value={selectedShot.description} onChange={(event) => updateShot(selectedShot.id, { description: event.target.value })} />
-            </label>
-            <label>图片 URL
-              <input className={styles.field} value={selectedShot.imageUrl || ""} onChange={(event) => updateShot(selectedShot.id, { imageUrl: event.target.value, status: event.target.value ? "image_ready" : "draft" })} />
-            </label>
-            <label>视频 URL
-              <input className={styles.field} value={selectedShot.videoUrl || ""} onChange={(event) => updateShot(selectedShot.id, { videoUrl: event.target.value, status: event.target.value ? "video_ready" : selectedShot.status })} />
-            </label>
-          </div>
-        ) : <p className={styles.muted}>请选择一个分镜。</p>}
-      </aside>
-      <section className={styles.previewStage}>
-        <div className={styles.previewFrame}>
-          {selectedShot ? <ShotPreview shot={selectedShot} /> : "No shot selected"}
-        </div>
-      </section>
-      <section className={styles.timeline}>
-        <div className={styles.timelineControls}>
-          <strong><Video size={16} /> 时间线</strong>
-          <span className={styles.muted}>{timeline.length} clips · {formatSeconds(totalTimelineSeconds(state))}</span>
-        </div>
-        <div className={styles.timelineTrack}>
-          {timeline.map((item) => (
-            <button
-              className={`${styles.timelineClip} ${state.selectedShotId === item.shotId ? styles.timelineClipActive : ""}`}
-              key={item.shotId}
-              type="button"
-              onClick={() => selectShot(item.shotId)}
-            >
-              <div className={styles.timelineClipThumb}>
-                {item.videoUrl ? <video src={item.videoUrl} muted /> : item.imageUrl ? <img src={item.imageUrl} alt="" /> : null}
-              </div>
-              <div className={styles.timelineClipText}>分镜 {item.index}<br />{formatSeconds(item.durationSeconds)}</div>
-            </button>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ShotPreview({ shot }: { shot: ProductionShot }) {
-  if (shot.videoUrl) return <video src={shot.videoUrl} controls />;
-  if (shot.imageUrl) return <img src={shot.imageUrl} alt={`分镜 ${shot.index}`} />;
-  return <span>等待图片或视频素材</span>;
-}
+const conflictStyle: React.CSSProperties = {
+  margin: "12px 24px 0",
+  padding: "12px 14px",
+  borderRadius: 10,
+  background: "rgba(255, 107, 107, 0.12)",
+  border: "1px solid rgba(255, 107, 107, 0.35)",
+  color: "#ff6b6b",
+  fontSize: 13,
+  fontWeight: 600,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+};

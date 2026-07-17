@@ -1,0 +1,204 @@
+{
+  "scenes": [
+    {
+      "heading": "INT. ÁTICO DE LUJO, MADRID - NOCHE",
+      "location": "Ático de lujo",
+      "timeOfDay": "夜",
+      "summary": "Bruno confronta a Isa sobre la noche anterior; ella rechaza el trato de su padre.",
+      "sourceText": "Isa entra con el abrigo mojado. Bruno la espera junto a la ventana con dos copas.\nBRUNO: ¿Dónde estuviste anoche, Isa?\nISA: No me vigiles. No eres mi marido todavía.\nBRUNO: Tu padre me debe demasiado. Tú eres parte del trato.\nISA: Entonces dile a mi padre que su deuda no me compra.",
+      "characters": ["Isa", "Bruno"],
+      "props": ["Copas de vino"],
+      "shots": [
+        {
+          "sourceText": "Isa entra con el abrigo mojado. Bruno la espera junto a la ventana con dos copas.",
+          "storyBeat": "Llegada tensa",
+          "visualDescription": "Isa entra al ático con el abrigo mojado; Bruno la espera de espaldas junto a la ventana con dos copas de vino sobre la mesa",
+          "characters": ["Isa", "Bruno"],
+          "location": "Ático de lujo",
+          "props": ["Copas de vino"],
+          "shotSize": "全景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "tensión",
+          "continuity": "abrigo mojado de Isa, noche lluviosa tras la ventana"
+        },
+        {
+          "sourceText": "BRUNO: ¿Dónde estuviste anoche, Isa?",
+          "storyBeat": "Acusación de Bruno",
+          "visualDescription": "Bruno se gira lentamente con una copa en la mano, mirada fría hacia Isa",
+          "characters": ["Bruno"],
+          "location": "Ático de lujo",
+          "props": ["Copas de vino"],
+          "shotSize": "中景",
+          "cameraMovement": "缓推",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "¿Dónde estuviste anoche, Isa?",
+          "emotion": "acusación fría",
+          "continuity": "Bruno traje oscuro sin corbata"
+        },
+        {
+          "sourceText": "ISA: No me vigiles. No eres mi marido todavía.",
+          "storyBeat": "Isa se defiende",
+          "visualDescription": "Isa se quita el abrigo mojado y lo deja caer sobre el respaldo del sofá, mirando a Bruno a los ojos",
+          "characters": ["Isa"],
+          "location": "Ático de lujo",
+          "props": [],
+          "shotSize": "近景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "No me vigiles. No eres mi marido todavía.",
+          "emotion": "desafío",
+          "continuity": "Isa vestido negro bajo el abrigo"
+        },
+        {
+          "sourceText": "BRUNO: Tu padre me debe demasiado. Tú eres parte del trato.",
+          "storyBeat": "Bruno revela el trato",
+          "visualDescription": "Bruno se acerca dos pasos, voz baja, señalando a Isa con la copa",
+          "characters": ["Bruno", "Isa"],
+          "location": "Ático de lujo",
+          "props": ["Copas de vino"],
+          "shotSize": "中景",
+          "cameraMovement": "缓推",
+          "angle": "微仰",
+          "durationSeconds": 5,
+          "dialogue": "Tu padre me debe demasiado. Tú eres parte del trato.",
+          "emotion": "amenaza velada",
+          "continuity": "misma posición de copas en la mesa"
+        },
+        {
+          "sourceText": "ISA: Entonces dile a mi padre que su deuda no me compra.",
+          "storyBeat": "Isa rompe el trato",
+          "visualDescription": "Isa deja la copa sobre la mesa sin beber, gira sobre sus talones hacia la puerta",
+          "characters": ["Isa"],
+          "location": "Ático de lujo",
+          "props": ["Copas de vino"],
+          "shotSize": "近景",
+          "cameraMovement": "跟",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "Entonces dile a mi padre que su deuda no me compra.",
+          "emotion": "dignidad herida",
+          "continuity": "la copa de Isa queda llena sobre la mesa"
+        }
+      ]
+    },
+    {
+      "heading": "INT. PASILLO DEL ÁTICO - NOCHE (CONTINUO)",
+      "location": "Pasillo del ático",
+      "timeOfDay": "夜",
+      "summary": "Bruno sujeta a Isa en el pasillo; ella entra al ascensor sin mirar atrás.",
+      "sourceText": "Isa camina rápido hacia el ascensor. Bruno la alcanza y le sujeta la muñeca.\nBRUNO: Escúchame. Si te vas esta noche, mañana tu familia lo pierde todo.\nISA: (susurrando) Ya lo perdimos todo el día que te conocimos.\nEl ascensor se abre. Isa entra sin mirar atrás.",
+      "characters": ["Isa", "Bruno"],
+      "props": [],
+      "shots": [
+        {
+          "sourceText": "Isa camina rápido hacia el ascensor.",
+          "storyBeat": "Huida por el pasillo",
+          "visualDescription": "Isa camina rápido por el pasillo iluminado con luz cálida tenue hacia el ascensor",
+          "characters": ["Isa"],
+          "location": "Pasillo del ático",
+          "props": [],
+          "shotSize": "全景",
+          "cameraMovement": "跟",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "urgencia",
+          "continuity": "pasillo de lujo con cuadros y luz cálida"
+        },
+        {
+          "sourceText": "Bruno la alcanza y le sujeta la muñeca.\nBRUNO: Escúchame. Si te vas esta noche, mañana tu familia lo pierde todo.",
+          "storyBeat": "Bruno la detiene",
+          "visualDescription": "Bruno alcanza a Isa y le sujeta la muñeca con fuerza; primer plano de la mano sobre la muñeca",
+          "characters": ["Bruno", "Isa"],
+          "location": "Pasillo del ático",
+          "props": [],
+          "shotSize": "特写",
+          "cameraMovement": "固定",
+          "angle": "俯拍",
+          "durationSeconds": 5,
+          "dialogue": "Escúchame. Si te vas esta noche, mañana tu familia lo pierde todo.",
+          "emotion": "amenaza",
+          "continuity": "muñeca derecha de Isa sujeta por Bruno"
+        },
+        {
+          "sourceText": "ISA: (susurrando) Ya lo perdimos todo el día que te conocimos.",
+          "storyBeat": "Respuesta susurrada",
+          "visualDescription": "Isa levanta la mirada, ojos brillantes, susurra la frase casi sin voz",
+          "characters": ["Isa"],
+          "location": "Pasillo del ático",
+          "props": [],
+          "shotSize": "近景",
+          "cameraMovement": "缓推",
+          "angle": "微仰",
+          "durationSeconds": 5,
+          "dialogue": "Ya lo perdimos todo el día que te conocimos.",
+          "emotion": "dolor contenido",
+          "continuity": "misma posición frente al ascensor"
+        },
+        {
+          "sourceText": "El ascensor se abre. Isa entra sin mirar atrás.",
+          "storyBeat": "Isa se marcha",
+          "visualDescription": "Las puertas del ascensor se abren con luz fría; Isa entra y se gira de frente a Bruno sin mirar atrás mientras las puertas se cierran",
+          "characters": ["Isa", "Bruno"],
+          "location": "Pasillo del ático",
+          "props": [],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 5,
+          "dialogue": "",
+          "emotion": "ruptura",
+          "continuity": "luz fría del ascensor contra luz cálida del pasillo"
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "characters": [
+      {
+        "name": "Isa",
+        "aliases": [],
+        "scriptBasis": "Isa entra con el abrigo mojado",
+        "description": "Spanish woman in her late twenties, long dark hair, elegant black dress under a wet beige coat, restrained defiant expression",
+        "visualKeywords": ["realistic", "luxury melodrama", "Madrid"]
+      },
+      {
+        "name": "Bruno",
+        "aliases": [],
+        "scriptBasis": "Bruno la espera junto a la ventana con dos copas",
+        "description": "Spanish man in his mid thirties, athletic build, dark tailored suit without tie, cold controlling gaze",
+        "visualKeywords": ["realistic", "luxury melodrama", "villain"]
+      }
+    ],
+    "locations": [
+      {
+        "name": "Ático de lujo",
+        "aliases": ["ático"],
+        "scriptBasis": "ÁTICO DE LUJO, MADRID - NOCHE",
+        "description": "Luxury penthouse living room in Madrid at night, floor-to-ceiling windows with rainy city lights, warm designer lamps, marble and dark wood",
+        "visualKeywords": ["penthouse", "night", "luxury"]
+      },
+      {
+        "name": "Pasillo del ático",
+        "aliases": [],
+        "scriptBasis": "PASILLO DEL ÁTICO - NOCHE",
+        "description": "Elegant penthouse hallway with warm dim wall lights, framed art, cold elevator light at the end",
+        "visualKeywords": ["hallway", "elevator"]
+      }
+    ],
+    "props": [
+      {
+        "name": "Copas de vino",
+        "aliases": ["copas"],
+        "scriptBasis": "junto a la ventana con dos copas",
+        "description": "Two crystal wine glasses with red wine on a marble side table",
+        "visualKeywords": ["wine glasses", "crystal"]
+      }
+    ]
+  }
+}

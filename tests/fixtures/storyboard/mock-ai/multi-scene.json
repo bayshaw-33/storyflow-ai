@@ -1,0 +1,301 @@
+{
+  "scenes": [
+    {
+      "heading": "EXT. 火车站台 - 黄昏",
+      "location": "火车站台",
+      "timeOfDay": "黄昏",
+      "summary": "周野十年后乘火车回到小城。",
+      "sourceText": "列车进站。周野拎着旧帆布包下车，站台广播杂音。",
+      "characters": ["周野"],
+      "props": ["旧帆布包"],
+      "shots": [
+        {
+          "sourceText": "列车进站。",
+          "storyBeat": "归乡开场",
+          "visualDescription": "黄昏站台，绿皮列车减速进站，蒸汽与暮色混合",
+          "characters": [],
+          "location": "火车站台",
+          "props": [],
+          "shotSize": "远景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 8,
+          "dialogue": "",
+          "emotion": "怀旧",
+          "continuity": "黄昏暖光，站台人不多"
+        },
+        {
+          "sourceText": "周野拎着旧帆布包下车，站台广播杂音。",
+          "storyBeat": "主角登场",
+          "visualDescription": "周野拎着磨白的旧帆布包跨下列车，抬头看一眼站牌",
+          "characters": ["周野"],
+          "location": "火车站台",
+          "props": ["旧帆布包"],
+          "shotSize": "中景",
+          "cameraMovement": "跟",
+          "angle": "平视",
+          "durationSeconds": 7,
+          "dialogue": "",
+          "emotion": "近乡情怯",
+          "continuity": "周野深色夹克，帆布包军绿色"
+        }
+      ]
+    },
+    {
+      "heading": "EXT. 老街巷口 - 夜",
+      "location": "老街巷口",
+      "timeOfDay": "夜",
+      "summary": "周野夜抵老街，修车铺已关门。",
+      "sourceText": "霓虹招牌闪烁。周野在巷口停下，看向关门的修车铺。",
+      "characters": ["周野"],
+      "props": [],
+      "shots": [
+        {
+          "sourceText": "霓虹招牌闪烁。",
+          "storyBeat": "老街夜景",
+          "visualDescription": "老街巷口霓虹招牌闪烁，潮湿路面反射彩光",
+          "characters": [],
+          "location": "老街巷口",
+          "props": [],
+          "shotSize": "全景",
+          "cameraMovement": "摇",
+          "angle": "平视",
+          "durationSeconds": 8,
+          "dialogue": "",
+          "emotion": "市井烟火",
+          "continuity": "夜晚霓虹，雨后湿路面"
+        },
+        {
+          "sourceText": "周野在巷口停下，看向关门的修车铺。",
+          "storyBeat": "故地重游",
+          "visualDescription": "周野在巷口停下，望向拉下卷帘门的修车铺，招牌字迹斑驳",
+          "characters": ["周野"],
+          "location": "老街巷口",
+          "props": [],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 7,
+          "dialogue": "",
+          "emotion": "怅然",
+          "continuity": "修车铺卷帘门关闭"
+        }
+      ]
+    },
+    {
+      "heading": "INT. 修车铺内 - 夜",
+      "location": "修车铺",
+      "timeOfDay": "夜",
+      "summary": "周野进入铺内，旧摩托与旧合影勾起回忆。",
+      "sourceText": "灰尘在手电光里浮动。周野掀开帆布，露出那台旧摩托。墙上还挂着十年前的合影。",
+      "characters": ["周野"],
+      "props": ["旧摩托", "合影照片"],
+      "shots": [
+        {
+          "sourceText": "灰尘在手电光里浮动。周野掀开帆布，露出那台旧摩托。",
+          "storyBeat": "揭开旧摩托",
+          "visualDescription": "手电光柱中灰尘浮动，周野掀开厚重帆布，露出一台老式摩托车",
+          "characters": ["周野"],
+          "location": "修车铺",
+          "props": ["旧摩托"],
+          "shotSize": "中景",
+          "cameraMovement": "缓推",
+          "angle": "微俯",
+          "durationSeconds": 8,
+          "dialogue": "",
+          "emotion": "郑重",
+          "continuity": "铺内仅靠手电照明"
+        },
+        {
+          "sourceText": "墙上还挂着十年前的合影。",
+          "storyBeat": "旧合影回忆杀",
+          "visualDescription": "墙上玻璃相框里两个年轻人站在修车铺前的合影，周野伸手擦去框上灰",
+          "characters": ["周野"],
+          "location": "修车铺",
+          "props": ["合影照片"],
+          "shotSize": "特写",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 7,
+          "dialogue": "",
+          "emotion": "怀念",
+          "continuity": "合影为十年前铺子开业时拍摄"
+        }
+      ]
+    },
+    {
+      "heading": "INT. 大排档 - 夜",
+      "location": "大排档",
+      "timeOfDay": "夜",
+      "summary": "老友重逢，周野表明赎回修车铺的决心。",
+      "sourceText": "烟火气。阿灿把两瓶啤酒顿在桌上。\n阿灿：十年了，你还知道回来？\n周野：回来把店赎回去。",
+      "characters": ["周野", "阿灿"],
+      "props": ["啤酒瓶"],
+      "shots": [
+        {
+          "sourceText": "阿灿把两瓶啤酒顿在桌上。\n阿灿：十年了，你还知道回来？",
+          "storyBeat": "老友重逢",
+          "visualDescription": "大排档烟火气，阿灿把两瓶啤酒顿在折叠桌上，半笑半恼地看着周野",
+          "characters": ["阿灿", "周野"],
+          "location": "大排档",
+          "props": ["啤酒瓶"],
+          "shotSize": "中景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 8,
+          "dialogue": "十年了，你还知道回来？",
+          "emotion": "久别重逢的埋怨",
+          "continuity": "阿灿花衬衫，周野深色夹克"
+        },
+        {
+          "sourceText": "周野：回来把店赎回去。",
+          "storyBeat": "表明决心",
+          "visualDescription": "周野起开啤酒，眼神定定地看向阿灿",
+          "characters": ["周野"],
+          "location": "大排档",
+          "props": ["啤酒瓶"],
+          "shotSize": "近景",
+          "cameraMovement": "缓推",
+          "angle": "平视",
+          "durationSeconds": 7,
+          "dialogue": "回来把店赎回去。",
+          "emotion": "坚定",
+          "continuity": "接上镜，桌上两瓶啤酒"
+        }
+      ]
+    },
+    {
+      "heading": "EXT. 江边大桥 - 凌晨",
+      "location": "江边大桥",
+      "timeOfDay": "凌晨",
+      "summary": "周野把存折托付给阿灿。",
+      "sourceText": "两人靠着栏杆，江面有货船灯。周野把一张存折塞进阿灿手里。\n周野：密码是车行开张那天。",
+      "characters": ["周野", "阿灿"],
+      "props": ["存折"],
+      "shots": [
+        {
+          "sourceText": "两人靠着栏杆，江面有货船灯。",
+          "storyBeat": "江边谈心",
+          "visualDescription": "凌晨大桥栏杆边，两人并肩靠栏，江面货船灯火缓缓移动",
+          "characters": ["周野", "阿灿"],
+          "location": "江边大桥",
+          "props": [],
+          "shotSize": "全景",
+          "cameraMovement": "固定",
+          "angle": "平视",
+          "durationSeconds": 8,
+          "dialogue": "",
+          "emotion": "平静",
+          "continuity": "凌晨蓝调时刻，江风"
+        },
+        {
+          "sourceText": "周野把一张存折塞进阿灿手里。\n周野：密码是车行开张那天。",
+          "storyBeat": "托付存折",
+          "visualDescription": "周野把存折塞进阿灿手里，阿灿愣住低头看存折",
+          "characters": ["周野", "阿灿"],
+          "location": "江边大桥",
+          "props": ["存折"],
+          "shotSize": "特写",
+          "cameraMovement": "固定",
+          "angle": "俯拍",
+          "durationSeconds": 7,
+          "dialogue": "密码是车行开张那天。",
+          "emotion": "信任托付",
+          "continuity": "存折为老式绿色封皮"
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "characters": [
+      {
+        "name": "周野",
+        "aliases": [],
+        "scriptBasis": "周野拎着旧帆布包下车",
+        "description": "35岁中国男性，短发微胡茬，深色旧夹克，身形结实，眼神沉稳带风霜感",
+        "visualKeywords": ["写实", "市井", "归乡"]
+      },
+      {
+        "name": "阿灿",
+        "aliases": [],
+        "scriptBasis": "阿灿把两瓶啤酒顿在桌上",
+        "description": "34岁中国男性，圆脸爱笑，花衬衫，大排档老板的烟火气",
+        "visualKeywords": ["写实", "市井"]
+      }
+    ],
+    "locations": [
+      {
+        "name": "火车站台",
+        "aliases": [],
+        "scriptBasis": "EXT. 火车站台 - 黄昏",
+        "description": "小城老式火车站台，黄昏暖光，绿色站牌，略显破旧",
+        "visualKeywords": ["火车站", "黄昏"]
+      },
+      {
+        "name": "老街巷口",
+        "aliases": [],
+        "scriptBasis": "EXT. 老街巷口 - 夜",
+        "description": "南方小城老街巷口，霓虹招牌，潮湿反光路面，关门的修车铺",
+        "visualKeywords": ["老街", "霓虹"]
+      },
+      {
+        "name": "修车铺",
+        "aliases": [],
+        "scriptBasis": "INT. 修车铺内 - 夜",
+        "description": "老式修车铺内部，工具墙、千斤顶、帆布覆盖的旧摩托，灰尘浮动",
+        "visualKeywords": ["修车铺", "怀旧"]
+      },
+      {
+        "name": "大排档",
+        "aliases": [],
+        "scriptBasis": "INT. 大排档 - 夜",
+        "description": "露天大排档，折叠桌椅，炭火烧烤烟，暖黄灯泡串",
+        "visualKeywords": ["大排档", "烟火气"]
+      },
+      {
+        "name": "江边大桥",
+        "aliases": [],
+        "scriptBasis": "EXT. 江边大桥 - 凌晨",
+        "description": "跨江大桥人行道，凌晨蓝调天色，江面货船灯火",
+        "visualKeywords": ["大桥", "江景", "凌晨"]
+      }
+    ],
+    "props": [
+      {
+        "name": "旧帆布包",
+        "aliases": [],
+        "scriptBasis": "拎着旧帆布包下车",
+        "description": "军绿色旧帆布旅行包，边角磨白，铜扣氧化",
+        "visualKeywords": ["旅行包", "旧物"]
+      },
+      {
+        "name": "旧摩托",
+        "aliases": ["摩托"],
+        "scriptBasis": "露出那台旧摩托",
+        "description": "九十年代老式摩托车，墨绿色油箱有划痕，皮座开裂",
+        "visualKeywords": ["摩托车", "复古"]
+      },
+      {
+        "name": "合影照片",
+        "aliases": [],
+        "scriptBasis": "墙上还挂着十年前的合影",
+        "description": "玻璃相框中的彩色合影，两个年轻人站在修车铺门口，照片略微泛黄",
+        "visualKeywords": ["老照片", "相框"]
+      },
+      {
+        "name": "啤酒瓶",
+        "aliases": [],
+        "scriptBasis": "把两瓶啤酒顿在桌上",
+        "description": "绿色玻璃啤酒瓶，瓶身水珠，本地产老牌啤酒",
+        "visualKeywords": ["啤酒"]
+      },
+      {
+        "name": "存折",
+        "aliases": [],
+        "scriptBasis": "把一张存折塞进阿灿手里",
+        "description": "老式绿色封皮银行存折，边角磨损",
+        "visualKeywords": ["存折", "旧物"]
+      }
+    ]
+  }
+}
