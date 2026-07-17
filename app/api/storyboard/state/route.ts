@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/supabase/server";
 import { RevisionConflictError, loadStoryboardState, saveStoryboardState } from "@/lib/storyboard/state-api";
 import type { SaveRequest } from "@/lib/storyboard/contracts";
+import { isSaveRequest } from "@/lib/storyboard/validators";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,18 +37,6 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     return storyboardError(error);
   }
-}
-
-function isSaveRequest(value: SaveRequest): value is SaveRequest {
-  return Boolean(
-    value &&
-      typeof value.projectId === "string" && value.projectId.trim() &&
-      typeof value.sourceUnitId === "string" && value.sourceUnitId.trim() &&
-      (Number.isInteger(value.expectedRevision) && value.expectedRevision >= 0) &&
-      Array.isArray(value.scenes) &&
-      Array.isArray(value.deletedSceneIds) &&
-      Array.isArray(value.deletedShotIds),
-  );
 }
 
 function badRequest(error: string) {

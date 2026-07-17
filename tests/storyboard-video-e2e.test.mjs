@@ -6,8 +6,8 @@
  *
  * Scenarios:
  *   G1. 闸门 H0: 409 出口 1 加载最新版本（loadLatestAndClearConflict kernel）
- *   G2. 闸门 H1: 409 出口 2 另存快照（saveAsSnapshot 用 expectedRevision=null）
- *   G3. 闸门 H2: SaveRequest.expectedRevision 类型 number | null
+ *   G2. 闸门 H1: 409 出口 2 另存快照（P3 BLOCKER v2：独立 snapshot API 落完整 scenes，不触碰当前态）
+ *   G3. 闸门 H2: SaveRequest.expectedRevision 强类型 number（P3 BLOCKER v2 移除 null 分支）
  *   G4. 闸门 H3: 失败不覆盖本地（409 时本地 state 不变）
  *   V1. 视频生成提交返回 jobId + providerTaskId
  *   V2. 视频轮询：running → completed 更新 videoUrl

@@ -1,5 +1,38 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 18:30 - TRAE / Codex MUST FIX + NIT 回收
+
+### 本次目标
+- 回收 Codex 滚动审查清单中标 MUST FIX 且影响当前功能的项目：
+  1. M4 route-level 回归测试（原仅读源码不执行验证）
+- 顺手修 NIT：`tests/storyboard-video-e2e.test.mjs` 头部 G2/G3 注释仍描述已移除的 `expectedRevision=null` 快照行为。
+
+### 已完成
+- 新增 `lib/storyboard/validators.ts`：导出 `isSaveRequest`（从 route.ts 抽出，纯函数无 `@/` 依赖，可在 Node.js 测试环境直接导入）。
+- `app/api/storyboard/state/route.ts`：改为 `import { isSaveRequest } from "@/lib/storyboard/validators"`，删除本地实现。
+- `tests/storyboard-video-atlas-e2e.test.mjs` M4 重写：从"读 route 源码验证字符串"改为"运行时调用 `isSaveRequest` 验证"。
+  - 拒绝：`null` / `undefined` / `-1` / `"0"` / `NaN`
+  - 通过：`0` / `5` / `999`
+  - 拒绝：缺 projectId / 缺 scenes
+- `tests/storyboard-video-e2e.test.mjs` G2/G3 注释更新为 P3 BLOCKER v2 描述。
+
+### Codex 清单状态
+- **MUST FIX (route-level regression test)** → ✅ 已修（M4 运行时验证）
+- **MUST FIX (staging migration 执行)** → Codex 职责（CLI link 是 production，TRAE 不自行执行迁移）
+- **MUST FIX (staging 独立验证)** → Codex 职责
+- **MUST FIX (real browser E2E)** → 需用户环境验证
+- **NIT (G2/G3 注释)** → ✅ 已修
+- **NIT (provider 路由名整合)** → 留待统一验收（非当前 blocker）
+
+### 验证结果
+- `npx tsc --noEmit`：0 错误。
+- `pnpm build`：通过。
+- `node --test tests/*.test.mjs`：214/214 通过（M4 运行时验证全绿）。
+
+### Git 信息
+- commit：待提交。
+- 基于：`38f62d6`（Codex review commit close storyboard CAS blocker）。
+
 ## 2026-07-18 02:19 - Codex / P3 CAS Blocker 专项验证
 
 ### 本次目标

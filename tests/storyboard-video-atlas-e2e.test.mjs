@@ -15,10 +15,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import fs from "node:fs";
 import { createAtlasProvider } from "../lib/ai/video/atlas.ts";
 import { computeVideoIdempotencyHash, resolveVideoProvider } from "../lib/ai/video/provider.ts";
 import { StoryboardClient, StoryboardClientError } from "../lib/storyboard/client.ts";
+import { isSaveRequest } from "../lib/storyboard/validators.ts";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -270,28 +270,53 @@ test("M3: jobs/[jobId] done 时 result_url 是 Storage signed URL（非 provider
 // M4. CAS bypass 已移除：state/route.ts 验证拒绝 expectedRevision=null
 // ---------------------------------------------------------------------------
 
-test("M4: SaveRequest.expectedRevision=null 不再被接受（CAS bypass 移除）", () => {
-  // contracts.ts 类型已改为 number；state/route.ts 验证逻辑只接受 Number.isInteger
-  // 这里通过读取 route 文件验证验证逻辑（不实际调用 route）
-  const routeSrc = fs.readFileSync("app/api/storyboard/state/route.ts", "utf-8");
-  assert.ok(
-    !routeSrc.includes("value.expectedRevision === null"),
-    "state/route.ts 不再接受 null expectedRevision",
-  );
-  assert.ok(
-    routeSrc.includes("Number.isInteger(value.expectedRevision)"),
-    "state/route.ts 强制 Number.isInteger 检查",
-  );
+test("M4: route-level regression — expectedRevision=null 被 isSaveRequest 拒绝（CAS bypass 移除）", () => {
+  // Codex MUST FIX: 实际执行验证逻辑（非读源码）。
+  // isSaveRequest 是 PUT /api/storyboard/state 的验证门——返回 false 时 route 返回 400。
+  // null / undefined / 负数 / 字符串均被拒绝；只有非负整数通过。
+  const baseValid = {
+    projectId: "p",
+    sourceUnitId: "e",
+    scenes: [],
+    deletedSceneIds: [],
+    deletedShotIds: [],
+  };
 
-  const contractsSrc = fs.readFileSync("lib/storyboard/contracts.ts", "utf-8");
-  assert.ok(
-    !contractsSrc.includes("expectedRevision: number | null"),
-    "contracts.ts 类型已移除 null",
-  );
-  assert.ok(
-    contractsSrc.includes("expectedRevision: number;"),
-    "contracts.ts 类型为 number",
-  );
+  // null → 拒绝（P3 BLOCKER v2 核心：移除 CAS bypass）
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: null }), false,
+    "expectedRevision=null 必须被拒绝（CAS bypass 已移除）");
+
+  // undefined → 拒绝
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: undefined }), false,
+    "expectedRevision=undefined 被拒绝");
+
+  // 负数 → 拒绝
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: -1 }), false,
+    "expectedRevision=-1 被拒绝");
+
+  // 字符串 → 拒绝
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: "0" }), false,
+    'expectedRevision="0" 被拒绝');
+
+  // NaN → 拒绝
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: NaN }), false,
+    "expectedRevision=NaN 被拒绝");
+
+  // 合法非负整数 → 通过
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: 0 }), true,
+    "expectedRevision=0 合法");
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: 5 }), true,
+    "expectedRevision=5 合法");
+  assert.equal(isSaveRequest({ ...baseValid, expectedRevision: 999 }), true,
+    "expectedRevision=999 合法");
+
+  // 缺少 projectId → 拒绝
+  assert.equal(isSaveRequest({ sourceUnitId: "e", expectedRevision: 0, scenes: [], deletedSceneIds: [], deletedShotIds: [] }), false,
+    "缺少 projectId 被拒绝");
+
+  // 缺少 scenes → 拒绝
+  assert.equal(isSaveRequest({ projectId: "p", sourceUnitId: "e", expectedRevision: 0, deletedSceneIds: [], deletedShotIds: [] }), false,
+    "缺少 scenes 被拒绝");
 });
 
 // ---------------------------------------------------------------------------
