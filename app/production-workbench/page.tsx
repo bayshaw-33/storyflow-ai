@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { ProductionWorkbench } from "@/components/production/ProductionWorkbench";
 
 export default function ProductionWorkbenchPage() {
-  return <ProductionWorkbench />;
+  return (
+    <Suspense fallback={null}>
+      <ProductionWorkbench />
+    </Suspense>
+  );
 }

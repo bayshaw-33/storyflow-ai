@@ -29,7 +29,7 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, ArrowLeft, Clock, Cpu, Film, Save, Settings, Users, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -85,16 +85,17 @@ type StoryboardAssets = {
 };
 
 const tabLabels: Array<{ id: Tab; label: string }> = [
-  { id: "script", label: "剧本输入" },
-  { id: "table", label: "分镜表" },
-  { id: "assets", label: "美术物料" },
-  { id: "frames", label: "分镜图与即梦提示词" },
+  { id: "script", label: "剧本" },
+  { id: "assets", label: "美术" },
+  { id: "table", label: "分镜" },
+  { id: "frames", label: "视频" },
 ];
 
 const EMPTY_ASSETS: StoryboardAssets = { characters: [], locations: [], props: [] };
 
 export function ProductionWorkbench() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // --- 顶层状态 ---
   const [activeTab, setActiveTab] = useState<Tab>("script");
@@ -169,12 +170,12 @@ export function ProductionWorkbench() {
   }, [projectId, sourceUnitId]);
 
   // --- URL 参数 + scope 校验 + handoff/draft 加载 ---
+  // 任务 4 修复：依赖数组加入 searchParams，避免 URL 变化但 effect 不重新执行（导致点模块失效）
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlProjectId = params.get("projectId");
-    const urlSourceUnitId = params.get("sourceUnitId");
-    const setup = params.get("setup");
-    const mode = params.get("mode") || "planning";
+    const urlProjectId = searchParams.get("projectId");
+    const urlSourceUnitId = searchParams.get("sourceUnitId");
+    const setup = searchParams.get("setup");
+    const mode = searchParams.get("mode") || "planning";
 
     if (!urlProjectId || !urlSourceUnitId) {
       // 任务 1.4「先创作后归档」：带 setup=1（从需求墙来）时自动开未命名草稿，立即可用
@@ -229,7 +230,7 @@ export function ProductionWorkbench() {
         if (typeof draftRevision === "number") setRevision(draftRevision);
       }
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, searchParams]);
 
   // --- Supabase session ---
   useEffect(() => {

@@ -1,5 +1,5 @@
 /**
- * /production — 第一阶段分镜制作台主入口
+ * /production - 第一阶段分镜制作台主入口
  *
  * 任务卡：KIIKIS-P1-TRAE-002
  *
@@ -8,10 +8,17 @@
  *
  * 旧 /production-workbench 路由保留作为兼容入口，但不再扩展新功能。
  * 旧 /storyboard-workbench 路由不再扩展，仅保留迁移入口。
+ *
+ * 任务 4 修复：useSearchParams 要求 Suspense boundary，否则 build 时 prerender 失败。
  */
 
+import { Suspense } from "react";
 import { ProductionWorkbench } from "@/components/production/ProductionWorkbench";
 
 export default function ProductionPage() {
-  return <ProductionWorkbench />;
+  return (
+    <Suspense fallback={null}>
+      <ProductionWorkbench />
+    </Suspense>
+  );
 }

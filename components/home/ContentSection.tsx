@@ -68,7 +68,9 @@ export function ContentSection({
       <div className="content-section-inner" ref={innerRef}>
         <p className="content-section-kicker">{kicker}</p>
         <h2 className="content-section-title">{isZh ? titleZh : titleEn}</h2>
-        <p className="content-section-subtitle">{isZh ? subtitleZh : subtitleEn}</p>
+        {(isZh ? subtitleZh : subtitleEn).split("\n\n").map((paragraph, index) => (
+          <p key={index} className="content-section-subtitle">{paragraph}</p>
+        ))}
         {ctaLabel && ctaHref && (
           <Link className="content-section-cta primary-button" href={ctaHref}>
             {ctaLabel}

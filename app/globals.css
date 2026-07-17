@@ -1326,7 +1326,7 @@ input:focus, textarea:focus, select:focus {
   padding: calc(var(--nav-height) + var(--space-8)) clamp(20px, 4vw, 40px) var(--space-16);
   align-items: start;
 }
-.kiikis-dashboard-shell.kiikis-dashboard-single { grid-template-columns: 1fr; max-width: 1100px; }
+.kiikis-dashboard-shell.kiikis-dashboard-single { grid-template-columns: 1fr; max-width: 1400px; }
 
 /* sidebar */
 .dashboard-sidebar {
@@ -2269,7 +2269,7 @@ input:focus, textarea:focus, select:focus {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-3);
-  padding: 0 var(--space-6) var(--space-5);
+  padding: 0 var(--space-4) var(--space-4);
   border-top: 1px solid var(--divider);
   padding-top: var(--space-4);
 }
@@ -6602,7 +6602,6 @@ select optgroup {
 
 .content-section-subtitle,
 .hero-copy > p {
-  white-space: pre-line;
   word-break: keep-all;
   overflow-wrap: normal;
   text-wrap: pretty;
@@ -6855,11 +6854,16 @@ a.ghost-button {
 }
 
 .hero-copy,
-.content-section-title,
-.content-section-subtitle {
+.content-section-title {
   word-break: keep-all;
   overflow-wrap: normal;
   text-wrap: balance;
+}
+
+.content-section-subtitle {
+  word-break: keep-all;
+  overflow-wrap: normal;
+  text-wrap: pretty;
 }
 
 .content-section-title {
@@ -6871,6 +6875,15 @@ a.ghost-button {
 .hero-copy > p {
   max-width: min(34em, calc(100vw - 40px));
   line-height: 1.76;
+}
+
+/* 多段 subtitle 之间的间距（任务 5 排版修复） */
+.content-section-subtitle + .content-section-subtitle {
+  margin-top: calc(var(--space-4) * -1);
+  margin-bottom: var(--space-4);
+}
+.content-section-subtitle:last-child {
+  margin-bottom: var(--space-8);
 }
 
 .hero-copy h1 {
