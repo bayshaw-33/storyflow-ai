@@ -28,7 +28,7 @@
 - 真实带认证 `POST /api/evidence/packages` / Storage 下载：待 staging 部署获得新路由后验证；production 零写入。
 
 ### Git 信息
-- commits：`4f252c4`、`0b3469c`、`e7074c8`、`1315cc1`；hardening 与本次交接待提交。
+- commits：`4f252c4`、`0b3469c`、`e7074c8`、`1315cc1`、`fb2fe21`（hardening 与本次交接）。
 - 推送锁：按用户长期指令直接推送；仍须通过本地 pre-push build/typecheck。
 
 ### 未完成 / 风险
