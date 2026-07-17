@@ -305,6 +305,51 @@ export function ProductionWorkbench() {
     }
   }
 
+  /**
+   * 409 出口 2：基于当前内容另存快照。
+   * 把本地内容当作新版本强制提交（expectedRevision 设为 null 绕过 CAS），
+   * 服务端 save_storyboard_state RPC 在 expectedRevision IS NULL 时直接插入新版本。
+   * 仅在用户明确选择"另存快照"时调用，不破坏正常 CAS 协议。
+   */
+  async function saveAsSnapshot() {
+    if (!session) {
+      setNotice("未登录，无法另存快照。");
+      return;
+    }
+    if (!projectId || !sourceUnitId) {
+      setNotice("缺少 projectId 或 sourceUnitId，无法另存快照。");
+      return;
+    }
+    setSaving(true);
+    setConflictRevision(null);
+    const request: SaveRequest = {
+      projectId,
+      sourceUnitId,
+      // null 信号：服务端跳过 CAS 检查，直接插入新版本（"另存快照"语义）
+      expectedRevision: null,
+      scenes,
+      deletedSceneIds,
+      deletedShotIds,
+    };
+    try {
+      const response: SaveResponse = await storyboardClient.saveState(request);
+      applyServerResponse(response);
+      setNotice(`已另存为快照（revision ${response.revision}）。原冲突已解除。`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "另存快照失败。";
+      setNotice(`另存快照失败：${message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** 409 出口 1：加载最新版本（丢弃本地未提交修改）。 */
+  async function loadLatestAndClearConflict() {
+    setConflictRevision(null);
+    await loadFromServer();
+    setNotice("已加载服务端最新版本，本地冲突已清除。");
+  }
+
   function applyServerResponse(response: SaveResponse) {
     setScenes((current) => {
       const next = current.map((scene) => {
@@ -843,12 +888,41 @@ export function ProductionWorkbench() {
 
       {conflictRevision !== null ? (
         <div role="alert" style={conflictStyle}>
-          <AlertTriangle size={14} style={{ marginRight: 6 }} />
-          REVISION_CONFLICT：服务器当前 revision 为 {conflictRevision}，本地期望 {revision}。
-          本地数据未被覆盖。请刷新工作台或重新分析以同步服务端状态。
-          <button type="button" onClick={() => setConflictRevision(null)} style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", marginLeft: 8 }} aria-label="关闭">
-            <X size={14} />
-          </button>
+          <AlertTriangle size={14} style={{ marginRight: 6, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>数据已在别处更新</div>
+            <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.9 }}>
+              服务器当前 revision 为 {conflictRevision}，本地期望 {revision}。本地数据未被覆盖，请选择如何处理：
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={loadLatestAndClearConflict}
+                disabled={saving}
+              >
+                加载最新版本
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={saveAsSnapshot}
+                disabled={saving}
+              >
+                {saving ? "另存中…" : "基于当前内容另存快照"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConflictRevision(null)}
+                style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", padding: "4px 8px", fontSize: 12 }}
+                aria-label="关闭"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

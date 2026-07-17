@@ -138,7 +138,13 @@ export type PromptResponse = {
 export type SaveRequest = {
   projectId: string;
   sourceUnitId: string;
-  expectedRevision: number;
+  /**
+   * CAS 期望 revision。null = "另存快照"语义：跳过 CAS 检查，把本地内容
+   * 当作新版本直接写入（仅在用户明确选择"基于当前内容另存快照"时使用）。
+   * 服务端 save_storyboard_state RPC 在 p_expected_revision IS NULL 时
+   * 因 NULL 比较跳过 REVISION_CONFLICT 检查，天然支持此语义。
+   */
+  expectedRevision: number | null;
   scenes: StoryboardScene[];
   deletedSceneIds: string[];
   deletedShotIds: string[];
