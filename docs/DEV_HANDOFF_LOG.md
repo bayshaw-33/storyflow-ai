@@ -1,5 +1,40 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 02:xx - Codex / P3 Atlas + 持久化滚动验证
+
+### 本次目标
+- 审查 `bdc971e..2644c9a` 的 Atlas、数据库幂等与视频转存；确认 M4 `expectedRevision: null` 回归测试是否可销项。
+
+### 已完成
+- `38f62d6` 审查记录已在 `origin/main`；同步后远端另含 `7a617f8`，该提交已把 M4 从源码字符串检查改为路由实际使用的运行时 validator 测试。
+- Atlas key 审计：未发现受跟踪源码中的原始 `apikey-<hex>` 或 `NEXT_PUBLIC_` Atlas/MiniMax 变量；Atlas key 只从服务端 `process.env.ATLASCLOUD_API_KEY` 读取，provider 原始响应未写入 job/日志。
+- 数据库幂等：migration 确实定义了 PostgreSQL partial unique index `uq_generation_jobs_idempotency_hash`；但 staging 尚未执行，当前不能宣称数据库实际已强制执行。
+- M4 已销项：运行时验证拒绝 `null`、`undefined`、负数、字符串与 `NaN` revision；state route 对验证失败返回 400。
+- 转存 MUST FIX 未关闭：下载、上传或签名失败时 jobs route 仍会把 provider 临时 URL 写为 `completed.result_url`；成功后的 7 天签名 URL 也没有 completed-job 重签路径。
+
+### 修改文件
+- `docs/reviews/PRODUCTION-WORKBENCH-ROLLING-REVIEW.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `node --test tests/*.test.mjs`：214/214 通过。
+- `npx tsc --noEmit`：通过。
+- `pnpm build`：通过（仅有既有 `LOGO_PRIMARY` orphan token 警告，不影响构建）。
+- `git diff --check bdc971e..2644c9a`：通过。
+- staging migration：未执行；当前 Supabase CLI link 指向 production，遵守零 production 写入。
+
+### Git 信息
+- commit：待提交。
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁。
+
+### 未完成 / 风险
+- 未执行 staging migration 前，幂等仍只由应用层预查询保证，不能作为付费视频链路的并发硬保证。
+- Provider 临时 URL 在转存失败路径仍被绑定为完成结果；签名 URL 过期后无法从 `storage_path` 重签。这两项保持 MUST FIX，但不阻塞 TRAE 继续开发。
+
+### 给下一位
+- 修复转存失败路径时不要把 provider URL 作为 completed 的 `result_url`；保留可重试状态并从持久对象重新签名。
+- migration 仅在 staging link 明确后由 Codex 执行并记录回滚演练，禁止 production 写入。
+
 ## 2026-07-18 18:30 - TRAE / Codex MUST FIX + NIT 回收
 
 ### 本次目标
