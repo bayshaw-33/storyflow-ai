@@ -11,6 +11,8 @@ import { readProjectFromSupabase, readProjectsFromSupabase, upsertProjectToSupab
 import { getUniverseBundle, listUniverses, saveInboxItems, type Universe, type UniverseBundle } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { byteLength, trimPromptBytes } from "@/lib/song/prompt";
+import { requestLyricsTranslation, type LyricsTranslationLanguage } from "@/lib/song/translation";
 
 type SongProjectType =
   | "original_song"
@@ -26,7 +28,6 @@ type SongProjectType =
 type OutputLanguage = "English" | "Chinese" | "Bilingual" | "Japanese" | "Korean" | "Spanish" | "French" | "Cantonese" | "Custom";
 type LyricsMode = "enhanced_lyrics" | "plain_lyrics" | "no_tags";
 type AuditStatus = "pass" | "low_risk" | "medium_risk" | "high_risk";
-type TranslationLanguage = "Chinese" | "English" | "Spanish" | "French" | "Japanese" | "Korean";
 type SongModelProvider = "auto" | "deepseek" | "minimax";
 
 type SongChatMessage = {
@@ -111,7 +112,7 @@ type UploadedReference = {
 
 const STORAGE_KEY = "kiikis-song-workbench-v1";
 const MUSIC_PROMPT_MAX_BYTES = 1000;
-const translationLanguages: TranslationLanguage[] = ["Chinese", "English", "Spanish", "French", "Japanese", "Korean"];
+const translationLanguages: LyricsTranslationLanguage[] = ["Chinese", "English", "Spanish", "French", "Japanese", "Korean"];
 
 const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: string; strategy: string }> = [
   { value: "original_song", label: "原创/独立歌曲", labelEn: "Original / indie song", strategy: "standard lyrics structure" },
@@ -518,9 +519,10 @@ export default function SongWorkbenchPage() {
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<SongChatMessage[]>([]);
   const [chatGenerating, setChatGenerating] = useState(false);
-  const [translationLanguage, setTranslationLanguage] = useState<TranslationLanguage>("Chinese");
+  const [translationLanguage, setTranslationLanguage] = useState<LyricsTranslationLanguage>("Chinese");
   const [translatedLyrics, setTranslatedLyrics] = useState("");
   const [translationGenerating, setTranslationGenerating] = useState(false);
+  const [translationError, setTranslationError] = useState("");
   const [selectedModelProvider, setSelectedModelProvider] = useState<SongModelProvider>("auto");
   const [uploadedReference, setUploadedReference] = useState<UploadedReference | null>(null);
   const [referenceMode, setReferenceMode] = useState<UploadedReference["mode"]>("similar_style");
@@ -671,29 +673,33 @@ export default function SongWorkbenchPage() {
 
   useEffect(() => {
     const trimmed = lyrics.trim();
+    setTranslationGenerating(false);
+    setTranslationError("");
     if (!trimmed) {
       setTranslatedLyrics("");
       return;
     }
     if (shouldSkipLyricsTranslation(trimmed, translationLanguage)) {
-      setTranslatedLyrics(isZh ? "当前歌词已经是中文，无需翻译。" : "The current lyrics are already Chinese, so no translation is needed.");
+      setTranslatedLyrics(trimmed);
       return;
     }
     if (!session?.access_token) {
-      setTranslatedLyrics(isZh ? "登录后可自动翻译歌词。" : "Sign in to auto-translate lyrics.");
+      setTranslatedLyrics("");
+      setTranslationError(isZh ? "登录后可自动翻译歌词。" : "Sign in to auto-translate lyrics.");
       return;
     }
 
-    let cancelled = false;
+    setTranslatedLyrics("");
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void translateLyrics(trimmed, translationLanguage, cancelled);
+      void translateLyrics(trimmed, translationLanguage, controller.signal);
     }, 900);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
+      controller.abort();
     };
-  }, [lyrics, translationLanguage, session?.access_token, isZh]);
+  }, [lyrics, translationLanguage, session?.access_token, isZh, selectedModelProvider, form.title]);
 
   function resetSongWorkbench() {
     setForm(initialForm);
@@ -707,6 +713,7 @@ export default function SongWorkbenchPage() {
     setChatMessages([createSongAssistantMessage(getSongOpeningMessage(isZh))]);
     setTranslationLanguage("Chinese");
     setTranslatedLyrics("");
+    setTranslationError("");
     setUploadedReference(null);
     setReferenceMode("similar_style");
     setVersions([]);
@@ -725,7 +732,7 @@ export default function SongWorkbenchPage() {
     const snapshot = songProjectToWorkbench(project);
     setForm(snapshot.form);
     setLyrics(snapshot.lyrics);
-    setStylePrompt(snapshot.stylePrompt);
+    setStylePrompt(trimPromptBytes(snapshot.stylePrompt, MUSIC_PROMPT_MAX_BYTES));
     setCompositionPrompt(snapshot.compositionPrompt);
     setAudit(snapshot.audit);
     setSongDevelopmentNotes(snapshot.songDevelopmentNotes);
@@ -900,37 +907,26 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  async function translateLyrics(sourceLyrics: string, targetLanguage: TranslationLanguage, cancelled: boolean) {
-    if (!session?.access_token || cancelled) return;
+  async function translateLyrics(sourceLyrics: string, targetLanguage: LyricsTranslationLanguage, signal: AbortSignal) {
+    if (!session?.access_token || signal.aborted) return;
     setTranslationGenerating(true);
+    setTranslationError("");
     try {
-      const response = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          taskType: "translation",
-          projectTitle: `${form.title || "Song"} lyrics translation`,
-          input: [
-            `Translate these song lyrics into ${targetLanguage}.`,
-            "Preserve section tags, line breaks, repeated hooks, and singing rhythm. Output only the translated lyrics.",
-            "",
-            sourceLyrics,
-          ].join("\n"),
-          options: { targetLanguage },
-          context: "This is a song lyric translation preview inside Kiikis Song Workbench.",
-          byoApi: buildSongByoApi(selectedModelProvider),
-        }),
+      const output = await requestLyricsTranslation({
+        accessToken: session.access_token,
+        projectTitle: form.title,
+        sourceLyrics,
+        targetLanguage,
+        signal,
+        byoApi: buildSongByoApi(selectedModelProvider),
       });
-      const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
-      if (!response.ok || !payload?.success) throw new Error(payload?.error || "Translation failed.");
-      if (!cancelled) setTranslatedLyrics(payload.output || "");
+      if (!signal.aborted) setTranslatedLyrics(output);
     } catch (translationError) {
-      if (!cancelled) setTranslatedLyrics(translationError instanceof Error ? translationError.message : isZh ? "翻译失败。" : "Translation failed.");
+      if (!signal.aborted) {
+        setTranslationError(translationError instanceof Error ? translationError.message : isZh ? "翻译失败。" : "Translation failed.");
+      }
     } finally {
-      if (!cancelled) setTranslationGenerating(false);
+      if (!signal.aborted) setTranslationGenerating(false);
     }
   }
 
@@ -1263,7 +1259,7 @@ export default function SongWorkbenchPage() {
 
       const parsed = parseSongGeneration(payload.output || "");
       const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || reviseLyrics(lyrics, instruction), selectedSingers);
-      const nextStylePrompt = trimPrompt(sanitizeForbidden(parsed.stylePrompt || stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), 280);
+      const nextStylePrompt = trimPromptBytes(sanitizeForbidden(parsed.stylePrompt || stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), MUSIC_PROMPT_MAX_BYTES);
       const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
@@ -1290,7 +1286,7 @@ export default function SongWorkbenchPage() {
 
   function previewVersion(version: SongVersion) {
     setLyrics(version.lyrics);
-    setStylePrompt(version.stylePrompt);
+    setStylePrompt(trimPromptBytes(version.stylePrompt, MUSIC_PROMPT_MAX_BYTES));
     setCompositionPrompt(version.compositionPrompt);
     setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers, form));
   }
@@ -1528,7 +1524,7 @@ export default function SongWorkbenchPage() {
             <label className="song-output-card">
               <span className="song-output-card-head">
                 {isZh ? "翻译" : "Translation"}
-                <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as TranslationLanguage)}>
+                <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as LyricsTranslationLanguage)}>
                   {translationLanguages.map((language) => <option key={language}>{language}</option>)}
                 </select>
               </span>
@@ -1536,6 +1532,7 @@ export default function SongWorkbenchPage() {
             </label>
           </div>
           {translationGenerating ? <small className="field-note">{isZh ? "正在翻译歌词…" : "Translating lyrics..."}</small> : null}
+          {translationError ? <small className="field-note song-save-warning">{translationError}</small> : null}
         </section>
 
         <aside className="dashboard-panel song-ai-panel">
@@ -2093,25 +2090,11 @@ function trimPrompt(value: string, max: number) {
   return value.length <= max ? value : value.slice(0, max - 1).trimEnd();
 }
 
-function byteLength(value: string) {
-  return new TextEncoder().encode(value).length;
-}
-
-function trimPromptBytes(value: string, maxBytes: number) {
-  const encoder = new TextEncoder();
-  if (encoder.encode(value).length <= maxBytes) return value.trim();
-  let output = value.trim();
-  while (output && encoder.encode(output).length > maxBytes) {
-    output = output.slice(0, -1).trimEnd();
-  }
-  return output;
-}
-
 function mergeMusicPrompt(stylePrompt: string, compositionPrompt: string) {
   return trimPromptBytes([stylePrompt, compositionPrompt].map((item) => item.trim()).filter(Boolean).join(", "), MUSIC_PROMPT_MAX_BYTES);
 }
 
-function shouldSkipLyricsTranslation(value: string, targetLanguage: TranslationLanguage) {
+function shouldSkipLyricsTranslation(value: string, targetLanguage: LyricsTranslationLanguage) {
   return targetLanguage === "Chinese" && isMostlyChinese(value);
 }
 
