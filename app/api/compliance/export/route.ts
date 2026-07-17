@@ -5,33 +5,14 @@ import { apiError } from "@/lib/api/responses";
 import { contentKindForFormat, resolveFormatKey, runComplianceMarking } from "@/lib/compliance/adapter";
 import type { AdapterRequest } from "@/lib/compliance/adapter";
 import { createSupabaseSink } from "@/lib/compliance/log-writer";
-import type { ContentKind, JurisdictionProfile, VisibleDisclosureMode } from "@/lib/compliance/types";
+import { serverContentId } from "@/lib/compliance/manifest";
+import type { JurisdictionProfile } from "@/lib/compliance/types";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB
-
-const CONTENT_KINDS: readonly ContentKind[] = ["text", "image", "audio", "video", "document"];
-const DISCLOSURE_MODES: readonly VisibleDisclosureMode[] = ["none", "ui", "watermark", "end_card", "credits"];
-
-function textField(form: FormData, key: string): string {
-  const value = form.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function boolField(form: FormData, key: string): boolean | undefined {
-  const raw = textField(form, key);
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  return undefined;
-}
-
-function optionalField(form: FormData, key: string): string | undefined {
-  const value = textField(form, key);
-  return value || undefined;
-}
 
 function safeAsciiFileName(name: string): string {
   const cleaned = name.replace(/[^\w.-]+/g, "_");
@@ -77,37 +58,23 @@ export async function POST(request: NextRequest) {
 
     const fileName = file.name || "export.bin";
     const formatKey = resolveFormatKey(fileName);
-    const rawContentKind = textField(form, "contentKind") as ContentKind;
-    const contentKind: ContentKind = CONTENT_KINDS.includes(rawContentKind)
-      ? rawContentKind
-      : formatKey
-        ? contentKindForFormat(formatKey)
-        : "document";
-    const rawMode = textField(form, "visibleDisclosureMode") as VisibleDisclosureMode;
+    const contentKind = formatKey ? contentKindForFormat(formatKey) : "document";
+    const contentId = serverContentId(inputBytes);
 
     const adapterRequest: AdapterRequest = {
-      assetId: textField(form, "assetId"),
-      assetVersionId: textField(form, "assetVersionId"),
+      assetId: contentId,
+      assetVersionId: contentId,
       contentKind,
       inputPath: fileName,
       outputPath: fileName,
-      jurisdictionProfile: textField(form, "jurisdictionProfile") as JurisdictionProfile,
-      aiGenerated: boolField(form, "aiGenerated") as boolean,
-      aiModified: boolField(form, "aiModified") as boolean,
-      providerCode: textField(form, "providerCode"),
-      contentId: textField(form, "contentId"),
-      modelProvider: optionalField(form, "modelProvider"),
-      modelName: optionalField(form, "modelName"),
-      modelVersion: optionalField(form, "modelVersion"),
-      projectId: optionalField(form, "projectId"),
-      episodeId: optionalField(form, "episodeId"),
-      visibleDisclosureMode: DISCLOSURE_MODES.includes(rawMode) ? rawMode : "none",
+      jurisdictionProfile: "" as JurisdictionProfile,
+      aiGenerated: undefined as unknown as boolean,
+      aiModified: undefined as unknown as boolean,
+      providerCode: "KIIKIS",
+      contentId,
+      visibleDisclosureMode: "none",
       inputBytes,
-      extra: {
-        syntheticVoice: boolField(form, "syntheticVoice"),
-        voiceLicenseStatus: optionalField(form, "voiceLicenseStatus"),
-        referenceRightsStatus: optionalField(form, "referenceRightsStatus"),
-      },
+      extra: {},
     };
 
     const result = await runComplianceMarking(adapterRequest, {

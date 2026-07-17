@@ -30,7 +30,7 @@ export async function writePdf(
     const doc = await PDFDocument.load(inputBytes, { updateMetadata: false });
     doc.setProducer(PRODUCER);
     doc.setCreator(CREATOR);
-    doc.setTitle(`AI-marked export ${manifest.asset_id}`);
+    doc.setTitle(`AI-marked export ${manifest.content_id}`);
     doc.setSubject("AI-generated content disclosure (EU AI Act Art.50 / CN AIGC labeling rules)");
     const json = canonicalJson(manifest);
     // Single keyword entry carries the FULL canonical JSON manifest.

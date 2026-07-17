@@ -731,14 +731,6 @@ type CreateJobInput = {
   targetId?: string;
 };
 
-type UpdateJobInput = {
-  status?: GenerationJobStatus;
-  providerTaskId?: string;
-  resultUrl?: string;
-  resultMetadata?: Record<string, unknown>;
-  error?: string | null;
-};
-
 export function useGenerationJobs(
   session: ProductionSession,
   projectId: string,
@@ -746,7 +738,6 @@ export function useGenerationJobs(
   createJob: (input: CreateJobInput) => Promise<GenerationJob>;
   listJobs: (filters?: { status?: GenerationJobStatus; targetType?: string; targetId?: string; limit?: number }) => Promise<GenerationJob[]>;
   getJob: (jobId: string) => Promise<GenerationJob>;
-  updateJob: (jobId: string, patch: UpdateJobInput) => Promise<GenerationJob>;
   cancelJob: (jobId: string) => Promise<void>;
   pollActiveJobs: () => Promise<GenerationJob[]>;
   loading: boolean;
@@ -842,22 +833,6 @@ export function useGenerationJobs(
     }
   }, [callApi]);
 
-  const updateJob = useCallback(async (jobId: string, patch: UpdateJobInput): Promise<GenerationJob> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await callApi({ action: "update", jobId, patch });
-      if (!payload.job) throw new Error("更新任务失败。");
-      return parseJob(payload.job);
-    } catch (err) {
-      const friendly = friendlyNetworkError(err, "更新任务失败，请稍后再试。");
-      setError(friendly.message);
-      throw friendly;
-    } finally {
-      setLoading(false);
-    }
-  }, [callApi]);
-
   const cancelJob = useCallback(async (jobId: string): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -891,7 +866,7 @@ export function useGenerationJobs(
     }
   }, [callApi]);
 
-  return { createJob, listJobs, getJob, updateJob, cancelJob, pollActiveJobs, loading, error };
+  return { createJob, listJobs, getJob, cancelJob, pollActiveJobs, loading, error };
 }
 
 

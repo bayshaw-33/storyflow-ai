@@ -6,7 +6,7 @@ import { runComplianceMarking } from "../lib/compliance/adapter.ts";
 import { resolveComplianceFlags } from "../lib/compliance/feature-flags.ts";
 import { runExportGate } from "../lib/compliance/gate.ts";
 import { createMemorySink } from "../lib/compliance/log-writer.ts";
-import { buildAiManifest, canonicalJson, computeMetadataHash, sha256Hex } from "../lib/compliance/manifest.ts";
+import { buildAiManifest, canonicalJson, computeMetadataHash, serverContentId, sha256Hex } from "../lib/compliance/manifest.ts";
 import { verifyJpeg, writeJpeg } from "../lib/compliance/writers/jpeg.ts";
 import { stripId3v2, verifyMp3, writeMp3 } from "../lib/compliance/writers/mp3.ts";
 import { verifyMp4, writeMp4 } from "../lib/compliance/writers/mp4.ts";
@@ -97,6 +97,49 @@ test("manifest: canonicalJson is key-order independent and hash is 64-hex", () =
   const hash = computeMetadataHash(makeManifest());
   assert.match(hash, /^[0-9a-f]{64}$/);
   assert.equal(sha256Hex(new TextEncoder().encode("abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
+
+test("manifest: public payload excludes internal IDs and authorization evidence", () => {
+  const manifest = buildAiManifest(
+    makeRequest({
+      contentKind: "audio",
+      inputPath: "song.mp3",
+      outputPath: "song.mp3",
+      projectId: "project-private",
+      episodeId: "episode-private",
+    }),
+    {
+      createdAt: FIXED_TIME,
+      syntheticVoice: true,
+      voiceProfileRef: "voice-private",
+      voiceLicenseStatus: "licensed",
+    },
+  );
+  assert.deepEqual(
+    Object.keys(manifest).sort(),
+    [
+      "ai_generated",
+      "ai_modified",
+      "content_id",
+      "content_kind",
+      "created_at",
+      "jurisdiction_profile",
+      "model_name",
+      "model_provider",
+      "platform",
+      "provider_code",
+      "schema_version",
+      "synthetic_voice",
+      "visible_disclosure_mode",
+    ].sort(),
+  );
+});
+
+test("content id: server derives a stable ID from source bytes", () => {
+  const source = new TextEncoder().encode("same export payload");
+  assert.equal(serverContentId(source), `cid_${sha256Hex(source)}`);
+  assert.equal(serverContentId(source), serverContentId(source));
+  assert.notEqual(serverContentId(source), serverContentId(new TextEncoder().encode("different payload")));
 });
 
 // ---------------------------------------------------------------------------
@@ -377,15 +420,15 @@ test("gate: corrupt PNG input fails closed with machine_marking_failed", async (
   assert.equal(sink.runRows[0].decision, "failed");
 });
 
-test("gate: COMPLIANCE_EXPORT_GATE=false allows with every step skipped", async () => {
+test("gate: COMPLIANCE_EXPORT_GATE=false blocks formal export", async () => {
   const { gate, sink } = await runGateCase({ env: prodEnv({ COMPLIANCE_EXPORT_GATE: "false" }) });
-  assert.equal(gate.decision, "allowed");
-  for (const step of gate.steps) {
-    assert.equal(step.status, "skipped");
-    assert.equal(step.detail, "gate_disabled");
-  }
+  assert.equal(gate.decision, "blocked");
+  assert.equal(gate.blockingCode, "gate_disabled");
+  const download = gate.steps.find((step) => step.step === "allow_download");
+  assert.equal(download.status, "blocked");
+  assert.equal(download.detail, "gate_disabled");
   assert.equal(sink.runRows.length, 1);
-  assert.equal(sink.runRows[0].decision, "allowed");
+  assert.equal(sink.runRows[0].decision, "blocked");
   assert.equal(sink.labelRows.length, 0);
 });
 

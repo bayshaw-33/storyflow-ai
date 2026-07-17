@@ -68,6 +68,7 @@ export type GateStepCode =
   | "allow_download";
 
 export type BlockingCode =
+  | "gate_disabled"
   | "jurisdiction_missing"
   | "ai_status_unknown"
   | "machine_marking_failed"
@@ -95,8 +96,6 @@ export interface GateDecision {
 export interface AiManifest {
   schema_version: string;
   platform: string;
-  asset_id: string;
-  asset_version_id: string;
   content_kind: ContentKind;
   ai_generated: boolean;
   ai_modified: boolean;
@@ -106,13 +105,9 @@ export interface AiManifest {
   model_provider?: string;
   model_name?: string;
   model_version?: string;
-  project_id?: string;
-  episode_id?: string;
   created_at: string;
   visible_disclosure_mode: VisibleDisclosureMode;
   synthetic_voice?: boolean;
-  voice_profile_ref?: string;
-  voice_license_status?: string;
 }
 
 /** Extra inputs that do not belong on the wire-level MarkingRequest. */

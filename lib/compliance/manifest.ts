@@ -16,26 +16,20 @@ export function buildAiManifest(request: MarkingRequest, extra?: ComplianceExtra
   const manifest: AiManifest = {
     schema_version: AI_MANIFEST_SCHEMA_VERSION,
     platform: AI_MANIFEST_PLATFORM,
-    asset_id: request.assetId,
-    asset_version_id: request.assetVersionId,
     content_kind: request.contentKind,
     ai_generated: request.aiGenerated,
     ai_modified: request.aiModified,
     jurisdiction_profile: request.jurisdictionProfile,
     provider_code: request.providerCode,
     content_id: request.contentId,
-    model_provider: request.modelProvider,
-    model_name: request.modelName,
-    model_version: request.modelVersion,
-    project_id: request.projectId,
-    episode_id: request.episodeId,
     created_at: extra?.createdAt ?? new Date().toISOString(),
     visible_disclosure_mode: request.visibleDisclosureMode,
   };
+  if (request.modelProvider) manifest.model_provider = request.modelProvider;
+  if (request.modelName) manifest.model_name = request.modelName;
+  if (request.modelVersion) manifest.model_version = request.modelVersion;
   if (request.contentKind === "audio") {
     if (extra?.syntheticVoice !== undefined) manifest.synthetic_voice = extra.syntheticVoice;
-    if (extra?.voiceProfileRef) manifest.voice_profile_ref = extra.voiceProfileRef;
-    if (extra?.voiceLicenseStatus) manifest.voice_license_status = extra.voiceLicenseStatus;
   }
   return manifest;
 }
@@ -61,6 +55,11 @@ export function canonicalJson(value: unknown): string {
 
 export function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Stable public identity derived only from server-observed source bytes. */
+export function serverContentId(bytes: Uint8Array): string {
+  return `cid_${sha256Hex(bytes)}`;
 }
 
 /** sha256 hex of canonicalJson(manifest). */

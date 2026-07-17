@@ -1,5 +1,49 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-17 22:42 - Codex / KIIKIS-CX-G0-001B Gate 0A Blocker Patch
+
+### 本次目标
+- 修复 Formal Export fail-open、客户端可信事实/Job 完成状态伪造、Content ID、RLS 与公开 metadata 边界；不执行 Gate 0B。
+
+### 已完成
+- `COMPLIANCE_EXPORT_GATE=false` 改为审计后 `blocked / gate_disabled`，`allow_download` 明确阻断。
+- 旧 multipart 合规导出入口不再读取客户端提交的法域、AI 来源、Provider/模型、Content ID、声音授权或参考权利；服务端按源文件 SHA-256 生成稳定 `cid_<sha256>`。服务端可信 Export Request 未接通前，该旧入口保持 fail-closed。
+- 删除客户端 generation job 任意 update API/hook，保留独立 cancel；RLS 将 generation jobs、compliance profiles、label records、compliance runs、exports 改为 authenticated 仅 owner SELECT、service role 写。
+- 公开 AI manifest 移除 asset/project/episode 内部 ID、voice profile 与 license 状态；私有审计表仍保留验证所需字段。
+- 将 TRAE Content ID 占位 UUID 改为强制接收服务端计算的 64-hex payload SHA-256。
+
+### 修改文件
+- `app/api/compliance/export/route.ts`
+- `app/api/production/jobs/route.ts`
+- `lib/compliance/{gate,manifest,types}.ts`
+- `lib/compliance/writers/{jpeg,pdf}.ts`
+- `lib/production/hooks.ts`
+- `lib/exports/content-id.ts`
+- `supabase/migrations/20260718030000_harden_compliance_trust_boundaries.sql`
+- `tests/compliance-marking.test.mjs`
+- `tests/compliance-trust-boundaries.test.mjs`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `pnpm run build`：通过（77/77 静态页面）；为共享工作树中 TRAE 的 3 个 0 字节在途 route 临时补 `export {}` 后验证，这些占位文件不纳入本提交。
+- 测试：定向安全测试 36/36；`node --test tests/*.test.mjs` 109/109；`pnpm exec tsc --noEmit` 通过；`git diff --check` 通过。
+- 实测/截图：非 UI 任务；安全 grep 确认旧 route 不再解析 13 个客户端可信字段，Job update 入口不存在。
+- 未验证的部分：未对 staging/production 执行 migration（禁止生产写）；未执行 Gate 0B；TRAE/Kimi 并行链路尚未集成。
+
+### Git 信息
+- commit：待提交。
+- 推送锁放行时间：按用户长期指令直接推送，不再等待 Claw 锁。
+
+### 未完成 / 风险
+- TRAE 的 `supabase/migrations/drafts/20260718020000_exports_compliance_fields.sql` 仍是初稿；其中 authenticated 写策略与 storage owner CRUD 不得作为 Formal Export 权威边界。即使后续保留 UI 策略，也必须保证本次 REVOKE 不被重新 GRANT。
+- 旧 `/api/compliance/export` 有意保持阻断，直至 Export Request 从服务端权威记录解析 jurisdiction、AI origin、voice/reference rights；不得重新接回客户端表单字段。
+
+### 给下一位
+- TRAE 在 Request API 中先服务端序列化 payload 并计算 SHA-256，再调用 `generateContentId`；不得接受客户端 payloadHash 或可信完成状态。
+- Kimi 原子发布链只能在 Gate `allowed + verified` 后 bind/release；下载签名不能绕过本次 RLS 与 Gate。
+
+---
+
 ## 2026-07-17 22:24 - Codex / P0S-03 歌词翻译与 Suno 字节限制
 
 ### 本次目标

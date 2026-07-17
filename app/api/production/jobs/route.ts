@@ -25,14 +25,6 @@ type JobRow = {
   completed_at: string | null;
 };
 
-type UpdatePatch = {
-  status?: string;
-  providerTaskId?: string | null;
-  resultUrl?: string | null;
-  resultMetadata?: Record<string, unknown>;
-  error?: string | null;
-};
-
 const TABLE = "/rest/v1/storyflow_generation_jobs";
 
 function badRequest(message: string) {
@@ -93,9 +85,6 @@ export async function POST(request: NextRequest) {
     }
     if (action === "get") {
       return await handleGet(userId, data);
-    }
-    if (action === "update") {
-      return await handleUpdate(userId, data);
     }
     if (action === "cancel") {
       return await handleCancel(userId, data);
@@ -194,61 +183,6 @@ async function handleGet(userId: string, data: Record<string, unknown>) {
   }
 
   return NextResponse.json({ success: true, job: jobs[0] });
-}
-
-async function handleUpdate(userId: string, data: Record<string, unknown>) {
-  const jobId = typeof data.jobId === "string" ? data.jobId.trim() : "";
-  if (!assertUuid(jobId)) {
-    return badRequest("缺少必要参数。");
-  }
-
-  const patch = (data.patch && typeof data.patch === "object" ? data.patch : {}) as UpdatePatch;
-
-  const updatePayload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (typeof patch.status === "string" && patch.status.trim()) {
-    updatePayload.status = patch.status.trim();
-    if (patch.status === "completed" || patch.status === "failed") {
-      updatePayload.completed_at = new Date().toISOString();
-    }
-  }
-  if (typeof patch.providerTaskId === "string") {
-    updatePayload.provider_task_id = patch.providerTaskId;
-  } else if (patch.providerTaskId === null) {
-    updatePayload.provider_task_id = null;
-  }
-  if (typeof patch.resultUrl === "string") {
-    updatePayload.result_url = patch.resultUrl;
-  } else if (patch.resultUrl === null) {
-    updatePayload.result_url = null;
-  }
-  if (patch.resultMetadata && typeof patch.resultMetadata === "object") {
-    updatePayload.result_metadata = patch.resultMetadata;
-  }
-  if (typeof patch.error === "string") {
-    updatePayload.error = patch.error;
-  } else if (patch.error === null) {
-    updatePayload.error = null;
-  }
-
-  const rows = await serviceFetch<JobRow[]>(
-    `${TABLE}?id=eq.${encodeURIComponent(jobId)}&owner_id=eq.${encodeURIComponent(userId)}`,
-    {
-      method: "PATCH",
-      headers: {
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify(updatePayload),
-    },
-  );
-
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return notFound();
-  }
-
-  return NextResponse.json({ success: true, job: rows[0] });
 }
 
 async function handleCancel(userId: string, data: Record<string, unknown>) {

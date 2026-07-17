@@ -264,9 +264,12 @@ export async function runExportGate(input: GateInput, deps: GateDeps): Promise<G
     setStep(step, "failed", detail);
   };
 
-  // --- Gate master switch: disabled → allow, but still audit the run. ---
+  // --- Gate master switch: disabling enforcement must never authorize export. ---
   if (!flags.COMPLIANCE_EXPORT_GATE) {
     for (const code of GATE_STEP_ORDER) setStep(code, "skipped", "gate_disabled");
+    decision = "blocked";
+    blockingCode = "gate_disabled";
+    setStep("allow_download", "blocked", "gate_disabled");
     return finish(null);
   }
 

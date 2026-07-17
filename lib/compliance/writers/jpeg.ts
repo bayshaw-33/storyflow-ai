@@ -18,8 +18,6 @@ export const KIIKIS_XMP_NS = "https://kiikis.ai/ns/ai-manifest/0.1/";
 const XMP_FIELD_KEYS = [
   "schema_version",
   "platform",
-  "asset_id",
-  "asset_version_id",
   "content_kind",
   "ai_generated",
   "ai_modified",
@@ -29,13 +27,9 @@ const XMP_FIELD_KEYS = [
   "model_provider",
   "model_name",
   "model_version",
-  "project_id",
-  "episode_id",
   "created_at",
   "visible_disclosure_mode",
   "synthetic_voice",
-  "voice_profile_ref",
-  "voice_license_status",
 ] as const;
 
 export function escapeXml(value: string): string {
