@@ -1,5 +1,6 @@
 import type { DramaProject } from "./projects.ts";
 import { assembleNovel, assembleScreenplay } from "./creation/assembly.ts";
+import { buildTranslationSource } from "./creation/screenplay.ts";
 
 export const CREATIVE_HANDOFF_STORAGE_KEY = "kiikis_creative_handoff_v1";
 
@@ -34,15 +35,19 @@ export function buildCreativeHandoffPackage(
   sourceUnitId?: string,
 ): CreativeHandoffPackage {
   const workspace = project.creationWorkspace;
+  const activeTrack = workspace?.[contentType === "script" ? "screenplay" : "novel"];
+  const activeUnit = sourceUnitId ? activeTrack?.units.find((unit) => unit.id === sourceUnitId) : undefined;
   const novelManuscript = workspace?.novel.units.length
     ? assembleNovel(workspace, "original", project.title).markdown
     : project.novelChapters?.map((chapter) => chapter.draft).filter(Boolean).join("\n\n") || project.novelChapterDraft || "";
   const scriptManuscript = workspace?.screenplay.units.length
     ? assembleScreenplay(workspace, "original", workspace.settings.screenplayFormat, project.title).markdown
     : project.finalScript || project.chineseScript || project.existingScript || project.importedScript || "";
-  const activeTrack = workspace?.[contentType === "script" ? "screenplay" : "novel"];
-  const translation = activeTrack?.units.map((unit) => unit.translation).filter(Boolean).join("\n\n") || project.translation || "";
-  const localization = activeTrack?.units.map((unit) => unit.localizedContent).filter(Boolean).join("\n\n") || project.localization || "";
+  const scopedManuscript = activeUnit && workspace
+    ? buildTranslationSource(workspace, contentType === "script" ? "screenplay" : "novel", activeUnit)
+    : "";
+  const translation = activeUnit?.translation || activeTrack?.units.map((unit) => unit.translation).filter(Boolean).join("\n\n") || project.translation || "";
+  const localization = activeUnit?.localizedContent || activeTrack?.units.map((unit) => unit.localizedContent).filter(Boolean).join("\n\n") || project.localization || "";
   return {
     version: 1,
     sourceProjectId: project.id,
@@ -54,7 +59,7 @@ export function buildCreativeHandoffPackage(
     projectBackground: workspace?.documents.backgroundWorld.content || project.novelBrief || project.brief || project.idea || "",
     worldAndOutline: workspace?.documents.plotOutline.content || project.novelBible || project.outline || "",
     characterBible: workspace?.documents.characterBible.content || project.novelCharacters || project.characters || "",
-    manuscript: contentType === "script" ? scriptManuscript : novelManuscript,
+    manuscript: scopedManuscript || (contentType === "script" ? scriptManuscript : novelManuscript),
     translation,
     localization,
     createdAt: new Date().toISOString(),
@@ -76,7 +81,7 @@ export function parseCreativeHandoff(
     if (value.version !== 1 || !value.sourceProjectId || !value.title || !value.contentType) return null;
     if (sourceProjectId && value.sourceProjectId !== sourceProjectId) return null;
     // BLOCKER 3: 若调用方传了 sourceUnitId，必须与 handoff 包内一致
-    if (sourceUnitId && value.sourceUnitId && value.sourceUnitId !== sourceUnitId) return null;
+    if (sourceUnitId && value.sourceUnitId !== sourceUnitId) return null;
     return value as CreativeHandoffPackage;
   } catch {
     return null;

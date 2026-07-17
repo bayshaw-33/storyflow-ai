@@ -1,5 +1,51 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-17 23:xx - Codex / KIIKIS-P1-CODEX-001B 稳定保存与关键补丁
+
+### 本次目标
+- 冻结第一阶段 Scene/Shot/Asset 契约；关闭 Shot ID 漂移与“先删后写”保存风险；提供 revision/CAS state API 与不可变 snapshot；对 TRAE 当前集交接做 Stage B 快速复查。
+
+### 已完成
+- 首个共享契约提交：`91ef3fd`，新增 `lib/storyboard/contracts.ts`，覆盖 Scene、Shot、Asset Usage、Analyze/Prompt/Save/Snapshot/Merge/Revision Conflict；临时 ID 与服务端 UUID 明确分离。
+- 新增 `save_storyboard_state` RPC：按 `owner_id + project_id + source_unit_id` 锁定作用域、比对 `expectedRevision`、事务内 upsert Scene/Shot、返回 `clientId → serverId` 映射、以 tombstone 删除 Scene/Shot；陈旧 revision 抛出 `REVISION_CONFLICT:<n>`。
+- 新增 `GET/PUT /api/storyboard/state` 与 `POST /api/storyboard/snapshots`；服务端只使用认证用户 ID，PUT 将 revision conflict 返回 HTTP 409。
+- 迁移新增 `storyflow_production_scenes`，扩展既有 production shots 而非另建旧工作台模型；RLS 明确 `TO authenticated` 只读，RPC 仅 `service_role` 可执行。回滚脚本为非破坏性停用 RPC，不删除创作数据。
+- Stage B 直接修复 TRAE handoff：要求 `sourceUnitId` 完整匹配，并让指定当前集仅传该单元的正文/译文/本土化内容。
+
+### 修改文件
+- `lib/storyboard/contracts.ts`（首个 commit）
+- `lib/storyboard/state-api.ts`
+- `app/api/storyboard/state/route.ts`
+- `app/api/storyboard/snapshots/route.ts`
+- `supabase/migrations/20260717152816_storyboard_stable_state.sql`
+- `supabase/migrations/rollback/20260717152816_storyboard_stable_state.sql`
+- `lib/creative-handoff.ts`
+- `tests/storyboard-*.test.*`
+- `tests/creative-handoff-scope.test.mjs`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `pnpm run test:unit`：128/128 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `pnpm run build`：通过（78/78 静态页面）。
+- `git diff --check`：通过。
+- Supabase 本地 RPC/pgTAP：未执行；`supabase status` 显示 Docker daemon 未运行。未执行 staging/production migration（禁止远端写）。
+
+### Git 信息
+- contracts commit：`91ef3fd`（已推送）。
+- 本实现 commit：待提交。
+- push：按用户长期指令直接推送，不等待 Claw 锁。
+
+### 未完成 / 风险
+- TRAE 必须将 ProductionWorkbench 的旧 `/api/production/save-state` 调用切换到 `/api/storyboard/state`，并用响应 `idMap` 替换本地临时 ID；在完成该集成前，旧保存链路仍不应视为 Alpha 主链。
+- Kimi 的 analyze/prompts/图片生成必须只使用 `sourceUnitId`、服务端稳定 Shot ID 与已选 asset version；本卡不实现 Provider 链。
+
+### 给下一位
+- 在 Docker/local Supabase 或 staging 可用后，先执行 migration 再补 pgTAP：首次保存 UUID、二次保存不变、插入失败回滚、409、跨项目/跨集、tombstone、snapshot 不改当前态。
+- Stage B 已关闭 handoff 的两个明确串集漏洞；待 TRAE 接入新 API 后，Codex 再审 UI 的 autosave/409/idMap 应用。
+
+---
+
 ## 2026-07-17 - Codex / KIIKIS-P1-CODEX-001 阶段 A 分镜链路快审
 
 ### 本次目标
