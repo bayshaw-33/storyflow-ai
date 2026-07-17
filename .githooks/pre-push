@@ -1,0 +1,48 @@
+#!/bin/sh
+# KIIKIS pre-push hook (trunk-based + feature branches)
+# Rejects push if local build fails.
+# Allows: main, feat/*, fix/* branches.
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+echo "🔒 Running pre-push checks..."
+
+# 1. Branch check — allow main, feat/*, fix/*
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+case "$current_branch" in
+    main|feat/*|fix/*)
+        ;;
+    *)
+        echo "${RED}❌ Pre-push rejected: branch '$current_branch' not allowed. Use main, feat/*, or fix/*.${NC}"
+        exit 1
+        ;;
+esac
+
+# 2. Pull --rebase only on main (feature branches track their own remote)
+if [ "$current_branch" = "main" ]; then
+    echo "⬇️  git pull --rebase origin main..."
+    if ! git pull --rebase origin main 2>/dev/null; then
+        echo "${RED}❌ Pre-push rejected: git pull --rebase failed. Resolve conflicts first.${NC}"
+        exit 1
+    fi
+fi
+
+# 3. Build check
+echo "🔨 Running pnpm run build..."
+if ! pnpm run build >/dev/null 2>&1; then
+    echo "${RED}❌ Pre-push rejected: build failed. Fix before pushing.${NC}"
+    exit 1
+fi
+
+# 4. TypeScript check
+echo "📐 Running TypeScript check..."
+if ! pnpm exec tsc --noEmit >/dev/null 2>&1; then
+    echo "${RED}❌ Pre-push rejected: TypeScript errors. Fix before pushing.${NC}"
+    exit 1
+fi
+
+echo "${GREEN}✅ Pre-push checks passed. Pushing...${NC}"
+exit 0
