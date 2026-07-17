@@ -544,7 +544,12 @@ export async function exportProjectAsMarkdown(userId: string, projectId: string)
   return markdown;
 }
 
-async function buildExportPayload(userId: string, projectId: string) {
+/**
+ * 构造项目导出 payload（不含 recordExport 副作用）。
+ * 新的 Export Request API (KIIKIS-TR-G0-002) 调用此函数取得原始 payload，
+ * 再交给 ComplianceMarkingAdapter 走 Gate。
+ */
+export async function buildExportPayload(userId: string, projectId: string) {
   const project = await requireProjectAccess(userId, projectId);
   const [steps, characters, episodes, localizationDiffs, dramaScores] = await Promise.all([
     listProjectSteps(userId, projectId),
@@ -568,6 +573,13 @@ async function buildExportPayload(userId: string, projectId: string) {
   };
 }
 
+/**
+ * 把项目导出 payload 渲染为 Markdown 文本（不含 recordExport 副作用）。
+ */
+export function renderExportMarkdown(payload: Awaited<ReturnType<typeof buildExportPayload>>) {
+  return renderExportMarkdownImpl(payload);
+}
+
 async function recordExport(userId: string, projectId: string, exportType: "json" | "markdown", payload: unknown) {
   await serviceFetch("/rest/v1/storyflow_exports", {
     method: "POST",
@@ -585,7 +597,7 @@ async function recordExport(userId: string, projectId: string, exportType: "json
   });
 }
 
-function renderExportMarkdown(payload: Awaited<ReturnType<typeof buildExportPayload>>) {
+function renderExportMarkdownImpl(payload: Awaited<ReturnType<typeof buildExportPayload>>) {
   const project = payload.project;
   const bible = payload.storyBible;
   const lines = [
