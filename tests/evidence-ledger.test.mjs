@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import JSZip from "jszip";
 
 const migrationPath = new URL("../supabase/migrations/20260719000000_evidence_ledger.sql", import.meta.url);
 
@@ -80,4 +81,51 @@ test("ledger accepts only allowlisted, scoped facts and detects tampering", asyn
     () => ledger.record({ ...received[0], payload: { providerResponse: "private" } }),
     /EVIDENCE_SENSITIVE_PAYLOAD_KEY/,
   );
+});
+
+test("evidence package is private, scoped and excludes sensitive data", async () => {
+  const { materializeEvidencePackage, signEvidencePackage } = await import("../lib/evidence/package.ts");
+  const { computeEvidenceEventHash } = await import("../lib/evidence/ledger.ts");
+  const objects = new Map();
+  const rows = [];
+  const eventInput = {
+    ownerId: "owner-1",
+    projectId: "project-1",
+    sourceUnitId: "episode-1",
+    eventType: "storyboard_snapshot_saved",
+    subjectType: "storyboard_snapshot",
+    subjectId: "snapshot-1",
+    subjectVersionId: "4",
+    payload: { revision: 4, sceneCount: 2 },
+    idempotencyKey: "snapshot-1",
+  };
+  const occurredAt = "2026-07-18T00:00:00.000Z";
+  const event = {
+    id: "event-1", case_id: "case-1", owner_id: "owner-1", project_id: "project-1", source_unit_id: "episode-1",
+    sequence_number: 1, event_type: eventInput.eventType, subject_type: eventInput.subjectType, subject_id: eventInput.subjectId,
+    subject_version_id: eventInput.subjectVersionId, payload: eventInput.payload, object_sha256: null, previous_event_hash: null,
+    occurred_at: occurredAt, idempotency_key: eventInput.idempotencyKey,
+    event_hash: computeEvidenceEventHash({ ...eventInput, sequenceNumber: 1, previousEventHash: null, occurredAt }),
+  };
+  const store = {
+    async getCase() { return { id: "case-1", last_event_hash: event.event_hash }; },
+    async listDocuments() { return []; },
+    async getPackage(sha) { return rows.find((row) => row.package_sha256 === sha) ?? null; },
+    async getPackageById(ownerId, packageId) { return rows.find((row) => row.owner_id === ownerId && row.id === packageId) ?? null; },
+    async insertPackage(row) { rows.push({ id: "package-1", ...row }); return rows.at(-1); },
+    async upload(path, bytes) { if (objects.has(path)) throw new Error("exists"); objects.set(path, bytes); },
+    async download() { throw new Error("not used"); },
+    async sign(path, ttl) { return { url: `https://example.test/${path}`, expiresIn: ttl }; },
+  };
+
+  const created = await materializeEvidencePackage({ ownerId: "owner-1", projectId: "project-1", sourceUnitId: "episode-1", events: [event] }, store);
+  assert.equal(created.highest_sequence_number, 1);
+  assert.match(created.storage_path, /^owner-1\/packages\/[0-9a-f]{64}\.zip$/);
+  const zip = await JSZip.loadAsync(objects.get(created.storage_path));
+  assert.deepEqual(Object.keys(zip.files).sort(), ["manifest.json", "timeline.json"]);
+  const timeline = await zip.file("timeline.json").async("string");
+  assert.doesNotMatch(timeline, /providerResponse|email|token|internal/i);
+  const signed = await signEvidencePackage({ packageId: created.id, requesterId: "owner-1", store });
+  assert.equal(signed.expiresIn, 300);
+  await assert.rejects(() => signEvidencePackage({ packageId: created.id, requesterId: "owner-2", store }), /EVIDENCE_PACKAGE_NOT_FOUND/);
 });

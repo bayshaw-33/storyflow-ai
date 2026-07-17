@@ -57,3 +57,15 @@ export interface EvidencePackageRow {
   status: "ready" | "failed";
   created_at: string;
 }
+
+export interface EvidenceDocumentRow {
+  id: string;
+  case_id: string;
+  owner_id: string;
+  document_type: "rights_declaration" | "authorization" | "assignment" | "registration_receipt";
+  file_name: string;
+  storage_bucket: string;
+  storage_path: string;
+  sha256: string;
+  created_at: string;
+}
