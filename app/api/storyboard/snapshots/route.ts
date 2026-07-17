@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/supabase/server";
+import { recordEvidenceEvent } from "@/lib/evidence/ledger";
+import { snapshotEvidenceEvent } from "@/lib/evidence/hooks";
 import { RevisionConflictError, createStoryboardSnapshot } from "@/lib/storyboard/state-api";
 import type { SnapshotRequest } from "@/lib/storyboard/contracts";
 
@@ -20,6 +22,15 @@ export async function POST(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
     const snapshot = await createStoryboardSnapshot(user.id, body);
+    await recordEvidenceEvent(snapshotEvidenceEvent({
+      ownerId: user.id,
+      projectId: body.projectId,
+      sourceUnitId: body.sourceUnitId,
+      snapshotId: snapshot.snapshotId,
+      revision: snapshot.revision,
+      reason: body.reason,
+      sceneCount: body.scenes.length,
+    }));
     return NextResponse.json({ success: true, ...snapshot });
   } catch (error) {
     if (error instanceof RevisionConflictError) {

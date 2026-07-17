@@ -16,6 +16,8 @@ import { NextResponse } from "next/server";
 import { authenticateRequest, serviceFetch } from "@/lib/supabase/server";
 import { resolveVideoProvider } from "@/lib/ai/video/provider";
 import { persistVideoArtifact } from "@/lib/ai/video/storage";
+import { recordEvidenceEvent } from "@/lib/evidence/ledger";
+import { completedGenerationEvidenceEvent } from "@/lib/evidence/hooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -199,6 +201,19 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
             completedAt: new Date().toISOString(),
           },
         };
+        const scopedInput = job.input_params as { projectId?: unknown; sourceUnitId?: unknown };
+        if (typeof scopedInput.projectId === "string" && scopedInput.projectId && typeof scopedInput.sourceUnitId === "string" && scopedInput.sourceUnitId) {
+          await recordEvidenceEvent(completedGenerationEvidenceEvent({
+            ownerId: userId,
+            projectId: scopedInput.projectId,
+            sourceUnitId: scopedInput.sourceUnitId,
+            jobId: job.id,
+            jobType: "video",
+            targetId: job.target_id || job.id,
+            provider: job.provider,
+            durationSeconds,
+          }));
+        }
       } else if (result.status === "error") {
         await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
           method: "PATCH",

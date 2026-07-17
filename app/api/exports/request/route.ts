@@ -27,6 +27,8 @@ import { createSupabaseSink } from "@/lib/compliance/log-writer";
 import { serverContentId } from "@/lib/compliance/manifest";
 import type { JurisdictionProfile, VisibleDisclosureMode } from "@/lib/compliance/types";
 import { uploadExportArtifact } from "@/lib/exports/storage";
+import { recordEvidenceEvent } from "@/lib/evidence/ledger";
+import { exportEvidenceEvent } from "@/lib/evidence/hooks";
 import type {
   AiOrigin,
   ExportRequestInput,
@@ -279,6 +281,18 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       }),
     });
+
+    if (input.episodeId?.trim()) {
+      await recordEvidenceEvent(exportEvidenceEvent({
+        ownerId: user.id,
+        projectId: input.projectId,
+        sourceUnitId: input.episodeId,
+        exportId,
+        exportType,
+        contentId,
+        metadataHash: metadataHash || null,
+      }));
+    }
 
     const response: ExportRequestResponse = {
       exportId,

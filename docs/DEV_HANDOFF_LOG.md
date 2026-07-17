@@ -1,5 +1,42 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 05:08 +08 - Codex / Evidence Ledger 与私有证据包
+
+### 本次目标
+- 实现无感、可验证的 Project + Episode 证据留痕，以及按需下载的私有证据包。
+
+### 已完成
+- 新增 append-only Evidence Ledger migration：Case、Event、Document、Package 四张表与私有 `evidence-artifacts` bucket。
+- Event 由 service-role-only RPC 在事务中锁定 Case、递增 sequence、计算 SHA-256 链并写入；authenticated 只有 owner-scoped SELECT，Event trigger 拒绝更新与删除。
+- 新增服务器 Evidence Ledger 契约：只接收 snapshot/generation/reference/export/package 五类事件，拒绝 prompt、URL、path、token、email、embedding、biometric、provider response 等敏感 payload 字段。
+- 新增 `POST /api/evidence/packages` 和 `GET /api/evidence/packages/:packageId/download`：按固定 Event 高水位生成 allowlist ZIP（manifest/timeline/可校验权属文件），以内容 hash 存入私有 bucket，下载 URL 最长 300 秒。
+- 已接入权威作用域完整的自动事件：快照保存、视频成功且已转存、带 `episodeId` 的正式导出。主参考选择接口没有 Episode 作用域，刻意不写 Evidence Event，避免跨集留痕。
+
+### 修改文件
+- `supabase/migrations/20260719000000_evidence_ledger.sql`
+- `lib/evidence/*`
+- `app/api/evidence/packages/*`
+- `app/api/storyboard/snapshots/route.ts`
+- `app/api/storyboard/jobs/[jobId]/route.ts`
+- `app/api/exports/request/route.ts`
+- `tests/evidence-ledger.test.mjs`
+
+### 验证结果
+- `node --test tests/evidence-ledger.test.mjs`：4/4 通过（schema/RLS、敏感字段拒绝、链篡改检测、ZIP 隔离/TTL、hook payload）。
+- `pnpm exec tsc --noEmit`：通过。
+- staging migration / 真实 Storage 下载：待本代码提交并在 staging 应用新 migration 后执行；production 零写入。
+
+### Git 信息
+- commits：`4f252c4`、`0b3469c`、`e7074c8`；自动 hook 与交接待提交。
+- 推送锁：按用户长期指令直接推送；仍须通过本地 pre-push build/typecheck。
+
+### 未完成 / 风险
+- 现有主参考选择路由缺少 `sourceUnitId`，不能安全产生 Episode 证据事件；需在未来请求契约中补齐该服务器可验证作用域，不能使用 project/global fallback。
+- 视频转存失败仍是既有 MUST FIX；该路径不会写 `generation_completed` evidence event。
+
+### 给下一位
+- 应用 `20260719000000_evidence_ledger.sql` 仅限 staging 后先做真实 POST/package/download 验证；不要为方便接入而放宽 Event 的 server-only 与不可变约束。
+
 ## 2026-07-18 19:50 +08 - TRAE / 制作工作台 PRD 三项紧急任务 + 收尾
 
 ### 本次目标

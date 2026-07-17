@@ -129,3 +129,25 @@ test("evidence package is private, scoped and excludes sensitive data", async ()
   assert.equal(signed.expiresIn, 300);
   await assert.rejects(() => signEvidencePackage({ packageId: created.id, requesterId: "owner-2", store }), /EVIDENCE_PACKAGE_NOT_FOUND/);
 });
+
+test("authoritative hooks only form scoped, server-derived evidence facts", async () => {
+  const { completedGenerationEvidenceEvent, exportEvidenceEvent, snapshotEvidenceEvent } = await import("../lib/evidence/hooks.ts");
+  const snapshot = snapshotEvidenceEvent({
+    ownerId: "owner-1", projectId: "project-1", sourceUnitId: "episode-1", snapshotId: "snapshot-1",
+    revision: 5, reason: "manual", sceneCount: 3,
+  });
+  assert.deepEqual(snapshot.payload, { revision: 5, reason: "manual", sceneCount: 3 });
+  assert.equal(snapshot.idempotencyKey, "snapshot:snapshot-1");
+  const generation = completedGenerationEvidenceEvent({
+    ownerId: "owner-1", projectId: "project-1", sourceUnitId: "episode-1", jobId: "job-1", jobType: "video",
+    targetId: "shot-1", provider: "atlas", durationSeconds: 5,
+  });
+  assert.equal(generation.payload.prompt, undefined);
+  assert.equal(generation.idempotencyKey, "generation:job-1");
+  const exported = exportEvidenceEvent({
+    ownerId: "owner-1", projectId: "project-1", sourceUnitId: "episode-1", exportId: "export-1",
+    exportType: "json", contentId: "cid_1", metadataHash: "a".repeat(64),
+  });
+  assert.equal(exported.objectSha256, "a".repeat(64));
+  assert.equal(exported.payload.storagePath, undefined);
+});
