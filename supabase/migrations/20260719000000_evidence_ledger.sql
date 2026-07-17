@@ -122,6 +122,7 @@ DECLARE
   v_existing public.storyflow_evidence_events;
   v_event public.storyflow_evidence_events;
   v_occurred_at timestamptz := now();
+  v_occurred_at_text text;
   v_event_hash text;
 BEGIN
   IF p_project_id = '' OR p_source_unit_id = '' OR p_subject_type = '' OR p_subject_id = '' OR p_idempotency_key = '' THEN
@@ -158,6 +159,7 @@ BEGIN
     RETURN v_existing;
   END IF;
 
+  v_occurred_at_text := to_char(v_occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
   v_event_hash := encode(digest(convert_to(concat_ws('|',
     COALESCE(v_case.last_event_hash, ''),
     v_case.next_sequence_number::text,
@@ -167,7 +169,7 @@ BEGIN
     COALESCE(p_subject_version_id, ''),
     COALESCE(p_payload, '{}'::jsonb)::text,
     COALESCE(p_object_sha256, ''),
-    v_occurred_at::text
+    v_occurred_at_text
   ), 'UTF8'), 'sha256'), 'hex');
 
   INSERT INTO public.storyflow_evidence_events (
