@@ -1,5 +1,46 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 18:00 - TRAE / P3 任务 1-3 Atlas Cloud + DB 幂等 + CDN 转存 + legacy 清缴
+
+### 本次目标
+- 任务 1：视频 Provider 切换 Atlas Cloud（uploadMedia→generateVideo→prediction 轮询；薄抽象 submit/poll/download；env VIDEO_PROVIDER 切换；API key 只走 env）
+- 任务 2：视频链路硬补丁（DB 幂等唯一约束 + CDN 临时 URL 转存 Supabase Storage；migration + 回滚脚本交 Codex staging 执行）
+- 任务 3：收尾（清缴 legacy /api/production/save-state 残留；E2E 补 Atlas 场景 + MUST FIX 验证）
+
+### 已完成（commit `7f7a5b5`）
+- `lib/ai/video/provider.ts`：VideoProvider 薄抽象 + async resolveVideoProvider（dynamic import 避 webpack 路径问题）+ computeVideoIdempotencyHash（sha256）
+- `lib/ai/video/atlas.ts`：Atlas Cloud 实现，兼容 data.outputs[0] string | data.output.video_url
+- `lib/ai/video/minimax-adapter.ts`：MiniMax 适配器（保留可切换）
+- `lib/ai/video/storage.ts`：persistVideoArtifact 下载→upload Storage→签名 URL，禁止绑 provider 临时 URL
+- `app/api/storyboard/jobs/[jobId]/route.ts`：provider.poll + done 时 Storage 转存 + pollByProviderName（旧 job 兼容，用 @/ alias dynamic import）
+- `app/api/storyboard/shots/[shotId]/generate-video/route.ts`：服务端解析 firstframe + idempotencyHash + provider.submit
+- `components/production/ProductionWorkbench.tsx`：videoJobsRef 修 stale closure + listVideoJobs 刷新恢复 + batchSubmitVideos accumulator
+- `lib/storyboard/client.ts`：generateVideo 签名移除 firstframeImageUrl、加 aspectRatio
+- `supabase/migrations/20260718100000_video_idempotency_and_storage.sql`：幂等唯一约束 + storyboard-videos bucket + RLS
+- `supabase/migrations/rollback/20260718100000_video_idempotency_and_storage.sql`：非破坏性回滚
+- `tests/storyboard-video-atlas-e2e.test.mjs`：12 场景 E2E（A1-A4 + M1-M7）
+
+### 关键决策
+- resolveVideoProvider 改 async + dynamic import()：解决 webpack 在 [jobId] 动态路由下无法解析相对路径 require 的问题
+- pollByProviderName 用 @/ alias dynamic import：5 级相对路径在 [jobId] 下解析错误，改用 alias
+- minimax-adapter 移除未用的 resolveSavedApiConfig import：消除 @/lib 在 Node.js 测试环境的解析问题
+- .ts 扩展名：lib/ai/video/ 内部 import 用 .ts（兼容 Node.js 测试），route.ts 用 @/ alias（兼容 webpack）
+
+### 验证结果
+- `npx tsc --noEmit`：0 错误。
+- `pnpm build`：通过。
+- `node --test tests/*.test.mjs`：214/214 通过（含 12 atlas e2e + 199 storyboard + 3 state-api）。
+
+### Git 信息
+- commit：`7f7a5b5`（基于 `ba73a45`）。
+- P3 完整 commit range：`bdc971e..7f7a5b5`（BLOCKER v2 + 任务 1-3）。
+- 分支：`feat/p3-blocker-v2-snapshot` → FF merge 到 main。
+
+### 待办 / 风险
+- migration 脚本待 Codex 在 staging 执行（TRAE 不自行执行迁移）。
+- 真实浏览器环境 E2E 走查需用户环境验证（代码层面已就绪）。
+- 闸门解除待 Codex 保存链路回归确认（H0-H3 单测已过）。
+
 ## 2026-07-18 17:35 - TRAE / P3 BLOCKER v2 — 移除 CAS bypass + 扩展 snapshot API
 
 ### 本次目标
