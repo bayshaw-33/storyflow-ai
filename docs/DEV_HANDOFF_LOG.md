@@ -1,5 +1,25 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 +08 - Codex / production production-workbench schema recovery
+
+### Completed
+- Confirmed production target `StoryFlow` (`vgcafbzksizlwmylphzu`) is healthy and took the read-only metadata snapshot in `docs/reviews/2026-07-18-production-pre-video-and-delivery-snapshot.md` before any write.
+- Production history differs from staging: it already contains the stable storyboard and export-release migrations under legacy timestamp versions, while the baseline is not recorded. Therefore `db push --include-all` would incorrectly replay baseline DDL over existing production objects and was intentionally not used.
+- Applied only the two additive, staging-rehearsed migrations through the authenticated Supabase Management API:
+  - `20260718100000_video_idempotency_and_storage.sql`
+  - `20260719100000_add_storyflow_projects_delivery_package.sql`
+- Recorded both as applied in production migration history.
+- Post-write verification: `storyflow_projects.delivery_package` is `text`; `storyflow_generation_jobs` has `idempotency_hash` and `storage_path`; all three video indexes, private `storyboard-videos` bucket, and both owner policies exist.
+- Restored the local Supabase CLI link to `kiikis-staging` (`cwpyolxitkcpitqizgtq`).
+
+### Online checks
+- `https://www.kiikis.com/`: HTTP 200.
+- Unauthenticated `POST /api/storyboard/analyze`: HTTP 401 as expected; it confirms the deployed route is reachable but is not a substitute for the authenticated “陨神之墓” production flow.
+- GitHub CI for `4143735`: success.
+
+### Remaining verification
+- Re-run “陨神之墓” analysis and Creation cloud-sync with the authorised production user session. No test account session was available locally, and no user project content was modified to fabricate this evidence.
+
 ## 2026-07-18 +08 - Codex / embedded art-draft project isolation
 
 ### Completed

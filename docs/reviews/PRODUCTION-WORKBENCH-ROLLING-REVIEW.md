@@ -27,6 +27,10 @@ The CLI link was verified as `cwpyolxitkcpitqizgtq` (`kiikis-staging`) before mi
 - Successful transfers store a seven-day signed URL, but no completed-job re-sign path uses `storage_path`; an expired URL remains `completed` and cannot be refreshed. Add server-side re-signing before UI/export access.
 - Independently verify in staging the database unique-conflict return path, confirmed-first-frame resolution, refresh restoration, batch totals, and the full download → private Storage → re-sign lifecycle. Injected-fetch tests do not prove these external effects.
 
+## Production migration status
+
+Production has legacy migration-history versions and existing baseline tables, so it must not receive `db push --include-all`. On 2026-07-18, the two additive migrations needed by the deployed workbench were applied via the Supabase Management API and recorded in history: `20260718100000_video_idempotency_and_storage` and `20260719100000_add_storyflow_projects_delivery_package`. Post-write queries confirmed `delivery_package text`, the two video columns, three indexes, a private `storyboard-videos` bucket, and both owner policies. The pre-write metadata snapshot is in `docs/reviews/2026-07-18-production-pre-video-and-delivery-snapshot.md`. Authenticated real-project replay remains required before unified acceptance.
+
 ## Resolved MUST FIX
 
 - [x] `expectedRevision: null` runtime regression: `7a617f8` extracts the validator used by `PUT /api/storyboard/state`; M4 executes it and rejects `null`, `undefined`, negative, string, and `NaN` revisions. The route returns 400 on that false result.
