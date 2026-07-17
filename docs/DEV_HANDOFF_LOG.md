@@ -1,5 +1,45 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-17 22:24 - Codex / P0S-03 歌词翻译与 Suno 字节限制
+
+### 本次目标
+- 保证歌词翻译只回填当前目标语言的有效结果，并让所有 Suno style prompt 入口严格不超过 1000 UTF-8 bytes。
+
+### 已完成
+- 抽取统一 UTF-8 字节裁剪工具，覆盖手工输入、AI 主生成、AI 修订、项目恢复和历史版本预览；不会切断 emoji 等多字节字符。
+- 翻译请求接入 `AbortSignal`，切换歌词、目标语言、模型或项目时取消旧请求，避免迟到结果覆盖当前译文。
+- 空翻译和请求失败改为独立错误提示，不再把错误文本写进译文正文；源歌词已是中文时直接回填原文。
+- 新增 999/1000/1001 bytes、空响应、取消传播、真实页面恢复与翻译回填测试，并保存双语并排截图。
+
+### 修改文件
+- `app/song-workbench/page.tsx`
+- `lib/song/prompt.ts`
+- `lib/song/translation.ts`
+- `tests/song-prompt.test.mjs`
+- `tests/song-translation.test.mjs`
+- `e2e/song-workbench-p0s03.spec.ts`
+- `docs/uat/p0s-03-lyrics-translation-zh.png`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `pnpm run build`：通过（77/77 静态页面生成完成）。
+- 测试：`node --test tests/*.test.mjs` 104/104 通过；Chromium E2E 12/12 通过；P0S-03 定向 E2E 2/2 通过。
+- 实测/截图：英文原歌词与中文译文正确并排回填；Suno prompt 恢复后显示 `1000/1000 bytes`；截图为 `docs/uat/p0s-03-lyrics-translation-zh.png`。
+- 未验证的部分：AI 翻译 E2E 使用受控 API 响应，不消耗真实模型额度；未运行 WebKit/Firefox。
+
+### Git 信息
+- commit：本条记录同 P0S-03 提交。
+- 推送锁放行时间：按用户长期指令直接推送，不再等待 Claw 锁。
+
+### 未完成 / 风险
+- `pnpm run test:unit` 的目录参数兼容问题仍属于 P0-07，本卡未修改。
+- 工作区中的 `.writetest.tmp` 与 `supabase/migrations/drafts/20260718020000_exports_compliance_fields.sql` 为其他任务在途文件，本提交不包含。
+
+### 给下一位
+- 翻译回填逻辑必须继续保留取消信号和空响应保护；任何新增 style prompt 回填入口必须调用 `trimPromptBytes`。
+
+---
+
 ## 2026-07-17 22:08 - Codex / P0-02 Dashboard 入口死链验收
 
 ### 本次目标
