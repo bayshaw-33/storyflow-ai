@@ -69,6 +69,7 @@ import {
 import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 import { ExportMenu } from "./ExportMenu";
 import { StoryboardExportMenu } from "./StoryboardExportMenu";
+import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
 import type { ProductionProjectState } from "@/lib/production/types";
 import styles from "./ProductionWorkbench.module.css";
 
@@ -101,7 +102,8 @@ export function ProductionWorkbench() {
   const [projectTitle, setProjectTitle] = useState<string>("");
   const [manuscript, setManuscript] = useState<string>("");
   const [sourceFiles, setSourceFiles] = useState<ProductionSourceFile[]>([]);
-  const [scopeError, setScopeError] = useState<string>("");
+  const [isEmptyState, setIsEmptyState] = useState(false);
+  const [entryMode, setEntryMode] = useState<EntryMode>("planning");
   const [notice, setNotice] = useState<string>("");
 
   // --- Storyboard 状态（contracts.ts）---
@@ -154,9 +156,14 @@ export function ProductionWorkbench() {
     const urlProjectId = params.get("projectId");
     const urlSourceUnitId = params.get("sourceUnitId");
     if (!urlProjectId || !urlSourceUnitId) {
-      setScopeError("缺少 projectId 或 sourceUnitId 参数。请从剧本工作台「生成分镜」按钮进入。");
+      // 空状态页：按入口 mode 决定初始 Tab（planning → 分镜表 / editor → 分镜图）
+      const mode = params.get("mode") === "editor" ? "editor" : "planning";
+      setEntryMode(mode);
+      setActiveTab(mode === "editor" ? "frames" : "table");
+      setIsEmptyState(true);
       return;
     }
+    setIsEmptyState(false);
     setProjectId(urlProjectId);
     setSourceUnitId(urlSourceUnitId);
 
@@ -1021,17 +1028,22 @@ export function ProductionWorkbench() {
   // Render
   // -------------------------------------------------------------------
 
-  if (scopeError) {
+  if (isEmptyState) {
     return (
-      <main className={styles.shell}>
-        <div style={{ padding: "64px 24px", textAlign: "center", color: "#ff6b6b" }}>
-          <h2 style={{ fontSize: 20, marginBottom: 12 }}>无法进入分镜制作台</h2>
-          <p style={{ fontSize: 14, marginBottom: 24 }}>{scopeError}</p>
-          <button className={styles.secondaryButton} type="button" onClick={() => router.push("/creation-workbench")}>
-            返回剧本工作台
-          </button>
-        </div>
-      </main>
+      <ProductionEmptyState
+        supabaseClient={supabaseClient}
+        entryMode={entryMode}
+        onPickProject={(pid, suId) => {
+          setIsEmptyState(false);
+          setProjectId(pid);
+          setSourceUnitId(suId);
+          // 更新 URL（不刷新页面），让后续 useEffect 正常触发
+          const url = new URL(window.location.href);
+          url.searchParams.set("projectId", pid);
+          url.searchParams.set("sourceUnitId", suId);
+          window.history.replaceState({}, "", url.toString());
+        }}
+      />
     );
   }
 
@@ -1184,6 +1196,15 @@ export function ProductionWorkbench() {
             onReanalyzeScene={(sceneId) => analyzeScript("scene", sceneId)}
             onClearConflict={() => setConflictRevision(null)}
           />
+        ) : null}
+        {activeTab === "assets" ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+            {projectId && (
+              <a href={`/art-workbench?handoff=creative&sourceProjectId=${encodeURIComponent(projectId)}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--ink-secondary)", textDecoration: "none" }}>
+                在美术工作台打开 →
+              </a>
+            )}
+          </div>
         ) : null}
         {activeTab === "assets" ? (
           <ArtAssetsPanel
