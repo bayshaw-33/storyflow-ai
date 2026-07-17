@@ -308,7 +308,7 @@ BEGIN
       'jimengPromptEn', shot.jimeng_prompt_en, 'storyboardImageVersionId', shot.storyboard_image_version_id,
       'locked', shot.locked, 'userEdited', shot.user_edited, 'confirmed', shot.confirmed,
       'revision', shot.revision, 'analysisVersion', shot.analysis_version, 'sourceHash', shot.source_hash
-    ) ORDER BY shot.index), '[]'::jsonb)
+    ) ORDER BY shot.index)
     FROM public.storyflow_production_shots shot
     WHERE shot.scene_id = scene.id AND shot.deleted_at IS NULL), '[]'::jsonb)
   ) ORDER BY scene.sort_order), '[]'::jsonb)
@@ -369,7 +369,7 @@ BEGIN
       'jimengPromptEn', shot.jimeng_prompt_en, 'storyboardImageVersionId', shot.storyboard_image_version_id,
       'locked', shot.locked, 'userEdited', shot.user_edited, 'confirmed', shot.confirmed,
       'revision', shot.revision, 'analysisVersion', shot.analysis_version, 'sourceHash', shot.source_hash
-    ) ORDER BY shot.index), '[]'::jsonb)
+    ) ORDER BY shot.index)
     FROM public.storyflow_production_shots shot
     WHERE shot.scene_id = scene.id AND shot.deleted_at IS NULL), '[]'::jsonb)
   ) ORDER BY scene.sort_order), '[]'::jsonb)
