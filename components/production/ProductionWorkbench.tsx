@@ -28,7 +28,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { AlertTriangle, Clock, Cpu, Film, Save, Users, X } from "lucide-react";
+import { AlertTriangle, Clock, Cpu, Film, Save, Settings, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -67,7 +67,6 @@ import {
   type ShotFrameMap,
 } from "./StoryboardPanels";
 import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
-import { ExportMenu } from "./ExportMenu";
 import { StoryboardExportMenu } from "./StoryboardExportMenu";
 import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
 import type { ProductionProjectState } from "@/lib/production/types";
@@ -141,6 +140,7 @@ export function ProductionWorkbench() {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [showModelRegistry, setShowModelRegistry] = useState(false);
+  const [showSecondaryMenu, setShowSecondaryMenu] = useState(false);
   const [versionList, setVersionList] = useState<VersionRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [versionDiff, setVersionDiff] = useState<VersionDiffResult | null>(null);
@@ -1073,10 +1073,7 @@ export function ProductionWorkbench() {
           ))}
         </nav>
         <div className={styles.actionRow}>
-          <button className={styles.secondaryButton} type="button" onClick={() => setShowVersionHistory(true)}><Clock size={16} /> 版本</button>
-          <button className={styles.secondaryButton} type="button" onClick={() => setShowTeamPanel(true)}><Users size={16} /> 团队</button>
-          <button className={styles.secondaryButton} type="button" onClick={() => setShowModelRegistry(true)}><Cpu size={16} /> 模型</button>
-          <button className={styles.secondaryButton} type="button" onClick={saveToServer} disabled={saving}>
+          <button className={styles.primaryButton} type="button" onClick={saveToServer} disabled={saving}>
             <Save size={16} /> {saving ? "保存中..." : "保存"}
           </button>
           <StoryboardExportMenu
@@ -1087,53 +1084,81 @@ export function ProductionWorkbench() {
             revision={revision}
             videoJobs={videoJobs}
           />
-          <ExportMenu
-            state={{
-              id: projectId,
-              projectId,
-              title: projectTitle,
-              workflowType: "storyboard",
-              contentType: "short_drama",
-              aspectRatio: "9:16",
-              language: "zh",
-              sourceFiles,
-              sourceSummary: manuscript,
-              storyBrief: { logline: "", targetPlatform: "", targetAudience: "", storySummary: "", notes: "" },
-              visualBible: { visualStyle: "", colorPalette: "", cameraRules: "", characterRules: "", sceneRules: "", negativePrompt: "" },
-              shots: [],
-              mode: "planning",
-              providers: { imageProvider: "minimax", videoProvider: "minimax" },
-              chatMessages: [],
-              history: [],
-              casting: {},
-              updatedAt: new Date().toISOString(),
-            }}
-          />
+          <div className={styles.secondaryMenu}>
+            <button
+              type="button"
+              className={`${styles.secondaryMenuTrigger} ${showSecondaryMenu ? styles.secondaryMenuTriggerActive : ""}`}
+              onClick={() => setShowSecondaryMenu((v) => !v)}
+              aria-expanded={showSecondaryMenu}
+              aria-haspopup="menu"
+            >
+              <Settings size={16} /> 更多
+            </button>
+            {showSecondaryMenu ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="关闭菜单"
+                  onClick={() => setShowSecondaryMenu(false)}
+                  style={{ position: "fixed", inset: 0, border: 0, background: "transparent", cursor: "default", zIndex: 25 }}
+                />
+                <div className={styles.secondaryMenuDropdown} role="menu">
+                  <button
+                    type="button"
+                    className={styles.secondaryMenuItem}
+                    onClick={() => { setShowVersionHistory(true); setShowSecondaryMenu(false); }}
+                    role="menuitem"
+                  >
+                    <Clock size={14} /> 版本历史
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.secondaryMenuItem}
+                    onClick={() => { setShowTeamPanel(true); setShowSecondaryMenu(false); }}
+                    role="menuitem"
+                  >
+                    <Users size={14} /> 团队
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.secondaryMenuItem}
+                    onClick={() => { setShowModelRegistry(true); setShowSecondaryMenu(false); }}
+                    role="menuitem"
+                  >
+                    <Cpu size={14} /> 模型注册表
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </header>
 
       {notice ? (
-        <div role="status" style={noticeStyle}>
-          {notice}
-          <button type="button" onClick={() => setNotice("")} style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", marginLeft: 8 }} aria-label="关闭">
+        <div
+          role="status"
+          className={`${styles.notice} ${notice.includes("失败") || notice.includes("拒绝") || notice.includes("错误") ? styles.noticeError : styles.noticeSuccess}`}
+        >
+          <span>{notice}</span>
+          <button type="button" className={styles.noticeClose} onClick={() => setNotice("")} aria-label="关闭">
             <X size={14} />
           </button>
         </div>
       ) : null}
 
       {conflictRevision !== null ? (
-        <div role="alert" style={conflictStyle}>
-          <AlertTriangle size={14} style={{ marginRight: 6, flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>数据已在别处更新</div>
-            <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.9 }}>
+        <div role="alert" className={styles.conflict}>
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div className={styles.conflictBody}>
+            <div className={styles.conflictTitle}>数据已在别处更新</div>
+            <div className={styles.conflictDesc}>
               服务器当前 revision 为 {conflictRevision}，本地期望 {revision}。本地数据未被覆盖，请选择如何处理：
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <div className={styles.conflictActions}>
               <button
                 type="button"
                 className={styles.primaryButton}
-                style={{ padding: "4px 10px", fontSize: 12 }}
+                style={{ padding: "4px 12px", fontSize: 12, minHeight: 28 }}
                 onClick={loadLatestAndClearConflict}
                 disabled={saving}
               >
@@ -1142,7 +1167,7 @@ export function ProductionWorkbench() {
               <button
                 type="button"
                 className={styles.secondaryButton}
-                style={{ padding: "4px 10px", fontSize: 12 }}
+                style={{ padding: "4px 12px", fontSize: 12, minHeight: 28 }}
                 onClick={saveAsSnapshot}
                 disabled={saving}
               >
@@ -1150,9 +1175,10 @@ export function ProductionWorkbench() {
               </button>
               <button
                 type="button"
+                className={styles.noticeClose}
                 onClick={() => setConflictRevision(null)}
-                style={{ background: "transparent", border: 0, color: "inherit", cursor: "pointer", padding: "4px 8px", fontSize: 12 }}
                 aria-label="关闭"
+                style={{ padding: "4px 8px" }}
               >
                 <X size={14} />
               </button>
@@ -1198,16 +1224,15 @@ export function ProductionWorkbench() {
           />
         ) : null}
         {activeTab === "assets" ? (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
-            {projectId && (
-              <a href={`/art-workbench?handoff=creative&sourceProjectId=${encodeURIComponent(projectId)}`} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--ink-secondary)", textDecoration: "none" }}>
-                在美术工作台打开 →
-              </a>
-            )}
-          </div>
-        ) : null}
-        {activeTab === "assets" ? (
-          <ArtAssetsPanel
+          <>
+            <div className={styles.assetsHeader}>
+              {projectId ? (
+                <a className={styles.assetsHeaderLink} href={`/art-workbench?handoff=creative&sourceProjectId=${encodeURIComponent(projectId)}`}>
+                  在美术工作台打开 →
+                </a>
+              ) : null}
+            </div>
+            <ArtAssetsPanel
             assets={assets}
             candidates={candidates}
             generatingAssetId={generatingAssetId}
@@ -1216,6 +1241,7 @@ export function ProductionWorkbench() {
             onUploadReplacement={uploadAssetReplacement}
             onAssetClick={(assetId) => setNotice(`资产 ${assetId} 关联的 Shot：${scenes.flatMap((s) => s.shots).filter((sh) => sh.characterAssetIds.includes(assetId) || sh.sceneAssetId === assetId || sh.propAssetIds.includes(assetId)).map((sh) => sh.id ?? sh.clientId).join(", ") || "无"}`)}
           />
+          </>
         ) : null}
         {activeTab === "frames" ? (
           <ShotFramesPanel
@@ -1269,31 +1295,3 @@ export function ProductionWorkbench() {
     </main>
   );
 }
-
-const noticeStyle: React.CSSProperties = {
-  margin: "12px 24px 0",
-  padding: "10px 14px",
-  borderRadius: 10,
-  background: "rgba(117, 219, 198, 0.12)",
-  border: "1px solid rgba(117, 219, 198, 0.35)",
-  color: "#75dbc6",
-  fontSize: 13,
-  fontWeight: 600,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-};
-
-const conflictStyle: React.CSSProperties = {
-  margin: "12px 24px 0",
-  padding: "12px 14px",
-  borderRadius: 10,
-  background: "rgba(255, 107, 107, 0.12)",
-  border: "1px solid rgba(255, 107, 107, 0.35)",
-  color: "#ff6b6b",
-  fontSize: 13,
-  fontWeight: 600,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-};

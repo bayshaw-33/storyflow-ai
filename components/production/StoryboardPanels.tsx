@@ -712,8 +712,8 @@ export function ShotFramesPanel(props: ShotFramesPanelProps) {
 
   return (
     <section style={panelStyle}>
-      {/* 任务 2：批量视频按钮区 */}
-      <div style={{ marginBottom: 12, padding: "10px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>
+      {/* 任务 2：批量视频按钮区（吸顶） */}
+      <div style={{ position: "sticky", top: 64, zIndex: 10, marginBottom: 12, padding: "10px 12px", border: `1px solid ${borderColor}`, borderRadius: 8, background: "rgba(24, 24, 27, 0.92)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
         <div style={{ display: "flex", gap: 6, marginBottom: batchProgress ? 8 : 0, flexWrap: "wrap" }}>
           <button type="button" style={secondaryButtonStyle} onClick={onBatchAll} disabled={batchRunning}>
             生成全部视频
