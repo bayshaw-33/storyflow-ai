@@ -1,5 +1,40 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 01:29 - Codex / 制作工作台安全与验证滚动审查
+
+### 本次目标
+- 按新的制作工作台 PRD 复核 `719c9a0..b6adf17`，把安全项与统一验收项分离。
+
+### 已完成
+- 新增滚动清单 `docs/reviews/PRODUCTION-WORKBENCH-ROLLING-REVIEW.md`；仅保留安全 BLOCKER，其余视频可靠性问题转入 MUST FIX，不阻塞 TRAE 后续功能开发。
+- 确认 `expectedRevision: null` 通过 API 到达 RPC 后，PostgreSQL NULL 比较会跳过唯一 CAS 判断并继续写当前态；所谓“另存快照”没有写不可变版本，结论为必须移除该绕过口。
+- 明确 Supabase CLI 当前 production link 只能阻止 migration 执行，不能作为 TRAE 功能开发的中途门禁。
+- 完成不回显凭证的受跟踪源码扫描：未发现原始 `apikey-<hex>` 凭证或 `NEXT_PUBLIC_` Atlas/MiniMax 变量；两类 provider key 仅由服务端 `process.env` 读取。
+
+### 修改文件
+- `docs/reviews/PRODUCTION-WORKBENCH-ROLLING-REVIEW.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `node --test tests/storyboard-state-api.test.mjs tests/storyboard-e2e-scenarios.test.mjs tests/storyboard-video-e2e.test.mjs`：32/32 通过。
+- `node --test tests/*.test.mjs`：199/199 通过。
+- `npx tsc --noEmit`：通过。
+- `pnpm build`：通过（仅有既有 `LOGO_PRIMARY` orphan token 警告，不影响构建）。
+- `git diff --check 719c9a0..b6adf17`：通过。
+- staging migration：未执行；当前 link 为 production，遵守零 production 写入。
+
+### Git 信息
+- commit：待提交。
+- 推送锁放行时间：按用户长期指令直接推送，不等待 Claw 锁。
+
+### 未完成 / 风险
+- 安全 BLOCKER：必须先移除 `expectedRevision: null` 对当前态保存的 CAS 绕过，再允许该保存链路进入内部生产使用。
+- MUST FIX：视频 job DB 幂等、Provider URL 转存、已确认首帧权威解析、刷新恢复、真实 staging 覆盖。
+
+### 给下一位
+- TRAE 可继续其余功能开发；统一验收前逐项关闭 MUST FIX。
+- migration 作者在 staging link/凭证明确后，再由 Codex 执行 migration + 非破坏性回滚演练，禁止 production 写入。
+
 ## 2026-07-18 09:xx - TRAE / KIIKIS-P2-TRAE-002 闸门+视频生成+批量+导出+E2E
 
 ### 本次目标
