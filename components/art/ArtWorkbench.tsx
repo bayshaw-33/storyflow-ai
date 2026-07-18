@@ -8,17 +8,11 @@ import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
-import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
+import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ArtWorkbench.module.css";
 import collapseStyles from "./ArtWorkbenchCollapse.module.css";
-
-export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
-
-function getArtWorkbenchStorageKey(projectId?: string) {
-  return projectId ? `${ART_WORKBENCH_STORAGE_KEY}:${projectId}` : ART_WORKBENCH_STORAGE_KEY;
-}
 
 function getArtWorkbenchArchivePrefix(storageKey: string) {
   return `${storageKey}__archive_`;
@@ -88,9 +82,11 @@ type ArtWorkbenchProps = {
   /** 嵌入模式：制作工作台美术 Tab 传入的项目上下文（任务 2 合并） */
   contextProjectId?: string;
   contextProjectTitle?: string;
+  /** PRD §7.2：嵌入美术台必须同时携带 sourceUnitId，scope 不能只有 project */
+  contextSourceUnitId?: string;
 };
 
-export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: ArtWorkbenchProps = {}) {
+export default function ArtWorkbench({ contextProjectId, contextProjectTitle, contextSourceUnitId }: ArtWorkbenchProps = {}) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
@@ -108,7 +104,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
   const [isHydrated, setIsHydrated] = useState(false);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
-  const storageKey = getArtWorkbenchStorageKey(contextProjectId);
+  const storageKey = getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId);
 
   useEffect(() => {
     setIsHydrated(false);
@@ -207,7 +203,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
     }
     setIsHydrated(true);
     return () => listener?.subscription.unsubscribe();
-  }, [contextProjectId, contextProjectTitle, isZh, storageKey]);
+  }, [contextProjectId, contextProjectTitle, contextSourceUnitId, isZh, storageKey]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -416,7 +412,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle }: 
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -432,7 +428,7 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
   return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function AssetCard({ asset, onDelete, isZh }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean }) {
+function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string }) {
   const image = useMemo(() => {
     // 优先使用已设为终稿的版本图；否则取最新生成的版本图
     const masterVariant = asset.variants?.find((item) => item.type === "master");
@@ -443,9 +439,18 @@ function AssetCard({ asset, onDelete, isZh }: { asset: ArtAsset; onDelete?: (id:
     // 回退到资产级字段（仅在未使用 variants 结构时）
     return asset.referenceSheetUrl || asset.threeViewUrl || asset.conceptUrl;
   }, [asset]);
+  // PRD §7.2 / §12.3：资产卡详情链接必须携带 projectId + sourceUnitId，详情页使用同一 scoped storage key
+  const assetDetailHref = useMemo(() => {
+    const path = `/art-workbench/assets/${encodeURIComponent(asset.id)}`;
+    if (scopeProjectId && scopeSourceUnitId) {
+      const params = new URLSearchParams({ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId });
+      return `${path}?${params.toString()}`;
+    }
+    return path;
+  }, [asset.id, scopeProjectId, scopeSourceUnitId]);
   return (
     <div className={styles.assetCardWrapper}>
-      <Link className={styles.assetCard} href={`/art-workbench/assets/${encodeURIComponent(asset.id)}`}>
+      <Link className={styles.assetCard} href={assetDetailHref}>
         <div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div>
         <div className={styles.assetTitle}><strong>{asset.name}</strong><span className={asset.status === "ready" ? styles.ready : ""}>{asset.status === "ready" ? "已锁定" : asset.status === "generating" ? "生成中" : asset.status === "error" ? "失败" : "草稿"}</span></div>
         <p>{asset.role || asset.description || "尚未填写设计说明"}</p>

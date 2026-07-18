@@ -1,5 +1,26 @@
 import type { DramaProject } from "@/lib/projects";
 
+/**
+ * 美术工作台本地草稿的 localStorage key 工具。
+ *
+ * PRD §7.2 / §4.1：嵌入美术台必须按 projectId + sourceUnitId 进行作用域隔离，
+ * 不得使用全局 key，否则跨项目/跨集会串资产。资产详情页必须使用与嵌入工作台
+ * 完全相同的 scoped key，避免"找不到资产"。
+ */
+export const ART_WORKBENCH_STORAGE_KEY = "kiikis_art_workbench_state";
+
+/**
+ * 派生美术工作台的 localStorage key。
+ * - 两参都给：`kiikis_art_workbench_state:<projectId>:<sourceUnitId>`（嵌入模式 / 制作工作台美术 Tab）
+ * - 仅 projectId：`kiikis_art_workbench_state:<projectId>`（旧独立美术台兼容）
+ * - 都不给：`kiikis_art_workbench_state`（全局 fallback，不推荐）
+ */
+export function getArtWorkbenchStorageKey(projectId?: string, sourceUnitId?: string): string {
+  if (projectId && sourceUnitId) return `${ART_WORKBENCH_STORAGE_KEY}:${projectId}:${sourceUnitId}`;
+  if (projectId) return `${ART_WORKBENCH_STORAGE_KEY}:${projectId}`;
+  return ART_WORKBENCH_STORAGE_KEY;
+}
+
 export type ArtAssetKind = "character" | "scene" | "prop";
 export type ArtCharacterPriority = "lead" | "supporting" | "minor";
 export type ArtAssetStatus = "draft" | "generating" | "ready" | "error";

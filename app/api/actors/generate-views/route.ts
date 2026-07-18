@@ -84,7 +84,6 @@ export async function GET(request: NextRequest) {
       return {
         versionId: row.id,
         previewUrl: await signStoredArtImage(row.storage_path),
-        storagePath: row.storage_path,
         provider: row.provider || "atlas",
         model: row.model || "",
         prompt: row.prompt || "",
@@ -180,7 +179,6 @@ export async function POST(request: NextRequest) {
 
     const versions = generatedVersions.map((version, index) => ({
       versionId: inserted[index]?.versionId || "",
-      storagePath: version.storagePath,
       previewUrl: version.previewUrl,
       provider: version.provider,
       model: version.model,

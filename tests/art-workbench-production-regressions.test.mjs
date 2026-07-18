@@ -30,13 +30,20 @@ test("setup entry resets stale local state and cloud projects are merged", async
   assert.match(component, /mergeArtProjects/);
 });
 
-test("embedded art workbench scopes local drafts and archives to the project", async () => {
-  const component = await read("../components/art/ArtWorkbench.tsx");
+test("embedded art workbench scopes local drafts and archives to the project + source unit", async () => {
+  const [component, lib] = await Promise.all([
+    read("../components/art/ArtWorkbench.tsx"),
+    read("../lib/art-workbench.ts"),
+  ]);
 
-  assert.match(component, /function getArtWorkbenchStorageKey\(projectId\?: string\)/);
-  assert.match(component, /\$\{ART_WORKBENCH_STORAGE_KEY\}:\$\{projectId\}/);
-  assert.match(component, /const storageKey = getArtWorkbenchStorageKey\(contextProjectId\)/);
+  // PRD §7.2：scoped key 函数已抽到 lib/art-workbench.ts，签名包含 sourceUnitId
+  assert.match(lib, /export function getArtWorkbenchStorageKey\(projectId\?: string, sourceUnitId\?: string\)/);
+  assert.match(lib, /\$\{ART_WORKBENCH_STORAGE_KEY\}:\$\{projectId\}:\$\{sourceUnitId\}/);
+  // 组件必须用 contextProjectId + contextSourceUnitId 派生 scoped key
+  assert.match(component, /const storageKey = getArtWorkbenchStorageKey\(contextProjectId, contextSourceUnitId\)/);
   assert.match(component, /getArtWorkbenchArchiveIndexKey\(storageKey\)/);
+  // 资产卡链接必须携带 projectId + sourceUnitId
+  assert.match(component, /new URLSearchParams\(\{ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId \}\)/);
 });
 
 test("reference images are uploaded and sent to MiniMax as image_url content", async () => {

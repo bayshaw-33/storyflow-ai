@@ -6,11 +6,10 @@ import { useParams, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
+import { getArtWorkbenchStorageKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
 import { ART_MODEL_CATALOG, findDefaultArtModel } from "@/lib/art/providers/catalog";
 import styles from "./ArtAssetDetail.module.css";
 
-const STORAGE_KEY = "kiikis_art_workbench_state";
 const REFERENCE_SHEET_PROMPT = "为选定的角色母版图生成专业完整角色参考表。纯白色无缝背景上干净整洁的网格布局。包含主全身体态转面图（正面、3/4 视角、侧面、背面）；主体身份与比例尺；右上角 6-8 色调色板；8 帧情绪进阶；5 帧微表情；多角度头部细节表；中性站姿与姿态变化；1 张特写；底部一排服装和配饰细节，包括头发质地、外套面料、鞋子和配饰；多种手势参考；角色轮廓指南。所有画面保持人物脸部和身体比例一致。4:3 横版，布局完美对齐。";
 
 export default function ArtAssetDetail() {
@@ -21,6 +20,8 @@ export default function ArtAssetDetail() {
   const ctxProjectId = searchParams.get("projectId") || "";
   const ctxSourceUnitId = searchParams.get("sourceUnitId") || "";
   const ctxSetup = searchParams.get("setup") === "1";
+  // PRD §7.2：详情页必须使用与嵌入工作台完全相同的 scoped storage key（projectId + sourceUnitId）
+  const storageKey = getArtWorkbenchStorageKey(ctxProjectId || undefined, ctxSourceUnitId || undefined);
   const backToArtHref = ctxProjectId && ctxSourceUnitId
     ? `/production?projectId=${encodeURIComponent(ctxProjectId)}&sourceUnitId=${encodeURIComponent(ctxSourceUnitId)}&mode=art`
     : `/production?mode=art${ctxSetup ? "&setup=1" : ""}`;
@@ -41,7 +42,7 @@ export default function ArtAssetDetail() {
     void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") as ArtWorkbenchState | null;
+      const stored = JSON.parse(localStorage.getItem(storageKey) || "null") as ArtWorkbenchState | null;
       const found = stored?.assets.find((item) => item.id === assetId) || null;
       if (stored && found) {
         const variants = found.variants?.length ? found.variants : [{ id: crypto.randomUUID(), name: found.kind === "character" ? "角色母版" : found.kind === "scene" ? "场景母版" : "道具母版", type: "master" as const, prompt: found.kind === "character" ? REFERENCE_SHEET_PROMPT : found.prompt, versions: legacyVersions(found) }];
@@ -79,7 +80,7 @@ export default function ArtAssetDetail() {
     if (!state) return;
     const nextState = { ...state, assets: state.assets.map((item) => item.id === next.id ? next : item), updatedAt: new Date().toISOString() };
     setState(nextState);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
+    try { localStorage.setItem(storageKey, JSON.stringify(nextState)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
   }
 
   function patchAsset(patch: Partial<ArtAsset>) {

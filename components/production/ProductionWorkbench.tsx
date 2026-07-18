@@ -1374,7 +1374,7 @@ export function ProductionWorkbench() {
           />
         ) : null}
         {activeTab === "assets" ? (
-          <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} />
+          <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} />
         ) : null}
         {activeTab === "frames" ? (
           <ShotFramesPanel
