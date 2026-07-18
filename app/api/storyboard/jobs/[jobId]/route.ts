@@ -1,21 +1,38 @@
 /**
  * GET /api/storyboard/jobs/:jobId
  *
- * 任务卡：KIIKIS-P3-TRAE-003 §1+§2
+ * 任务卡：KIIKIS-P3-TRAE-003 §1+§2 + PRD §9 TRAE-PW-P0-005（fail-closed 状态机）
  *
- * 返回 job 当前状态。如果 video job 处于 running 且有 provider_task_id：
- *   1. resolveVideoProvider().poll() 主动刷新 provider
- *   2. done 时：download bytes → persistVideoArtifact 转存到 Supabase Storage
- *      → PATCH job with status=completed + result_url=signedUrl + storage_path
- *      禁止直接绑 provider 临时 URL（Codex MUST FIX）
- *   3. error 时：PATCH job with status=failed
- * provider poll 失败不致命，返回当前 DB 状态 + warning。
+ * 返回 job 当前状态。视频 job 按以下状态机处理：
+ *
+ * 1. running + provider_task_id → poll provider once
+ *    - done → download + upload + sign（PRD §9.1 完整链）
+ *      - 全部成功 → status=completed + result_url=signedUrl + storage_path
+ *      - download/upload 失败 → status=result_ingesting + result_url=null + storage_path=null
+ *      - sign 失败（upload 已成功）→ status=partial_failure + result_url=null + storage_path=已上传
+ *    - error → status=failed
+ *    - still running → no update
+ *
+ * 2. result_ingesting + provider_task_id → retry-transfer（PRD §9.1 / §12.4）
+ *    - 重新 poll provider 拿 videoUrl（不调 provider.submit，不重复计费）
+ *    - 重新 download + upload + sign
+ *    - 成功 → status=completed
+ *    - 失败 → 保持 result_ingesting
+ *
+ * 3. partial_failure + storage_path → re-sign only（PRD §9.1）
+ *    - 只调 signStoredVideo，不重新 download/upload
+ *    - 成功 → status=completed + result_url=newSignedUrl
+ *    - 失败 → 保持 partial_failure
+ *
+ * 4. completed + storage_path → re-sign result_url（PRD §9.2：signed URL 过期可重新播放）
+ *
+ * PRD §9.1：providerTempUrl 永远不入库；result_url 失败时为 null；不误用 completed。
  */
 
 import { NextResponse } from "next/server";
 import { authenticateRequest, serviceFetch } from "@/lib/supabase/server";
 import { resolveVideoProvider } from "@/lib/ai/video/provider";
-import { persistVideoArtifact } from "@/lib/ai/video/storage";
+import { uploadVideoArtifact, signStoredVideo } from "@/lib/ai/video/storage";
 import { recordEvidenceEvent } from "@/lib/evidence/ledger";
 import { completedGenerationEvidenceEvent } from "@/lib/evidence/hooks";
 import { isEvidenceLedgerEnabled } from "@/lib/evidence/feature-flags";
@@ -39,12 +56,96 @@ type VideoJobRow = {
   status: string;
   error: string | null;
   result_url: string | null;
+  storage_path: string | null;
   result_metadata: Record<string, unknown>;
   target_type: string | null;
   target_id: string | null;
   created_at: string;
   updated_at: string;
 };
+
+/** PATCH job 的 DRY helper。status/error/result_url/storage_path/result_metadata 可选。 */
+async function patchJob(jobId: string, patch: {
+  status: string;
+  result_url?: string | null;
+  storage_path?: string | null;
+  error?: string | null;
+  result_metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const body: Record<string, unknown> = {
+    status: patch.status,
+    updated_at: new Date().toISOString(),
+  };
+  if (patch.result_url !== undefined) body.result_url = patch.result_url;
+  if (patch.storage_path !== undefined) body.storage_path = patch.storage_path;
+  if (patch.error !== undefined) body.error = patch.error;
+  if (patch.result_metadata !== undefined) body.result_metadata = patch.result_metadata;
+
+  try {
+    await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // storage_path 列可能不存在（migration 未执行）→ fallback 不带 storage_path
+    if (patch.storage_path !== undefined) {
+      const fallback = { ...body };
+      delete fallback.storage_path;
+      await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(fallback),
+      });
+    }
+  }
+}
+
+/**
+ * PRD §9.1 完整转存链：download → upload → sign。
+ * 返回 tagged union 让 caller 精确区分失败阶段，写正确的 fail-closed 状态。
+ */
+type TransferResult =
+  | { kind: "success"; signedUrl: string; storagePath: string }
+  | { kind: "ingesting_error"; error: string }
+  | { kind: "partial_error"; storagePath: string; error: string };
+
+async function downloadAndTransfer(
+  provider: { download: (url: string) => Promise<{ bytes: Uint8Array; contentType: string }> },
+  providerVideoUrl: string,
+  ctx: { userId: string; jobId: string; shotId: string },
+): Promise<TransferResult> {
+  let downloaded: { bytes: Uint8Array; contentType: string };
+  try {
+    downloaded = await provider.download(providerVideoUrl);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { kind: "ingesting_error", error: `视频下载失败，可重试转存：${msg}` };
+  }
+
+  let storagePath: string;
+  try {
+    const uploaded = await uploadVideoArtifact({
+      userId: ctx.userId,
+      jobId: ctx.jobId,
+      shotId: ctx.shotId,
+      bytes: downloaded.bytes,
+      contentType: downloaded.contentType,
+    });
+    storagePath = uploaded.storagePath;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // PRD §9.1：校验失败（空 bytes / 不支持的 contentType）也归为 ingesting_error
+    return { kind: "ingesting_error", error: `视频存储失败，可重试转存：${msg}` };
+  }
+
+  try {
+    const { signedUrl } = await signStoredVideo(storagePath);
+    return { kind: "success", signedUrl, storagePath };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // upload 已成功但 sign 失败 → partial_failure，保留 storage_path 供单独重签
+    return { kind: "partial_error", storagePath, error: `视频签名失败，可重签：${msg}` };
+  }
+}
 
 export async function GET(request: Request, context: { params: Promise<{ jobId: string }> }) {
   const { jobId } = await context.params;
@@ -76,7 +177,13 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
     return errorResponse(404, "JOB_NOT_FOUND", "任务不存在或无权访问。");
   }
 
-  // 2. if video job + running + has provider_task_id, poll provider once
+  const shotId = (job.input_params as { shotId?: string }).shotId || job.target_id || job.id;
+  const durationSeconds = (job.input_params as { duration?: number }).duration ?? 5;
+  const scopedInput = job.input_params as { projectId?: unknown; sourceUnitId?: unknown };
+  const hasEvidenceScope = typeof scopedInput.projectId === "string" && Boolean(scopedInput.projectId)
+    && typeof scopedInput.sourceUnitId === "string" && Boolean(scopedInput.sourceUnitId);
+
+  // 2. running + provider_task_id → poll provider + attempt transfer
   if (
     job.job_type === "video" &&
     job.status === "running" &&
@@ -85,144 +192,135 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
   ) {
     try {
       const provider = await resolveVideoProvider();
-      // 确保切换器与 DB provider 一致（env 改了但 job 还是旧 provider 时，仍用 job.provider）
       const result = job.provider === provider.name
         ? await provider.poll(job.provider_task_id)
         : await pollByProviderName(job.provider, job.provider_task_id);
 
       if (result.status === "done" && result.videoUrl) {
-        // 下载 + 转存到自有 Storage
-        const shotId = (job.input_params as { shotId?: string }).shotId || job.target_id || job.id;
-        const durationSeconds = (job.input_params as { duration?: number }).duration ?? 5;
+        const transfer = await downloadAndTransfer(provider, result.videoUrl, { userId, jobId: job.id, shotId });
 
-        let finalVideoUrl = result.videoUrl;
-        let storagePath: string | null = null;
-        try {
-          const downloaded = await provider.download(result.videoUrl);
-          const persisted = await persistVideoArtifact({
-            userId,
-            jobId: job.id,
-            shotId,
-            bytes: downloaded.bytes,
-            contentType: downloaded.contentType,
-          });
-          finalVideoUrl = persisted.signedUrl;
-          storagePath = persisted.storagePath;
-        } catch (downloadErr) {
-          // 转存失败：保留 provider 临时 URL 但记录 warning，不阻塞 done 状态
-          // caller 可以后续重试转存
-          const msg = downloadErr instanceof Error ? downloadErr.message : String(downloadErr);
-          await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              status: "completed",
-              result_url: finalVideoUrl,
-              result_metadata: {
-                ...job.result_metadata,
-                videoUrl: finalVideoUrl,
-                providerTempUrl: result.videoUrl,
-                storagePath: null,
-                storageTransferError: msg,
-                durationSeconds,
-                completedAt: new Date().toISOString(),
-              },
-              updated_at: new Date().toISOString(),
-            }),
+        if (transfer.kind === "success") {
+          // PRD §9.1：全部成功 → completed + result_url=signedUrl + storage_path
+          await patchJob(jobId, {
+            status: "completed",
+            result_url: transfer.signedUrl,
+            storage_path: transfer.storagePath,
+            error: null,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: transfer.signedUrl,
+              providerTempUrl: null, // PRD §9.1：不保留临时 URL
+              storagePath: transfer.storagePath,
+              durationSeconds,
+              completedAt: new Date().toISOString(),
+            },
           });
           job = {
             ...job,
             status: "completed",
-            result_url: finalVideoUrl,
+            result_url: transfer.signedUrl,
+            storage_path: transfer.storagePath,
+            error: null,
             result_metadata: {
               ...job.result_metadata,
-              videoUrl: finalVideoUrl,
-              providerTempUrl: result.videoUrl,
-              storagePath: null,
-              storageTransferError: msg,
+              videoUrl: transfer.signedUrl,
+              providerTempUrl: null,
+              storagePath: transfer.storagePath,
               durationSeconds,
               completedAt: new Date().toISOString(),
+            },
+          };
+          // Evidence event
+          if (isEvidenceLedgerEnabled() && hasEvidenceScope) {
+            await recordEvidenceEvent(completedGenerationEvidenceEvent({
+              ownerId: userId,
+              projectId: scopedInput.projectId as string,
+              sourceUnitId: scopedInput.sourceUnitId as string,
+              jobId: job.id,
+              jobType: "video",
+              targetId: job.target_id || job.id,
+              provider: job.provider,
+              durationSeconds,
+            }));
+          }
+        } else if (transfer.kind === "ingesting_error") {
+          // PRD §9.1：download/upload/校验失败 → result_ingesting + result_url=null + storage_path=null
+          await patchJob(jobId, {
+            status: "result_ingesting",
+            result_url: null,
+            storage_path: null,
+            error: transfer.error,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: null,
+              providerTempUrl: null, // 不保存临时 URL
+              storagePath: null,
+              storageTransferError: transfer.error,
+              durationSeconds,
+            },
+          });
+          job = {
+            ...job,
+            status: "result_ingesting",
+            result_url: null,
+            storage_path: null,
+            error: transfer.error,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: null,
+              providerTempUrl: null,
+              storagePath: null,
+              storageTransferError: transfer.error,
+              durationSeconds,
             },
           };
           return NextResponse.json({
             success: true,
             job,
-            warning: `video done but storage transfer failed: ${msg}`,
+            warning: transfer.error,
           });
-        }
-
-        // 转存成功：绑自有地址，不绑 provider 临时 URL
-        // 同时写入 storage_path 列（migration 执行后）；未执行时忽略错误
-        try {
-          await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              status: "completed",
-              result_url: finalVideoUrl,
-              storage_path: storagePath,
-              result_metadata: {
-                ...job.result_metadata,
-                videoUrl: finalVideoUrl,
-                providerTempUrl: null, // 不保留临时 URL
-                storagePath,
-                durationSeconds,
-                completedAt: new Date().toISOString(),
-              },
-              updated_at: new Date().toISOString(),
-            }),
+        } else {
+          // transfer.kind === "partial_error"：upload 成功但 sign 失败
+          // PRD §9.1：partial_failure + result_url=null + storage_path=已上传
+          await patchJob(jobId, {
+            status: "partial_failure",
+            result_url: null,
+            storage_path: transfer.storagePath,
+            error: transfer.error,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: null,
+              providerTempUrl: null,
+              storagePath: transfer.storagePath,
+              storageTransferError: transfer.error,
+              durationSeconds,
+            },
           });
-        } catch {
-          // storage_path 列可能不存在（migration 未执行），fallback 不带列
-          await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              status: "completed",
-              result_url: finalVideoUrl,
-              result_metadata: {
-                ...job.result_metadata,
-                videoUrl: finalVideoUrl,
-                providerTempUrl: null,
-                storagePath,
-                durationSeconds,
-                completedAt: new Date().toISOString(),
-              },
-              updated_at: new Date().toISOString(),
-            }),
+          job = {
+            ...job,
+            status: "partial_failure",
+            result_url: null,
+            storage_path: transfer.storagePath,
+            error: transfer.error,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: null,
+              providerTempUrl: null,
+              storagePath: transfer.storagePath,
+              storageTransferError: transfer.error,
+              durationSeconds,
+            },
+          };
+          return NextResponse.json({
+            success: true,
+            job,
+            warning: transfer.error,
           });
-        }
-        job = {
-          ...job,
-          status: "completed",
-          result_url: finalVideoUrl,
-          result_metadata: {
-            ...job.result_metadata,
-            videoUrl: finalVideoUrl,
-            providerTempUrl: null,
-            storagePath,
-            durationSeconds,
-            completedAt: new Date().toISOString(),
-          },
-        };
-        const scopedInput = job.input_params as { projectId?: unknown; sourceUnitId?: unknown };
-        if (isEvidenceLedgerEnabled() && typeof scopedInput.projectId === "string" && scopedInput.projectId && typeof scopedInput.sourceUnitId === "string" && scopedInput.sourceUnitId) {
-          await recordEvidenceEvent(completedGenerationEvidenceEvent({
-            ownerId: userId,
-            projectId: scopedInput.projectId,
-            sourceUnitId: scopedInput.sourceUnitId,
-            jobId: job.id,
-            jobType: "video",
-            targetId: job.target_id || job.id,
-            provider: job.provider,
-            durationSeconds,
-          }));
         }
       } else if (result.status === "error") {
-        await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            status: "failed",
-            error: `${job.provider} 视频生成失败 (raw: ${result.rawStatus})`,
-            updated_at: new Date().toISOString(),
-          }),
+        await patchJob(jobId, {
+          status: "failed",
+          error: `${job.provider} 视频生成失败 (raw: ${result.rawStatus})`,
         });
         job = {
           ...job,
@@ -239,6 +337,174 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
         job,
         warning: `provider poll failed: ${message}`,
       });
+    }
+  }
+
+  // 3. PRD §9.1 / §12.4：result_ingesting + provider_task_id → retry-transfer
+  //    重新 poll provider 拿 videoUrl（不调 provider.submit，不重复计费），再 download + upload + sign
+  if (
+    job.job_type === "video" &&
+    job.status === "result_ingesting" &&
+    job.provider_task_id &&
+    (job.provider === "atlas" || job.provider === "minimax")
+  ) {
+    try {
+      const provider = await resolveVideoProvider();
+      const result = job.provider === provider.name
+        ? await provider.poll(job.provider_task_id)
+        : await pollByProviderName(job.provider, job.provider_task_id);
+
+      if (result.status === "done" && result.videoUrl) {
+        const transfer = await downloadAndTransfer(provider, result.videoUrl, { userId, jobId: job.id, shotId });
+
+        if (transfer.kind === "success") {
+          await patchJob(jobId, {
+            status: "completed",
+            result_url: transfer.signedUrl,
+            storage_path: transfer.storagePath,
+            error: null,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: transfer.signedUrl,
+              providerTempUrl: null,
+              storagePath: transfer.storagePath,
+              storageTransferError: null,
+              durationSeconds,
+              completedAt: new Date().toISOString(),
+            },
+          });
+          job = {
+            ...job,
+            status: "completed",
+            result_url: transfer.signedUrl,
+            storage_path: transfer.storagePath,
+            error: null,
+            result_metadata: {
+              ...job.result_metadata,
+              videoUrl: transfer.signedUrl,
+              providerTempUrl: null,
+              storagePath: transfer.storagePath,
+              storageTransferError: null,
+              durationSeconds,
+              completedAt: new Date().toISOString(),
+            },
+          };
+          if (isEvidenceLedgerEnabled() && hasEvidenceScope) {
+            await recordEvidenceEvent(completedGenerationEvidenceEvent({
+              ownerId: userId,
+              projectId: scopedInput.projectId as string,
+              sourceUnitId: scopedInput.sourceUnitId as string,
+              jobId: job.id,
+              jobType: "video",
+              targetId: job.target_id || job.id,
+              provider: job.provider,
+              durationSeconds,
+            }));
+          }
+        } else if (transfer.kind === "ingesting_error") {
+          // 保持 result_ingesting，更新 error
+          await patchJob(jobId, {
+            status: "result_ingesting",
+            result_url: null,
+            storage_path: null,
+            error: transfer.error,
+          });
+          job = { ...job, status: "result_ingesting", result_url: null, storage_path: null, error: transfer.error };
+          return NextResponse.json({ success: true, job, warning: transfer.error });
+        } else {
+          // partial_error：upload 成功但 sign 失败 → 升级为 partial_failure
+          await patchJob(jobId, {
+            status: "partial_failure",
+            result_url: null,
+            storage_path: transfer.storagePath,
+            error: transfer.error,
+          });
+          job = { ...job, status: "partial_failure", result_url: null, storage_path: transfer.storagePath, error: transfer.error };
+          return NextResponse.json({ success: true, job, warning: transfer.error });
+        }
+      }
+      // else: provider 还在 running 或已 error，不改 status（result_ingesting 保持）
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return NextResponse.json({ success: true, job, warning: `retry-transfer poll failed: ${message}` });
+    }
+  }
+
+  // 4. PRD §9.1：partial_failure + storage_path → re-sign only（不重新 download/upload）
+  if (
+    job.job_type === "video" &&
+    job.status === "partial_failure" &&
+    job.storage_path
+  ) {
+    try {
+      const { signedUrl } = await signStoredVideo(job.storage_path);
+      await patchJob(jobId, {
+        status: "completed",
+        result_url: signedUrl,
+        error: null,
+        result_metadata: {
+          ...job.result_metadata,
+          videoUrl: signedUrl,
+          providerTempUrl: null,
+          storagePath: job.storage_path,
+          storageTransferError: null,
+          durationSeconds,
+          completedAt: new Date().toISOString(),
+        },
+      });
+      job = {
+        ...job,
+        status: "completed",
+        result_url: signedUrl,
+        error: null,
+        result_metadata: {
+          ...job.result_metadata,
+          videoUrl: signedUrl,
+          providerTempUrl: null,
+          storagePath: job.storage_path,
+          storageTransferError: null,
+          durationSeconds,
+          completedAt: new Date().toISOString(),
+        },
+      };
+      if (isEvidenceLedgerEnabled() && hasEvidenceScope) {
+        await recordEvidenceEvent(completedGenerationEvidenceEvent({
+          ownerId: userId,
+          projectId: scopedInput.projectId as string,
+          sourceUnitId: scopedInput.sourceUnitId as string,
+          jobId: job.id,
+          jobType: "video",
+          targetId: job.target_id || job.id,
+          provider: job.provider,
+          durationSeconds,
+        }));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // re-sign 失败，保持 partial_failure
+      return NextResponse.json({ success: true, job, warning: `re-sign failed: ${message}` });
+    }
+  }
+
+  // 5. PRD §9.2：completed + storage_path → re-sign result_url（signed URL 过期可重新播放）
+  if (
+    job.job_type === "video" &&
+    job.status === "completed" &&
+    job.storage_path
+  ) {
+    try {
+      const { signedUrl } = await signStoredVideo(job.storage_path);
+      if (signedUrl !== job.result_url) {
+        // 只在 URL 变化时写库（避免无谓写入）
+        await patchJob(jobId, {
+          status: "completed",
+          result_url: signedUrl,
+        });
+        job = { ...job, result_url: signedUrl };
+      }
+    } catch {
+      // re-sign 失败不降级 job 状态（PRD §9.2：过期 signed URL 不得让 job 变成失败）
+      // 返回当前 job（result_url 可能是旧签名）
     }
   }
 
