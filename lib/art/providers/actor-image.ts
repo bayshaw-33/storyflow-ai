@@ -91,8 +91,29 @@ export const ACTOR_VIEW_PACKS: ActorViewPack[] = [
   },
 ];
 
-export function getActorViewPack(key: string): ActorViewPack | null {
-  return ACTOR_VIEW_PACKS.find((pack) => pack.key === key) || null;
+/**
+ * Resolve a pack by raw key. Accepts canonical key (three-view-casual) and
+ * legacy underscore variants (three_view_casual / three_view_swim /
+ * body_details) for backward compatibility with old cached UI / API calls.
+ * Returns null for unknown keys (caller must 400).
+ */
+export function getActorViewPack(rawKey: string): ActorViewPack | null {
+  const trimmed = String(rawKey || "").trim();
+  // canonical match
+  const canonical = ACTOR_VIEW_PACKS.find((pack) => pack.key === trimmed);
+  if (canonical) return canonical;
+  // legacy underscore normalization
+  switch (trimmed) {
+    case "three_view_casual":
+      return ACTOR_VIEW_PACKS.find((p) => p.key === "three-view-casual") || null;
+    case "three_view_swim":
+    case "three_view_swimwear":
+      return ACTOR_VIEW_PACKS.find((p) => p.key === "three-view-swimwear") || null;
+    case "body_details":
+      return ACTOR_VIEW_PACKS.find((p) => p.key === "body-details") || null;
+    default:
+      return null;
+  }
 }
 
 /** 「白底正面特写肖像」头像提示词。 */

@@ -32,23 +32,60 @@ export type ActorDetail = ActorLike & {
   portrayalCount?: number;
 };
 
-// POST /api/actors/generate-views {actorId, pack} → {versions:[{versionId,previewUrl,pack}]}
+// POST /api/actors/generate-views {actorId, pack} → {versions:[{versionId,previewUrl,pack,shotKey,isPrimary}]}
+// 每条版本必须明确返回 pack + shotKey，前端不再自行补 pack。
 export type ViewVersion = {
   versionId: string;
   previewUrl: string;
   pack: string;
+  shotKey?: string;
   createdAt?: string | null;
   isPrimary?: boolean;
 };
 
+/**
+ * Canonical ActorViewPackKey — UI / API / 状态 / 导出 / 完整度统计全部使用该 key。
+ * 旧 underscore key 由 normalizePackKey 兼容归一化（向后兼容旧页面缓存）。
+ */
+export type ActorViewPackKey = "three-view-casual" | "three-view-swimwear" | "expressions" | "body-details";
+
 export const ACTOR_VIEW_PACKS = [
-  { id: "three_view_casual", zh: "三视图 · 白T牛仔", en: "Three-view · White tee & jeans" },
-  { id: "three_view_swim", zh: "三视图 · 泳装", en: "Three-view · Swimwear" },
+  { id: "three-view-casual", zh: "三视图 · 白T牛仔", en: "Three-view · White tee & jeans" },
+  { id: "three-view-swimwear", zh: "三视图 · 泳装", en: "Three-view · Swimwear" },
   { id: "expressions", zh: "表情组", en: "Expression set" },
-  { id: "body_details", zh: "身体细节", en: "Body details" },
+  { id: "body-details", zh: "身体细节", en: "Body details" },
 ] as const;
 
 export type ViewPackId = (typeof ACTOR_VIEW_PACKS)[number]["id"];
+
+/**
+ * 旧 underscore pack key 归一化为 canonical key。
+ * 兼容旧前端缓存 / 旧 API 调用：
+ *   three_view_casual → three-view-casual
+ *   three_view_swim / three_view_swimwear → three-view-swimwear
+ *   body_details → body-details
+ * 未知值原样返回（让上层校验拒绝）。
+ */
+export function normalizePackKey(raw: unknown): ActorViewPackKey | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  switch (trimmed) {
+    case "three-view-casual":
+    case "three_view_casual":
+      return "three-view-casual";
+    case "three-view-swimwear":
+    case "three_view_swim":
+    case "three_view_swimwear":
+      return "three-view-swimwear";
+    case "expressions":
+      return "expressions";
+    case "body-details":
+    case "body_details":
+      return "body-details";
+    default:
+      return null;
+  }
+}
 
 // PortrayalLike 兼容两种来源：
 // 1. 旧 raw 行（snake_case 字段，来自直查 portrayal 表）
@@ -235,10 +272,12 @@ function normalizeOneVersion(raw: unknown): ViewVersion | null {
     : typeof record.is_primary === "boolean"
       ? record.is_primary
       : false;
+  const shotKey = cleanText(record.shotKey ?? record.shot_key);
   return {
     versionId: versionId || `v-${previewUrl.slice(-24)}`,
     previewUrl,
     pack,
+    shotKey: shotKey || undefined,
     createdAt: cleanText(record.createdAt ?? record.created_at) || null,
     isPrimary,
   };

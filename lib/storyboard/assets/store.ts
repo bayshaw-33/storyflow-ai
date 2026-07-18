@@ -31,6 +31,7 @@ import { storyboardAssetDedupeKey } from "./extract.ts";
 
 export const STORYBOARD_ART_PROJECT_NAME = "Storyboard Assets";
 export const STORYBOARD_VARIANT_NAME = "Storyboard Master";
+export const ACTOR_ART_PROJECT_NAME = "Actor Assets";
 
 /** Map contract kind → art-table kind ("location" → "scene"). */
 export function toArtKind(kind: StoryboardAssetKind): "character" | "scene" | "prop" {
@@ -78,6 +79,148 @@ export async function ensureStoryboardArtProject(
   const id = inserted?.[0]?.id;
   if (!id) throw new Error("STORYBOARD_ART_PROJECT_CREATE_FAILED");
   return id;
+}
+
+/**
+ * Find-or-create the actor-scoped art project. Replaces the legacy
+ * `source_project_id = "actor:<actorId>"` hack (which violated the FK on
+ * storyflow_art_projects.source_project_id → storyflow_projects.id).
+ *
+ * Contract:
+ *   - source_project_id stays NULL (no fake storyboard project)
+ *   - actor_id is non-null
+ *   - DB UNIQUE (owner_id, actor_id) WHERE actor_id IS NOT NULL guarantees idempotency
+ *
+ * Errors:
+ *   - ACTOR_ART_PROJECT_FAILED on any unexpected DB error
+ */
+export async function ensureActorArtProject(
+  fetchFn: ServiceFetchFn,
+  input: { ownerId: string; actorId: string },
+): Promise<string> {
+  const existing = await fetchFn<ArtProjectRow[]>(
+    `/rest/v1/storyflow_art_projects?owner_id=eq.${encodeURIComponent(input.ownerId)}&actor_id=eq.${encodeURIComponent(input.actorId)}&select=id&limit=1`,
+  );
+  if (existing?.[0]?.id) return existing[0].id;
+
+  try {
+    const inserted = await fetchFn<ArtProjectRow[]>("/rest/v1/storyflow_art_projects", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        owner_id: input.ownerId,
+        actor_id: input.actorId,
+        source_project_id: null,
+        name: ACTOR_ART_PROJECT_NAME,
+        visual_style: "",
+        provider_selection: "smart",
+        status: "active",
+      }),
+    });
+    const id = inserted?.[0]?.id;
+    if (id) return id;
+  } catch (error) {
+    // ON CONFLICT 命中（同一 owner + actor 已被并发创建）→ 重读一次
+    const msg = error instanceof Error ? error.message : "";
+    if (msg.includes("409") || msg.includes("PGRST") || msg.includes("duplicate")) {
+      const retry = await fetchFn<ArtProjectRow[]>(
+        `/rest/v1/storyflow_art_projects?owner_id=eq.${encodeURIComponent(input.ownerId)}&actor_id=eq.${encodeURIComponent(input.actorId)}&select=id&limit=1`,
+      );
+      if (retry?.[0]?.id) return retry[0].id;
+    }
+    throw new Error("ACTOR_ART_PROJECT_FAILED");
+  }
+  throw new Error("ACTOR_ART_PROJECT_FAILED");
+}
+
+/**
+ * Actor view asset identity anchor: "actor-view:<actorId>:<canonicalPackKey>".
+ * Replaces the old "infer pack from Chinese name suffix" approach (brittle,
+ * locale-dependent, breaks on rename).
+ */
+export function actorViewIdentityAnchor(actorId: string, canonicalPackKey: string): string {
+  return `actor-view:${actorId}:${canonicalPackKey}`;
+}
+
+/**
+ * Upsert an actor view asset keyed by (artProject, actorId, canonicalPackKey).
+ * Writes actor_id + identity_anchor for pack-level dedupe.
+ * Guarantees a "master" variant exists for version attachment.
+ */
+export async function upsertActorViewAsset(
+  fetchFn: ServiceFetchFn,
+  input: {
+    ownerId: string;
+    artProjectId: string;
+    actorId: string;
+    canonicalPackKey: string;
+    name: string;
+    description: string;
+    prompt: string;
+  },
+): Promise<{ assetId: string; variantId: string }> {
+  const artKind = "character";
+  const anchor = actorViewIdentityAnchor(input.actorId, input.canonicalPackKey);
+  const now = new Date().toISOString();
+
+  const found = await fetchFn<ArtAssetRow[]>(
+    `/rest/v1/storyflow_art_assets?project_id=eq.${encodeURIComponent(input.artProjectId)}&actor_id=eq.${encodeURIComponent(input.actorId)}&identity_anchor=eq.${encodeURIComponent(anchor)}&select=id,description&limit=1`,
+  );
+
+  let assetId: string;
+  if (found?.[0]?.id) {
+    assetId = found[0].id;
+    const nextDescription =
+      input.description.trim().length > (found[0].description ?? "").trim().length
+        ? input.description
+        : (found[0].description ?? "");
+    await fetchFn(
+      `/rest/v1/storyflow_art_assets?id=eq.${encodeURIComponent(assetId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ description: nextDescription, updated_at: now }),
+      },
+    );
+  } else {
+    const inserted = await fetchFn<ArtAssetRow[]>("/rest/v1/storyflow_art_assets", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        project_id: input.artProjectId,
+        actor_id: input.actorId,
+        kind: artKind,
+        name: input.name.trim(),
+        narrative_role: "actor-view",
+        description: input.description,
+        identity_anchor: anchor,
+        status: "draft",
+        created_by: input.ownerId,
+      }),
+    });
+    assetId = inserted?.[0]?.id ?? "";
+    if (!assetId) throw new Error("ACTOR_ART_ASSET_FAILED");
+  }
+
+  const variant = await fetchFn<ArtVariantRow[]>(
+    `/rest/v1/storyflow_art_asset_variants?asset_id=eq.${encodeURIComponent(assetId)}&variant_type=eq.master&select=id&limit=1`,
+  );
+  if (variant?.[0]?.id) return { assetId, variantId: variant[0].id };
+
+  const insertedVariant = await fetchFn<ArtVariantRow[]>("/rest/v1/storyflow_art_asset_variants", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      asset_id: assetId,
+      name: STORYBOARD_VARIANT_NAME,
+      variant_type: "master",
+      prompt: input.prompt,
+      negative_prompt: "",
+      created_by: input.ownerId,
+    }),
+  });
+  const variantId = insertedVariant?.[0]?.id ?? "";
+  if (!variantId) throw new Error("ACTOR_ART_ASSET_FAILED");
+  return { assetId, variantId };
 }
 
 /** Upsert a storyboard asset keyed by (artProject, kind, dedupeKey) and
@@ -169,6 +312,8 @@ export type NewAssetVersion = {
   height?: number;
   appearanceSummary?: string;
   previewUrl?: string;
+  /** KIIKIS-TR-ACTOR-P0-005: 单图 shot 标识，写入 metadata.shot_key 供 GET 恢复 pack/shotKey。 */
+  shotKey?: string;
 };
 
 /** Insert generated image versions under an asset variant. */
@@ -196,6 +341,7 @@ export async function insertAssetVersions(
       storyboard: true,
       appearance_summary: version.appearanceSummary ?? "",
       preview_url: version.previewUrl ?? "",
+      shot_key: version.shotKey ?? "",
     },
     created_by: input.createdBy,
   }));

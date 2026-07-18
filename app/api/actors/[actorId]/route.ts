@@ -80,12 +80,14 @@ async function resolveImagePackCompleteness(actor: ActorProfile): Promise<ImageP
     if (pack) packs.add(pack);
   }
 
+  // canonical pack key：three-view-casual / three-view-swimwear / expressions / body-details
+  // 同时兼容旧 underscore key（three_view_casual 等）以防 staging 旧数据
   return {
     avatar: actor.avatar_asset_id != null || types.has("actor_avatar"),
-    threeViewCasual: packs.has("three_view_casual") || types.has("actor_three_view"),
-    threeViewSwimwear: packs.has("three_view_swimwear") || types.has("actor_three_view_swimwear"),
+    threeViewCasual: packs.has("three-view-casual") || packs.has("three_view_casual") || types.has("actor_three_view"),
+    threeViewSwimwear: packs.has("three-view-swimwear") || packs.has("three_view_swimwear") || types.has("actor_three_view_swimwear"),
     expressions: packs.has("expressions") || types.has("actor_expressions"),
-    bodyDetails: packs.has("body_details") || types.has("actor_body_details"),
+    bodyDetails: packs.has("body-details") || packs.has("body_details") || types.has("actor_body_details"),
   };
 }
 

@@ -55,16 +55,18 @@ export function selectReferenceSheetImages(input: {
   avatarUrl?: string | null;
   versionsByPack: Record<string, ViewVersion[]>;
 }): SheetSelection {
+  // 兼容 canonical key（three-view-casual）和旧 underscore key（three_view_casual）
+  // 由 actor-view-model.normalizePackKey 统一归一化；此处双查向后兼容
   const packs = input.versionsByPack || {};
-  const casual = firstUrls(packs.three_view_casual, THREE_VIEW_SLOTS);
-  const swim = firstUrls(packs.three_view_swim, THREE_VIEW_SLOTS);
+  const casual = firstUrls(packs["three-view-casual"] ?? packs.three_view_casual, THREE_VIEW_SLOTS);
+  const swim = firstUrls(packs["three-view-swimwear"] ?? packs.three_view_swim, THREE_VIEW_SLOTS);
   const threeViewUrls = casual.map((url, index) => url || swim[index] || null);
   const avatar = typeof input.avatarUrl === "string" && input.avatarUrl.trim() ? input.avatarUrl.trim() : null;
   return {
     mainVisualUrl: avatar || threeViewUrls[0] || null,
     threeViewUrls,
     expressionUrls: firstUrls(packs.expressions, EXPRESSION_SLOTS),
-    detailUrls: firstUrls(packs.body_details, DETAIL_SLOTS),
+    detailUrls: firstUrls(packs["body-details"] ?? packs.body_details, DETAIL_SLOTS),
   };
 }
 

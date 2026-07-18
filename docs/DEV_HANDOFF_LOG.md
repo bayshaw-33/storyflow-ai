@@ -1,5 +1,64 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-19 01:28 +08 - TRAE / KIIKIS-TR-ACTOR-P0-005 演员图组生成 400/502 修复
+
+### 根因
+
+1. **前后端图组契约不一致**：前端发送 `three_view_casual`/`three_view_swim`/`body_details`（下划线），后端只接受 `three-view-casual`/`three-view-swimwear`/`body-details`（连字符），导致 400 "未知图组包"。
+2. **演员资产错误冒充 Production Project**：代码把 `source_project_id = "actor:<actorId>"` 写入 `storyflow_art_projects`，但该字段有 FK → `storyflow_projects(id)`，2 个演员没有对应虚构 project，插入必然违反 FK 返回 502。
+
+### 修复
+
+#### P0-1 图组契约统一
+
+- 新建 canonical 类型 `ActorViewPackKey = "three-view-casual" | "three-view-swimwear" | "expressions" | "body-details"`。
+- `ACTOR_VIEW_PACKS.id` 全部改为 canonical 连字符 key；UI/API/状态/导出/完整度统计全部使用 canonical。
+- `normalizePackKey(raw)` 兼容旧 underscore key 归一化（`three_view_casual` → `three-view-casual` 等），避免旧页面缓存报错。
+- `getActorViewPack` 同步兼容旧 underscore key。
+- `reference-sheet-plan.ts` / `app/api/actors/[actorId]/route.ts` 双查 canonical + underscore key。
+
+#### P0-2 演员美术资产作用域
+
+- 新建 migration `20260724000000_actor_art_projects_actor_scope.sql`：
+  - `storyflow_art_projects` 加 `actor_id uuid` 列 + FK → `actor_profiles(id) ON DELETE SET NULL`
+  - `UNIQUE INDEX (owner_id, actor_id) WHERE actor_id IS NOT NULL` — DB 级幂等
+  - `storyflow_art_assets.actor_id` 加 FK 约束（baseline 已有列无 FK）
+  - `INDEX (actor_id, identity_anchor) WHERE actor_id IS NOT NULL` — GET 查询优化
+- 新建 `ensureActorArtProject(ownerId, actorId)`：先查再插，409 重读，`source_project_id = null`，`actor_id` 非空。
+- 新建 `actorViewIdentityAnchor(actorId, canonicalPackKey)` → `actor-view:<actorId>:<canonicalPack>`。
+- 新建 `upsertActorViewAsset`：写 `actor_id` + `identity_anchor`，先查再 PATCH/INSERT，保证 master variant 存在。
+- `primary-version/route.ts` 改用 `actor_id === actorId` 校验替代旧 `source_project_id !== "actor:<id>"`。
+
+#### P0-3 生成结果契约
+
+- 每条版本明确返回 `versionId/previewUrl/pack/shotKey/isPrimary`（不再依赖前端补 pack）。
+- `NewAssetVersion` 加 `shotKey?: string`，`insertAssetVersions` 写入 `metadata.shot_key`。
+- 逐张 `Promise.all` + 独立 try/catch — 单张失败不清空已成功图片。
+- 至少一张成功时返回成功版本 + 失败明细；全部失败才 502。
+- Provider 图片必须先 `persistRemoteArtImage` 转存 Supabase Storage，再写 version。
+- GET 按 `actor_id` 查询 assets，反解 `identity_anchor` 拿 pack，`signStoredArtImage` 重签 `storage_path`。
+
+#### 错误可观测性
+
+- 5 个阶段错误码：`ACTOR_ART_PROJECT_FAILED` / `ACTOR_ART_ASSET_FAILED` / `ATLAS_GENERATION_FAILED` / `ART_IMAGE_TRANSFER_FAILED` / `ART_VERSION_INSERT_FAILED`。
+- `StageHandledError` 携带 `errorCode + stage + shotKey`。
+- 日志 `console.warn(JSON.stringify({requestId, stage, errorCode, shotKey}))` — 不记密钥/头像 URL/Provider 响应/Prompt。
+
+### 代码与验证
+
+- Commit：见 git log
+- tsc 0 错误 / 617 测试全通过（新增 16 项契约测试）/ pnpm build 成功
+- 新增测试文件：`tests/actor-view-packs-contract.test.mjs`（16 项契约检查）
+- 更新测试：`tests/actor-library-ui.test.mjs`（pack id 断言改 canonical）、`tests/actor-portrayal-auth.test.mjs`（mock 改 actor_id）、`tests/actors-production-smoke.test.mjs`（versions map 匹配 successes.map）
+
+### Migration 待执行
+
+- `supabase/migrations/20260724000000_actor_art_projects_actor_scope.sql` — TRAE 已写入，需 Codex 在 staging 核验后应用，再推 production。
+- Production 当前无成功生成的演员 art project / asset，无需清理或回填旧数据。
+
+### 线上验收
+
+用真实演员逐一生成 4 个 pack（白T牛仔三视图 3 张 + 泳装三视图 3 张 + 表情组 4 张 + 身体细节 4 张 = 14 张）。刷新页面后 14 张仍可显示；数据库应只有一个该演员的 art project，所有 asset/version 均绑定正确 `actor_id`。
 ## 2026-07-19 00:45 +08 - Codex / 演员库生产恢复与共享安全加固
 
 ### 已解决

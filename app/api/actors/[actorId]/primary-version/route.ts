@@ -32,7 +32,7 @@ type AssetRow = {
 type ArtProjectRow = {
   id: string;
   owner_id: string;
-  source_project_id: string;
+  actor_id: string | null;
 };
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ actorId: string }> }) {
@@ -69,13 +69,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
     if (!asset) throw new Error("VERSION_NOT_FOUND");
 
     const artProjectRows = await serviceFetch<ArtProjectRow[]>(
-      `/rest/v1/storyflow_art_projects?id=eq.${encodeURIComponent(asset.project_id)}&select=id,owner_id,source_project_id&limit=1`,
+      `/rest/v1/storyflow_art_projects?id=eq.${encodeURIComponent(asset.project_id)}&select=id,owner_id,actor_id&limit=1`,
     );
     const artProject = artProjectRows[0];
     if (!artProject) throw new Error("VERSION_NOT_FOUND");
-    // 严格校验：art_project 必须属于当前用户 且 source_project_id 必须匹配 actor
+    // 严格校验：art_project 必须属于当前用户 且 actor_id 必须匹配当前演员
+    // KIIKIS-TR-ACTOR-P0-005: 替代旧 source_project_id = "actor:<id>" 模式（违反 FK）
     if (artProject.owner_id !== user.id) throw new Error("VERSION_FORBIDDEN");
-    if (artProject.source_project_id !== `actor:${actorId}`) throw new Error("VERSION_FORBIDDEN");
+    if (artProject.actor_id !== actorId) throw new Error("VERSION_FORBIDDEN");
 
     // 复用现有的权威主版本字段。单行更新天然原子，不改写任何 version metadata。
     await serviceFetch(

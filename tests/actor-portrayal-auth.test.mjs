@@ -169,7 +169,7 @@ test("PATCH primary-version 只更新 variant.approved_version_id，不覆盖版
     }
     if (url.includes("/rest/v1/storyflow_art_assets")) return jsonResponse([{ id: "asset-1", project_id: "art-1" }]);
     if (url.includes("/rest/v1/storyflow_art_projects")) {
-      return jsonResponse([{ id: "art-1", owner_id: USER_A, source_project_id: "actor:actor-a" }]);
+      return jsonResponse([{ id: "art-1", owner_id: USER_A, actor_id: "actor-a" }]);
     }
     return jsonResponse([]);
   });
