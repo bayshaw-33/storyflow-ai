@@ -36,11 +36,14 @@ export async function GET(request: NextRequest) {
     ).catch(() => [] as Array<{ team_id: string }>);
     const teamIds = memberships.map((row) => row.team_id).filter(Boolean);
 
-    // 单次聚合查询：用 or=(owner_id=eq.X,team_id=in.(...)) + actor_profile_id=in.(...) 一次拉所有可读 portrayals
-    const ownerFilter = `owner_id=eq.${encodeURIComponent(user.id)}`;
-    const accessFilter = teamIds.length
-      ? `or=(${ownerFilter},team_id=in.(${teamIds.map(encodeURIComponent).join(",")}))`
-      : ownerFilter;
+    // 修复 PGRST：or() 内部用 col.op.val 点号语法；team 表达式放首项规避 PGRST100 owner_id o 前缀词法 bug
+    const userIdEnc = encodeURIComponent(user.id);
+    const ownerInOr = `owner_id.eq.${userIdEnc}`;
+    const ownerTop = `owner_id=eq.${userIdEnc}`;
+    const teamExpr = teamIds.length
+      ? `team_id.in.(${teamIds.map(encodeURIComponent).join(",")})`
+      : "";
+    const accessFilter = teamExpr ? `or=(${teamExpr},${ownerInOr})` : ownerTop;
     const actorFilter = `actor_profile_id=in.(${actorIds.map(encodeURIComponent).join(",")})`;
 
     const rows = await serviceFetch<CountRow[]>(

@@ -37,12 +37,14 @@ export async function GET(request: NextRequest) {
     ).catch(() => [] as Array<{ team_id: string }>);
     const teamIds = memberships.map((row) => row.team_id).filter(Boolean);
 
-    // portrayal 表的 owner/team 过滤
-    const ownerFilter = `owner_id=eq.${encodeURIComponent(user.id)}`;
-    const teamFilter = teamIds.length
-      ? `and=(team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`
+    // 修复 PGRST：or()/and() 内部必须用 col.op.val 点号语法；team 表达式放首项规避 PGRST100 owner_id o 前缀词法 bug
+    const userIdEnc = encodeURIComponent(user.id);
+    const ownerInOr = `owner_id.eq.${userIdEnc}`;
+    const ownerTop = `owner_id=eq.${userIdEnc}`;
+    const teamExpr = teamIds.length
+      ? `team_id.in.(${teamIds.map(encodeURIComponent).join(",")})`
       : "";
-    const accessQuery = teamFilter ? `or=(${teamFilter},${ownerFilter})` : ownerFilter;
+    const accessQuery = teamExpr ? `or=(${teamExpr},${ownerInOr})` : ownerTop;
 
     const filters = [accessQuery, `actor_profile_id=not.is.null`];
     if (projectId) filters.push(`project_id=eq.${encodeURIComponent(projectId)}`);

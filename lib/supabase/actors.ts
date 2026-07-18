@@ -124,18 +124,21 @@ export async function listActorsForUser(userId: string): Promise<ActorProfile[]>
 
 async function listStructuredActorsForUser(userId: string) {
   const memberships = await listMemberships(userId);
-  const teamIds = memberships.map((item) => item.team_id);
-  const ownerFilter = `owner_id=eq.${encodeURIComponent(userId)}`;
-  const teamFilter = teamIds.length
+  const teamIds = memberships.map((item) => item.team_id).filter(Boolean) as string[];
+  const userIdEnc = encodeURIComponent(userId);
+
+  // 修复 PGRST100/PGRST106：or()/and() 内部必须用 col.op.val 点号语法（不能用 col=op.val）。
+  // team 表达式放首项，规避 owner_id 的 o 前缀被 or 词法器误吞；
+  // 无团队时退化为顶层 owner 过滤（顶层 col=op.val 仍合法）。
+  const ownerInOr = `owner_id.eq.${userIdEnc}`;
+  const ownerTop = `owner_id=eq.${userIdEnc}`;
+  const teamExpr = teamIds.length
     ? `and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`
     : "";
-
-  // PGRST100 词法 bug：or(...) 首项不能是 o 开头列（owner_id 会被词法器误吞 or 前缀），
-  // 因此团队过滤放在首位；无团队时退化为普通 owner 过滤，不使用 or(...)。
-  const query = teamFilter ? `or=(${teamFilter},${ownerFilter})` : ownerFilter;
+  const accessQuery = teamExpr ? `or=(${teamExpr},${ownerInOr})` : ownerTop;
 
   const actors = await serviceFetch<ActorProfile[]>(
-    `/rest/v1/storyflow_actor_profiles?${query}&status=neq.archived&select=*&order=updated_at.desc`,
+    `/rest/v1/storyflow_actor_profiles?${accessQuery}&status=neq.archived&select=*&order=updated_at.desc`,
   );
 
   return hydrateActorAssets(actors);
@@ -227,7 +230,7 @@ export async function createActorForUser(userId: string, input: ActorProfileInpu
 }
 
 export async function updateActorForUser(userId: string, actorId: string, input: ActorProfileInput) {
-  ensureServiceRole();
+  // ensureServiceRole() 由 getActorForUser 负责（避免重复校验）
   const actor = await getActorForUser(userId, actorId);
   if (actor.storage_source === "project_snapshot") return updateFallbackActor(userId, actorId, input);
   await assertCanEditActor(userId, actor);
@@ -280,7 +283,7 @@ export async function updateActorForUser(userId: string, actorId: string, input:
 }
 
 export async function archiveActorForUser(userId: string, actorId: string) {
-  ensureServiceRole();
+  // ensureServiceRole() 由 getActorForUser 负责（避免重复校验）
   const actor = await getActorForUser(userId, actorId);
   if (actor.storage_source === "project_snapshot") return archiveFallbackActor(userId, actorId);
   await assertCanEditActor(userId, actor);
@@ -329,7 +332,7 @@ export async function saveGeneratedActorImage(params: {
   provider: string;
   model: string;
 }) {
-  ensureServiceRole();
+  // ensureServiceRole() 由 getActorForUser 负责（避免重复校验）
   const actor = await getActorForUser(params.userId, params.actorId);
   if (actor.storage_source === "project_snapshot") {
     const actorPatch: Partial<ActorProfile> = {
@@ -401,7 +404,7 @@ export async function listAppearanceVariantsForProject(userId: string, projectId
 }
 
 export async function upsertAppearanceVariant(userId: string, input: Partial<CharacterAppearanceVariant>) {
-  ensureServiceRole();
+  // ensureServiceRole() 由 getActorForUser 负责（input 校验后立即调用）
   if (!input.project_id) throw new Error("PROJECT_REQUIRED");
   if (!input.actor_id) throw new Error("ACTOR_REQUIRED");
   if (!input.character_name?.trim()) throw new Error("CHARACTER_NAME_REQUIRED");
