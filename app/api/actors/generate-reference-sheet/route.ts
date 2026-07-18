@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
-import { generateArtImages, isAtlasAuthorizedUser } from "@/lib/art/providers";
+import { generateArtImages } from "@/lib/art/providers";
 import { buildActorReferenceImageRequest, firstArtImageResult, sanitizeReferenceUrls } from "@/lib/art/providers/actor-image";
 import { authenticateRequest } from "@/lib/supabase/server";
 import { buildActorReferencePrompt, getActorForUser, saveGeneratedActorImage } from "@/lib/supabase/actors";
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         referenceUrls,
         aspectRatio: "4:3",
       }),
-      { atlasAuthorized: isAtlasAuthorizedUser(user) },
+      { atlasAuthorized: true },
     );
     const result = firstArtImageResult(generated);
     const saved = await saveGeneratedActorImage({

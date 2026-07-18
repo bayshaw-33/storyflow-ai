@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateArtImages, isAtlasAuthorizedUser } from "@/lib/art/providers";
+import { generateArtImages } from "@/lib/art/providers";
 import { buildActorTextToImageRequest, firstArtImageResult } from "@/lib/art/providers/actor-image";
 import { authenticateRequest, consumeCredits, refundCredits } from "@/lib/supabase/server";
 
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
         prompt: visualPrompt,
         aspectRatio: body.kind === "character" ? "3:4" : "16:9",
       }),
-      { atlasAuthorized: isAtlasAuthorizedUser(user) },
+      { atlasAuthorized: true },
     );
     const result = firstArtImageResult(generated);
 

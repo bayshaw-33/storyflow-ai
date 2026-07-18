@@ -136,7 +136,8 @@ export function buildActorTextToImageRequest(input: {
     referenceUrls: [],
     aspectRatio: input.aspectRatio,
     count: input.count ?? 1,
-    selection: "smart",
+    // Actor/concept generation is Atlas-only; do not silently fall back to FLUX.
+    selection: "atlas",
   };
 }
 

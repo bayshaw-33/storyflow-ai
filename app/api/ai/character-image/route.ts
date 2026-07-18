@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { callDeepSeek } from "@/lib/ai/providers/deepseek";
-import { generateArtImages, isAtlasAuthorizedUser } from "@/lib/art/providers";
+import { generateArtImages } from "@/lib/art/providers";
 import { buildActorTextToImageRequest, firstArtImageResult } from "@/lib/art/providers/actor-image";
 import { authenticateRequest, consumeCredits, refundCredits } from "@/lib/supabase/server";
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const visualPrompt = await buildVisualPrompt(body);
     const generated = await generateArtImages(
       buildActorTextToImageRequest({ prompt: visualPrompt, aspectRatio: "9:16" }),
-      { atlasAuthorized: isAtlasAuthorizedUser(user) },
+      { atlasAuthorized: true },
     );
     const result = firstArtImageResult(generated);
 

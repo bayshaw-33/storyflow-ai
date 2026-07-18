@@ -1,5 +1,30 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 +08 - Codex / Kimi 中断成果恢复、Universe/演员链路收口
+
+### 恢复结论
+- Kimi 中断成果可以继续使用，但旧 stash 不能直接 pop：`stash@{1}` 的 `lib/universe.ts` 同时保留旧实现并在文件尾重复追加新实现，会产生重复函数；演员 UI 的旧 stash 还包含过期的 snake_case pack 名。
+- 已审计后按有效版本落盘并推送：`ae20809`（DeepSeek/Atlas、演员库 UI、团队安全与 actor schema migration）及 `a4b43af`（Universe 断链、聚合、缩略图、作品关联与 UniverseGraph）。
+- 6 个历史 stash 继续保留作为只读恢复证据，本轮没有 pop/drop，避免旧版本覆盖 main。
+
+### 本轮追加收口
+- 演员/概念/关系图 6 个端点改为 Atlas-only：请求固定 `selection: "atlas"`，不再受 Atlas allowlist 降级到 FLUX，也不在 Atlas 失败时静默 fallback。
+- `GET /api/actors/generate-views?actorId=` 读取已持久化图组，按 actor owner 作用域查 art project/assets/versions，并从私有 Storage 重新签发 1 小时预览 URL；修复刷新详情页后图组消失。
+- Universe extract/canon-check 在 service-role 写入前验证 Universe owner 或 active team owner/admin/editor；越权返回 403，写库失败返回 502，不再 200 假成功。
+- `lib/universe.ts` 的 Inbox accept/reject 与列表读取移除云端静默 catch，统一返回 `synced:false` 并记录错误；project link 继续保持项目先写、Universe 后写、link 最后写。
+
+### 验证
+- `pnpm exec tsc --noEmit`：通过。
+- 专项：44/44 通过（Universe 链路、DeepSeek degraded、Atlas 演员图、演员 UI、团队鉴权）。
+- 全量：`node --test tests/*.test.mjs` 264/264 通过。
+- `pnpm build`：成功，67/67 静态页面生成；`/api/universe/summaries`、`/api/actors/generate-views`、演员详情与 Universe 详情均进入构建产物。
+- 凭证扫描：tracked 文件未命中 `apikey-*` 长密钥模式；Atlas key 仍只通过服务端环境变量读取。
+
+### 部署前置与遗留
+- `supabase/migrations/20260718060000_actor_metadata_and_email_revoke.sql` 已提交但本轮未执行；部署环境必须先在 staging 验证后再应用到 production，才能彻底关闭 actor metadata 缺列与匿名邮箱枚举问题。
+- `generate-views` 生成仍为多图并发；单张失败会显式报错，但已上传且尚未来得及写 version 的孤儿对象仍需后续清理任务治理。
+- 真实 Atlas 图片生成会产生费用，本轮未为测试而触发付费调用；代码契约、路由选择、请求 payload 和构建均已验证。
+
 ## 2026-07-18 (TRAE) / KIIKIS 制作工作台新任务 1-4 完成
 
 ### 基线与 commit range

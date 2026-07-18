@@ -33,6 +33,23 @@ export async function persistRemoteArtImage(input: {
   return uploadAndSign(path, contentType, await source.arrayBuffer());
 }
 
+export async function signStoredArtImage(storagePath: string, expiresIn = 60 * 60) {
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!supabaseUrl || !serviceKey) throw new Error("MISSING_SUPABASE_STORAGE_CONFIG");
+
+  const signed = await fetch(`${supabaseUrl}/storage/v1/object/sign/${ART_BUCKET}/${storagePath}`, {
+    method: "POST",
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn }),
+  });
+  if (!signed.ok) throw new Error(`ART_STORAGE_SIGN_ERROR:${signed.status}`);
+  const payload = await signed.json() as { signedURL?: string; signedUrl?: string };
+  const signedPath = payload.signedURL || payload.signedUrl;
+  if (!signedPath) throw new Error("ART_STORAGE_SIGN_EMPTY");
+  return signedPath.startsWith("http") ? signedPath : `${supabaseUrl}/storage/v1${signedPath}`;
+}
+
 async function uploadAndSign(path: string, contentType: string, body: ArrayBuffer) {
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -50,16 +67,7 @@ async function uploadAndSign(path: string, contentType: string, body: ArrayBuffe
   });
   if (!upload.ok) throw new Error(`ART_STORAGE_UPLOAD_ERROR:${upload.status}`);
 
-  const signed = await fetch(`${supabaseUrl}/storage/v1/object/sign/${ART_BUCKET}/${path}`, {
-    method: "POST",
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 7 }),
-  });
-  if (!signed.ok) throw new Error(`ART_STORAGE_SIGN_ERROR:${signed.status}`);
-  const payload = await signed.json() as { signedURL?: string; signedUrl?: string };
-  const signedPath = payload.signedURL || payload.signedUrl;
-  if (!signedPath) throw new Error("ART_STORAGE_SIGN_EMPTY");
-  return { storagePath: path, previewUrl: signedPath.startsWith("http") ? signedPath : `${supabaseUrl}/storage/v1${signedPath}` };
+  return { storagePath: path, previewUrl: await signStoredArtImage(path, 60 * 60 * 24 * 7) };
 }
 
 function sanitize(value: string) {

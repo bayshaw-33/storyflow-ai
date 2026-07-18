@@ -88,6 +88,7 @@ test("expressions pack shots are distinct expression close-ups", () => {
 
 test("text-to-image request routes to the catalog default Atlas text model", () => {
   const request = buildActorTextToImageRequest({ prompt: "cinematic portrait", aspectRatio: "1:1" });
+  assert.equal(request.selection, "atlas");
   assert.equal(request.task, "concept");
   assert.equal(request.referenceUrls.length, 0);
   assert.equal(request.count, 1);
@@ -114,6 +115,7 @@ test("reference-driven request routes to the catalog default Atlas edit model wi
     referenceUrls: [avatarUrl],
     aspectRatio: "4:3",
   });
+  assert.equal(request.selection, "atlas");
   assert.deepEqual(request.referenceUrls, [avatarUrl]);
 
   const route = resolveArtProviderRoute({

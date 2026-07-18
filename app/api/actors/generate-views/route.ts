@@ -17,21 +17,84 @@
 
 import { NextRequest } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
-import { generateArtImages, isAtlasAuthorizedUser } from "@/lib/art/providers";
+import { generateArtImages } from "@/lib/art/providers";
 import {
   buildActorReferenceImageRequest,
   buildActorViewShotPrompt,
+  ACTOR_VIEW_PACKS,
   firstArtImageResult,
   getActorViewPack,
   sanitizeReferenceUrls,
 } from "@/lib/art/providers/actor-image";
-import { persistRemoteArtImage } from "@/lib/supabase/art-storage";
+import { persistRemoteArtImage, signStoredArtImage } from "@/lib/supabase/art-storage";
 import { getActorForUser } from "@/lib/supabase/actors";
 import { authenticateRequest, serviceFetch } from "@/lib/supabase/server";
 import { ensureStoryboardArtProject, insertAssetVersions, upsertStoryboardAsset } from "@/lib/storyboard/assets/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await authenticateRequest(request);
+    const actorId = request.nextUrl.searchParams.get("actorId")?.trim() || "";
+    if (!actorId) throw new Error("ACTOR_NOT_FOUND");
+    await getActorForUser(user.id, actorId);
+
+    const projects = await serviceFetch<Array<{ id: string }>>(
+      `/rest/v1/storyflow_art_projects?owner_id=eq.${encodeURIComponent(user.id)}&source_project_id=eq.${encodeURIComponent(`actor:${actorId}`)}&name=eq.${encodeURIComponent("Storyboard Assets")}&select=id&limit=1`,
+    );
+    const projectId = projects[0]?.id;
+    if (!projectId) return ok({ actorId, versions: [] });
+
+    const assets = await serviceFetch<Array<{ id: string; name: string }>>(
+      `/rest/v1/storyflow_art_assets?project_id=eq.${encodeURIComponent(projectId)}&kind=eq.character&select=id,name`,
+    );
+    if (!assets.length) return ok({ actorId, versions: [] });
+    const packByAsset = new Map<string, string>();
+    for (const asset of assets) {
+      const pack = ACTOR_VIEW_PACKS.find((candidate) => asset.name.endsWith(candidate.label));
+      if (pack) packByAsset.set(asset.id, pack.key);
+    }
+
+    const variants = await serviceFetch<Array<{ id: string; asset_id: string }>>(
+      `/rest/v1/storyflow_art_asset_variants?asset_id=in.(${assets.map((asset) => asset.id).join(",")})&select=id,asset_id`,
+    );
+    if (!variants.length) return ok({ actorId, versions: [] });
+    const assetByVariant = new Map(variants.map((variant) => [variant.id, variant.asset_id]));
+    const rows = await serviceFetch<Array<{
+      id: string;
+      variant_id: string;
+      storage_path: string;
+      provider: string | null;
+      model: string | null;
+      prompt: string;
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+    }>>(
+      `/rest/v1/storyflow_art_asset_versions?variant_id=in.(${variants.map((variant) => variant.id).join(",")})&select=id,variant_id,storage_path,provider,model,prompt,metadata,created_at&order=created_at.desc`,
+    );
+
+    const versions = await Promise.all(rows.map(async (row) => {
+      const assetId = assetByVariant.get(row.variant_id) || "";
+      const pack = packByAsset.get(assetId) || "";
+      return {
+        versionId: row.id,
+        previewUrl: await signStoredArtImage(row.storage_path),
+        storagePath: row.storage_path,
+        provider: row.provider || "atlas",
+        model: row.model || "",
+        prompt: row.prompt || "",
+        pack,
+        createdAt: row.created_at,
+      };
+    }));
+
+    return ok({ actorId, versions: versions.filter((version) => version.pack) });
+  } catch (error) {
+    return apiError(error, "读取演员图组失败。", 502);
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,7 +136,7 @@ export async function POST(request: NextRequest) {
             referenceUrls,
             aspectRatio: pack.aspectRatio,
           }),
-          { atlasAuthorized: isAtlasAuthorizedUser(user) },
+          { atlasAuthorized: true },
         );
         const image = firstArtImageResult(generated);
         const stored = await persistRemoteArtImage({

@@ -3,6 +3,10 @@ import type { DramaProject } from "@/lib/projects";
 import type { CreativePackage } from "@/lib/universe/creative-package";
 import { extractUniverseInboxItems } from "@/lib/ai/universe";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { assertUniverseWriteAccess } from "@/lib/supabase/universe-access";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   let body: { universeId?: string; project?: DramaProject; creativePackage?: CreativePackage };
@@ -24,6 +28,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Please sign in before extracting Universe updates." }, { status: 401 });
   }
 
+  if (!hasServiceRoleConfig()) {
+    return NextResponse.json({ success: false, error: "Universe service is unavailable." }, { status: 503 });
+  }
+  try {
+    await assertUniverseWriteAccess(user.id, body.universeId);
+  } catch (accessError) {
+    const forbidden = accessError instanceof Error && accessError.message.includes("UNIVERSE_FORBIDDEN");
+    return NextResponse.json(
+      { success: false, error: forbidden ? "You cannot edit this Universe." : "Universe access check failed." },
+      { status: forbidden ? 403 : 502 },
+    );
+  }
+
   const extraction = await extractUniverseInboxItems({
     universeId: body.universeId,
     project: body.project,
@@ -31,12 +48,16 @@ export async function POST(request: Request) {
     userId: user.id,
   });
 
-  if (hasServiceRoleConfig() && extraction.items.length) {
-    await serviceFetch("/rest/v1/storyflow_universe_inbox_items?on_conflict=id", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify(extraction.items),
-    }).catch(() => null);
+  if (extraction.items.length) {
+    try {
+      await serviceFetch("/rest/v1/storyflow_universe_inbox_items?on_conflict=id", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify(extraction.items),
+      });
+    } catch {
+      return NextResponse.json({ success: false, error: "Extracted items could not be saved." }, { status: 502 });
+    }
   }
 
   return NextResponse.json({
