@@ -172,10 +172,13 @@ export async function POST(request: Request) {
           };
         } catch (error) {
           if (isStoryboardError(error)) throw error;
+          // 透传原始错误信息（如 DEEPSEEK_API_ERROR:400:Model Not Exist），方便用户定位配置问题
+          const rawDetail = error instanceof Error ? error.message.slice(0, 200) : String(error);
           console.error("[storyboard/analyze] provider chain failed", {
             code: error instanceof Error ? error.message.split(":", 1)[0] : "UNKNOWN",
+            detail: rawDetail,
           });
-          throw new StoryboardError("AI_CALL_FAILED", "AI 服务暂时不可用，请稍后重试。");
+          throw new StoryboardError("AI_CALL_FAILED", `AI 服务暂时不可用，请稍后重试。原因：${rawDetail}`);
         }
       },
       loadExistingState: (scope) => loadExistingState(scope),

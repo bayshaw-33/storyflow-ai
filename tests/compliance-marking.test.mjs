@@ -40,7 +40,7 @@ function makeRequest(overrides = {}) {
     providerCode: "KIIKIS",
     contentId: "content-1",
     modelProvider: "deepseek",
-    modelName: "deepseek-v4-flash",
+    modelName: "deepseek-chat",
     visibleDisclosureMode: "ui",
     ...overrides,
   };

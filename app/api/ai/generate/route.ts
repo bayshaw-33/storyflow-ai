@@ -242,6 +242,10 @@ function toFriendlyError(error: unknown) {
     return "连接 DeepSeek 失败，请检查网络后重试。已有内容已保留。";
   }
 
+  if (message.includes("DEEPSEEK_API_ERROR:400")) {
+    return "DeepSeek 模型配置错误（如模型名不存在），请检查 DEEPSEEK_MODEL 环境变量。";
+  }
+
   if (message.includes("DEEPSEEK_API_ERROR")) {
     return "DeepSeek 生成失败，请稍后重试或检查模型配置。";
   }

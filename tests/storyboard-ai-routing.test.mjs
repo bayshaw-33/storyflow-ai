@@ -29,7 +29,7 @@ let fetchLog = [];
 
 function setupEnv() {
   process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
-  process.env.DEEPSEEK_MODEL = "deepseek-v4-flash";
+  process.env.DEEPSEEK_MODEL = "deepseek-chat";
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
   process.env.ATLASCLOUD_LLM_BASE_URL = "https://api.atlascloud.ai/v1";
   process.env.ATLASCLOUD_LLM_MODEL = "gemini-2.5-flash";
@@ -84,7 +84,7 @@ const MESSAGES = [
 test("DeepSeek 成功时只调用 DeepSeek，fallbackUsed=false", async () => {
   setupEnv();
   mockFetch({
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-v4-flash"),
+    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
     [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
   });
 
@@ -143,7 +143,7 @@ test("DeepSeek 5xx 时 fallback 到 Atlas Gemini", async () => {
 test("DeepSeek 空输出时 fallback 到 Atlas Gemini", async () => {
   setupEnv();
   mockFetch({
-    [DEEPSEEK_URL]: () => chatResponse("", "deepseek-v4-flash"),
+    [DEEPSEEK_URL]: () => chatResponse("", "deepseek-chat"),
     [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
   });
 
@@ -160,7 +160,7 @@ test("DeepSeek 空输出时 fallback 到 Atlas Gemini", async () => {
 test("DeepSeek 返回不合格 JSON 时由任务校验器触发 Atlas fallback", async () => {
   setupEnv();
   mockFetch({
-    [DEEPSEEK_URL]: () => chatResponse("not-json", "deepseek-v4-flash"),
+    [DEEPSEEK_URL]: () => chatResponse("not-json", "deepseek-chat"),
     [ATLAS_URL]: () => chatResponse('{"scenes":[]}', "gemini-2.5-flash"),
   });
 
@@ -180,7 +180,7 @@ test("DeepSeek 返回不合格 JSON 时由任务校验器触发 Atlas fallback",
 test("DeepSeek 与 Atlas 输出都不合格时显式抛出校验错误", async () => {
   setupEnv();
   mockFetch({
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-invalid", "deepseek-v4-flash"),
+    [DEEPSEEK_URL]: () => chatResponse("deepseek-invalid", "deepseek-chat"),
     [ATLAS_URL]: () => chatResponse("atlas-invalid", "gemini-2.5-flash"),
   });
 
@@ -258,7 +258,7 @@ test("MiniMax 在 storyboard_script 链路零调用（即使配置了 MiniMax ke
   process.env.MINIMAX_API_KEY = "test-minimax-key";
   process.env.AI_PROVIDER = "hybrid";
   mockFetch({
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-v4-flash"),
+    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
     [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
   });
 
@@ -296,7 +296,7 @@ test("非 storyboard_script 任务仍走原 hybrid router（不受窄链影响�
   // 用一个非 storyboard、非 novel、非 creation 的 taskType
   // 在 hybrid 模式下应走 MiniMax
   mockFetch({
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-v4-flash"),
+    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
     [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
   });
 

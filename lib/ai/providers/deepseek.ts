@@ -18,7 +18,7 @@ export async function callDeepSeek({
   modelOverride,
 }: DeepSeekOptions): Promise<AIProviderResult> {
   const apiKey = apiKeyOverride || process.env.DEEPSEEK_API_KEY;
-  const model = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  const model = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-chat";
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");
