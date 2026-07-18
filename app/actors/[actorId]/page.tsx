@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, ArrowLeft, Pencil, TriangleAlert, UserRoundX } from "lucide-react";
 import { ActorAssetPacks } from "@/components/actors/ActorAssetPacks";
 import { ActorProfilePanel } from "@/components/actors/ActorProfilePanel";
+import { EditActorModal } from "@/components/actors/EditActorModal";
 import { PortrayalGallery } from "@/components/actors/PortrayalGallery";
 import { ReferenceSheetExport } from "@/components/actors/ReferenceSheetExport";
 import { actorApiFetch } from "@/components/actors/actor-client";
@@ -60,6 +61,7 @@ export default function ActorDetailPage() {
 
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState("");
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   // PRD §7.2 关键约束：详情页必须用 GET /api/actors/:actorId 单读。
   useEffect(() => {
@@ -243,6 +245,8 @@ export default function ActorDetailPage() {
     return normalizeTagList(actor.playable_roles).slice(0, 4);
   }, [actor]);
 
+  // PRD §权限矩阵：基础资料编辑仅创建者可写
+  const isCreator = Boolean(actor && session?.user?.id && actor.owner_id === session.user.id);
   const authRequired = sessionLoaded && !session;
 
   return (
@@ -266,15 +270,17 @@ export default function ActorDetailPage() {
         <span className={styles.topbarSpacer} />
         {actor ? (
           <span className={styles.detailActions}>
-            <button
-              className={styles.ghostBtn}
-              type="button"
-              disabled
-              title={isZh ? "编辑入口暂未开放，请使用文字创建补充资料。" : "Edit entry not available yet."}
-            >
-              <Pencil size={14} />
-              {isZh ? "编辑" : "Edit"}
-            </button>
+            {isCreator ? (
+              <button
+                className={styles.ghostBtn}
+                type="button"
+                onClick={() => setEditModalOpen(true)}
+                disabled={archiving}
+              >
+                <Pencil size={14} />
+                {isZh ? "编辑" : "Edit"}
+              </button>
+            ) : null}
             <button
               className={styles.ghostBtn}
               type="button"
@@ -366,6 +372,17 @@ export default function ActorDetailPage() {
           </div>
         </>
       )}
+      <EditActorModal
+        open={editModalOpen}
+        token={token}
+        copy={ui}
+        actor={actor}
+        onClose={() => setEditModalOpen(false)}
+        onUpdated={(updated) => {
+          setActor(updated);
+          setEditModalOpen(false);
+        }}
+      />
     </main>
   );
 }

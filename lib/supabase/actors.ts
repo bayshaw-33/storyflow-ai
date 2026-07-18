@@ -2,6 +2,7 @@ import {
   buildActorBasePrompt,
   buildActorNegativePrompt,
   buildReferenceSheetPrompt,
+  mergeActorUpdate,
   normalizeActorInput,
   type ActorProfile,
   type ActorProfileInput,
@@ -235,8 +236,11 @@ export async function updateActorForUser(userId: string, actorId: string, input:
   // ensureServiceRole() 由 getActorForUser 负责（避免重复校验）
   const actor = await getActorForUser(userId, actorId);
   if (actor.storage_source === "project_snapshot") return updateFallbackActor(userId, actorId, input);
-  await assertCanEditActor(userId, actor);
-  const normalized = normalizeActorInput({ ...actor, ...input });
+  // PRD §权限矩阵：基础资料编辑仅创建者可写
+  await assertCanEditActorBasicProfile(userId, actor);
+  // PRD §演员资料编辑：空字段不覆盖已有内容；metadata 深合并
+  const merged = mergeActorUpdate(actor, input);
+  const normalized = normalizeActorInput(merged);
   if (!normalized.name) throw new Error("ACTOR_NAME_REQUIRED");
 
   if (normalized.visibility === "team") {
@@ -284,7 +288,8 @@ export async function archiveActorForUser(userId: string, actorId: string) {
   // ensureServiceRole() 由 getActorForUser 负责（避免重复校验）
   const actor = await getActorForUser(userId, actorId);
   if (actor.storage_source === "project_snapshot") return archiveFallbackActor(userId, actorId);
-  await assertCanEditActor(userId, actor);
+  // PRD §权限矩阵：删除演员仅创建者可操作
+  await assertCanEditActorBasicProfile(userId, actor);
   await serviceFetch(`/rest/v1/storyflow_actor_profiles?id=eq.${encodeURIComponent(actorId)}`, {
     method: "PATCH",
     body: JSON.stringify({ status: "archived", updated_at: new Date().toISOString() }),
@@ -302,7 +307,7 @@ export async function saveActorPrompt(userId: string, actorId: string | null, in
     await updateFallbackActor(userId, actorId, { ...input, base_prompt: basePrompt, negative_prompt: negativePrompt });
     return { basePrompt, negativePrompt };
   }
-  if (actorId) await assertCanEditActor(userId, actor as ActorProfile);
+  if (actorId) await assertCanEditActorBasicProfile(userId, actor as ActorProfile);
   const merged = { ...actor, ...normalizeActorInput(input) };
   const basePrompt = buildActorBasePrompt(merged);
   const negativePrompt = buildActorNegativePrompt(merged);
@@ -354,7 +359,8 @@ export async function saveGeneratedActorImage(params: {
       actor: updated,
     };
   }
-  await assertCanEditActor(params.userId, actor);
+  // 基础身份资产（头像/参考表）仅创建者可改
+  await assertCanEditActorBasicProfile(params.userId, actor);
   const asset = await createActorAsset({
     userId: params.userId,
     teamId: actor.team_id || null,
@@ -468,6 +474,19 @@ async function assertCanEditActor(userId: string, actor: ActorProfile) {
     await assertTeamRole(userId, actor.team_id, TEAM_ADMIN_ROLES);
     return;
   }
+  throw new Error("ACTOR_FORBIDDEN");
+}
+
+/**
+ * 基础资料编辑权限：仅创建者可以编辑名称/年龄感/脸型/头像/Prompt/共享范围等基础身份资产。
+ * 团队成员/平台用户不得修改原始身份资料（PRD §权限矩阵：编辑基础资料 = 创建者=是, 团队=否, 平台=否）。
+ * 用于：updateActorForUser / archiveActorForUser / saveActorPrompt / saveGeneratedActorImage。
+ *
+ * 项目形象（upsertAppearanceVariant）仍用 assertCanEditActor（团队 admin 可写），
+ * 因为那是项目级 appearance，不是演员基础身份。
+ */
+async function assertCanEditActorBasicProfile(userId: string, actor: ActorProfile) {
+  if (actor.owner_id === userId) return;
   throw new Error("ACTOR_FORBIDDEN");
 }
 
