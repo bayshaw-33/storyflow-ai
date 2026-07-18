@@ -26,7 +26,7 @@ export interface StoryboardDraftScope {
   sourceUnitId: string;
 }
 
-function buildDraftKey(scope: StoryboardDraftScope): string {
+export function buildDraftKey(scope: StoryboardDraftScope): string {
   const userSegment = scope.userId || ANON_USER;
   return `${DRAFT_KEY_PREFIX}:${userSegment}:${scope.projectId}:${scope.sourceUnitId}`;
 }
@@ -38,7 +38,9 @@ function buildDraftKey(scope: StoryboardDraftScope): string {
 export function readStoryboardDraft(scope: StoryboardDraftScope): Partial<ProductionProjectState> | null {
   if (!scope.projectId || !scope.sourceUnitId) return null;
   try {
-    const raw = window.localStorage.getItem(buildDraftKey(scope));
+    const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+    if (!storage) return null;
+    const raw = storage.getItem(buildDraftKey(scope));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ProductionProjectState>;
     return parsed && typeof parsed === "object" ? parsed : null;
@@ -53,11 +55,10 @@ export function readStoryboardDraft(scope: StoryboardDraftScope): Partial<Produc
  */
 export function writeStoryboardDraft(scope: StoryboardDraftScope, state: ProductionProjectState): void {
   if (!scope.projectId || !scope.sourceUnitId) return;
-  try {
-    window.localStorage.setItem(buildDraftKey(scope), JSON.stringify(state));
-  } catch {
-    // Quota exceeded or serialization error — 静默忽略，云端保存是真相之源
-  }
+  // PRD §6.2: localStorage 写入失败必须抛出，让调用方在通知区域显示错误（不得空 catch）
+  const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+  if (!storage) throw new Error("本地存储不可用（localStorage 未初始化）");
+  storage.setItem(buildDraftKey(scope), JSON.stringify(state));
 }
 
 /**

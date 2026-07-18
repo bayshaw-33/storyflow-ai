@@ -108,6 +108,12 @@ export function ProductionWorkbench() {
   const [sourceFiles, setSourceFiles] = useState<ProductionSourceFile[]>([]);
   const [isEmptyState, setIsEmptyState] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("planning");
+  // PRD §6.2 hydration 状态机：resolving_scope → loading_local → loading_cloud_if_archived → ready → autosave_enabled
+  // ready 之前禁止把空初始 state 写入 localStorage 或云端
+  const [hydrationPhase, setHydrationPhase] = useState<
+    "resolving_scope" | "loading_local" | "loading_cloud_if_archived" | "ready"
+  >("resolving_scope");
+  const [draftPersistError, setDraftPersistError] = useState<string>("");
   const [notice, setNotice] = useState<string>("");
 
   // --- Storyboard 状态（contracts.ts）---
@@ -180,8 +186,22 @@ export function ProductionWorkbench() {
     if (!urlProjectId || !urlSourceUnitId) {
       // 任务 1.4「先创作后归档」：带 setup=1（从需求墙来）时自动开未命名草稿，立即可用
       if (setup === "1") {
-        const draftId = `draft-production-${Date.now()}`;
-        const draftUnitId = `draft-unit-${Date.now()}`;
+        // PRD §6.1: 用 crypto.randomUUID() 生成稳定 draft ID，立即 router.replace 写回 URL
+        // 保留 mode 和已有 universeId，删除 setup=1 避免 effect 再次初始化
+        const uuid = typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const draftId = `draft-production-${uuid}`;
+        const draftUnitId = `draft-unit-${uuid}`;
+        const universeId = searchParams.get("universeId") || "";
+        // 构造规范化 URL
+        const params = new URLSearchParams();
+        params.set("mode", mode);
+        params.set("projectId", draftId);
+        params.set("sourceUnitId", draftUnitId);
+        if (universeId) params.set("universeId", universeId);
+        // 不再 set setup=1
+        router.replace(`/production?${params.toString()}`, { scroll: false });
         setProjectId(draftId);
         setSourceUnitId(draftUnitId);
         setIsEmptyState(false);
@@ -190,6 +210,7 @@ export function ProductionWorkbench() {
         const tabForMode: Tab = mode === "editor" ? "frames" : mode === "art" ? "assets" : mode === "planning" ? "table" : "script";
         setActiveTab(tabForMode);
         setEntryMode(mode as EntryMode);
+        setHydrationPhase("loading_local");
         return;
       }
       // 无 setup：显示需求墙（任务 1.3）
@@ -200,12 +221,14 @@ export function ProductionWorkbench() {
     setIsEmptyState(false);
     setProjectId(urlProjectId);
     setSourceUnitId(urlSourceUnitId);
+    setHydrationPhase("loading_local");
 
     // 优先 handoff
     const handoff = readCreativeHandoff(urlProjectId, urlSourceUnitId);
     if (handoff) {
       setProjectTitle(handoff.title);
       setManuscript(handoff.manuscript);
+      setHydrationPhase("ready");
       return;
     }
 
@@ -230,7 +253,9 @@ export function ProductionWorkbench() {
         if (typeof draftRevision === "number") setRevision(draftRevision);
       }
     }
-  }, [session?.user?.id, searchParams]);
+    // 草稿加载完成，标记 ready（云端加载由 loadFromServer 异步进行，不阻塞 ready）
+    setHydrationPhase("ready");
+  }, [session?.user?.id, searchParams, router]);
 
   // --- Supabase session ---
   useEffect(() => {
@@ -268,9 +293,17 @@ export function ProductionWorkbench() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  // PRD §6.2: localStorage 写入失败持续显示，不自动消失
+  useEffect(() => {
+    if (!draftPersistError) return;
+    setNotice(draftPersistError);
+  }, [draftPersistError]);
+
   // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
+  // PRD §6.2: hydration gate —— ready 之前禁止把空初始 state 写入 localStorage
   useEffect(() => {
     if (!projectId || !sourceUnitId) return;
+    if (hydrationPhase !== "ready") return;
     const scope: StoryboardDraftScope = {
       userId: session?.user?.id || null,
       projectId,
@@ -299,8 +332,15 @@ export function ProductionWorkbench() {
       storyboardAssets: assets,
       storyboardRevision: revision,
     } as unknown as ProductionProjectState;
-    writeStoryboardDraft(scope, draftPayload);
-  }, [scenes, assets, revision, projectId, sourceUnitId, session, projectTitle, sourceFiles, manuscript]);
+    try {
+      writeStoryboardDraft(scope, draftPayload);
+      if (draftPersistError) setDraftPersistError("");
+    } catch (error) {
+      // PRD §6.2: localStorage 写入失败必须在现有通知区域显示错误，不得空 catch
+      const message = error instanceof Error ? error.message : "本地草稿保存失败";
+      setDraftPersistError(message);
+    }
+  }, [scenes, assets, revision, projectId, sourceUnitId, session, projectTitle, sourceFiles, manuscript, hydrationPhase, draftPersistError]);
 
   // -------------------------------------------------------------------
   // 服务端加载/保存
