@@ -12,7 +12,6 @@
  */
 
 import { useState } from "react";
-import JSZip from "jszip";
 import { ChevronDown, Download, FileArchive, Loader2, ShieldCheck } from "lucide-react";
 import type { StoryboardScene, StoryboardShot } from "@/lib/storyboard/contracts";
 import { requestEvidencePackageDownload } from "@/lib/evidence/download";
@@ -57,70 +56,52 @@ export function StoryboardExportMenu(props: Props) {
   }
 
   async function handleExportZip() {
+    // PRD §10: 服务端构建完整生产包（script + storyboard + assets + images + videos + manifest）
+    // 不再在前端 JSZip 拉取 Provider 临时 URL
+    if (!projectId || !sourceUnitId) {
+      setProgress("缺少项目作用域，无法导出。");
+      return;
+    }
+    if (projectId.startsWith("draft-")) {
+      setProgress("请先归档草稿为正式项目再导出生产包。");
+      return;
+    }
     setExporting(true);
-    setProgress("准备打包…");
+    setProgress("服务端打包中…");
     try {
-      const zip = new JSZip();
-      const safeTitle = (projectTitle || "storyboard").replace(/[^\w\u4e00-\u9fa5-]/g, "_");
-
-      // 1. storyboard.json
-      setProgress("写入 storyboard.json…");
-      zip.file("storyboard.json", JSON.stringify({
-        projectId,
-        sourceUnitId,
-        revision,
-        exportedAt: new Date().toISOString(),
-        scenes,
-      }, null, 2));
-
-      // 2. shots.csv
-      setProgress("写入 shots.csv…");
-      zip.file("shots.csv", buildShotsCsv(scenes));
-
-      // 3. jimeng-prompts.md（每个 Shot 追加视频文件名引用）
-      setProgress("写入 jimeng-prompts.md…");
-      zip.file("jimeng-prompts.md", buildJimengPromptsMd(scenes, videoJobs));
-
-      // 4. video-list.csv
-      setProgress("写入 video-list.csv…");
-      zip.file("video-list.csv", buildVideoListCsv(scenes, videoJobs));
-
-      // 5. videos/ 目录（仅 completed 状态，fetch 拉取后塞入）
-      const videosFolder = zip.folder("videos");
-      if (videosFolder) {
-        const completedShots = scenes.flatMap((s) => s.shots).map((sh, i) => ({ shot: sh, index: i + 1 })).filter(({ shot }) => {
-          const id = shot.id ?? shot.clientId ?? "";
-          return videoJobs[id]?.status === "completed" && videoJobs[id]?.videoUrl;
-        });
-        for (const { shot, index } of completedShots) {
-          const id = shot.id ?? shot.clientId ?? "";
-          const url = videoJobs[id]?.videoUrl;
-          if (!url) continue;
-          const filename = `shot-${String(index).padStart(3, "0")}.mp4`;
-          setProgress(`下载视频 ${filename}…`);
-          try {
-            const resp = await fetch(url);
-            const blob = await resp.blob();
-            videosFolder.file(filename, blob);
-          } catch {
-            // 单个视频下载失败不阻塞整个 ZIP
-            videosFolder.file(`${filename}.failed.txt`, `下载失败: ${url}\n时间: ${new Date().toISOString()}`);
-          }
-        }
+      const resp = await fetch("/api/storyboard/export-package", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ projectId, sourceUnitId }),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({})) as { error?: string; code?: string };
+        throw new Error(errBody.error || `导出失败（HTTP ${resp.status}）`);
       }
+      const blob = await resp.blob();
+      const exportStatus = resp.headers.get("X-Export-Status") || "ok";
+      const failedCount = resp.headers.get("X-Export-Failed-Count") || "0";
 
-      // 6. README.md
-      zip.file("README.md", buildReadme(projectTitle, sourceUnitId, revision, scenes.length));
+      // 从 Content-Disposition 提取文件名
+      const cd = resp.headers.get("Content-Disposition") || "";
+      const fnameMatch = cd.match(/filename="([^"]+)"/);
+      const filename = fnameMatch ? fnameMatch[1] : `${projectTitle || "production"}-production-package.zip`;
 
-      setProgress("压缩中…");
-      const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${safeTitle}-storyboard.zip`;
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      setProgress("");
+
+      if (exportStatus === "partial_failure") {
+        setProgress(`导出完成（部分失败：${failedCount} 个文件缺失，详见 ZIP 内 manifest.json）`);
+      } else {
+        setProgress("生产包已下载");
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setProgress(`导出失败: ${message}`);
@@ -208,141 +189,4 @@ export function StoryboardExportMenu(props: Props) {
       ) : null}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Builders
-// ---------------------------------------------------------------------------
-
-function buildShotsCsv(scenes: StoryboardScene[]): string {
-  const headers = ["SceneOrder", "ShotOrder", "Location", "TimeOfDay", "ShotSize", "Camera", "Angle", "Duration", "Dialogue", "VisualDescription", "StoryBeat", "Emotion", "Confirmed", "Locked"];
-  const rows: string[] = [headers.join(",")];
-  for (const scene of scenes) {
-    for (const shot of scene.shots) {
-      const cells = [
-        scene.order,
-        shot.order,
-        csvEscape(scene.location),
-        csvEscape(scene.timeOfDay),
-        csvEscape(shot.shotSize),
-        csvEscape(shot.cameraMovement),
-        csvEscape(shot.angle),
-        shot.durationSeconds,
-        csvEscape(shot.dialogue),
-        csvEscape(shot.visualDescription),
-        csvEscape(shot.storyBeat),
-        csvEscape(shot.emotion),
-        shot.confirmed ? "Y" : "N",
-        shot.locked ? "Y" : "N",
-      ];
-      rows.push(cells.join(","));
-    }
-  }
-  return rows.join("\n");
-}
-
-function buildJimengPromptsMd(scenes: StoryboardScene[], videoJobs: VideoJobMap): string {
-  const lines: string[] = [
-    `# 即梦视频提示词 — ${new Date().toISOString()}`,
-    "",
-    `共 ${scenes.length} 场，${scenes.reduce((n, s) => n + s.shots.length, 0)} 个 Shot。`,
-    "",
-  ];
-  let shotIndex = 0;
-  for (const scene of scenes) {
-    lines.push(`## 第 ${scene.order} 场 — ${scene.heading || ""}`);
-    lines.push("");
-    lines.push(`- 场景：${scene.location || "—"}`);
-    lines.push(`- 时间：${scene.timeOfDay || "—"}`);
-    lines.push(`- 梗概：${scene.summary || "—"}`);
-    lines.push("");
-    for (const shot of scene.shots) {
-      shotIndex += 1;
-      const shotId = shot.id ?? shot.clientId ?? "";
-      const videoState = videoJobs[shotId];
-      const videoFilename = videoState?.status === "completed" ? `videos/shot-${String(shotIndex).padStart(3, "0")}.mp4` : null;
-      lines.push(`### Shot ${shotIndex} (S${scene.order}-SHOT${shot.order})`);
-      lines.push("");
-      lines.push(`- 景别/机位：${shot.shotSize} / ${shot.cameraMovement} / ${shot.angle}`);
-      lines.push(`- 时长：${shot.durationSeconds}s`);
-      lines.push(`- 视觉描述：${shot.visualDescription || "—"}`);
-      if (shot.dialogue) lines.push(`- 台词：${shot.dialogue}`);
-      if (shot.emotion) lines.push(`- 表情情绪：${shot.emotion}`);
-      lines.push("");
-      lines.push("**即梦提示词：**");
-      lines.push("```");
-      lines.push(shot.jimengPromptZh || "（未生成）");
-      lines.push("```");
-      lines.push("");
-      if (videoFilename) {
-        lines.push(`**视频文件：** [\`${videoFilename}\`](${videoFilename})`);
-        if (videoState.durationSeconds) lines.push(`- 时长：${videoState.durationSeconds}s`);
-        if (videoState.costEstimate !== null) lines.push(`- 估算成本：${videoState.costEstimate} 积分`);
-        lines.push("");
-      } else {
-        lines.push(`**视频文件：** 未生成或失败（状态：${videoState?.status ?? "idle"}）`);
-        lines.push("");
-      }
-      lines.push("---");
-      lines.push("");
-    }
-  }
-  return lines.join("\n");
-}
-
-function buildVideoListCsv(scenes: StoryboardScene[], videoJobs: VideoJobMap): string {
-  const headers = ["ShotIndex", "SceneOrder", "ShotOrder", "ShotId", "Duration", "AspectRatio", "GeneratedAt", "CostEstimate", "Status", "VideoFile", "Error"];
-  const rows: string[] = [headers.join(",")];
-  let shotIndex = 0;
-  for (const scene of scenes) {
-    for (const shot of scene.shots) {
-      shotIndex += 1;
-      const shotId = shot.id ?? shot.clientId ?? "";
-      const v = videoJobs[shotId];
-      const videoFile = v?.status === "completed" ? `videos/shot-${String(shotIndex).padStart(3, "0")}.mp4` : "";
-      rows.push([
-        shotIndex,
-        scene.order,
-        shot.order,
-        csvEscape(shotId),
-        v?.durationSeconds ?? "",
-        v?.aspectRatio ?? "9:16",
-        v?.finishedAt ? new Date(v.finishedAt).toISOString() : "",
-        v?.costEstimate ?? "",
-        v?.status ?? "idle",
-        csvEscape(videoFile),
-        csvEscape(v?.error ?? ""),
-      ].join(","));
-    }
-  }
-  return rows.join("\n");
-}
-
-function buildReadme(title: string, sourceUnitId: string, revision: number, sceneCount: number): string {
-  return [
-    `# ${title} — 分镜包`,
-    "",
-    `- 集源 ID：${sourceUnitId}`,
-    `- Revision：${revision}`,
-    `- 场景数：${sceneCount}`,
-    `- 导出时间：${new Date().toISOString()}`,
-    "",
-    "## 内容",
-    "",
-    "- `storyboard.json` — 完整分镜数据（scenes + assets + revision）",
-    "- `shots.csv` — 分镜表（含景别/机位/对白/视觉描述等）",
-    "- `jimeng-prompts.md` — 即梦视频提示词（每个 Shot 追加视频文件名引用）",
-    "- `video-list.csv` — 视频清单（Shot/时长/画幅/生成时间/成本估算/状态）",
-    "- `videos/` — 视频文件（仅 completed 状态，按 shot-001.mp4 命名）",
-    "",
-  ].join("\n");
-}
-
-function csvEscape(value: string): string {
-  if (value == null) return "";
-  const s = String(value);
-  if (/[",\n\r]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
 }
