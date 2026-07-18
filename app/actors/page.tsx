@@ -63,7 +63,7 @@ export default function ActorsPage() {
         result.warning || (result.storageMode && result.storageMode !== "structured" ? ui.fallbackWarning : ""),
       );
       // 并行补全参演数（最多 24 位，超出按需进入详情页查看；避免 N+1 风暴）
-      void enrichPortrayalCounts(list.slice(0, 24));
+      void enrichPortrayalCounts(list);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : ui.errorTitle);
     } finally {
@@ -72,30 +72,22 @@ export default function ActorsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.access_token, ui.errorTitle, ui.fallbackWarning]);
 
+  // PRD §7.1 优化：用 /api/actors/portrayals/counts 批量查询，避免 N+1（原 24 次 GET → 1 次 batch）
   const enrichPortrayalCounts = useCallback(
     async (targets: ActorProfile[]) => {
       if (!session?.access_token || !targets.length) return;
       const token = session.access_token;
-      const results = await Promise.all(
-        targets.map((actor) =>
-          actorApiFetch<{ actor: { portrayalCount?: number } }>(
-            `/api/actors/${encodeURIComponent(actor.id)}`,
-            token,
-          )
-            .then((response) => ({
-              id: actor.id,
-              count: typeof response.actor?.portrayalCount === "number" ? response.actor.portrayalCount : 0,
-            }))
-            .catch(() => null),
-        ),
-      );
-      setPortrayalCounts((current) => {
-        const next = { ...current };
-        for (const entry of results) {
-          if (entry) next[entry.id] = entry.count;
-        }
-        return next;
-      });
+      try {
+        const ids = targets.map((actor) => actor.id).join(",");
+        const result = await actorApiFetch<{ counts?: Record<string, number> }>(
+          `/api/actors/portrayals/counts?ids=${encodeURIComponent(ids)}`,
+          token,
+        );
+        const counts = result.counts || {};
+        setPortrayalCounts((current) => ({ ...current, ...counts }));
+      } catch {
+        // 批量失败不阻塞列表渲染；portrayalCount 保持 0
+      }
     },
     [session?.access_token],
   );

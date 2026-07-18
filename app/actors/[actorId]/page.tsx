@@ -184,12 +184,30 @@ export default function ActorDetailPage() {
     [token, actorId, packBusy, isZh],
   );
 
-  const handleSetPrimary = useCallback((pack: ViewPackId, versionId: string) => {
-    setVersionsByPack((current) => ({
-      ...current,
-      [pack]: markVersionPrimary(current[pack] || [], versionId),
-    }));
-  }, []);
+  // PRD §7.2 主版本持久化：调用 PATCH /api/actors/:actorId/primary-version
+  // 失败时保留旧状态并提示错误，不静默丢失用户操作。
+  const [primaryError, setPrimaryError] = useState("");
+  const handleSetPrimary = useCallback(
+    async (pack: ViewPackId, versionId: string) => {
+      if (!token || !actorId) return;
+      setPrimaryError("");
+      // 乐观更新：先改本地状态，让用户立刻看到反馈
+      setVersionsByPack((current) => ({
+        ...current,
+        [pack]: markVersionPrimary(current[pack] || [], versionId),
+      }));
+      try {
+        await actorApiFetch(`/api/actors/${encodeURIComponent(actorId)}/primary-version`, token, {
+          method: "PATCH",
+          body: JSON.stringify({ versionId }),
+        });
+      } catch (issue) {
+        // 持久化失败：恢复原状态由 useEffect 重新拉取，这里只提示错误
+        setPrimaryError(issue instanceof Error ? issue.message : isZh ? "主版本持久化失败，请重试。" : "Failed to persist primary version.");
+      }
+    },
+    [token, actorId, isZh],
+  );
 
   const handleArchive = useCallback(async () => {
     if (!token || !actorId || archiving) return;
@@ -276,6 +294,11 @@ export default function ActorDetailPage() {
       {archiveError ? (
         <div className={styles.noticeBar} role="alert">
           {archiveError}
+        </div>
+      ) : null}
+      {primaryError ? (
+        <div className={styles.noticeBar} role="alert">
+          {primaryError}
         </div>
       ) : null}
 

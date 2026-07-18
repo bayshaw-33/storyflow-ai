@@ -40,6 +40,7 @@ type ShotRow = {
   production_project_id: string;
   character_refs: unknown;
   scene_refs: unknown;
+  prop_refs: unknown;
 };
 
 type EntityRow = {
@@ -94,24 +95,26 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
       .filter((row) => row.owner_id === user.id)
       .map((row) => row.id);
 
-    // 聚合 shots 的 character_refs/scene_refs（去重）
+    // 聚合 shots 的 character_refs/scene_refs/prop_refs（去重）
+    // PRD §6.4 关键道具：prop_refs 列由 migration 20260720020000 添加
     const characterNames = new Set<string>();
     const sceneNames = new Set<string>();
+    const propNames = new Set<string>();
     if (accessibleProdIds.length) {
       const shots = await serviceFetch<ShotRow[]>(
-        `/rest/v1/storyflow_production_shots?production_project_id=in.(${accessibleProdIds.map(encodeURIComponent).join(",")})&select=id,production_project_id,character_refs,scene_refs`,
+        `/rest/v1/storyflow_production_shots?production_project_id=in.(${accessibleProdIds.map(encodeURIComponent).join(",")})&select=id,production_project_id,character_refs,scene_refs,prop_refs`,
       ).catch(() => [] as ShotRow[]);
       for (const shot of shots) {
         for (const ref of asStringArray(shot.character_refs)) characterNames.add(ref);
         for (const ref of asStringArray(shot.scene_refs)) sceneNames.add(ref);
+        for (const ref of asStringArray(shot.prop_refs)) propNames.add(ref);
       }
     }
 
     // 缩略图：从 universe_entities 按 name 匹配取 thumbnail，无则 null
-    const entityNames = Array.from(new Set([...characterNames, ...sceneNames]));
+    const entityNames = Array.from(new Set([...characterNames, ...sceneNames, ...propNames]));
     let entitiesByName = new Map<string, EntityRow>();
     if (entityNames.length) {
-      // PostgREST 不支持按 jsonb name 数组 in 过滤；用 name=in.(...) 简化
       const entities = await serviceFetch<EntityRow[]>(
         `/rest/v1/storyflow_universe_entities?universe_id=eq.${encodeURIComponent(universeId)}&name=in.(${entityNames.map(encodeURIComponent).join(",")})&select=id,universe_id,type,name,details_json`,
       ).catch(() => [] as EntityRow[]);
@@ -122,8 +125,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
 
     const characters = buildRefs(characterNames, entitiesByName, "character");
     const scenes = buildRefs(sceneNames, entitiesByName, "location");
-    // 道具：当前 schema 中 shots 没有独立 prop_refs 列；返回空数组，等后续 schema 增补
-    const props: EntityRef[] = [];
+    // PRD §3.1: Object / Prop 类型在 universe_entities 中 type=object
+    const props = buildRefs(propNames, entitiesByName, "object");
 
     return ok({
       project: {
@@ -148,7 +151,7 @@ function buildRefs(names: Set<string>, entitiesByName: Map<string, EntityRow>, e
     const entity = entitiesByName.get(name);
     let thumbnail: string | null = null;
     if (entity) {
-      // 优先按类型匹配，避免 location/character 重名
+      // 优先按类型匹配，避免 location/character/object 重名
       if (entity.type === expectedType) {
         const url = getUniverseEntityThumbnail({ details_json: entity.details_json || {} });
         thumbnail = url || null;
@@ -187,7 +190,7 @@ function asStringArray(value: unknown): string[] {
       if (typeof item === "string") return item;
       if (item && typeof item === "object") {
         const record = item as Record<string, unknown>;
-        const name = record.name || record.id || record.character_name;
+        const name = record.name || record.id || record.character_name || record.prop_name;
         return name ? String(name) : "";
       }
       return String(item || "");

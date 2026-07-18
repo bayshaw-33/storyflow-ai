@@ -69,6 +69,17 @@ export async function GET(request: NextRequest) {
       serviceFetch<LinkRow[]>(`/rest/v1/storyflow_universe_project_links?${universeFilter}&select=universe_id,project_id`),
     ]);
 
+    // PRD §4.4 缩略图优先级：批量解析 cover_asset_version_id → storyflow_assets.public_url
+    // cover_asset_version_id 实际引用 storyflow_assets.id（PRD §8.2 暂不建 FK，服务端校验 owner）
+    const coverAssetIds = Array.from(
+      new Set(
+        universes
+          .map((row) => row.cover_asset_version_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const coverUrlById = await resolveCoverUrls(coverAssetIds, user.id);
+
     type Counter = { workIds: Set<string>; characterCount: number; locationCount: number; pendingInboxCount: number };
     const counters = new Map<string, Counter>();
     for (const id of ids) counters.set(id, { workIds: new Set(), characterCount: 0, locationCount: 0, pendingInboxCount: 0 });
@@ -98,8 +109,7 @@ export async function GET(request: NextRequest) {
         name: row.name,
         status: row.status,
         cardSummary: buildCardSummary(row.card_summary, row.description),
-        // cover_asset_version_id 解析需要查 asset_versions 表，本期返回 null，后续阶段补
-        coverUrl: null,
+        coverUrl: row.cover_asset_version_id ? (coverUrlById.get(row.cover_asset_version_id) ?? null) : null,
         tags: buildTags(row.metadata, row.genre),
         workCount: counter?.workIds.size ?? 0,
         characterCount: counter?.characterCount ?? 0,
@@ -113,6 +123,26 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return await errorWithRequestId(error, "读取宇宙汇总失败。", requestId);
   }
+}
+
+// 批量解析 cover URL：仅返回属于当前用户/团队的 asset，避免越权读取
+// PRD §8.2: cover_asset_version_id 只能引用当前用户/团队可访问、已持久化的资产版本
+async function resolveCoverUrls(
+  assetIds: string[],
+  userId: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!assetIds.length) return map;
+  const rows = await serviceFetch<Array<{ id: string; public_url: string | null; user_id: string; team_id: string | null }>>(
+    `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,public_url,user_id,team_id`,
+  ).catch(() => [] as Array<{ id: string; public_url: string | null; user_id: string; team_id: string | null }>);
+  // 服务端二次校验 owner：service role 绕过 RLS，需手动过滤
+  for (const row of rows) {
+    if (row.user_id === userId && row.public_url) {
+      map.set(row.id, row.public_url);
+    }
+  }
+  return map;
 }
 
 function buildCardSummary(cardSummary: string | null, description: string | null): string {

@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
     const versions = await Promise.all(rows.map(async (row) => {
       const assetId = assetByVariant.get(row.variant_id) || "";
       const pack = packByAsset.get(assetId) || "";
+      const meta = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+      const isPrimary = meta.is_primary === true;
       return {
         versionId: row.id,
         previewUrl: await signStoredArtImage(row.storage_path),
@@ -87,6 +89,7 @@ export async function GET(request: NextRequest) {
         prompt: row.prompt || "",
         pack,
         createdAt: row.created_at,
+        isPrimary,
       };
     }));
 
