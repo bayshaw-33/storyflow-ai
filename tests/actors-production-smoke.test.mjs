@@ -59,10 +59,9 @@ test("generate-views POST 响应不含 storagePath 字段", async () => {
   assert.ok(postMatch, "POST handler must exist");
   const postBlock = postMatch[0];
   // POST 最终响应 versions 不得包含 storagePath
-  // 注意：内部变量 successes 可含 storagePath 用于持久化，但返回给客户端的 versions 不行
-  // KIIKIS-TR-ACTOR-P0-005: 变量名从 generatedVersions 改为 successes（逐张独立 try/catch 后的成功集合）
-  const versionsMatch = postBlock.match(/const versions = successes\.map[\s\S]*?\}\);/);
-  assert.ok(versionsMatch, "versions mapping must exist");
+  // KIIKIS-TR-ACTOR-P0-006: 合成图模式，单图成功用 success 变量，versions 是数组字面量
+  const versionsMatch = postBlock.match(/const versions = \[[\s\S]*?\];/);
+  assert.ok(versionsMatch, "versions array must exist");
   assert.doesNotMatch(
     versionsMatch[0],
     /storagePath:/,

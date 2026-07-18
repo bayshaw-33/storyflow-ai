@@ -10,7 +10,7 @@
  *   6. 不同演员资产严格隔离
  *   7. GET 刷新能恢复版本及签名图片
  *   8. 四个 pack 都能生成并返回非空 versionId/previewUrl/pack
- *   9. 单图失败保留其他成功版本
+ *   9. 5 次重试策略 + 全失败才 502
  *
  * 测试形态：静态代码契约 + 类型/字符串检查。
  * Route handler 实际执行需要 Next.js runtime + Supabase service role，不在 .mjs 单测范围。
@@ -242,19 +242,21 @@ test("GET 路由按 actor_id 查询 + 反解 identity_anchor + signStoredArtImag
 // ============================================================
 // 测试 8：四个 pack 都能生成并返回非空 versionId/previewUrl/pack
 // ============================================================
-test("POST 路由响应契约：每条版本返回 versionId/previewUrl/pack/shotKey/isPrimary", () => {
+test("POST 路由响应契约：每条版本返回 versionId/previewUrl/pack/shotKey/isPrimary + attempt", () => {
   const src = readSrc("app/api/actors/generate-views/route.ts");
   const postStart = src.indexOf("export async function POST");
   const postBody = src.slice(postStart);
 
-  // 响应必须包含这 5 个字段
-  const requiredFields = ["versionId", "previewUrl", "pack", "shotKey", "isPrimary"];
+  // 响应必须包含这 6 个字段（含 attempt 表示第几次重试成功）
+  const requiredFields = ["versionId", "previewUrl", "pack", "shotKey", "isPrimary", "attempt"];
   for (const field of requiredFields) {
     assert.ok(
       new RegExp(`${field}:`).test(postBody),
       `POST 响应必须包含 ${field} 字段`,
     );
   }
+  // shotKey 必须为 "sheet"（合成图模式）
+  assert.ok(postBody.includes('"sheet"') || postBody.includes("'sheet'"), "shotKey 必须为 'sheet'");
 
   // 四个 pack 都必须支持（getActorViewPack 必须接受 canonical key）
   const actorImageSrc = readSrc("lib/art/providers/actor-image.ts");
@@ -284,40 +286,62 @@ test("getActorViewPack 兼容旧 underscore key 归一化", async () => {
 });
 
 // ============================================================
-// 测试 9：单图失败保留其他成功版本
+// 测试 9：5 次重试策略 + 全失败才 502
 // ============================================================
-test("POST 路由：单图失败不清空已成功图片（successes + failures 并存）", () => {
+test("POST 路由：5 次重试策略（同 prompt 换 seed 2 次 + 切换 promptVariants 3 次）", () => {
   const src = readSrc("app/api/actors/generate-views/route.ts");
   const postStart = src.indexOf("export async function POST");
   const postBody = src.slice(postStart);
 
-  // 必须有 successes 和 failures 两个数组
-  assert.ok(/const successes/.test(postBody), "必须有 successes 数组");
-  assert.ok(/const failures/.test(postBody), "必须有 failures 数组");
-
-  // 每张图必须独立 try/catch
-  assert.ok(
-    /pack\.shots\.map\(async\s*\(shot\)\s*=>\s*{[\s\S]*?try\s*{[\s\S]*?}\s*catch/.test(postBody),
-    "每张 shot 必须独立 try/catch，单张失败不影响其他",
-  );
+  // 必须有 SHEET_RETRY_PLAN 引用
+  assert.ok(postBody.includes("SHEET_RETRY_PLAN"), "必须使用 SHEET_RETRY_PLAN 重试策略");
+  // 必须有 failures 数组记录每次失败
+  assert.ok(/const failures/.test(postBody), "必须有 failures 数组记录每次失败");
+  // 必须有 success 变量（单图成功）
+  assert.ok(/let success/.test(postBody), "必须有 success 变量记录成功结果");
+  // 成功后必须 break 退出重试循环
+  assert.ok(/break;/.test(postBody), "成功后必须 break 退出重试循环");
 
   // 全部失败才返回 502
   assert.ok(
-    /if\s*\(!successes\.length\)[\s\S]*?502/.test(postBody),
-    "全部失败才返回 502",
+    /if\s*\(!success\)[\s\S]*?502/.test(postBody),
+    "5 次全部失败才返回 502",
   );
 
-  // 部分成功时必须 insertAssetVersions + 返回成功版本
+  // 成功时必须调用 insertAssetVersions 写入版本
   assert.ok(
     /insertAssetVersions/.test(postBody),
-    "部分成功时必须调用 insertAssetVersions 写入成功版本",
+    "成功时必须调用 insertAssetVersions 写入版本",
   );
 
-  // 响应必须同时返回 versions 和 failures
-  assert.ok(/versions,/.test(postBody), "响应必须返回 versions（成功版本）");
+  // 响应必须返回 versions + attempts + failures
+  assert.ok(/versions,/.test(postBody), "响应必须返回 versions");
+  assert.ok(/attempts:/.test(postBody), "响应必须返回 attempts（第几次成功）");
   assert.ok(/failures,/.test(postBody), "响应必须返回 failures（失败明细）");
 });
 
+test("actor-image.ts SHEET_RETRY_PLAN 定义 5 次重试", () => {
+  const src = readSrc("lib/art/providers/actor-image.ts");
+  // 必须有 SHEET_RETRY_PLAN 常量
+  assert.ok(src.includes("SHEET_RETRY_PLAN"), "必须有 SHEET_RETRY_PLAN 常量");
+  // 必须有 5 个重试项
+  const match = src.match(/SHEET_RETRY_PLAN\s*=\s*\[([\s\S]*?)\];/);
+  assert.ok(match, "SHEET_RETRY_PLAN 数组定义必须存在");
+  const itemCount = (match[1].match(/promptVariantIndex/g) || []).length;
+  assert.equal(itemCount, 5, "SHEET_RETRY_PLAN 必须有 5 个重试项");
+  // 第 1-2 项用 promptVariantIndex: 0（同 prompt 换 seed）
+  // 第 3-5 项用 promptVariantIndex: 1/2/-1（切换 promptVariants）
+  assert.ok(/promptVariantIndex:\s*0[^]*promptVariantIndex:\s*0[^]*promptVariantIndex:\s*1[^]*promptVariantIndex:\s*2[^]*promptVariantIndex:\s*-1/.test(src.replace(/\s+/g, " ")), "重试顺序：0,0,1,2,-1");
+});
+
+test("每个 pack 的 promptVariants 至少 3 组（泳装至少 4 组）", () => {
+  const src = readSrc("lib/art/providers/actor-image.ts");
+  // 泳装 pack 必须有 >= 4 组 promptVariants（容易被拒绝）
+  const swimMatch = src.match(/key:\s*"three-view-swimwear"[\s\S]*?promptVariants:\s*\[([\s\S]*?)\],/);
+  assert.ok(swimMatch, "泳装 pack promptVariants 未找到");
+  const swimVariantCount = (swimMatch[1].match(/"/g) || []).length / 2; // 每组一个字符串
+  assert.ok(swimVariantCount >= 4, `泳装 pack 必须有 >= 4 组 promptVariants，实际 ${swimVariantCount}`);
+});
 test("POST 路由：5 个阶段错误码已定义", () => {
   const src = readSrc("app/api/actors/generate-views/route.ts");
   const requiredCodes = [
@@ -336,11 +360,11 @@ test("POST 路由：5 个阶段错误码已定义", () => {
   // StageHandledError 必须存在
   assert.ok(
     src.includes("class StageHandledError"),
-    "必须有 StageHandledError 类携带 errorCode + stage + shotKey",
+    "必须有 StageHandledError 类携带 errorCode + stage",
   );
 });
 
-test("POST 路由：日志只记 requestId+stage+errorCode+shotKey，不记密钥/URL/响应/Prompt", () => {
+test("POST 路由：日志只记 requestId+stage+errorCode+attempt，不记密钥/URL/响应/Prompt", () => {
   const src = readSrc("app/api/actors/generate-views/route.ts");
   // console.warn 必须存在
   assert.ok(/console\.warn\(JSON\.stringify\(/.test(src), "必须有 console.warn 结构化日志");

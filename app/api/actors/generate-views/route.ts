@@ -1,20 +1,20 @@
 /**
- * POST /api/actors/generate-views — 演员图组生成（参考图驱动）。
+ * POST /api/actors/generate-views — 演员图组生成（参考图驱动 · 合成图模式）。
  *
- * 输入 actorId + pack（canonical key 或兼容旧 underscore key）：
- *   - three-view-casual    白T牛仔裤三视图（正面 / 侧面 / 背面）
- *   - three-view-swimwear  泳装三视图（正面 / 侧面 / 背面）
- *   - expressions          表情组（微笑 / 愤怒 / 悲伤 / 惊讶）
- *   - body-details         身体细节（面部 / 手部 / 背面发型 / 全身比例）
+ * KIIKIS-TR-ACTOR-P0-006 修复：
+ *   - 每个 pack 只生成 1 张合成图（character sheet 风格）
+ *   - 三视图横排3格(3:1) / 表情组2x2(1:1) / 身体细节2x2(1:1)
+ *   - 失败时按 SHEET_RETRY_PLAN 自动重试 5 次：
+ *       attempt 1-2: 同 prompt 换 seed
+ *       attempt 3-5: 切换更保守的 promptVariants + 换 seed
+ *   - 全部失败才返回 502
+ *   - 单张合成图成功后转存 Storage + 写 version
  *
- * KIIKIS-TR-ACTOR-P0-005 修复（替代旧实现）：
- *   - 不再写 source_project_id = "actor:<actorId>"（违反 FK）
- *   - 改用 ensureActorArtProject + actor_id 作用域 + identity_anchor
- *   - 每张图独立 try/catch，单张失败不清空已成功图片
- *   - 至少一张成功时返回成功版本 + 失败明细，全部失败才 502
- *   - 每条版本明确返回 versionId/previewUrl/pack/shotKey/isPrimary
- *   - Provider 图片先转存 Supabase Storage 再写 version（persistRemoteArtImage）
- *   - GET 重新签名并恢复图片
+ * 输入 actorId + pack（canonical 或旧 underscore key）：
+ *   - three-view-casual    白T牛仔三视图（3 格横排）
+ *   - three-view-swimwear  泳装三视图（3 格横排）
+ *   - expressions          表情组（2x2 共 4 格）
+ *   - body-details         身体细节（2x2 共 4 格）
  *
  * 错误可观测性：requestId + stage + errorCode，不记密钥/URL/响应/Prompt。
  */
@@ -24,10 +24,12 @@ import { apiError, ok } from "@/lib/api/responses";
 import { generateArtImages } from "@/lib/art/providers";
 import {
   buildActorReferenceImageRequest,
-  buildActorViewShotPrompt,
+  buildActorSheetPrompt,
   firstArtImageResult,
   getActorViewPack,
+  randomSheetSeed,
   sanitizeReferenceUrls,
+  SHEET_RETRY_PLAN,
 } from "@/lib/art/providers/actor-image";
 import { persistRemoteArtImage, signStoredArtImage } from "@/lib/supabase/art-storage";
 import { getActorForUser } from "@/lib/supabase/actors";
@@ -44,7 +46,7 @@ export const dynamic = "force-dynamic";
 type StageError = {
   stage: "art-project" | "art-asset" | "atlas-generation" | "art-image-transfer" | "art-version-insert";
   errorCode: string;
-  shotKey?: string;
+  attempt?: number;
   message: string;
 };
 
@@ -69,6 +71,22 @@ type HistoryVersionRow = {
   metadata: Record<string, unknown> | null;
   created_at: string;
 };
+
+class StageHandledError extends Error {
+  errorCode: string;
+  stage: StageError["stage"];
+  attempt?: number;
+  constructor(errorCode: string, stage: StageError["stage"], cause: unknown, attempt?: number) {
+    super(errorCode);
+    this.name = "StageHandledError";
+    this.errorCode = errorCode;
+    this.stage = stage;
+    this.attempt = attempt;
+    if (cause instanceof Error) {
+      this.message = `${errorCode}: ${cause.message}`;
+    }
+  }
+}
 
 /**
  * GET /api/actors/generate-views?actorId=X
@@ -117,7 +135,8 @@ export async function GET(request: NextRequest) {
       const pack = packByAsset.get(assetId) || "";
       const meta = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
       const isPrimary = primaryByVariant.get(row.variant_id) === row.id || meta.is_primary === true;
-      const shotKey = typeof meta.shot_key === "string" ? meta.shot_key : "";
+      // 合成图模式下 shotKey 固定为 "sheet"；旧版本若有多 shotKey 也兼容
+      const shotKey = typeof meta.shot_key === "string" ? meta.shot_key : "sheet";
       let previewUrl = "";
       try {
         previewUrl = await signStoredArtImage(row.storage_path);
@@ -151,6 +170,8 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/actors/generate-views
  * Body: { actorId: string, pack: string }
+ *
+ * 合成图模式：每个 pack 生成 1 张图，失败时按 SHEET_RETRY_PLAN 重试 5 次。
  */
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -201,124 +222,128 @@ export async function POST(request: NextRequest) {
       throw new StageHandledError("ACTOR_ART_ASSET_FAILED", "art-asset", error);
     }
 
-    // 3. 逐张生成 + 转存到 Storage（单张失败不影响其他）
-    type GeneratedShot = {
-      shotKey: string;
-      shotLabel: string;
-      prompt: string;
+    // 3. 合成图生成 + 5 次重试
+    type SheetResult = {
       storagePath: string;
       previewUrl: string;
       provider: string;
       model: string;
       providerTaskId: string;
+      prompt: string;
+      attempt: number;
     };
-    const successes: GeneratedShot[] = [];
+    let success: SheetResult | null = null;
     const failures: StageError[] = [];
 
-    await Promise.all(
-      pack.shots.map(async (shot) => {
-        const shotStage: StageError["stage"] = "atlas-generation";
-        try {
-          const prompt = buildActorViewShotPrompt(pack, shot, basePrompt);
-          let image;
-          try {
-            const generated = await generateArtImages(
-              buildActorReferenceImageRequest({
-                prompt,
-                negativePrompt: actor.negative_prompt || "",
-                referenceUrls,
-                aspectRatio: pack.aspectRatio,
-              }),
-              { atlasAuthorized: true },
-            );
-            image = firstArtImageResult(generated);
-          } catch (error) {
-            throw new StageHandledError("ATLAS_GENERATION_FAILED", shotStage, error, shot.key);
-          }
+    for (let i = 0; i < SHEET_RETRY_PLAN.length; i++) {
+      const attempt = i + 1;
+      const plan = SHEET_RETRY_PLAN[i];
+      // -1 表示最后一个 variant
+      const variantIdx = plan.promptVariantIndex === -1
+        ? pack.promptVariants.length - 1
+        : Math.min(plan.promptVariantIndex, pack.promptVariants.length - 1);
+      const seed = randomSheetSeed();
+      const prompt = buildActorSheetPrompt(pack, variantIdx, basePrompt);
 
-          let stored;
-          try {
-            stored = await persistRemoteArtImage({
-              userId: user.id,
-              projectId: artProjectId,
-              assetId,
-              remoteUrl: image.imageUrl,
-              providerTaskId: image.providerTaskId,
-              index: pack.shots.indexOf(shot),
-            });
-          } catch (error) {
-            throw new StageHandledError("ART_IMAGE_TRANSFER_FAILED", "art-image-transfer", error, shot.key);
-          }
-
-          successes.push({
-            shotKey: shot.key,
-            shotLabel: shot.label,
+      try {
+        stage = "atlas-generation";
+        const generated = await generateArtImages(
+          buildActorReferenceImageRequest({
             prompt,
-            storagePath: stored.storagePath,
-            previewUrl: stored.previewUrl,
-            provider: image.provider,
-            model: image.model,
+            negativePrompt: actor.negative_prompt || "",
+            referenceUrls,
+            aspectRatio: pack.aspectRatio,
+            seed,
+          }),
+          { atlasAuthorized: true },
+        );
+        const image = firstArtImageResult(generated);
+
+        // 转存到 Storage
+        let stored;
+        try {
+          stage = "art-image-transfer";
+          stored = await persistRemoteArtImage({
+            userId: user.id,
+            projectId: artProjectId,
+            assetId,
+            remoteUrl: image.imageUrl,
             providerTaskId: image.providerTaskId,
+            index: 0,
           });
         } catch (error) {
-          const handled = error instanceof StageHandledError
-            ? { stage: error.stage, errorCode: error.errorCode, shotKey: error.shotKey, message: error.message }
-            : { stage: shotStage, errorCode: "ATLAS_GENERATION_FAILED", shotKey: shot.key, message: String(error) };
-          failures.push(handled);
-          console.warn(JSON.stringify({
-            requestId,
-            stage: handled.stage,
-            errorCode: handled.errorCode,
-            shotKey: handled.shotKey,
-          }));
+          throw new StageHandledError("ART_IMAGE_TRANSFER_FAILED", "art-image-transfer", error, attempt);
         }
-      }),
-    );
 
-    if (!successes.length) {
-      // 全部失败 — 返回 502 + 失败明细
+        success = {
+          storagePath: stored.storagePath,
+          previewUrl: stored.previewUrl,
+          provider: image.provider,
+          model: image.model,
+          providerTaskId: image.providerTaskId,
+          prompt,
+          attempt,
+        };
+        break; // 成功，退出重试循环
+      } catch (error) {
+        const handled = error instanceof StageHandledError
+          ? { stage: error.stage, errorCode: error.errorCode, attempt, message: error.message }
+          : { stage: "atlas-generation" as const, errorCode: "ATLAS_GENERATION_FAILED", attempt, message: String(error) };
+        failures.push(handled);
+        console.warn(JSON.stringify({
+          requestId,
+          stage: handled.stage,
+          errorCode: handled.errorCode,
+          attempt,
+        }));
+        // 继续下一次重试
+      }
+    }
+
+    if (!success) {
+      // 5 次全部失败 — 返回 502 + 失败明细
       return NextResponse.json({
         success: false,
-        error: "ACTOR_VIEW_ALL_SHOTS_FAILED",
+        error: "ACTOR_VIEW_SHEET_ALL_RETRIES_FAILED",
         requestId,
         failures,
       }, { status: 502 });
     }
 
-    // 4. 批量插入成功版本
+    // 4. 写入成功版本
     let inserted: Array<{ versionId: string; storagePath: string }> = [];
     try {
       stage = "art-version-insert";
       inserted = await insertAssetVersions(serviceFetch, {
         variantId,
         createdBy: user.id,
-        versions: successes.map((version) => ({
-          storagePath: version.storagePath,
-          previewUrl: version.previewUrl,
-          provider: version.provider,
-          model: version.model,
-          providerTaskId: version.providerTaskId,
-          prompt: version.prompt,
-          appearanceSummary: `${pack.label} · ${version.shotLabel}`,
-          shotKey: version.shotKey,
-        })),
+        versions: [{
+          storagePath: success.storagePath,
+          previewUrl: success.previewUrl,
+          provider: success.provider,
+          model: success.model,
+          providerTaskId: success.providerTaskId,
+          prompt: success.prompt,
+          appearanceSummary: `${pack.label} · sheet`,
+          shotKey: "sheet",
+        }],
       });
     } catch (error) {
       throw new StageHandledError("ART_VERSION_INSERT_FAILED", "art-version-insert", error);
     }
 
-    // 5. 组装契约响应：每条版本明确返回 versionId/previewUrl/pack/shotKey/isPrimary
-    const versions = successes.map((version, index) => ({
-      versionId: inserted[index]?.versionId || "",
-      previewUrl: version.previewUrl,
-      provider: version.provider,
-      model: version.model,
+    // 5. 组装契约响应
+    const versions = [{
+      versionId: inserted[0]?.versionId || "",
+      previewUrl: success.previewUrl,
+      provider: success.provider,
+      model: success.model,
       pack: pack.key,
-      shotKey: version.shotKey,
-      shotLabel: version.shotLabel,
-      prompt: version.prompt,
-      isPrimary: index === 0,
-    }));
+      shotKey: "sheet",
+      prompt: success.prompt,
+      isPrimary: true,
+      attempt: success.attempt,
+    }];
 
     return ok({
       pack: pack.key,
@@ -327,6 +352,7 @@ export async function POST(request: NextRequest) {
       assetId,
       variantId,
       versions,
+      attempts: success.attempt,
       failures,
       requestId,
     });
@@ -347,21 +373,3 @@ export async function POST(request: NextRequest) {
     return apiError(error, "生成演员图组失败。", 502);
   }
 }
-
-class StageHandledError extends Error {
-  errorCode: string;
-  stage: StageError["stage"];
-  shotKey?: string;
-  constructor(errorCode: string, stage: StageError["stage"], cause: unknown, shotKey?: string) {
-    super(errorCode);
-    this.name = "StageHandledError";
-    this.errorCode = errorCode;
-    this.stage = stage;
-    this.shotKey = shotKey;
-    if (cause instanceof Error) {
-      // 保留原始 message 供日志，但不暴露给客户端
-      this.message = `${errorCode}: ${cause.message}`;
-    }
-  }
-}
-

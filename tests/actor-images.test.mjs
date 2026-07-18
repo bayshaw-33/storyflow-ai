@@ -15,8 +15,8 @@ import {
   ACTOR_VIEW_PACKS,
   buildActorAvatarPrompt,
   buildActorReferenceImageRequest,
+  buildActorSheetPrompt,
   buildActorTextToImageRequest,
-  buildActorViewShotPrompt,
   firstArtImageResult,
   getActorViewPack,
   sanitizeReferenceUrls,
@@ -35,55 +35,70 @@ test("avatar prompt is a white-background front-facing close-up portrait with st
   assert.ok(prompt.includes("no extra people"), "guards against extra people");
 });
 
-test("view pack registry exposes exactly the four contracted packs", () => {
+test("view pack registry exposes exactly the four contracted packs (合成图模式)", () => {
   assert.deepEqual(
     ACTOR_VIEW_PACKS.map((pack) => pack.key),
     ["three-view-casual", "three-view-swimwear", "expressions", "body-details"],
   );
   assert.equal(getActorViewPack("nope"), null);
-  assert.equal(getActorViewPack("three-view-casual")?.shots.length, 3);
-  assert.equal(getActorViewPack("three-view-swimwear")?.shots.length, 3);
-  assert.equal(getActorViewPack("expressions")?.shots.length, 4);
-  assert.ok((getActorViewPack("body-details")?.shots.length ?? 0) >= 3);
+  // 合成图模式：每个 pack 用 sheetCells 描述格子，不再用 shots
+  assert.equal(getActorViewPack("three-view-casual")?.sheetCells.length, 3);
+  assert.equal(getActorViewPack("three-view-swimwear")?.sheetCells.length, 3);
+  assert.equal(getActorViewPack("expressions")?.sheetCells.length, 4);
+  assert.equal(getActorViewPack("body-details")?.sheetCells.length, 4);
+  // 每个 pack 必须有 promptVariants（失败时切换）
+  for (const pack of ACTOR_VIEW_PACKS) {
+    assert.ok(pack.promptVariants.length >= 3, `${pack.key} 必须有至少 3 组 promptVariants`);
+    assert.ok(pack.sheetLayout, `${pack.key} 必须有 sheetLayout`);
+  }
+  // 泳装 pack 应有更多备选措辞（容易被拒绝）
+  assert.ok(getActorViewPack("three-view-swimwear")?.promptVariants.length >= 4, "泳装 pack 应有至少 4 组 promptVariants");
 });
 
 test("three-view packs cover front/side/back with the contracted costumes", () => {
   const casual = getActorViewPack("three-view-casual");
   assert.ok(casual);
-  assert.deepEqual(casual.shots.map((shot) => shot.key), ["front", "side", "back"]);
+  assert.deepEqual(casual.sheetCells.map((cell) => cell.key), ["front", "side", "back"]);
   assert.ok(casual.costume.includes("white crew-neck T-shirt"));
   assert.ok(casual.costume.includes("jeans"));
 
   const swimwear = getActorViewPack("three-view-swimwear");
   assert.ok(swimwear);
-  assert.deepEqual(swimwear.shots.map((shot) => shot.key), ["front", "side", "back"]);
+  assert.deepEqual(swimwear.sheetCells.map((cell) => cell.key), ["front", "side", "back"]);
   assert.ok(swimwear.costume.includes("swimwear") || swimwear.costume.includes("swimsuit"));
 });
 
-test("every shot prompt locks identity to the reference image and embeds the actor base description", () => {
+test("sheet prompt locks identity to the reference image and embeds the actor base description", () => {
+  // 合成图模式：每个 pack 只生成 1 张图，prompt 由 buildActorSheetPrompt 构造
   for (const pack of ACTOR_VIEW_PACKS) {
-    for (const shot of pack.shots) {
-      const prompt = buildActorViewShotPrompt(pack, shot, BASE_PROMPT);
-      assert.ok(prompt.includes("reference image"), `${pack.key}/${shot.key} references the input image`);
-      assert.ok(prompt.includes("identical face"), `${pack.key}/${shot.key} locks the face`);
-      assert.ok(prompt.includes(BASE_PROMPT), `${pack.key}/${shot.key} embeds the actor base description`);
-      assert.ok(prompt.includes(shot.brief), `${pack.key}/${shot.key} embeds the shot brief`);
-      assert.ok(prompt.includes(pack.costume), `${pack.key}/${shot.key} embeds the costume`);
-      assert.ok(prompt.includes("No text"), `${pack.key}/${shot.key} carries output guards`);
+    // 测试主 promptVariant
+    const prompt = buildActorSheetPrompt(pack, 0, BASE_PROMPT);
+    assert.ok(prompt.includes("reference image"), `${pack.key} references the input image`);
+    assert.ok(prompt.includes("identical face"), `${pack.key} locks the face`);
+    assert.ok(prompt.includes(BASE_PROMPT), `${pack.key} embeds the actor base description`);
+    assert.ok(prompt.includes(pack.sheetLayout), `${pack.key} embeds sheetLayout`);
+    assert.ok(prompt.includes(pack.costume), `${pack.key} embeds the costume`);
+    assert.ok(prompt.includes("No text"), `${pack.key} carries output guards`);
+    // 测试备选 promptVariant
+    if (pack.promptVariants.length > 1) {
+      const altPrompt = buildActorSheetPrompt(pack, 1, BASE_PROMPT);
+      assert.ok(altPrompt.includes(pack.promptVariants[1]), `${pack.key} 备选 promptVariant 嵌入`);
     }
   }
 });
 
-test("expressions pack shots are distinct expression close-ups", () => {
+test("expressions pack sheet covers four distinct expressions", () => {
   const pack = getActorViewPack("expressions");
   assert.ok(pack);
-  const briefs = pack.shots.map((shot) => shot.brief).join("\n");
+  // 合成图模式：4 个表情在 sheetCells + sheetLayout 中描述
+  const layoutText = pack.sheetLayout.toLowerCase();
   for (const word of ["smile", "angry", "sad", "surprised"]) {
-    assert.ok(briefs.includes(word), `contains ${word}`);
+    assert.ok(layoutText.includes(word), `sheetLayout contains ${word}`);
   }
-  for (const shot of pack.shots) {
-    assert.ok(shot.brief.includes("close-up"), `${shot.key} is a close-up`);
-  }
+  assert.equal(pack.sheetCells.length, 4);
+  assert.deepEqual(pack.sheetCells.map((c) => c.key), ["smile", "angry", "sad", "surprised"]);
+  // 2x2 网格布局
+  assert.ok(pack.sheetLayout.includes("2x2"), "expressions sheetLayout 必须是 2x2 网格");
 });
 
 test("text-to-image request routes to the catalog default Atlas text model", () => {
@@ -202,14 +217,13 @@ test("firstArtImageResult 失败显式抛错（不静默降级为空图）", () 
   );
 });
 
-test("view pack shots 都包含 identity lock（防止换脸）", () => {
+test("view pack sheet prompt 都包含 identity lock（防止换脸）", () => {
   // PRD §3.3 强制约束：Actor 不是 Character，身份必须稳定
+  // 合成图模式下每个 pack 只有一个 prompt，由 buildActorSheetPrompt 构造
   for (const pack of ACTOR_VIEW_PACKS) {
-    for (const shot of pack.shots) {
-      const prompt = buildActorViewShotPrompt(pack, shot, BASE_PROMPT);
-      assert.ok(prompt.includes("identical face"), `${pack.key}/${shot.key} 必须锁定身份`);
-      assert.ok(prompt.includes("reference image"), `${pack.key}/${shot.key} 必须使用参考图`);
-    }
+    const prompt = buildActorSheetPrompt(pack, 0, BASE_PROMPT);
+    assert.ok(prompt.includes("identical face"), `${pack.key} 必须锁定身份`);
+    assert.ok(prompt.includes("reference image"), `${pack.key} 必须使用参考图`);
   }
 });
 
