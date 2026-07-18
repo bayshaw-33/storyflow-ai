@@ -32,20 +32,22 @@ export type AtlasLLMOptions = {
  * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
  */
 export const ATLAS_LLM_MODEL_OPTIONS = [
-  "gemini-3.5-flash",
-  "gpt-5.6",
-  "claude-sonnet-4.5",
-  "grok-4.5",
-  "deepseek-v4",
-  "glm-5.2",
+  "deepseek-v3",
+  "deepseek-r1",
+  "qwen-turbo",
+  "kimi-k2",
+  "glm-4",
+  "doubao-pro",
 ] as const;
 
 /**
  * ATLASCLOUD_LLM_MODEL 未配置时的默认模型。
- * 默认 gemini-3.5-flash（2026 Google I/O 发布，免费且速度快 4 倍）。
- * 让 Vercel 不用配置任何环境变量 Atlas 即可启用。
+ * 用 deepseek-v3（Atlas Cloud 文档明确示例过的 model id，性价比高且稳定）。
+ * 注意：Atlas Cloud 是中国厂商模型聚合平台，不支持 Gemini/GPT/Claude/Grok。
+ * 支持的 LLM 厂商：DeepSeek / Qwen / Kimi / GLM / MiniMax / Doubao。
+ * 详见 https://www.atlascloud.ai/docs/models/llm
  */
-const DEFAULT_ATLAS_LLM_MODEL = "gemini-3.5-flash";
+const DEFAULT_ATLAS_LLM_MODEL = "deepseek-v3";
 
 /**
  * 调用 Atlas Cloud LLM（OpenAI-compatible）。
@@ -65,7 +67,7 @@ export async function callAtlasLLM({
 }: AtlasLLMOptions): Promise<AIProviderResult> {
   const apiKey = process.env.ATLASCLOUD_API_KEY;
   const baseUrl = (process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1").trim().replace(/\/+$/, "");
-  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 gemini-2.5-flash
+  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 deepseek-v3
   // 这样即使用户没在 Vercel 配 ATLASCLOUD_LLM_MODEL，Atlas 也能自动启用
   const model = (modelOverride?.trim() || process.env.ATLASCLOUD_LLM_MODEL || DEFAULT_ATLAS_LLM_MODEL).trim();
 
