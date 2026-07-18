@@ -1,5 +1,33 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 +08 - Codex / Universe 与演员库优化升级 PRD
+
+### 本次目标
+- 根据 TRAE 浏览器报告、线上页面实测、当前源码和生产数据事实，形成可直接执行的 Universe + 演员库完整 PRD。
+
+### 已完成
+- 固定“列表用于选择、详情用于理解、资产区用于管理、完整长文独立阅读”的信息分层。
+- 明确 Universe / Work / Canon Entity / Actor / Portrayal 领域关系、图片主版本规则和关联展示边界。
+- 将 Universe 详情收敛为概览、资产、作品、Canon、待处理 5 个主区域。
+- 补充 actor metadata、project link、重复 Universe、card summary、主图、casting/portrayal RLS 等数据止血要求。
+- 固定聚合 API、错误状态、TRAE 五阶段交付、测试矩阵和 Codex 最终复查/小补丁规则。
+
+### 修改文件
+- `docs/ops/KIIKIS-Universe-演员库优化升级-PRD-v3.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- 文档占位符、矛盾和模糊范围自检：通过。
+- `git diff --check`：通过。
+- 未修改运行时代码、数据库或环境配置，未运行代码测试与 build。
+
+### Git 信息
+- commit：见本次文档提交。
+- 未推送。
+
+### 未完成 / 风险
+- PRD 需要用户确认后交给 TRAE 执行；TRAE 完成后由 Codex 按 PRD 第 16 节统一审查并直接修复小范围问题。
+
 ## 2026-07-18 +08 - Codex / GitHub 网络修复与 Evidence 下载入口上线
 
 ### GitHub 根因与修复
