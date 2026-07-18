@@ -18,7 +18,13 @@ export async function callDeepSeek({
   modelOverride,
 }: DeepSeekOptions): Promise<AIProviderResult> {
   const apiKey = apiKeyOverride || process.env.DEEPSEEK_API_KEY;
-  const model = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  // Vercel 环境变量 DEEPSEEK_MODEL 可能被锁定为不存在的旧值（如 deepseek-v4-flash），
+  // 这里做兜底：已知不存在的模型名自动回退到官方模型 deepseek-chat，
+  // 避免 DeepSeek API 返回 400 Model Not Exist。
+  // 优先级：modelOverride（API 调用方传入）> DEEPSEEK_MODEL > 默认值
+  const KNOWN_INVALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4", "deepseek-flash", "deepseek-v3-flash"]);
+  const rawModel = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const model = KNOWN_INVALID_DEEPSEEK_MODELS.has(rawModel) ? "deepseek-chat" : rawModel;
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");

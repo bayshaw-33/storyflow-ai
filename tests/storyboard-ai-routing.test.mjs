@@ -370,3 +370,52 @@ test("fallback 仅执行一次（Atlas 失败不二次回 DeepSeek）", async ()
   assert.equal(deepseekCallCount, 1);
   assert.equal(atlasCallCount, 1);
 });
+
+
+// ============================================================================
+// KIIKIS-TR-ACTOR-P0-011: Vercel 环境变量 DEEPSEEK_MODEL 被锁定为不存在的旧值
+// （deepseek-v4-flash）时，代码层应自动回退到 deepseek-chat，避免 400 Model Not Exist
+// 直接测试 callDeepSeek，绕过 router，纯粹验证模型名回退逻辑
+// ============================================================================
+import { callDeepSeek } from "../lib/ai/providers/deepseek.ts";
+
+test("DEEPSEEK_MODEL 被锁定为不存在的 deepseek-v4-flash 时自动回退到 deepseek-chat", async () => {
+  setupEnv();
+  // 模拟 Vercel 锁定场景：DEEPSEEK_MODEL 被设为不存在的旧值
+  process.env.DEEPSEEK_MODEL = "deepseek-v4-flash";
+
+  let capturedModel = null;
+  mockFetch({
+    [DEEPSEEK_URL]: (init) => {
+      const body = JSON.parse(init.body);
+      capturedModel = body.model;
+      return chatResponse("deepseek-output", body.model);
+    },
+  });
+
+  const result = await callDeepSeek({ messages: MESSAGES });
+
+  // 验证：实际发给 DeepSeek 的 model 是 deepseek-chat（不是 deepseek-v4-flash）
+  assert.equal(capturedModel, "deepseek-chat");
+  assert.equal(result.output, "deepseek-output");
+});
+
+test("DEEPSEEK_MODEL 设为合法值（如 deepseek-reasoner）时不被回退", async () => {
+  setupEnv();
+  process.env.DEEPSEEK_MODEL = "deepseek-reasoner";
+
+  let capturedModel = null;
+  mockFetch({
+    [DEEPSEEK_URL]: (init) => {
+      const body = JSON.parse(init.body);
+      capturedModel = body.model;
+      return chatResponse("deepseek-output", body.model);
+    },
+  });
+
+  const result = await callDeepSeek({ messages: MESSAGES });
+
+  // 验证：合法模型名透传，不被回退
+  assert.equal(capturedModel, "deepseek-reasoner");
+  assert.equal(result.output, "deepseek-output");
+});
