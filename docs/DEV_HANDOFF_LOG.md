@@ -1,5 +1,41 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-19 00:45 +08 - Codex / 演员库生产恢复与共享安全加固
+
+### 已解决
+
+- 修复私有 Storage 头像的读取链：演员资产现在读取 `storage_path` 并签发有效预览 URL；上传时 `public_url` 固定为空不再导致头像丢失。
+- 修复平台共享演员的新建失败：production 已应用 `platform` 可见性、使用留痕及肖像权注释三份 migration。
+- 收窄共享演员 RLS：客户端只能新建/更新 `private`、`team` 演员；`platform` 仅能经服务端完成肖像权校验后写入。
+- 收窄演员使用留痕：客户端不能直写 usage；服务端同时校验项目归属，使用记录保留 actor 删除保护。
+- 平台演员列表改为公开安全 DTO，不再返回 owner UUID、内部资产 ID、prompt、metadata 或存储信息。
+
+### 代码与部署
+
+- Commit：`c68d994 fix(actors): restore private avatar previews and harden sharing`
+- 已推送 `main`；Vercel production deployment `dpl_C41zxyGZfMRiimsasBKpkgCGe8p9` 状态 `READY`。
+
+### Migration 执行记录
+
+- staging：`kiikis-staging` (`cwpyolxitkcpitqizgtq`)，先核验后应用：
+  - `20260721000000_actor_platform_visibility.sql`
+  - `20260722000000_actor_usages.sql`
+  - `20260723000000_actor_portrait_rights.sql`
+- production：`StoryFlow` (`vgcafbzksizlwmylphzu`)，在 staging 核验通过后应用同一三份 migration。
+- 两个环境均核验：`visibility` 包含 `platform`、usage 唯一约束存在、actor usage 外键为 `RESTRICT`、直接 Data API 写入 platform/usage 被 RLS 拒绝。
+- 两个环境都存在早期 migration history 的临时时间戳登记；仅在确认相应 schema 已存在后修复为仓库中的规范 migration 版本，未重放历史 DDL、未删除用户数据。CLI 当前已恢复 link 至 staging。
+
+### 验证
+
+- `pnpm exec tsc --noEmit`：通过。
+- `node --test tests/*.test.mjs`：601/601 通过。
+- `pnpm run build`：通过。
+- 部署 URL 在未授权环境被 Vercel SSO 正常保护；需以真实已登录账号完成一次“新建演员 → 上传头像 → 刷新演员库”的最终交互确认。
+
+### 已保留的非本任务改动
+
+- 工作树中的白皮书 PDF 删除与 Universe/Actors 优化方案未纳入本次提交。
+
 ## 2026-07-19 01:30 +08 - TRAE / KIIKIS-TR-ACTOR-P0-004 演员库生产故障修复
 
 ### 本次目标
