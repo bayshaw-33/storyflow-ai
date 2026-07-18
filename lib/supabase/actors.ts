@@ -11,6 +11,7 @@ import {
   type TeamRole,
 } from "@/lib/actors";
 import { hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { attachAvatarAssetToActor, validateAvatarAssetBelongsToUser } from "@/lib/supabase/actor-avatar-storage";
 
 type AssetRow = {
   id: string;
@@ -200,19 +201,12 @@ export async function createActorForUser(userId: string, input: ActorProfileInpu
     metadata: normalized.metadata || undefined,
   };
 
-  if (input.uploaded_avatar_data_url?.startsWith("data:image/")) {
-    const asset = await createActorAsset({
-      userId,
-      teamId: row.team_id || null,
-      actorId: row.id,
-      assetType: "actor_avatar",
-      publicUrl: input.uploaded_avatar_data_url,
-      metadata: { source: "uploaded_avatar" },
-    }).catch((error) => {
-      if (isActorSchemaUnavailable(error)) return null;
-      throw error;
-    });
-    row.avatar_asset_id = asset?.id || null;
+  // 头像上传：客户端已通过 POST /api/actors/upload-avatar 上传到 Storage 并返回 assetId。
+  // 这里只做归属校验 + 绑定。禁止保存 Base64 data URL。
+  if (input.avatar_asset_id) {
+    const owned = await validateAvatarAssetBelongsToUser(userId, input.avatar_asset_id).catch(() => false);
+    if (!owned) throw new Error("AVATAR_ASSET_INVALID");
+    row.avatar_asset_id = input.avatar_asset_id;
     row.status = "ready";
   }
 
@@ -221,6 +215,14 @@ export async function createActorForUser(userId: string, input: ActorProfileInpu
       method: "POST",
       body: JSON.stringify(row),
     });
+
+    // 将上传资产绑定到具体 actor（asset_type: actor_avatar_upload → actor_avatar）
+    if (input.avatar_asset_id) {
+      await attachAvatarAssetToActor(input.avatar_asset_id, row.id).catch((error) => {
+        // 绑定失败不阻断 actor 创建（asset 仍存在，只是没标记）
+        console.warn("AVATAR_ATTACH_FAILED:", error instanceof Error ? error.message : error);
+      });
+    }
 
     return (await hydrateActorAssets([row]))[0];
   } catch (error) {
@@ -261,16 +263,12 @@ export async function updateActorForUser(userId: string, actorId: string, input:
     metadata: normalized.metadata || undefined,
   };
 
-  if (input.uploaded_avatar_data_url?.startsWith("data:image/")) {
-    const asset = await createActorAsset({
-      userId,
-      teamId: patch.team_id || null,
-      actorId,
-      assetType: "actor_avatar",
-      publicUrl: input.uploaded_avatar_data_url,
-      metadata: { source: "uploaded_avatar" },
-    });
-    patch.avatar_asset_id = asset.id;
+  // 头像更新：客户端上传新头像到 Storage 拿到新 assetId，这里只做归属校验 + 绑定。
+  // 更换头像产生新资产版本，不覆盖历史文件（Storage 路径含 timestamp+uuid）。
+  if (input.avatar_asset_id) {
+    const owned = await validateAvatarAssetBelongsToUser(userId, input.avatar_asset_id).catch(() => false);
+    if (!owned) throw new Error("AVATAR_ASSET_INVALID");
+    patch.avatar_asset_id = input.avatar_asset_id;
     patch.status = "ready";
   }
 
@@ -651,9 +649,9 @@ async function createFallbackActor(userId: string, input: ActorProfileInput) {
     negative_prompt: normalized.negative_prompt || buildActorNegativePrompt(normalized),
     avatar_asset_id: null,
     reference_sheet_asset_id: null,
-    avatar_url: input.uploaded_avatar_data_url?.startsWith("data:image/") ? input.uploaded_avatar_data_url : null,
+    avatar_url: null,
     reference_sheet_url: null,
-    status: input.uploaded_avatar_data_url?.startsWith("data:image/") ? "ready" : "draft",
+    status: "draft",
     created_at: now,
     updated_at: now,
     metadata: normalized.metadata || undefined,
@@ -690,7 +688,7 @@ async function updateFallbackActor(userId: string, actorId: string, input: Actor
     playable_roles: normalized.playable_roles,
     base_prompt: normalized.base_prompt || current.base_prompt,
     negative_prompt: normalized.negative_prompt || current.negative_prompt,
-    avatar_url: raw.avatar_url || (input.uploaded_avatar_data_url?.startsWith("data:image/") ? input.uploaded_avatar_data_url : current.avatar_url),
+    avatar_url: raw.avatar_url || current.avatar_url,
     reference_sheet_url: raw.reference_sheet_url || current.reference_sheet_url,
     status: raw.status || current.status,
     updated_at: new Date().toISOString(),

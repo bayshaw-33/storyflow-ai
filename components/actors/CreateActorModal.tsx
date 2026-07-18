@@ -6,6 +6,7 @@ import type { ActorProfile } from "@/lib/actors";
 import { actorApiFetch } from "./actor-client";
 import type { ActorLibraryCopy } from "./actor-copy";
 import { normalizeTagList } from "./actor-view-model";
+import { processAvatarImage, uploadProcessedAvatar } from "@/lib/avatar-processing";
 import styles from "./actors.module.css";
 
 type Props = {
@@ -16,7 +17,14 @@ type Props = {
   onCreated: (actor: ActorProfile) => void;
 };
 
+type AvatarPhase = "idle" | "processing" | "uploading" | "ready";
+
 // 创建入口：文字创建 / 上传头像两种路径，成功后立刻回调让列表可见。
+// 头像上传流程（废弃 Base64）：
+//   选择图片 → processAvatarImage（自动旋转 + 压缩 + 去 EXIF）
+//   → uploadProcessedAvatar（POST /api/actors/upload-avatar）
+//   → 保存 assetId → 表单提交时传 avatar_asset_id
+// 数据库不再保存 data:image/... Base64 字符串。
 export function CreateActorModal({ open, token, copy, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<"text" | "upload">("text");
   const [name, setName] = useState("");
@@ -26,7 +34,9 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
   const [temperament, setTemperament] = useState("");
   const [roles, setRoles] = useState("");
   const [bio, setBio] = useState("");
-  const [avatarDataUrl, setAvatarDataUrl] = useState("");
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
+  const [avatarAssetId, setAvatarAssetId] = useState("");
+  const [avatarPhase, setAvatarPhase] = useState<AvatarPhase>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,7 +50,9 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
     setTemperament("");
     setRoles("");
     setBio("");
-    setAvatarDataUrl("");
+    setAvatarPreviewUrl("");
+    setAvatarAssetId("");
+    setAvatarPhase("idle");
     setError("");
     setTab("text");
   }
@@ -51,6 +63,14 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
     onClose();
   }
 
+  function mapAvatarError(message: string): string {
+    if (message === "AVATAR_TYPE_UNSUPPORTED") return copy.avatarErrorType;
+    if (message === "AVATAR_RAW_SIZE_EXCEEDS_20MB") return copy.avatarErrorSize;
+    if (message === "AVATAR_BITMAP_DECODE_FAILED" || message === "AVATAR_CANVAS_CONTEXT_FAILED" || message === "AVATAR_CANVAS_TO_BLOB_FAILED") return copy.avatarErrorDecode;
+    if (message.startsWith("AVATAR_UPLOAD")) return copy.avatarErrorUpload;
+    return copy.createFailed;
+  }
+
   async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -58,19 +78,34 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
       setError(copy.uploadImageOnly);
       return;
     }
-    if (file.size > 1.5 * 1024 * 1024) {
-      setError(copy.uploadLimit);
-      return;
-    }
+
+    setBusy(true);
+    setError("");
+    setAvatarPhase("processing");
+    setAvatarPreviewUrl("");
+    setAvatarAssetId("");
+
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setAvatarDataUrl(dataUrl);
-      setError("");
+      // 客户端处理：自动旋转 + 压缩 + 去 EXIF（最长边 ≤ 2048px、目标 ≤ 6MB）
+      const processed = await processAvatarImage(file);
+
+      // 上传到服务端 Storage（FormData POST /api/actors/upload-avatar）
+      setAvatarPhase("uploading");
+      const uploaded = await uploadProcessedAvatar(processed.blob, token);
+
+      setAvatarPreviewUrl(uploaded.previewUrl);
+      setAvatarAssetId(uploaded.assetId);
+      setAvatarPhase("ready");
+
+      // 没有名称时用文件名预填
       if (!name.trim()) {
         setName(file.name.replace(/\.[a-z0-9]+$/i, "").slice(0, 40));
       }
-    } catch {
-      setError(copy.createFailed);
+    } catch (issue) {
+      setError(mapAvatarError(issue instanceof Error ? issue.message : ""));
+      setAvatarPhase("idle");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -78,6 +113,10 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
     event.preventDefault();
     if (!name.trim()) {
       setError(copy.createNameRequired);
+      return;
+    }
+    if (avatarPhase === "processing" || avatarPhase === "uploading") {
+      setError(copy.avatarInProgress);
       return;
     }
     setBusy(true);
@@ -93,7 +132,7 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
           temperament: normalizeTagList(temperament),
           playable_roles: normalizeTagList(roles),
           bio: bio.trim(),
-          uploaded_avatar_data_url: avatarDataUrl || undefined,
+          avatar_asset_id: avatarAssetId || undefined,
         }),
       });
       reset();
@@ -105,21 +144,27 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
     }
   }
 
+  const avatarLabel =
+    avatarPhase === "processing" ? copy.avatarProcessing
+      : avatarPhase === "uploading" ? copy.avatarUploading
+        : avatarPhase === "ready" ? copy.createAvatarSelected
+          : copy.createAvatarPick;
+
   return (
     <div className={styles.modalBackdrop} role="dialog" aria-modal="true" aria-label={copy.createTitle} onClick={handleClose}>
       <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
         <div className={styles.modalHead}>
           <h2>{copy.createTitle}</h2>
-          <button className={styles.iconBtn} type="button" onClick={handleClose} aria-label={copy.cancel}>
+          <button className={styles.iconBtn} type="button" onClick={handleClose} aria-label={copy.cancel} disabled={busy}>
             <X size={16} />
           </button>
         </div>
 
         <div className={styles.tabRow} role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "text"} className={tab === "text" ? styles.active : ""} onClick={() => setTab("text")}>
+          <button type="button" role="tab" aria-selected={tab === "text"} className={tab === "text" ? styles.active : ""} onClick={() => setTab("text")} disabled={busy}>
             {copy.createTabText}
           </button>
-          <button type="button" role="tab" aria-selected={tab === "upload"} className={tab === "upload" ? styles.active : ""} onClick={() => setTab("upload")}>
+          <button type="button" role="tab" aria-selected={tab === "upload"} className={tab === "upload" ? styles.active : ""} onClick={() => setTab("upload")} disabled={busy}>
             {copy.createTabUpload}
           </button>
         </div>
@@ -128,48 +173,50 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
           <div className={styles.formGrid}>
             {tab === "upload" ? (
               <label className={styles.uploadBox}>
-                {avatarDataUrl ? (
+                {avatarPreviewUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img className={styles.uploadPreview} src={avatarDataUrl} alt="" />
+                  <img className={styles.uploadPreview} src={avatarPreviewUrl} alt="" />
+                ) : avatarPhase === "processing" || avatarPhase === "uploading" ? (
+                  <LoaderCircle className={styles.spin} size={22} />
                 ) : (
                   <ImagePlus size={22} />
                 )}
-                <span>{avatarDataUrl ? copy.createAvatarSelected : copy.createAvatarPick}</span>
+                <span>{avatarLabel}</span>
                 <span>{copy.createAvatarHint}</span>
-                <input type="file" accept="image/*" onChange={handleUpload} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleUpload} disabled={busy} />
               </label>
             ) : null}
 
             <label className={`${styles.field} ${styles.fieldWide}`}>
               {copy.createName}
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder={copy.createNamePlaceholder} autoFocus />
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder={copy.createNamePlaceholder} autoFocus disabled={busy} />
             </label>
 
             {tab === "text" ? (
               <>
                 <label className={styles.field}>
                   {copy.createAge}
-                  <input value={ageRange} onChange={(event) => setAgeRange(event.target.value)} placeholder={copy.createAgePlaceholder} />
+                  <input value={ageRange} onChange={(event) => setAgeRange(event.target.value)} placeholder={copy.createAgePlaceholder} disabled={busy} />
                 </label>
                 <label className={styles.field}>
                   {copy.createGender}
-                  <input value={gender} onChange={(event) => setGender(event.target.value)} placeholder={copy.createGenderPlaceholder} />
+                  <input value={gender} onChange={(event) => setGender(event.target.value)} placeholder={copy.createGenderPlaceholder} disabled={busy} />
                 </label>
                 <label className={`${styles.field} ${styles.fieldWide}`}>
                   {copy.createEthnicity}
-                  <input value={ethnicity} onChange={(event) => setEthnicity(event.target.value)} placeholder={copy.createEthnicityPlaceholder} />
+                  <input value={ethnicity} onChange={(event) => setEthnicity(event.target.value)} placeholder={copy.createEthnicityPlaceholder} disabled={busy} />
                 </label>
                 <label className={`${styles.field} ${styles.fieldWide}`}>
                   {copy.createTemperament}
-                  <input value={temperament} onChange={(event) => setTemperament(event.target.value)} placeholder={copy.createTemperamentPlaceholder} />
+                  <input value={temperament} onChange={(event) => setTemperament(event.target.value)} placeholder={copy.createTemperamentPlaceholder} disabled={busy} />
                 </label>
                 <label className={`${styles.field} ${styles.fieldWide}`}>
                   {copy.createRoles}
-                  <input value={roles} onChange={(event) => setRoles(event.target.value)} placeholder={copy.createRolesPlaceholder} />
+                  <input value={roles} onChange={(event) => setRoles(event.target.value)} placeholder={copy.createRolesPlaceholder} disabled={busy} />
                 </label>
                 <label className={`${styles.field} ${styles.fieldWide}`}>
                   {copy.createBio}
-                  <textarea value={bio} onChange={(event) => setBio(event.target.value)} placeholder={copy.createBioPlaceholder} />
+                  <textarea value={bio} onChange={(event) => setBio(event.target.value)} placeholder={copy.createBioPlaceholder} disabled={busy} />
                 </label>
               </>
             ) : null}
@@ -190,13 +237,4 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
       </div>
     </div>
   );
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("IMAGE_READ_FAILED"));
-    reader.readAsDataURL(file);
-  });
 }

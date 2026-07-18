@@ -72,7 +72,12 @@ export type ActorProfileInput = {
   playable_roles?: string[] | string;
   base_prompt?: string;
   negative_prompt?: string;
-  uploaded_avatar_data_url?: string;
+  avatar_asset_id?: string | null;
+  /**
+   * @deprecated 使用 avatar_asset_id 代替。仅在 fallback 模式下保留。
+   * 数据库禁止保存 data:image/... 开头的 Base64 字符串。
+   */
+  uploaded_avatar_data_url?: never;
   metadata?: {
     identity_passport?: {
       identity_core_prompt?: string;
@@ -236,7 +241,7 @@ export function buildReferenceSheetPrompt(params: {
     .replace("{costumeDirection}", params.costumeDirection || "Neutral modern costume, no story-specific canon override.");
 }
 
-export function createEmptyActorInput(): Required<Omit<ActorProfileInput, "uploaded_avatar_data_url">> {
+export function createEmptyActorInput(): Required<Omit<ActorProfileInput, "avatar_asset_id" | "uploaded_avatar_data_url">> {
   return {
     team_id: null,
     visibility: "private",
