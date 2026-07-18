@@ -711,6 +711,24 @@
   object-fit: cover;
 }
 
+/* KIIKIS-TR-ACTOR-P0-010: 主视觉自适应比例容器
+   reference-sheet 是 4:3 横版，不强制 4/5 竖版 cover 裁切
+   width: 100% + height: auto 让图片按真实比例渲染 */
+.mainVisualAuto {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f4f4f2;
+  width: 100%;
+  max-width: 100%;
+}
+
+.mainVisualAuto img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
 .packGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
