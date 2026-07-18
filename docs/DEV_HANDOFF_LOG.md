@@ -55,12 +55,18 @@
 
 - staging（`kiikis-staging` / `cwpyolxitkcpitqizgtq`）：TRAE 于 2026-07-19 执行 `supabase db push`，应用 `20260724000000_actor_art_projects_actor_scope.sql` 成功。
 - 验证：`storyflow_art_projects.actor_id` (uuid) 列已创建；FK `storyflow_art_projects_actor_id_fkey` 已建立；UNIQUE INDEX `storyflow_art_projects_actor_scope_unique` (owner_id, actor_id) WHERE actor_id IS NOT NULL 已创建；INDEX `storyflow_art_assets_actor_anchor_idx` (actor_id, identity_anchor) 已创建。
-- Production（`StoryFlow` / `vgcafbzksizlwmylphzu`）：未链接，待 Codex 核验 staging 无误后推 production。
-- Production 当前无成功生成的演员 art project / asset，无需清理或回填旧数据。
+- Production（`StoryFlow` / `vgcafbzksizlwmylphzu`）：Codex 已核验项目名称、migration history 与 dry-run，仅剩该 migration 后执行 `supabase db push --linked --yes` 成功。
+- Production 验证：`actor_id` uuid 列、`storyflow_art_projects_actor_id_fkey`、`storyflow_art_projects_actor_scope_unique`、`storyflow_art_assets_actor_anchor_idx` 均已创建；migration history 已登记 `20260724000000`。
+- Production 当前无成功生成的演员 art project / asset，无需清理或回填旧数据；CLI 链接已恢复至 staging。
 
 ### 线上验收
 
 用真实演员逐一生成 4 个 pack（白T牛仔三视图 3 张 + 泳装三视图 3 张 + 表情组 4 张 + 身体细节 4 张 = 14 张）。刷新页面后 14 张仍可显示；数据库应只有一个该演员的 art project，所有 asset/version 均绑定正确 `actor_id`。
+
+### Codex 线上部署核验
+
+- `f5060ea` 对应 Vercel production deployment `dpl_H1FChSw4Jj2vrxVCeuDEPhGrWrt2` 状态 `READY`。
+- 真实四组图片生成仍需已登录用户会话执行；未将未授权请求伪装为成功验收。
 ## 2026-07-19 00:45 +08 - Codex / 演员库生产恢复与共享安全加固
 
 ### 已解决
