@@ -105,6 +105,8 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const storageKey = getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId);
+  // PRD §8.1：嵌入模式（制作工作台美术 Tab）隐藏独立项目创建/切换能力
+  const isEmbedded = Boolean(contextProjectId);
 
   useEffect(() => {
     setIsHydrated(false);
@@ -385,10 +387,16 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       <header className={styles.header}>
         <div className={styles.brand}><span>KIIKIS</span><strong>{state.title}</strong><small>美术工作台</small></div>
         <div className={styles.headerActions}>
-          <label className={styles.projectSelect}><Archive size={15} /><select value={state.projectId || ""} onChange={(event) => selectProject(event.target.value)}><option value="">关联已有项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDown size={14} /></label>
-          <label className={styles.projectSelect}><Archive size={15} /><select value="" onChange={(event) => { const id = event.target.value; if (id) loadArchivedDraft(id); event.target.value = ""; }}><option value="">{isZh ? "我的草稿" : "My Drafts"} ({archiveIndex.length})</option>{archiveIndex.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.assetCount} 项 · {new Date(item.archivedAt).toLocaleDateString()}</option>)}</select><ChevronDown size={14} /></label>
-          <button type="button" onClick={newProject}><Plus size={15} />{isZh ? "新建项目" : "New"}</button>
-          <button type="button" onClick={clearCurrentDraft} title={isZh ? "清空当前草稿（自动归档后清空）" : "Clear current draft (auto-archives first)"}><Trash2 size={15} />{isZh ? "清空" : "Clear"}</button>
+          {/* PRD §8.1：嵌入模式（制作工作台美术 Tab）隐藏独立项目创建/切换能力 */}
+          {isEmbedded ? null : (
+            <>
+              <label className={styles.projectSelect}><Archive size={15} /><select value={state.projectId || ""} onChange={(event) => selectProject(event.target.value)}><option value="">关联已有项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDown size={14} /></label>
+              <label className={styles.projectSelect}><Archive size={15} /><select value="" onChange={(event) => { const id = event.target.value; if (id) loadArchivedDraft(id); event.target.value = ""; }}><option value="">{isZh ? "我的草稿" : "My Drafts"} ({archiveIndex.length})</option>{archiveIndex.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.assetCount} 项 · {new Date(item.archivedAt).toLocaleDateString()}</option>)}</select><ChevronDown size={14} /></label>
+              <button type="button" onClick={newProject}><Plus size={15} />{isZh ? "新建项目" : "New"}</button>
+              <button type="button" onClick={clearCurrentDraft} title={isZh ? "清空当前草稿（自动归档后清空）" : "Clear current draft (auto-archives first)"}><Trash2 size={15} />{isZh ? "清空" : "Clear"}</button>
+            </>
+          )}
+          {isEmbedded && contextProjectTitle ? <span className={styles.provider}>{contextProjectTitle}</span> : null}
           <span className={styles.provider}><Sparkles size={14} />智能选择</span>
         </div>
       </header>

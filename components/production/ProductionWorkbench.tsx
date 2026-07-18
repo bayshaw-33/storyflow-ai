@@ -52,8 +52,8 @@ import { readCreativeHandoff } from "@/lib/creative-handoff";
 import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } from "@/lib/storyboard/draft";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createProductionId } from "@/lib/production/state";
-import { createContinuationProject, createProject, upsertProject } from "@/lib/projects";
-import { upsertProjectToSupabase } from "@/lib/supabase/projects";
+import { isScopeActionable, isCloudActionable } from "@/lib/production/scope";
+
 import type { ProductionSourceFile } from "@/lib/production/types";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
 import { TeamPanel } from "./TeamPanel";
@@ -156,6 +156,13 @@ export function ProductionWorkbench() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveTitle, setArchiveTitle] = useState("");
   const [archiveWorkflowType, setArchiveWorkflowType] = useState<"creation" | "continuation">("creation");
+  // PRD §8.2：归档弹窗支持 4 种绑定模式（existing/create/none × existing/create）
+  const [archiveUniverseMode, setArchiveUniverseMode] = useState<"existing" | "create" | "none">("none");
+  const [archiveUniverseId, setArchiveUniverseId] = useState<string>("");
+  const [archiveUniverseName, setArchiveUniverseName] = useState<string>("");
+  const [archiveProjectMode, setArchiveProjectMode] = useState<"existing" | "create">("create");
+  const [archiveExistingProjectId, setArchiveExistingProjectId] = useState<string>("");
+  const [archiveEpisodeLabel, setArchiveEpisodeLabel] = useState<string>("Episode 1");
   const [archiving, setArchiving] = useState(false);
   const [versionList, setVersionList] = useState<VersionRecord[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -428,31 +435,71 @@ export function ProductionWorkbench() {
     }
   }
 
-  /** 任务 1.4：归档 draft 草稿为真实项目，归档后自动保存到云端。 */
+  /**
+   * PRD §8.2 TRAE-PW-P0-004：归档 draft 草稿为正式项目。
+   *
+   * 改为调用 POST /api/production/archive，支持 4 种绑定模式：
+   *   A. 绑定已有 Universe + 已有 Project + 当前 Episode
+   *   B. 绑定已有 Universe + 创建新 Project + 创建 Episode 1
+   *   C. 创建新 Universe + 创建新 Project + 创建 Episode 1
+   *   D. 暂不归属 Universe + 创建新 Project + 创建 Episode 1
+   *
+   * 服务端保证：project → link FK 顺序、link 失败不吞错、复用不重复。
+   * 归档成功后客户端用返回的 projectId + sourceUnitId 原地 replace URL，再保存 storyboard state。
+   */
   async function archiveDraft() {
     const title = archiveTitle.trim() || "未命名项目";
+    // PRD §8.2：universeMode=existing 必须有 universeId；projectMode=existing 必须有 existingProjectId
+    if (archiveUniverseMode === "existing" && !archiveUniverseId.trim()) {
+      setNotice("请选择要绑定的 Universe，或改为新建 / 暂不归属。");
+      return;
+    }
+    if (archiveProjectMode === "existing" && !archiveExistingProjectId.trim()) {
+      setNotice("请选择要绑定的已有项目，或改为新建项目。");
+      return;
+    }
     setArchiving(true);
     try {
-      const base = {
-        title,
-        workflowType: archiveWorkflowType,
-        genre: "逆袭复仇",
-        targetLanguage: "中文",
-        market: "北美",
-        episodeCount: 1,
-        episodeDuration: "2 分钟",
+      // 调用归档 API（服务端处理 project/universe/link 写入 + 复用校验）
+      const archiveResp = await fetch("/api/production/archive", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          title,
+          workflowType: archiveWorkflowType,
+          universeMode: archiveUniverseMode,
+          universeId: archiveUniverseId.trim() || undefined,
+          universeName: archiveUniverseName.trim() || undefined,
+          projectMode: archiveProjectMode,
+          existingProjectId: archiveExistingProjectId.trim() || undefined,
+          episodeLabel: archiveEpisodeLabel.trim() || "Episode 1",
+        }),
+      });
+      if (!archiveResp.ok) {
+        const errBody = await archiveResp.json().catch(() => ({}));
+        const msg = (errBody && typeof errBody === "object" && "error" in errBody && typeof errBody.error === "string")
+          ? errBody.error
+          : `归档失败（HTTP ${archiveResp.status}）`;
+        setNotice(msg);
+        return;
+      }
+      const data = (await archiveResp.json()) as {
+        projectId: string;
+        sourceUnitId: string;
+        universeId: string | null;
+        linkId: string | null;
+        episodeLabel: string;
+        reused: { project: boolean; link: boolean };
       };
-      const project = archiveWorkflowType === "continuation"
-        ? createContinuationProject(base)
-        : createProject(base);
-      upsertProject(project);
-      void upsertProjectToSupabase(project, { accessToken: session?.access_token });
-      const newProjectId = project.id;
-      const newUnitId = `ep-${newProjectId}-1`;
+      const newProjectId = data.projectId;
+      const newUnitId = data.sourceUnitId;
       setProjectId(newProjectId);
       setSourceUnitId(newUnitId);
       setProjectTitle(title);
-      // 更新 URL
+      // 更新 URL（原地 replace 为正式 projectId + sourceUnitId）
       if (typeof window !== "undefined") {
         const url = new URL(window.location.href);
         url.searchParams.set("projectId", newProjectId);
@@ -461,8 +508,9 @@ export function ProductionWorkbench() {
         window.history.replaceState({}, "", url.toString());
       }
       setArchiveOpen(false);
-      setNotice(`已归档为项目「${title}」，正在同步云端…`);
-      // 归档后立即保存到云端（用真实 ID）
+      const reusedHint = data.reused.project ? "（复用已有项目）" : "";
+      setNotice(`已归档为项目「${title}」${reusedHint}，正在同步云端…`);
+      // 归档后立即保存 storyboard state 到云端（用真实 ID）
       setSaving(true);
       try {
         const request: SaveRequest = {
@@ -813,8 +861,9 @@ export function ProductionWorkbench() {
    * 重新生成时保留旧视频直到新视频成功（不先删旧的）。
    */
   async function submitVideo(shotId: string) {
-    if (!projectId || !sourceUnitId || !session) {
-      setNotice("未登录或缺少 projectId/sourceUnitId，无法生成视频。");
+    // PRD §8.1：视频生成需正式 scope（draft 不可，需先归档）—— fail-closed
+    if (!isCloudActionable(projectId, sourceUnitId) || !session) {
+      setNotice("视频生成需要先归档为正式项目。");
       return;
     }
     const existing = videoJobs[shotId];
@@ -910,6 +959,10 @@ export function ProductionWorkbench() {
   /** 任务 2：批量提交视频生成。 */
   async function batchSubmitVideos(shotIds: string[]) {
     if (batchRunning) return;
+    if (!isCloudActionable(projectId, sourceUnitId)) {
+      setNotice("批量视频生成需要先归档为正式项目。");
+      return;
+    }
     if (shotIds.length === 0) {
       setNotice("没有可提交的 Shot。");
       return;
@@ -1222,7 +1275,13 @@ export function ProductionWorkbench() {
               <ArrowLeft size={16} /> 返回创作
             </button>
           ) : null}
-          <button className={styles.primaryButton} type="button" onClick={saveToServer} disabled={saving}>
+          <button
+            className={styles.primaryButton}
+            type="button"
+            onClick={saveToServer}
+            disabled={saving || !isScopeActionable(projectId, sourceUnitId)}
+            title={!isScopeActionable(projectId, sourceUnitId) ? "缺少 projectId 或 sourceUnitId" : undefined}
+          >
             <Save size={16} /> {saving ? "保存中..." : "保存"}
           </button>
           <StoryboardExportMenu
@@ -1431,7 +1490,7 @@ export function ProductionWorkbench() {
           <div className={styles.archiveModal}>
             <div className={styles.archiveHeader}>
               <h2>归档草稿为项目</h2>
-              <p>为这份草稿命名并选择类型，归档后将自动同步到云端。</p>
+              <p>PRD §8.2：为这份草稿命名并选择项目与 Universe 绑定方式，归档后将自动同步到云端。</p>
             </div>
             <div className={styles.archiveBody}>
               <label className={styles.archiveField}>
@@ -1454,6 +1513,69 @@ export function ProductionWorkbench() {
                   <option value="continuation">续作</option>
                 </select>
               </label>
+              <label className={styles.archiveField}>
+                <span>项目模式</span>
+                <select
+                  value={archiveProjectMode}
+                  onChange={(e) => setArchiveProjectMode(e.target.value as "existing" | "create")}
+                >
+                  <option value="create">创建新项目</option>
+                  <option value="existing">绑定已有项目</option>
+                </select>
+              </label>
+              {archiveProjectMode === "existing" ? (
+                <label className={styles.archiveField}>
+                  <span>已有项目 ID</span>
+                  <input
+                    type="text"
+                    value={archiveExistingProjectId}
+                    onChange={(e) => setArchiveExistingProjectId(e.target.value)}
+                    placeholder="粘贴已有项目 UUID"
+                  />
+                </label>
+              ) : null}
+              <label className={styles.archiveField}>
+                <span>集次标签</span>
+                <input
+                  type="text"
+                  value={archiveEpisodeLabel}
+                  onChange={(e) => setArchiveEpisodeLabel(e.target.value)}
+                  placeholder="Episode 1"
+                />
+              </label>
+              <label className={styles.archiveField}>
+                <span>Universe 绑定</span>
+                <select
+                  value={archiveUniverseMode}
+                  onChange={(e) => setArchiveUniverseMode(e.target.value as "existing" | "create" | "none")}
+                >
+                  <option value="none">暂不归属 Universe</option>
+                  <option value="existing">绑定已有 Universe</option>
+                  <option value="create">创建新 Universe</option>
+                </select>
+              </label>
+              {archiveUniverseMode === "existing" ? (
+                <label className={styles.archiveField}>
+                  <span>已有 Universe ID</span>
+                  <input
+                    type="text"
+                    value={archiveUniverseId}
+                    onChange={(e) => setArchiveUniverseId(e.target.value)}
+                    placeholder="粘贴已有 Universe UUID"
+                  />
+                </label>
+              ) : null}
+              {archiveUniverseMode === "create" ? (
+                <label className={styles.archiveField}>
+                  <span>新 Universe 名称</span>
+                  <input
+                    type="text"
+                    value={archiveUniverseName}
+                    onChange={(e) => setArchiveUniverseName(e.target.value)}
+                    placeholder={`${archiveTitle || "未命名"} Universe`}
+                  />
+                </label>
+              ) : null}
             </div>
             <div className={styles.archiveActions}>
               <button
