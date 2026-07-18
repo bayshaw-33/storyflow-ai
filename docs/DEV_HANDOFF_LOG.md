@@ -1,5 +1,25 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 +08 - Codex / GitHub 网络修复与 Evidence 下载入口上线
+
+### GitHub 根因与修复
+- 根因：macOS 系统代理为 Clash `127.0.0.1:7897`，但 Git/libcurl 未自动继承系统代理，HTTPS 直连 GitHub 在当前网络下会间歇超时；SSH 同时没有可用 public key。
+- 本机仓库已设置 URL 级代理：`http.https://github.com.proxy=http://127.0.0.1:7897`，不影响其他 Git 远程；连续 3 次 `git ls-remote` 均约 1 秒完成。
+- `.githooks/pre-push` 不再丢弃 `git pull --rebase` 的 stderr，也不再把所有失败误报为冲突，后续会保留真实网络/认证/rebase 错误。
+
+### Evidence 生产部署与入口
+- 核验发现 staging 已有完整 Evidence schema，但 production 没有任何 Evidence 表、RPC 或私有 bucket；这与此前“有后端代码但页面找不到”的现象一致。
+- 已向 production `StoryFlow`（`vgcafbzksizlwmylphzu`）原样执行 staging 验证过的 `evidence_ledger` 与 `harden_evidence_ledger` 两条 migration。
+- 执行后核验：4 张 Evidence 表、`evidence-artifacts` 私有 bucket、append RPC、events RLS 均存在；authenticated 只能 SELECT、不能 INSERT，只有 service_role 可执行 append RPC；Supabase Advisor 无 Evidence 相关安全告警。
+- 制作工作台现有「导出」菜单新增「下载制作证据包」：单击完成服务端生成、获取最长 300 秒私密签名 URL 并下载；未登录/草稿态禁用，空证据链会给出明确提示。
+- Evidence 在 schema 完成生产 rollout 后默认启用，仍可用 `EVIDENCE_LEDGER_ENABLED=false|0` 作为紧急 kill switch。
+
+### 验证
+- 专项 TDD：`tests/evidence-download.test.mjs` + `tests/evidence-ledger.test.mjs`，8/8 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- 全量：`node --test tests/*.test.mjs`，267/267 通过。
+- `pnpm build`：成功，67/67 静态页面生成；Evidence 创建与下载路由均进入构建产物。
+
 ## 2026-07-18 +08 - Codex / Kimi 中断成果恢复、Universe/演员链路收口
 
 ### 恢复结论

@@ -13,8 +13,9 @@
 
 import { useState } from "react";
 import JSZip from "jszip";
-import { ChevronDown, Download, FileArchive, Loader2 } from "lucide-react";
+import { ChevronDown, Download, FileArchive, Loader2, ShieldCheck } from "lucide-react";
 import type { StoryboardScene, StoryboardShot } from "@/lib/storyboard/contracts";
+import { requestEvidencePackageDownload } from "@/lib/evidence/download";
 import type { VideoJobMap } from "./ShotVideoPanel";
 
 type Props = {
@@ -24,13 +25,36 @@ type Props = {
   scenes: StoryboardScene[];
   revision: number;
   videoJobs: VideoJobMap;
+  accessToken?: string;
 };
 
 export function StoryboardExportMenu(props: Props) {
-  const { projectId, sourceUnitId, projectTitle, scenes, revision, videoJobs } = props;
+  const { projectId, sourceUnitId, projectTitle, scenes, revision, videoJobs, accessToken = "" } = props;
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<string>("");
+
+  async function handleEvidencePackageDownload() {
+    setOpen(false);
+    setExporting(true);
+    setProgress("正在整理制作留痕…");
+    try {
+      const result = await requestEvidencePackageDownload({ accessToken, projectId, sourceUnitId });
+      const safeTitle = (projectTitle || "kiikis").replace(/[^\w\u4e00-\u9fa5-]/g, "_");
+      const link = document.createElement("a");
+      link.href = result.downloadUrl;
+      link.download = `${safeTitle}-制作证据包.zip`;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setProgress("制作证据包已开始下载");
+    } catch (error) {
+      setProgress(error instanceof Error ? error.message : "制作证据包下载失败。");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleExportZip() {
     setExporting(true);
@@ -150,6 +174,29 @@ export function StoryboardExportMenu(props: Props) {
                 </span>
               </span>
             </button>
+            <button
+              type="button"
+              onClick={handleEvidencePackageDownload}
+              disabled={!accessToken || !projectId || !sourceUnitId || projectId.startsWith("draft-")}
+              title={!accessToken ? "请先登录" : projectId.startsWith("draft-") ? "请先将草稿归档为项目" : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%",
+                padding: "10px 12px", border: "none", background: "transparent",
+                borderRadius: 6, cursor: accessToken && projectId && sourceUnitId && !projectId.startsWith("draft-") ? "pointer" : "not-allowed",
+                textAlign: "left", color: "#e0e0e0", opacity: accessToken && projectId && sourceUnitId && !projectId.startsWith("draft-") ? 1 : 0.5,
+              }}
+            >
+              <ShieldCheck size={16} color="#75dbc6" />
+              <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>下载制作证据包</span>
+                <span style={{ fontSize: 11, color: "#888" }}>
+                  时间线 + 哈希清单 + 已上传授权材料（5 分钟私密链接）
+                </span>
+              </span>
+            </button>
+            <p style={{ margin: "4px 12px 8px 38px", color: "#666", fontSize: 10, lineHeight: 1.4 }}>
+              用于制作过程核验，不替代法律确权结论。
+            </p>
           </div>
         </>
       ) : null}

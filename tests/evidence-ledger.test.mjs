@@ -155,9 +155,9 @@ test("authoritative hooks only form scoped, server-derived evidence facts", asyn
   assert.equal(exported.payload.storagePath, undefined);
 });
 
-test("evidence ledger stays disabled until explicitly enabled per environment", async () => {
+test("evidence ledger defaults on after rollout and supports an explicit kill switch", async () => {
   const { isEvidenceLedgerEnabled } = await import("../lib/evidence/feature-flags.ts");
-  assert.equal(isEvidenceLedgerEnabled({}), false);
+  assert.equal(isEvidenceLedgerEnabled({}), true);
   assert.equal(isEvidenceLedgerEnabled({ EVIDENCE_LEDGER_ENABLED: "false" }), false);
   assert.equal(isEvidenceLedgerEnabled({ EVIDENCE_LEDGER_ENABLED: "1" }), true);
   assert.equal(isEvidenceLedgerEnabled({ EVIDENCE_LEDGER_ENABLED: "TRUE" }), true);

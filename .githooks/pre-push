@@ -24,8 +24,9 @@ esac
 # 2. Pull --rebase only on main (feature branches track their own remote)
 if [ "$current_branch" = "main" ]; then
     echo "⬇️  git pull --rebase origin main..."
-    if ! git pull --rebase origin main 2>/dev/null; then
-        echo "${RED}❌ Pre-push rejected: git pull --rebase failed. Resolve conflicts first.${NC}"
+    if ! git pull --rebase origin main; then
+        echo "${RED}❌ Pre-push rejected: unable to sync origin/main.${NC}"
+        echo "${RED}   Read the Git error above: it may be network/proxy, authentication, local changes, or a rebase conflict.${NC}"
         exit 1
     fi
 fi

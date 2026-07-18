@@ -1192,6 +1192,7 @@ export function ProductionWorkbench() {
             scenes={scenes}
             revision={revision}
             videoJobs={videoJobs}
+            accessToken={session?.access_token}
           />
           <div className={styles.secondaryMenu}>
             <button
