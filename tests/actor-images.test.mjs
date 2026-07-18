@@ -38,7 +38,7 @@ test("avatar prompt is a white-background front-facing close-up portrait with st
 test("view pack registry exposes exactly the four contracted packs (合成图模式)", () => {
   assert.deepEqual(
     ACTOR_VIEW_PACKS.map((pack) => pack.key),
-    ["three-view-casual", "three-view-swimwear", "expressions", "body-details"],
+    ["three-view-casual", "three-view-swimwear", "expressions", "body-details", "reference-sheet"],
   );
   assert.equal(getActorViewPack("nope"), null);
   // 合成图模式：每个 pack 用 sheetCells 描述格子，不再用 shots
@@ -46,13 +46,16 @@ test("view pack registry exposes exactly the four contracted packs (合成图模
   assert.equal(getActorViewPack("three-view-swimwear")?.sheetCells.length, 3);
   assert.equal(getActorViewPack("expressions")?.sheetCells.length, 4);
   assert.equal(getActorViewPack("body-details")?.sheetCells.length, 4);
+  // reference-sheet 是主视觉 pack，包含完整角色参考表所有格子
+  assert.ok(getActorViewPack("reference-sheet")?.sheetCells.length >= 8, "reference-sheet 必须有至少 8 个格子");
+  assert.equal(getActorViewPack("reference-sheet")?.aspectRatio, "4:3");
   // 每个 pack 必须有 promptVariants（失败时切换）
   for (const pack of ACTOR_VIEW_PACKS) {
     assert.ok(pack.promptVariants.length >= 3, `${pack.key} 必须有至少 3 组 promptVariants`);
     assert.ok(pack.sheetLayout, `${pack.key} 必须有 sheetLayout`);
   }
   // 泳装 pack 应有更多备选措辞（容易被拒绝）
-  assert.ok(getActorViewPack("three-view-swimwear")?.promptVariants.length >= 4, "泳装 pack 应有至少 4 组 promptVariants");
+  assert.ok(getActorViewPack("three-view-swimwear")?.promptVariants.length >= 6, "泳装 pack 应有至少 6 组 promptVariants");
 });
 
 test("three-view packs cover front/side/back with the contracted costumes", () => {

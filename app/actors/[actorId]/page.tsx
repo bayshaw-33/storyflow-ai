@@ -209,6 +209,43 @@ export default function ActorDetailPage() {
     [token, actorId, isZh],
   );
 
+  // KIIKIS-TR-ACTOR-P0-007: 上传图片替代生成
+  const handleUploadPack = useCallback(
+    async (pack: ViewPackId, file: File) => {
+      if (!token || !actorId || packBusy) return;
+      setPackBusy(pack);
+      setPackErrors((current) => ({ ...current, [pack]: "" }));
+      try {
+        const formData = new FormData();
+        formData.append("pack", pack);
+        formData.append("file", file);
+        const result = await actorApiFetch<unknown>(
+          `/api/actors/${encodeURIComponent(actorId)}/upload-view`,
+          token,
+          { method: "POST", body: formData },
+        );
+        const incoming = normalizeViewVersions(result).map((version) => ({
+          ...version,
+          pack: version.pack || pack,
+        }));
+        if (!incoming.length) {
+          throw new Error(isZh ? "上传未返回图片版本。" : "Upload returned no versions.");
+        }
+        setVersionsByPack((current) => ({
+          ...current,
+          [pack]: mergeVersions(current[pack] || [], incoming),
+        }));
+      } catch (issue) {
+        const message = issue instanceof Error ? issue.message : isZh ? "上传失败。" : "Upload failed.";
+        setPackErrors((current) => ({ ...current, [pack]: message }));
+        throw issue;
+      } finally {
+        setPackBusy("");
+      }
+    },
+    [token, actorId, packBusy, isZh],
+  );
+
   const handleArchive = useCallback(async () => {
     if (!token || !actorId || archiving) return;
     if (!window.confirm(isZh ? "归档该演员？已生成的资产会保留，但不再出现在名册中。" : "Archive this actor? Generated assets stay, but the actor leaves the roster.")) {
@@ -366,6 +403,7 @@ export default function ActorDetailPage() {
                 historyFailed={historyFailed}
                 onGenerate={(pack) => void generatePack(pack)}
                 onSetPrimary={handleSetPrimary}
+                onUpload={handleUploadPack}
               />
               <PortrayalGallery copy={ui} portrayals={portrayals} loading={portrayalsLoading} error={portrayalsError} />
             </div>

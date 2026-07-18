@@ -42,7 +42,7 @@ test("UI 四个按钮发送 canonical pack（ACTOR_VIEW_PACKS.id 全部为 canon
   const ids = ACTOR_VIEW_PACKS.map((pack) => pack.id);
   assert.deepEqual(
     ids,
-    ["three-view-casual", "three-view-swimwear", "expressions", "body-details"],
+    ["reference-sheet", "three-view-casual", "three-view-swimwear", "expressions", "body-details"],
     "ACTOR_VIEW_PACKS.id 必须为 canonical 连字符 key，UI 通过 pack.id 调用 onGenerate",
   );
   // 所有 id 不含下划线
@@ -258,9 +258,9 @@ test("POST 路由响应契约：每条版本返回 versionId/previewUrl/pack/sho
   // shotKey 必须为 "sheet"（合成图模式）
   assert.ok(postBody.includes('"sheet"') || postBody.includes("'sheet'"), "shotKey 必须为 'sheet'");
 
-  // 四个 pack 都必须支持（getActorViewPack 必须接受 canonical key）
+  // 五个 pack 都必须支持（getActorViewPack 必须接受 canonical key）
   const actorImageSrc = readSrc("lib/art/providers/actor-image.ts");
-  for (const packKey of ["three-view-casual", "three-view-swimwear", "expressions", "body-details"]) {
+  for (const packKey of ["three-view-casual", "three-view-swimwear", "expressions", "body-details", "reference-sheet"]) {
     assert.ok(
       actorImageSrc.includes(`"${packKey}"`),
       `actor-image.ts 必须支持 pack: ${packKey}`,
@@ -320,27 +320,28 @@ test("POST 路由：5 次重试策略（同 prompt 换 seed 2 次 + 切换 promp
   assert.ok(/failures,/.test(postBody), "响应必须返回 failures（失败明细）");
 });
 
-test("actor-image.ts SHEET_RETRY_PLAN 定义 5 次重试", () => {
+test("actor-image.ts SHEET_RETRY_PLAN 定义 6 次重试", () => {
   const src = readSrc("lib/art/providers/actor-image.ts");
   // 必须有 SHEET_RETRY_PLAN 常量
   assert.ok(src.includes("SHEET_RETRY_PLAN"), "必须有 SHEET_RETRY_PLAN 常量");
-  // 必须有 5 个重试项
+  // 必须有 6 个重试项（KIIKIS-TR-ACTOR-P0-007: 泳装 6 组措辞需要 6 次重试）
   const match = src.match(/SHEET_RETRY_PLAN\s*=\s*\[([\s\S]*?)\];/);
   assert.ok(match, "SHEET_RETRY_PLAN 数组定义必须存在");
   const itemCount = (match[1].match(/promptVariantIndex/g) || []).length;
-  assert.equal(itemCount, 5, "SHEET_RETRY_PLAN 必须有 5 个重试项");
+  assert.equal(itemCount, 6, "SHEET_RETRY_PLAN 必须有 6 个重试项");
   // 第 1-2 项用 promptVariantIndex: 0（同 prompt 换 seed）
   // 第 3-5 项用 promptVariantIndex: 1/2/-1（切换 promptVariants）
-  assert.ok(/promptVariantIndex:\s*0[^]*promptVariantIndex:\s*0[^]*promptVariantIndex:\s*1[^]*promptVariantIndex:\s*2[^]*promptVariantIndex:\s*-1/.test(src.replace(/\s+/g, " ")), "重试顺序：0,0,1,2,-1");
+  // 第 6 项用 promptVariantIndex: -1（最后一个 variant，最保守）
+  assert.ok(/promptVariantIndex:\s*0[^]*promptVariantIndex:\s*0[^]*promptVariantIndex:\s*1[^]*promptVariantIndex:\s*2[^]*promptVariantIndex:\s*-1[^]*promptVariantIndex:\s*-1/.test(src.replace(/\s+/g, " ")), "重试顺序：0,0,1,2,-1,-1");
 });
 
 test("每个 pack 的 promptVariants 至少 3 组（泳装至少 4 组）", () => {
   const src = readSrc("lib/art/providers/actor-image.ts");
-  // 泳装 pack 必须有 >= 4 组 promptVariants（容易被拒绝）
+  // 泳装 pack 必须有 >= 6 组 promptVariants（KIIKIS-TR-ACTOR-P0-007: 从 4 组增到 6 组）
   const swimMatch = src.match(/key:\s*"three-view-swimwear"[\s\S]*?promptVariants:\s*\[([\s\S]*?)\],/);
   assert.ok(swimMatch, "泳装 pack promptVariants 未找到");
   const swimVariantCount = (swimMatch[1].match(/"/g) || []).length / 2; // 每组一个字符串
-  assert.ok(swimVariantCount >= 4, `泳装 pack 必须有 >= 4 组 promptVariants，实际 ${swimVariantCount}`);
+  assert.ok(swimVariantCount >= 6, `泳装 pack 必须有 >= 6 组 promptVariants，实际 ${swimVariantCount}`);
 });
 test("POST 路由：5 个阶段错误码已定义", () => {
   const src = readSrc("app/api/actors/generate-views/route.ts");

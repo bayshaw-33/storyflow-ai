@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Expand, ImageOff, LoaderCircle, RefreshCw, Sparkles, Star } from "lucide-react";
+import { useRef, useState } from "react";
+import { Expand, ImageOff, LoaderCircle, RefreshCw, Sparkles, Star, Upload } from "lucide-react";
 import type { ActorProfile } from "@/lib/actors";
 import type { ActorLibraryCopy } from "./actor-copy";
 import { ACTOR_VIEW_PACKS, type ViewPackId, type ViewVersion } from "./actor-view-model";
@@ -18,11 +18,17 @@ type Props = {
   historyFailed: boolean;
   onGenerate: (pack: ViewPackId) => void;
   onSetPrimary: (pack: ViewPackId, versionId: string) => void;
+  /**
+   * 上传图片到指定 pack。前端把 File 传给父组件，由父组件调用 upload API。
+   * KIIKIS-TR-ACTOR-P0-007: 用户可上传图片替代生成。
+   */
+  onUpload: (pack: ViewPackId, file: File) => Promise<void>;
 };
 
 // 详情页右侧图片资产区：
-// 主视觉 + 4 个视图包（白T三视图 / 泳装三视图 / 表情组 / 身体细节）。
-// 每个 pack 维护独立版本列表，单张失败不清空其他版本，主版本可切换。
+// 主视觉（reference-sheet 优先，avatar 回退）+ 5 个视图包
+// （角色参考表 / 白T三视图 / 泳装三视图 / 表情组 / 身体细节）。
+// 每个 pack 支持生成与上传两种方式，单张失败不清空其他版本。
 export function ActorAssetPacks({
   actor,
   isZh,
@@ -34,17 +40,39 @@ export function ActorAssetPacks({
   historyFailed,
   onGenerate,
   onSetPrimary,
+  onUpload,
 }: Props) {
+  // 主视觉优先用 reference-sheet 主版本，否则回退到 avatar
+  const refSheetVersions = versionsByPack["reference-sheet"] || [];
+  const refSheetPrimary = refSheetVersions.find((v) => v.isPrimary) || refSheetVersions[0] || null;
+  const mainVisualUrl = refSheetPrimary?.previewUrl || actor.avatar_url || "";
+
   return (
     <>
       <section className={styles.assetSection} aria-label={copy.mainVisual}>
         <div className={styles.assetSectionHead}>
           <h2>{copy.mainVisual}</h2>
+          <span className={styles.spacer} />
+          <UploadButton
+            pack="reference-sheet"
+            copy={copy}
+            disabled={Boolean(packBusy)}
+            onUpload={onUpload}
+          />
+          <button
+            className={styles.ghostBtn}
+            type="button"
+            onClick={() => onGenerate("reference-sheet")}
+            disabled={Boolean(packBusy)}
+          >
+            {packBusy === "reference-sheet" ? <LoaderCircle className={styles.spin} size={14} /> : refSheetVersions.length ? <RefreshCw size={14} /> : <Sparkles size={14} />}
+            {packBusy === "reference-sheet" ? copy.generating : refSheetVersions.length ? copy.regenerate : copy.generate}
+          </button>
         </div>
-        {actor.avatar_url ? (
+        {mainVisualUrl ? (
           <div className={styles.mainVisual}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={actor.avatar_url} alt={`${actor.name} · ${copy.mainVisual}`} />
+            <img src={mainVisualUrl} alt={`${actor.name} · ${copy.mainVisual}`} />
           </div>
         ) : (
           <div className={styles.packEmptyBox}>
@@ -60,7 +88,7 @@ export function ActorAssetPacks({
         </div>
       ) : null}
 
-      {ACTOR_VIEW_PACKS.map((pack) => {
+      {ACTOR_VIEW_PACKS.filter((pack) => pack.id !== "reference-sheet").map((pack) => {
         const versions = versionsByPack[pack.id] || [];
         const busy = packBusy === pack.id;
         const packError = packErrors[pack.id] || "";
@@ -78,6 +106,7 @@ export function ActorAssetPacks({
             disabled={Boolean(packBusy)}
             onGenerate={onGenerate}
             onSetPrimary={onSetPrimary}
+            onUpload={onUpload}
           />
         );
       })}
@@ -97,10 +126,11 @@ type PackSectionProps = {
   disabled: boolean;
   onGenerate: (pack: ViewPackId) => void;
   onSetPrimary: (pack: ViewPackId, versionId: string) => void;
+  onUpload: (pack: ViewPackId, file: File) => Promise<void>;
 };
 
 function PackSection(props: PackSectionProps) {
-  const { pack, isZh, copy, actorName, versions, busy, packError, versionErrors, disabled, onGenerate, onSetPrimary } = props;
+  const { pack, isZh, copy, actorName, versions, busy, packError, versionErrors, disabled, onGenerate, onSetPrimary, onUpload } = props;
   const [historyOpen, setHistoryOpen] = useState(false);
   const packLabel = isZh ? pack.zh : pack.en;
   const primary = versions.find((version) => version.isPrimary) || versions[0] || null;
@@ -124,6 +154,12 @@ function PackSection(props: PackSectionProps) {
             {copy.versionHistory} · {historyVersions.length}
           </button>
         ) : null}
+        <UploadButton
+          pack={pack.id}
+          copy={copy}
+          disabled={disabled}
+          onUpload={onUpload}
+        />
         <button
           className={styles.ghostBtn}
           type="button"
@@ -184,6 +220,60 @@ function PackSection(props: PackSectionProps) {
         <p className={styles.historyEmpty}>{copy.versionHistoryEmpty}</p>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * 上传按钮：隐藏 file input，点击触发选择文件。
+ * 接受 image/png, image/jpeg, image/webp。
+ */
+function UploadButton({
+  pack,
+  copy,
+  disabled,
+  onUpload,
+}: {
+  pack: ViewPackId;
+  copy: ActorLibraryCopy;
+  disabled: boolean;
+  onUpload: (pack: ViewPackId, file: File) => Promise<void>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await onUpload(pack, file);
+    } finally {
+      setUploading(false);
+      // 重置 input 允许重复选择同一文件
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={handleFileChange}
+        style={{ display: "none" }}
+      />
+      <button
+        className={styles.ghostBtn}
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled || uploading}
+        title={copy.uploadHint}
+      >
+        {uploading ? <LoaderCircle className={styles.spin} size={14} /> : <Upload size={14} />}
+        {uploading ? copy.uploading : copy.upload}
+      </button>
+    </>
   );
 }
 
@@ -276,4 +366,3 @@ function PackHistoryItem({
     </figure>
   );
 }
-

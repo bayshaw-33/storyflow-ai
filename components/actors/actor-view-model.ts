@@ -47,9 +47,11 @@ export type ViewVersion = {
  * Canonical ActorViewPackKey — UI / API / 状态 / 导出 / 完整度统计全部使用该 key。
  * 旧 underscore key 由 normalizePackKey 兼容归一化（向后兼容旧页面缓存）。
  */
-export type ActorViewPackKey = "three-view-casual" | "three-view-swimwear" | "expressions" | "body-details";
+export type ActorViewPackKey = "three-view-casual" | "three-view-swimwear" | "expressions" | "body-details" | "reference-sheet";
 
 export const ACTOR_VIEW_PACKS = [
+  // reference-sheet 排首位，作为主视觉位置的首选 pack
+  { id: "reference-sheet", zh: "角色参考表", en: "Reference sheet" },
   { id: "three-view-casual", zh: "三视图 · 白T牛仔", en: "Three-view · White tee & jeans" },
   { id: "three-view-swimwear", zh: "三视图 · 泳装", en: "Three-view · Swimwear" },
   { id: "expressions", zh: "表情组", en: "Expression set" },
@@ -70,6 +72,9 @@ export function normalizePackKey(raw: unknown): ActorViewPackKey | null {
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
   switch (trimmed) {
+    case "reference-sheet":
+    case "reference_sheet":
+      return "reference-sheet";
     case "three-view-casual":
     case "three_view_casual":
       return "three-view-casual";

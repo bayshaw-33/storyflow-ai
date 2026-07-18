@@ -13,6 +13,26 @@ export async function persistUploadedArtReference(input: {
   return uploadAndSign(path, contentType, await input.file.arrayBuffer());
 }
 
+/**
+ * 上传演员图组图片到 Storage（用户手动上传，替代生成）。
+ * KIIKIS-TR-ACTOR-P0-007: 用户可上传 PNG/JPG/WebP 替代 Atlas 生成。
+ */
+export async function persistUploadedActorView(input: {
+  userId: string;
+  projectId: string;
+  assetId: string;
+  file: File;
+}) {
+  const contentType = input.file.type;
+  if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
+    throw new Error("ACTOR_VIEW_UPLOAD_TYPE_ERROR");
+  }
+  if (input.file.size > 10 * 1024 * 1024) throw new Error("ACTOR_VIEW_UPLOAD_SIZE_ERROR");
+  const extension = contentType.includes("jpeg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
+  const path = `${input.userId}/${input.projectId}/uploaded/${input.assetId}/${crypto.randomUUID()}.${extension}`;
+  return uploadAndSign(path, contentType, await input.file.arrayBuffer());
+}
+
 export async function persistRemoteArtImage(input: {
   userId: string;
   projectId: string;

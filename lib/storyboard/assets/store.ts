@@ -314,6 +314,8 @@ export type NewAssetVersion = {
   previewUrl?: string;
   /** KIIKIS-TR-ACTOR-P0-005: 单图 shot 标识，写入 metadata.shot_key 供 GET 恢复 pack/shotKey。 */
   shotKey?: string;
+  /** KIIKIS-TR-ACTOR-P0-007: 版本来源，默认 generated，上传为 uploaded。 */
+  source?: "generated" | "uploaded";
 };
 
 /** Insert generated image versions under an asset variant. */
@@ -329,7 +331,7 @@ export async function insertAssetVersions(
   const rows = input.versions.map((version) => ({
     variant_id: input.variantId,
     storage_path: version.storagePath,
-    source: "generated",
+    source: version.source ?? "generated",
     provider: version.provider ?? null,
     model: version.model ?? null,
     provider_task_id: version.providerTaskId ?? null,

@@ -20,7 +20,7 @@ import type { ArtImageProviderResult, ArtImageRequest } from "./types.ts";
 
 export type ActorImageAspectRatio = ArtImageRequest["aspectRatio"];
 
-export type ActorViewPackKey = "three-view-casual" | "three-view-swimwear" | "expressions" | "body-details";
+export type ActorViewPackKey = "three-view-casual" | "three-view-swimwear" | "expressions" | "body-details" | "reference-sheet";
 
 export type ActorViewPack = {
   key: ActorViewPackKey;
@@ -38,14 +38,20 @@ export type ActorViewPack = {
    * 泳装 pack 尤其需要多组备选（内衣照容易被拒绝）。
    */
   promptVariants: string[];
+  /**
+   * 可选背景描述（覆盖默认的 "white seamless studio background"）。
+   * 白T牛仔用深灰色背景避免白色上衣与白色背景混淆。
+   */
+  backgroundOverride?: string;
 };
 
 const IDENTITY_NOTE =
   "Use the person in the reference image(s) as the exact same fictional virtual actor: identical face, identical hairstyle, identical body proportions, identical skin tone. Single person only.";
 
 // 合成图专用质量注释：允许 collage 布局，禁止文字/水印/多余人物
+// 注意：背景色由 pack.backgroundOverride 指定（白T牛仔用深灰色避免与白色上衣混淆）
 const SHEET_QUALITY_NOTE =
-  "Clean seamless studio background, even soft studio lighting, sharp focus, production-ready character reference quality. Clear cell boundaries with even spacing. No text, no watermark, no logo, no extra people beyond the intended cells.";
+  "Even soft studio lighting, sharp focus, production-ready character reference quality. Clear cell boundaries with even spacing. No text, no watermark, no logo, no extra people beyond the intended cells.";
 
 export const ACTOR_VIEW_PACKS: ActorViewPack[] = [
   {
@@ -60,6 +66,8 @@ export const ACTOR_VIEW_PACKS: ActorViewPack[] = [
       { key: "side", label: "侧面全身" },
       { key: "back", label: "背面全身" },
     ],
+    // 白T与白色背景太接近，改用深灰色背景增强对比
+    backgroundOverride: "neutral dark gray seamless studio background (RGB ~#3a3a3a), even soft lighting, no shadow on the floor",
     promptVariants: [
       "Character model sheet with three full-body views in a horizontal row.",
       "Character reference sheet showing the same person from three angles in a row.",
@@ -78,12 +86,15 @@ export const ACTOR_VIEW_PACKS: ActorViewPack[] = [
       { key: "side", label: "侧面全身" },
       { key: "back", label: "背面全身" },
     ],
-    // 泳装/内衣照容易被拒绝，准备 4 组措辞从直接到保守
+    // 泳装/内衣照容易被拒绝，准备 6 组措辞从直接到极保守
+    // 失败重试时按序切换，第 5-6 次用极保守措辞（完全不提 swimwear）
     promptVariants: [
       "Character model sheet with three full-body views in a horizontal row, for body proportion reference.",
       "Character proportion reference sheet showing the same person from three angles in a row, athletic studio study.",
       "Figure-study character sheet, three full-body poses side by side, modest athletic attire for proportion calibration.",
       "Anatomical proportion reference sheet for a virtual character, three standing poses in a row, minimal athletic wear.",
+      "Virtual character turnaround sheet, three standing full-body poses in a row, simple fitted athletic top and shorts for 3D modeling reference.",
+      "3D character modeling reference sheet, three full-body standing poses side by side, simple neutral athletic practice wear, studio proportion study.",
     ],
   },
   {
@@ -122,6 +133,34 @@ export const ACTOR_VIEW_PACKS: ActorViewPack[] = [
       "Character detail reference sheet with four close-ups in a 2x2 grid.",
       "Body detail study sheet, four detail shots arranged in a square grid.",
       "Character anatomy reference, four detail views in a 2x2 layout.",
+    ],
+  },
+  {
+    // 角色参考表（主视觉）：基于头像生成的完整角色参考表
+    // 用户上传图片也可以替代生成
+    key: "reference-sheet",
+    label: "角色参考表",
+    description: "完整角色参考表：全身体态转面图、比例尺、色调色板、情绪/微表情、头部细节、姿态变化、特写、服装配饰、手势、轮廓指南（4:3 横版）。",
+    aspectRatio: "4:3",
+    costume: "the same outfit as shown in the reference image(s)",
+    sheetLayout: "professional complete character reference sheet on pure white seamless background with clean grid layout. The sheet includes: main full-body turnaround (front, 3/4 view, side, back) with a vertical scale ruler beside the body on the left as the largest element; a 6-8 color palette swatch in the top-right corner; 8-frame emotion progression; 5-frame micro-expression row; multi-angle head detail table; neutral standing pose; pose variations; 1 close-up; a bottom row of costume and accessory detail close-ups (hair texture, jacket fabric, shoes, accessory details); multiple hand gesture references; character silhouette guide. All figures share identical face and body proportions. Perfect layout alignment.",
+    sheetCells: [
+      { key: "turnaround", label: "全身体态转面图" },
+      { key: "color-palette", label: "色调色板" },
+      { key: "emotion", label: "情绪进阶" },
+      { key: "micro-expression", label: "微表情" },
+      { key: "head-details", label: "头部细节" },
+      { key: "poses", label: "姿态变化" },
+      { key: "closeup", label: "特写" },
+      { key: "costume-details", label: "服装配饰" },
+      { key: "hands", label: "手势参考" },
+      { key: "silhouette", label: "轮廓指南" },
+    ],
+    backgroundOverride: "pure white seamless background",
+    promptVariants: [
+      "Professional complete character reference sheet on pure white seamless background with clean grid layout.",
+      "Comprehensive character model reference sheet, white background, organized grid layout with all required detail cells.",
+      "Full character design specification sheet, pure white background, structured grid layout for production pipeline reference.",
     ],
   },
 ];
@@ -176,10 +215,14 @@ export function buildActorSheetPrompt(
   actorBasePrompt: string,
 ): string {
   const variant = pack.promptVariants[Math.min(promptVariantIndex, pack.promptVariants.length - 1)] || pack.promptVariants[0];
+  const background = pack.backgroundOverride
+    ? pack.backgroundOverride
+    : "clean seamless white studio background";
   return [
     "Professional character reference sheet for a fictional virtual actor asset library.",
     IDENTITY_NOTE,
     `Costume: ${pack.costume}.`,
+    `Background: ${background}.`,
     `Layout: ${pack.sheetLayout}.`,
     `Composition: ${variant}`,
     SHEET_QUALITY_NOTE,
@@ -252,6 +295,8 @@ export const SHEET_RETRY_PLAN = [
   { promptVariantIndex: 1, seedStrategy: "random" as const },
   { promptVariantIndex: 2, seedStrategy: "random" as const },
   { promptVariantIndex: -1, seedStrategy: "random" as const }, // -1 = 最后一个 variant
+  // 如果 pack 有更多 promptVariants（如泳装 6 组），第 6 次重试自动用最后一个
+  { promptVariantIndex: -1, seedStrategy: "random" as const },
 ];
 
 /** 生成随机 seed（0 ~ 2^31 - 1）。 */

@@ -42,7 +42,7 @@ function version(pack, index) {
 test("视图包契约覆盖：两个三视图版本 + 表情组 + 身体细节", () => {
   assert.deepEqual(
     ACTOR_VIEW_PACKS.map((pack) => pack.id),
-    ["three-view-casual", "three-view-swimwear", "expressions", "body-details"],
+    ["reference-sheet", "three-view-casual", "three-view-swimwear", "expressions", "body-details"],
   );
 });
 
