@@ -13,15 +13,14 @@
 --      - owner 永远可读自己的演员
 --      - visibility='team' 且是团队 active 成员可读
 --      - visibility='platform' 时所有 authenticated 用户可读
---   3. 重建 actor_profiles_owner_or_team_editor_insert RLS 策略：
---      - platform 共享不改变 INSERT 权限：仍要求 owner_id = auth.uid()
+--   3. 收紧客户端 INSERT / UPDATE RLS 策略：
+--      - platform 共享只能经服务端权限校验后以 service_role 写入
+--      - authenticated Data API 不能伪造 rights_state 绕过肖像权确认
 --      - team 共享要求是团队 owner/admin/editor
 --      - platform 共享时 team_id 必须为 NULL（平台级共享，不属于某个团队）
 --
--- 注意：基础资料编辑/删除仍由应用层 assertCanEditActorBasicProfile 强制（仅创建者）。
---      RLS 只负责"可见性"，不负责"可写性"——可写性在 UPDATE/DELETE 策略上单独控制。
---      本 migration 不修改 UPDATE/DELETE 策略（baseline 未启用 UPDATE/DELETE RLS，
---      应用层 assertCanEditActorBasicProfile 已是强约束）。
+-- 注意：平台共享是服务端受控状态。RLS 同时拒绝 authenticated 角色直接
+--      INSERT / UPDATE 为 platform，避免绕过 assertCanSetPlatformVisibility。
 -- ============================================================
 
 -- 1. 扩展 visibility CHECK 约束
@@ -57,8 +56,7 @@ CREATE POLICY actor_profiles_visible_select
 --    - owner_id 必须等于 auth.uid()（禁止伪造他人 actor）
 --    - visibility='private' 任意 authenticated 可创建自己的私有演员
 --    - visibility='team' 要求是团队 owner/admin/editor
---    - visibility='platform' 允许任意 authenticated 用户创建平台共享演员
---      （应用层肖像权边界：真人照片默认 private，确认肖像授权后才能设 platform）
+--    - visibility='platform' 只能由服务端完成肖像权校验后写入
 DROP POLICY IF EXISTS actor_profiles_owner_or_team_editor_insert ON public.storyflow_actor_profiles;
 
 CREATE POLICY actor_profiles_owner_or_team_editor_insert
@@ -68,7 +66,6 @@ CREATE POLICY actor_profiles_owner_or_team_editor_insert
     owner_id = auth.uid()
     AND (
       visibility = 'private'::text
-      OR visibility = 'platform'::text
       OR (
         visibility = 'team'::text
         AND EXISTS (
@@ -83,8 +80,35 @@ CREATE POLICY actor_profiles_owner_or_team_editor_insert
     )
   );
 
+-- 4. 重建 UPDATE 策略：同样禁止客户端直接升级为 platform。
+-- service_role 不受 RLS 限制，正常 /api/actors 服务端流程保持可用。
+DROP POLICY IF EXISTS actor_profiles_owner_or_team_admin_update ON public.storyflow_actor_profiles;
+
+CREATE POLICY actor_profiles_owner_or_team_admin_update
+  ON public.storyflow_actor_profiles
+  FOR UPDATE TO authenticated
+  USING (
+    owner_id = auth.uid()
+    OR (
+      team_id IS NOT NULL
+      AND public.is_team_member(team_id, auth.uid(), ARRAY['owner'::text, 'admin'::text])
+    )
+  )
+  WITH CHECK (
+    visibility <> 'platform'::text
+    AND (
+      owner_id = auth.uid()
+      OR (
+        team_id IS NOT NULL
+        AND public.is_team_member(team_id, auth.uid(), ARRAY['owner'::text, 'admin'::text])
+      )
+    )
+  );
+
 -- 注释：便于运维查询
 COMMENT ON POLICY actor_profiles_visible_select ON public.storyflow_actor_profiles IS
   'Owner always readable; platform readable by all authenticated; team readable by active team members.';
 COMMENT ON POLICY actor_profiles_owner_or_team_editor_insert ON public.storyflow_actor_profiles IS
-  'owner_id must equal auth.uid(); platform allowed; team requires owner/admin/editor role.';
+  'owner_id must equal auth.uid(); platform requires the server-side rights check; team requires owner/admin/editor role.';
+COMMENT ON POLICY actor_profiles_owner_or_team_admin_update ON public.storyflow_actor_profiles IS
+  'Owners/team admins may update non-platform actors directly; platform visibility requires the server-side rights check.';

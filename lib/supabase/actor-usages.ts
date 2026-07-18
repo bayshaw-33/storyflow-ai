@@ -32,10 +32,17 @@ export type ActorUsage = {
 };
 
 export type PlatformActorCard = {
-  actor: ActorProfile;
+  actor: PublicActorProfile;
   creator_display_name: string | null;
   usage_count: number;
 };
+
+/** Public platform card DTO. Never return owner IDs, asset IDs, prompts or internal metadata. */
+export type PublicActorProfile = Pick<ActorProfile,
+  "id" | "visibility" | "name" | "bio" | "age_range" | "gender_expression" |
+  "ethnicity_style" | "face_description" | "hair_description" | "body_description" |
+  "temperament" | "playable_roles" | "status" | "updated_at" | "avatar_url"
+>;
 
 export type ActorUsageWithActor = ActorUsage & {
   actor: ActorProfile | null;
@@ -73,7 +80,17 @@ export async function createActorUsage(params: {
   // 3. 创建者不需要"使用"自己的演员
   if (actor.owner_id === params.consumerId) throw new Error("ACTOR_OWNER_CANNOT_USE_SELF");
 
-  // 4. 创建快照（防止后续创建者修改演员资料后，使用记录失去上下文）
+  // 4. 使用必须属于当前用户自己的项目。service role 会绕过 RLS，因此这里不能
+  //    信任浏览器传入的 projectId。
+  const projects = await serviceFetch<Array<{ id: string; owner_id: string | null; user_id: string | null }>>(
+    `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(params.projectId)}&select=id,owner_id,user_id&limit=1`,
+  );
+  const project = projects[0];
+  const projectOwnerId = project?.owner_id || project?.user_id;
+  if (!project) throw new Error("PROJECT_NOT_FOUND");
+  if (!projectOwnerId || projectOwnerId !== params.consumerId) throw new Error("PROJECT_FORBIDDEN");
+
+  // 5. 创建快照（防止后续创建者修改演员资料后，使用记录失去上下文）
   const creatorSnapshot = {
     name: actor.name,
     age_range: actor.age_range,
@@ -85,7 +102,7 @@ export async function createActorUsage(params: {
     snapshot_at: new Date().toISOString(),
   };
 
-  // 5. 幂等插入（ON CONFLICT DO NOTHING）
+  // 6. 幂等插入（ON CONFLICT DO NOTHING）
   const now = new Date().toISOString();
   const row = {
     id: crypto.randomUUID(),
@@ -113,7 +130,7 @@ export async function createActorUsage(params: {
     if (!msg.includes("409") && !msg.includes("PGRST116")) throw error;
   }
 
-  // 6. 查询并返回（无论新建还是已存在）
+  // 7. 查询并返回（无论新建还是已存在）
   const existing = await serviceFetch<ActorUsage[]>(
     `/rest/v1/storyflow_actor_usages?actor_id=eq.${encodeURIComponent(params.actorId)}&consumer_id=eq.${encodeURIComponent(params.consumerId)}&project_id=eq.${encodeURIComponent(params.projectId)}&select=*&limit=1`,
   );
@@ -171,12 +188,32 @@ export async function listPlatformActors(params: {
 
   // 5. 组装返回（不暴露 owner_id 原始值给前端——只暴露 display_name）
   const cards: PlatformActorCard[] = actors.map((actor) => ({
-    actor,
+    actor: toPublicActorProfile(actor),
     creator_display_name: profileMap.get(actor.owner_id) || null,
     usage_count: usageCountMap.get(actor.id) || 0,
   }));
 
   return { actors: cards, total };
+}
+
+function toPublicActorProfile(actor: ActorProfile): PublicActorProfile {
+  return {
+    id: actor.id,
+    visibility: actor.visibility,
+    name: actor.name,
+    bio: actor.bio,
+    age_range: actor.age_range,
+    gender_expression: actor.gender_expression,
+    ethnicity_style: actor.ethnicity_style,
+    face_description: actor.face_description,
+    hair_description: actor.hair_description,
+    body_description: actor.body_description,
+    temperament: actor.temperament,
+    playable_roles: actor.playable_roles,
+    status: actor.status,
+    updated_at: actor.updated_at,
+    avatar_url: actor.avatar_url || null,
+  };
 }
 
 /**

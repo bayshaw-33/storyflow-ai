@@ -15,7 +15,7 @@ import {
   type TeamRole,
 } from "@/lib/actors";
 import { hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
-import { attachAvatarAssetToActor, validateAvatarAssetBelongsToUser } from "@/lib/supabase/actor-avatar-storage";
+import { attachAvatarAssetToActor, signActorAssetUrl, validateAvatarAssetBelongsToUser } from "@/lib/supabase/actor-avatar-storage";
 
 type AssetRow = {
   id: string;
@@ -522,14 +522,23 @@ async function hydrateActorAssets(actors: ActorProfile[]) {
   if (!assetIds.length) return actors.map(markStructuredActor);
 
   const assets = await serviceFetch<AssetRow[]>(
-    `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,public_url,asset_type,metadata`,
+    `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,public_url,storage_path,asset_type,metadata`,
   ).catch(() => []);
   const byId = new Map(assets.map((asset) => [asset.id, asset]));
+  const signedUrls = new Map(await Promise.all(assets.map(async (asset) => {
+    if (!asset.storage_path) return [asset.id, asset.public_url || null] as const;
+    try {
+      return [asset.id, await signActorAssetUrl(asset.storage_path, 60 * 60 * 24 * 7)] as const;
+    } catch (error) {
+      console.warn("ACTOR_ASSET_SIGN_FAILED:", asset.id, error instanceof Error ? error.message : error);
+      return [asset.id, asset.public_url || null] as const;
+    }
+  })));
 
   return actors.map((actor) => ({
     ...markStructuredActor(actor),
-    avatar_url: actor.avatar_asset_id ? byId.get(actor.avatar_asset_id)?.public_url || null : null,
-    reference_sheet_url: actor.reference_sheet_asset_id ? byId.get(actor.reference_sheet_asset_id)?.public_url || null : null,
+    avatar_url: actor.avatar_asset_id ? signedUrls.get(actor.avatar_asset_id) || byId.get(actor.avatar_asset_id)?.public_url || null : null,
+    reference_sheet_url: actor.reference_sheet_asset_id ? signedUrls.get(actor.reference_sheet_asset_id) || byId.get(actor.reference_sheet_asset_id)?.public_url || null : null,
   }));
 }
 

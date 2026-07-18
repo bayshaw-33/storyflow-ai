@@ -35,15 +35,16 @@ test("M2: 幂等唯一约束 UNIQUE(actor_id, consumer_id, project_id)", async (
   assert.match(sql, /CONSTRAINT storyflow_actor_usages_unique UNIQUE \(actor_id, consumer_id, project_id\)/);
 });
 
-test("M3: RLS 启用 + SELECT/INSERT 策略，无 UPDATE/DELETE 策略", async () => {
+test("M3: RLS 启用 + SELECT 策略；使用记录只允许服务端写入", async () => {
   const sql = await read("../supabase/migrations/20260722000000_actor_usages.sql");
   assert.match(sql, /ALTER TABLE public\.storyflow_actor_usages ENABLE ROW LEVEL SECURITY/);
   // SELECT: consumer 或 actor_owner
   assert.match(sql, /CREATE POLICY actor_usages_consumer_or_owner_select[\s\S]+?FOR SELECT/);
   assert.match(sql, /consumer_id = auth\.uid\(\)\s+OR\s+actor_owner_id = auth\.uid\(\)/);
-  // INSERT: consumer 只能为自己创建
-  assert.match(sql, /CREATE POLICY actor_usages_consumer_insert[\s\S]+?FOR INSERT/);
-  assert.match(sql, /WITH CHECK \(consumer_id = auth\.uid\(\)\)/);
+  // 不创建 authenticated INSERT 策略：服务端从权威 actor/project 构造记录，
+  // 防止 Data API 伪造 owner、project 或快照。
+  assert.doesNotMatch(sql, /CREATE POLICY actor_usages_consumer_insert/);
+  assert.match(sql, /RLS 默认拒绝没有策略的 INSERT/);
   // 不应有 UPDATE/DELETE 策略（留痕不可改不可删）
   assert.doesNotMatch(sql, /FOR UPDATE/);
   assert.doesNotMatch(sql, /FOR DELETE/);
@@ -51,7 +52,7 @@ test("M3: RLS 启用 + SELECT/INSERT 策略，无 UPDATE/DELETE 策略", async (
 
 test("M4: 外键约束（actor_id → actor_profiles, consumer/owner → auth.users）", async () => {
   const sql = await read("../supabase/migrations/20260722000000_actor_usages.sql");
-  assert.match(sql, /FOREIGN KEY \(actor_id\) REFERENCES public\.storyflow_actor_profiles\(id\) ON DELETE CASCADE/);
+  assert.match(sql, /FOREIGN KEY \(actor_id\) REFERENCES public\.storyflow_actor_profiles\(id\) ON DELETE RESTRICT/);
   assert.match(sql, /FOREIGN KEY \(consumer_id\) REFERENCES auth\.users\(id\) ON DELETE CASCADE/);
   assert.match(sql, /FOREIGN KEY \(actor_owner_id\) REFERENCES auth\.users\(id\) ON DELETE CASCADE/);
 });
@@ -90,6 +91,13 @@ test("L2: createActorUsage 校验 actor.visibility === platform（取消共享�
 test("L3: createActorUsage 禁止创建者自用", async () => {
   const src = await read("../lib/supabase/actor-usages.ts");
   assert.match(src, /if \(actor\.owner_id === params\.consumerId\) throw new Error\("ACTOR_OWNER_CANNOT_USE_SELF"\)/);
+});
+
+test("L3b: createActorUsage 从权威 project 校验 consumer 归属", async () => {
+  const src = await read("../lib/supabase/actor-usages.ts");
+  assert.match(src, /storyflow_projects\?id=eq\.\$\{encodeURIComponent\(params\.projectId\)\}/);
+  assert.match(src, /if \(!project\) throw new Error\("PROJECT_NOT_FOUND"\)/);
+  assert.match(src, /projectOwnerId !== params\.consumerId\) throw new Error\("PROJECT_FORBIDDEN"\)/);
 });
 
 test("L4: createActorUsage 幂等（Prefer: resolution=merge-duplicates + 查询已有记录）", async () => {
@@ -194,7 +202,7 @@ test("P3: 使用记录不可改不可删（RLS 无 UPDATE/DELETE 策略）", asy
   assert.doesNotMatch(sql, /FOR DELETE/);
 });
 
-test("P4: 平台共享演员卡不暴露创建者邮箱/UUID/供应商URL/存储路径", async () => {
+test("P4: 平台共享演员卡使用脱敏 DTO，不暴露创建者 UUID、资产 ID、提示词或 metadata", async () => {
   const src = await read("../lib/supabase/actor-usages.ts");
   // PlatformActorCard 类型只含 creator_display_name，不含 email/owner_id 原始值
   assert.match(src, /export type PlatformActorCard = \{[\s\S]*?creator_display_name[\s\S]*?usage_count[\s\S]*?\}/);
@@ -203,6 +211,9 @@ test("P4: 平台共享演员卡不暴露创建者邮箱/UUID/供应商URL/存储
   assert.ok(cardMatch);
   assert.doesNotMatch(cardMatch[0], /email/);
   assert.doesNotMatch(cardMatch[0], /storage_path/);
+  assert.match(src, /actor: toPublicActorProfile\(actor\)/);
+  const publicDto = src.match(/export type PublicActorProfile =[\s\S]*?>;/)?.[0] || "";
+  assert.doesNotMatch(publicDto, /owner_id|avatar_asset_id|reference_sheet_asset_id|base_prompt|negative_prompt|metadata/);
 });
 
 console.log("Commit 5 使用留痕表测试套件加载完成");

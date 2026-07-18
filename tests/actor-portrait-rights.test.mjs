@@ -205,6 +205,15 @@ test("M1: migration 20260723000000 文档化 rights_state 约束", async () => {
   assert.match(sql, /portrait_pending/);
 });
 
+test("M2: platform 共享不能被 authenticated Data API 直接写入", async () => {
+  const sql = await read("../supabase/migrations/20260721000000_actor_platform_visibility.sql");
+  const insertPolicy = sql.match(/CREATE POLICY actor_profiles_owner_or_team_editor_insert[\s\S]*?\n  \);/)?.[0] || "";
+  assert.ok(insertPolicy, "必须重建 actor INSERT 策略");
+  assert.doesNotMatch(insertPolicy, /visibility = 'platform'/);
+  assert.match(sql, /CREATE POLICY actor_profiles_owner_or_team_admin_update[\s\S]*?visibility <> 'platform'::text/);
+  assert.match(sql, /service_role 不受 RLS 限制/);
+});
+
 // ============================================================
 // 权限矩阵对照（PRD §肖像权安全边界）
 // ============================================================

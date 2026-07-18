@@ -49,7 +49,7 @@ export async function uploadActorAvatar(input: {
   }
 
   // 生成 7 天签名 URL 供客户端预览
-  const previewUrl = await signAvatarUrl(storagePath, 60 * 60 * 24 * 7);
+  const previewUrl = await signActorAssetUrl(storagePath, 60 * 60 * 24 * 7);
 
   // 创建 storyflow_assets 记录（asset_type 标记为 upload，actor_id 待 createActor 时回填）
   const assetId = crypto.randomUUID();
@@ -145,7 +145,8 @@ export async function attachAvatarAssetToActor(assetId: string, actorId: string)
   }
 }
 
-async function signAvatarUrl(storagePath: string, expiresIn = 60 * 60): Promise<string> {
+/** Sign a private actor asset for an authenticated response. */
+export async function signActorAssetUrl(storagePath: string, expiresIn = 60 * 60): Promise<string> {
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!supabaseUrl || !serviceKey) throw new Error("MISSING_SUPABASE_STORAGE_CONFIG");

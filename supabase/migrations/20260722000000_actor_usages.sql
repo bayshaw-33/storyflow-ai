@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.storyflow_actor_usages (
   actor_owner_id uuid NOT NULL,
   consumer_id uuid NOT NULL,
   project_id uuid NOT NULL,
-  source_unit_id uuid,
+  source_unit_id text,
   portrayal_id uuid,
   usage_type text DEFAULT 'internal_free'::text NOT NULL,
   terms_version text DEFAULT 'v1'::text NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS public.storyflow_actor_usages (
 -- 外键
 ALTER TABLE ONLY public.storyflow_actor_usages
   ADD CONSTRAINT storyflow_actor_usages_actor_id_fkey
-  FOREIGN KEY (actor_id) REFERENCES public.storyflow_actor_profiles(id) ON DELETE CASCADE;
+  FOREIGN KEY (actor_id) REFERENCES public.storyflow_actor_profiles(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY public.storyflow_actor_usages
   ADD CONSTRAINT storyflow_actor_usages_consumer_id_fkey
@@ -87,11 +87,9 @@ CREATE POLICY actor_usages_consumer_or_owner_select
     OR actor_owner_id = auth.uid()
   );
 
--- INSERT 策略：consumer 只能为自己创建使用记录（consumer_id 必须等于 auth.uid()）
-CREATE POLICY actor_usages_consumer_insert
-  ON public.storyflow_actor_usages
-  FOR INSERT TO authenticated
-  WITH CHECK (consumer_id = auth.uid());
+-- INSERT 只允许服务端 service_role：它会从权威 actor / project 读取 owner、
+-- visibility、快照和 consumer，避免 authenticated Data API 伪造 actor_owner_id、
+-- project_id 或 creator_snapshot。RLS 默认拒绝没有策略的 INSERT。
 
 -- 不创建 UPDATE/DELETE 策略：使用记录是留痕，不可改不可删
 -- （RLS 默认拒绝无策略的操作）
@@ -100,5 +98,3 @@ COMMENT ON TABLE public.storyflow_actor_usages IS
   '平台共享演员使用留痕：consumer 在项目中使用 actor 的授权记录，幂等（同 actor+consumer+project 一条）。';
 COMMENT ON POLICY actor_usages_consumer_or_owner_select ON public.storyflow_actor_usages IS
   'consumer 可读自己的使用记录；actor_owner 可读自己演员被使用的记录。';
-COMMENT ON POLICY actor_usages_consumer_insert ON public.storyflow_actor_usages IS
-  'consumer 只能为自己创建使用记录，consumer_id 必须等于 auth.uid()。';

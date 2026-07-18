@@ -144,6 +144,15 @@ test("lib/supabase/actors.ts: createActorForUser 用 avatar_asset_id 校验+绑�
   assert.match(src, /row\.status\s*=\s*"ready"/, "有头像时 status 必须设为 ready");
 });
 
+test("lib/supabase/actors.ts: 私有 Storage 头像读取 storage_path 并重新签名", async () => {
+  const src = await read("../lib/supabase/actors.ts");
+  assert.match(src, /signActorAssetUrl/);
+  assert.match(src, /select=id,public_url,storage_path,asset_type,metadata/);
+  assert.match(src, /asset\.storage_path/);
+  assert.match(src, /ACTOR_ASSET_SIGN_FAILED/);
+  assert.match(src, /avatar_url: actor\.avatar_asset_id \? signedUrls\.get\(actor\.avatar_asset_id\)/);
+});
+
 // === 9. lib/supabase/actors.ts: updateActorForUser 用 avatar_asset_id ===
 test("lib/supabase/actors.ts: updateActorForUser 用 avatar_asset_id 校验+绑定", async () => {
   const src = await read("../lib/supabase/actors.ts");
