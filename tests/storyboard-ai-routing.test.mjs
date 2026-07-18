@@ -32,7 +32,7 @@ function setupEnv() {
   process.env.DEEPSEEK_MODEL = "deepseek-chat";
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
   process.env.ATLASCLOUD_LLM_BASE_URL = "https://api.atlascloud.ai/v1";
-  process.env.ATLASCLOUD_LLM_MODEL = "gemini-2.5-flash";
+  process.env.ATLASCLOUD_LLM_MODEL = "gemini-3.5-flash";
   // 确保没有 MiniMax key（即便有，storyboard chain 也不该走 MiniMax）
   delete process.env.MINIMAX_API_KEY;
   delete process.env.MINIMAX_TOKEN;
@@ -84,7 +84,7 @@ const MESSAGES = [
 test("Atlas 成功时只调用 Atlas，fallbackUsed=false（Atlas primary 反转后）", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
     [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
   });
 
@@ -143,7 +143,7 @@ test("Atlas 5xx 时 fallback 到 DeepSeek（Atlas primary 反转后）", async (
 test("Atlas 空输出时 fallback 到 DeepSeek（Atlas primary 反转后）", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("", "gemini-3.5-flash"),
     [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
   });
 
@@ -160,7 +160,7 @@ test("Atlas 空输出时 fallback 到 DeepSeek（Atlas primary 反转后）", as
 test("Atlas 返回不合格 JSON 时由任务校验器触发 DeepSeek fallback（Atlas primary 反转后）", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("not-json", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("not-json", "gemini-3.5-flash"),
     [DEEPSEEK_URL]: () => chatResponse('{"scenes":[]}', "deepseek-chat"),
   });
 
@@ -180,7 +180,7 @@ test("Atlas 返回不合格 JSON 时由任务校验器触发 DeepSeek fallback�
 test("Atlas 与 DeepSeek 输出都不合格时显式抛出校验错误（Atlas primary 反转后）", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("atlas-invalid", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-invalid", "gemini-3.5-flash"),
     [DEEPSEEK_URL]: () => chatResponse("deepseek-invalid", "deepseek-chat"),
   });
 
@@ -203,7 +203,7 @@ test("DeepSeek 4xx 输入错误不触发 fallback（直接抛错）", async () =
   delete process.env.ATLASCLOUD_API_KEY;
   mockFetch({
     [DEEPSEEK_URL]: () => errorResponse(400, "bad request"),
-    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   await assert.rejects(
@@ -262,7 +262,7 @@ test("MiniMax 在 storyboard_script 链路零调用（即使配置了 MiniMax ke
   process.env.AI_PROVIDER = "hybrid";
   mockFetch({
     [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
-    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   await callRoutedProvider({
@@ -280,7 +280,7 @@ test("DeepSeek 缺 key 时 Atlas primary 正常工作（不依赖 DeepSeek）", 
   setupEnv();
   delete process.env.DEEPSEEK_API_KEY;
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -302,7 +302,7 @@ test("非 storyboard_script 任务仍走原 hybrid router（不受窄链影响�
   // 在 hybrid 模式下应走 MiniMax
   mockFetch({
     [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
-    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   // 用 "quality_evaluation"（在 deepSeekPreferredTasks 里）验证非 storyboard 任务仍走 DeepSeek

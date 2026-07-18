@@ -32,18 +32,18 @@ export type AtlasLLMOptions = {
  * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
  */
 export const ATLAS_LLM_MODEL_OPTIONS = [
-  "gemini-2.5-flash",
-  "gpt-4o-mini",
-  "gpt-4o",
-  "grok-2",
-  "deepseek-chat",
+  "gemini-3.5-flash",
+  "gpt-5.6",
+  "grok-4.5",
+  "deepseek-v4",
 ] as const;
 
 /**
  * ATLASCLOUD_LLM_MODEL 未配置时的默认模型。
+ * 默认 gemini-3.5-flash（2026 Google I/O 发布，免费且速度快 4 倍）。
  * 让 Vercel 不用配置任何环境变量 Atlas 即可启用。
  */
-const DEFAULT_ATLAS_LLM_MODEL = "gemini-2.5-flash";
+const DEFAULT_ATLAS_LLM_MODEL = "gemini-3.5-flash";
 
 /**
  * 调用 Atlas Cloud LLM（OpenAI-compatible）。

@@ -250,7 +250,7 @@ test("2. Atlas 正常分析（Atlas primary 反转后）：callRoutedProvider �
   process.env.DEEPSEEK_MODEL = "deepseek-v4-flash";
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
   process.env.ATLASCLOUD_LLM_BASE_URL = "https://api.atlascloud.ai/v1";
-  process.env.ATLASCLOUD_LLM_MODEL = "gemini-2.5-flash";
+  process.env.ATLASCLOUD_LLM_MODEL = "gemini-3.5-flash";
   delete process.env.MINIMAX_API_KEY;
 
   const fetchUrls = [];
@@ -331,7 +331,7 @@ test("3. Atlas 429 → DeepSeek fallback 一次，MiniMax 零调用（Atlas prim
   process.env.DEEPSEEK_MODEL = "deepseek-chat";
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
   process.env.ATLASCLOUD_LLM_BASE_URL = "https://api.atlascloud.ai/v1";
-  process.env.ATLASCLOUD_LLM_MODEL = "gemini-2.5-flash";
+  process.env.ATLASCLOUD_LLM_MODEL = "gemini-3.5-flash";
   delete process.env.MINIMAX_API_KEY;
 
   const fetchUrls = [];

@@ -85,11 +85,10 @@ const EMPTY_BYO_API: ByoApiSettings = {
  * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
  * 不需要 API key（用服务端 ATLASCLOUD_API_KEY）。 */
 const ATLAS_LLM_MODEL_OPTIONS = [
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (默认，快速)" },
-  { value: "gpt-4o-mini", label: "GPT-4o mini (经济)" },
-  { value: "gpt-4o", label: "GPT-4o (旗舰)" },
-  { value: "grok-2", label: "Grok 2 (xAI)" },
-  { value: "deepseek-chat", label: "DeepSeek V3 (Atlas Cloud)" },
+  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (默认，快速)" },
+  { value: "gpt-5.6", label: "GPT-5.6 (旗舰)" },
+  { value: "grok-4.5", label: "Grok 4.5 (xAI)" },
+  { value: "deepseek-v4", label: "DeepSeek V4 (Atlas Cloud)" },
 ];
 
 const copy = {
@@ -800,7 +799,7 @@ export default function SettingsPage() {
               disabled={!canUseByoApi}
               onChange={(event) => setByoApi((current) => ({ ...current, atlasModel: event.target.value }))}
             >
-              <option value="">使用默认（gemini-2.5-flash）</option>
+              <option value="">使用默认（gemini-3.5-flash）</option>
               {ATLAS_LLM_MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
