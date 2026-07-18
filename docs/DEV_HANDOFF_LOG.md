@@ -1,5 +1,33 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 19:55 +08 - Codex / 制作工作台生产闭环修复 PRD
+
+### 本次目标
+- 根据 production 实操 BLOCK 报告，形成可直接交给 TRAE 执行的生产闭环修复 PRD；本轮冻结工作台布局。
+
+### 已完成
+- 将真实主链收敛为：DeepSeek 分镜分析、Atlas Cloud Gemini fallback、稳定草稿身份、演员/美术资产持久化、统一作用域、Atlas 视频安全转存、完整生产包和无感证据包。
+- 明确 Universe DTO/列表布局、actor/Universe/casting/prop_refs migrations、CAS、Evidence 与视频数据库幂等已完成，禁止 TRAE 重复施工或盲目重跑 migration。
+- 把已确认的视频转存伪 completed、临时 URL 持久化、签名过期不重签和美术详情读取错误作用域列为 P0。
+- 固定 7 个独立提交、专项测试、真实 production E2E、交付证据和 Codex 最终 PASS/BLOCK 标准。
+- 明确冻结四区骨架、分镜表、全局导航、Universe/Actor 视觉布局；只允许完成主链所需的最小控件和错误状态。
+
+### 修改文件
+- `docs/ops/KIIKIS-ProductionWorkbench-生产闭环修复-TRAE-PRD-v1.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- PRD 占位符、矛盾、旧事实和范围自检：通过。
+- `git diff --check`：通过。
+- 本次只修改文档；未修改运行时代码、数据库或环境配置，未运行代码测试与 build。
+
+### Git / 部署
+- commit / push：见本次文档提交。
+- Vercel / migration：不适用。
+
+### 未完成 / 风险
+- TRAE 尚未执行本 PRD；完成并部署后由 Codex 以 production 真实完成一集为唯一验收标准，并直接修复边界明确的小型问题。
+
 ## 2026-07-18 19:45 +08 - Codex / Universe 列表布局止血
 
 ### 本次目标
