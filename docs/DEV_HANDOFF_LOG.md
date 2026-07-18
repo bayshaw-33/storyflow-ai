@@ -1,5 +1,45 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 - Codex / 制作工作台 P0 独立复查与外科补丁
+
+### 独立结论
+
+- 对 `b418f82..d90ebfc` 做了代码、契约与安全复查；TRAE 的
+  `tests/production-e2e-flow.test.mjs` 是注入式契约测试，不是浏览器、真实
+  Supabase 或真实 Provider E2E，因此不能单独证明 production 闭环可用。
+- 已直接修复 6 个边界明确的问题：Universe project-link 非 UUID、DeepSeek
+  坏 JSON 不触发 Atlas fallback、视频 job PATCH 失败被吞、空 Scene 草稿不恢复
+  assets/revision、剧本元数据不进入服务端导出、空 `script.txt` 被误报完整。
+- Atlas LLM 与导出错误响应不再把 Provider/Storage 原始错误正文返回客户端。
+
+### 修改摘要
+
+- `storyboard_script` 在 DeepSeek 输出未通过结构校验时进入 Atlas Gemini fallback；
+  Atlas 仍不合格则显式返回 `ANALYZE_OUTPUT_INVALID`。
+- `storyflow_universe_project_links.id` 全部改用 `crypto.randomUUID()`；同一项目尝试
+  绑定另一个 Universe 时返回 409，避免一个项目产生多个主归属。
+- 视频完成态写入失败不再删除 `storage_path` 重试或静默成功。
+- Storyboard 保存请求同步 `title/manuscript/sourceFiles` 到当前
+  `owner_id + project_id + source_unit_id` 的 production project；失败时 UI 明确提示。
+- 空剧本导出标为 `partial_failure / SCRIPT_SOURCE_MISSING`。
+
+### 验证证据
+
+- `pnpm exec tsc --noEmit`：通过。
+- `node --test tests/*.test.mjs`：474/474 通过。
+- `pnpm build`：通过（Next.js 15.5.20，67/67 静态页生成）。
+- 定向安全/状态机/导出回归：101/101 通过。
+- `git diff --check`：通过。
+
+### 尚未关闭的生产 BLOCKER
+
+- 嵌入式 `ArtWorkbench` 的项目资产当前仍主要写入 scoped localStorage；Storyboard
+  导出 API 却查询旧 `storyflow_assets`，而 Shot 参考图链使用
+  `storyflow_art_*`。美术资产、Shot 引用和完整 ZIP 尚未共享一条按
+  `owner + project + sourceUnit` 隔离的权威云端数据链。
+- 在完成该资产契约统一并用真实登录态、真实 DeepSeek/Atlas、真实 Storage 跑完一集
+  之前，结论维持 `BLOCK / NOT READY FOR INTERNAL PRODUCTION`。
+
 
 ## 2026-07-18 - TRAE / 制作工作台生产闭环修复 PRD v1.0 全部交付
 

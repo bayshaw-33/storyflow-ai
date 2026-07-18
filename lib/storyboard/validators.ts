@@ -19,12 +19,19 @@ import type { SaveRequest } from "./contracts.ts";
 export function isSaveRequest(value: unknown): value is SaveRequest {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
+  const metadata = v.projectMetadata;
+  const metadataValid = metadata === undefined || (
+    Boolean(metadata) && typeof metadata === "object" && !Array.isArray(metadata) &&
+    typeof (metadata as Record<string, unknown>).title === "string" &&
+    typeof (metadata as Record<string, unknown>).manuscript === "string" &&
+    Array.isArray((metadata as Record<string, unknown>).sourceFiles)
+  );
   return Boolean(
     typeof v.projectId === "string" && (v.projectId as string).trim() &&
       typeof v.sourceUnitId === "string" && (v.sourceUnitId as string).trim() &&
       Number.isInteger(v.expectedRevision) && (v.expectedRevision as number) >= 0 &&
       Array.isArray(v.scenes) &&
       Array.isArray(v.deletedSceneIds) &&
-      Array.isArray(v.deletedShotIds),
+      Array.isArray(v.deletedShotIds) && metadataValid,
   );
 }

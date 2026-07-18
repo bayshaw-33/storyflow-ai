@@ -184,8 +184,8 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "EXPORT_PACKAGE_ERROR";
-    return errorResponse(500, "EXPORT_FAILED", `导出失败: ${message}`);
+    console.error("[storyboard/export-package] export failed", error);
+    return errorResponse(500, "EXPORT_FAILED", "导出失败，请稍后重试。");
   }
 }
 
@@ -207,9 +207,8 @@ async function fetchStorageBytes(bucket: string, storagePath: string): Promise<U
   });
   if (!resp.ok) {
     const status = resp.status;
-    const text = await resp.text().catch(() => "");
     // PRD §10.3：不能把 HTTP 404/403 响应体当文件写进 ZIP
-    throw new Error(`STORAGE_FETCH_FAILED:${status}:${text.slice(0, 100)}`);
+    throw new Error(`STORAGE_FETCH_FAILED:${status}`);
   }
   const arrayBuffer = await resp.arrayBuffer();
   return new Uint8Array(arrayBuffer);

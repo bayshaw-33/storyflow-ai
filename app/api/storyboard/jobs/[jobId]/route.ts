@@ -81,22 +81,13 @@ async function patchJob(jobId: string, patch: {
   if (patch.error !== undefined) body.error = patch.error;
   if (patch.result_metadata !== undefined) body.result_metadata = patch.result_metadata;
 
-  try {
-    await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
-  } catch {
-    // storage_path 列可能不存在（migration 未执行）→ fallback 不带 storage_path
-    if (patch.storage_path !== undefined) {
-      const fallback = { ...body };
-      delete fallback.storage_path;
-      await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
-        method: "PATCH",
-        body: JSON.stringify(fallback),
-      });
-    }
-  }
+  // A failed state transition must be visible to the caller. Retrying without
+  // storage_path would claim completion while losing the durable artifact
+  // binding, and swallowing other PATCH failures leaves the UI ahead of DB.
+  await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 /**

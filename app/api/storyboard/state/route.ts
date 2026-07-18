@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/supabase/server";
+import { authenticateRequest, serviceFetch } from "@/lib/supabase/server";
 import { isEvidenceLedgerEnabled } from "@/lib/evidence/feature-flags";
 import { storyboardSaveEvidenceEvent } from "@/lib/evidence/hooks";
 import { recordEvidenceEvent } from "@/lib/evidence/ledger";
@@ -36,6 +36,26 @@ export async function PUT(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
     const state = await saveStoryboardState(user.id, body);
+    let projectMetadataSynced = true;
+    if (body.projectMetadata) {
+      try {
+        await serviceFetch(
+          `/rest/v1/storyflow_production_projects?owner_id=eq.${encodeURIComponent(user.id)}&project_id=eq.${encodeURIComponent(body.projectId)}&source_unit_id=eq.${encodeURIComponent(body.sourceUnitId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              title: body.projectMetadata.title.trim() || "未命名制片项目",
+              source_summary: body.projectMetadata.manuscript,
+              source_files: body.projectMetadata.sourceFiles,
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        );
+      } catch (metadataError) {
+        projectMetadataSynced = false;
+        console.error("[storyboard/state] project metadata sync failed", metadataError);
+      }
+    }
     let evidenceSynced = !isEvidenceLedgerEnabled();
     if (isEvidenceLedgerEnabled()) {
       try {
@@ -51,7 +71,7 @@ export async function PUT(request: NextRequest) {
         console.error("[evidence] storyboard save trace failed", evidenceError);
       }
     }
-    return NextResponse.json({ success: true, ...state, evidenceSynced });
+    return NextResponse.json({ success: true, ...state, evidenceSynced, projectMetadataSynced });
   } catch (error) {
     return storyboardError(error);
   }

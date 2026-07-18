@@ -20,6 +20,7 @@ import type {
   PersistedStoryboardShot,
 } from "@/lib/storyboard/contracts";
 import { runAnalyze } from "@/lib/storyboard/analyze";
+import { parseAnalyzeOutput } from "@/lib/storyboard/analyze/parse";
 import type { AnalyzeDependencies, ExistingStateScope } from "@/lib/storyboard/analyze/types";
 import { parseAnalyzeJsonBody, validateAnalyzeRequest } from "@/lib/storyboard/analyze/schema";
 import { isStoryboardError, StoryboardError } from "@/lib/storyboard/analyze/types";
@@ -156,6 +157,9 @@ export async function POST(request: Request) {
               { role: "user", content: userPrompt },
             ],
             temperature: 0.2,
+            validateOutput: (output) => {
+              parseAnalyzeOutput(output);
+            },
           });
           // PRD §5.2: 返回 output + provider 诊断（非敏感）
           return {
@@ -167,8 +171,11 @@ export async function POST(request: Request) {
             },
           };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          throw new StoryboardError("AI_CALL_FAILED", `AI 调用失败: ${message}`);
+          if (isStoryboardError(error)) throw error;
+          console.error("[storyboard/analyze] provider chain failed", {
+            code: error instanceof Error ? error.message.split(":", 1)[0] : "UNKNOWN",
+          });
+          throw new StoryboardError("AI_CALL_FAILED", "AI 服务暂时不可用，请稍后重试。");
         }
       },
       loadExistingState: (scope) => loadExistingState(scope),

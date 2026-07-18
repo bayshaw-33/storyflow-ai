@@ -700,7 +700,8 @@ export function buildProjectLink(params: {
 }): UniverseProjectLink {
   const now = new Date().toISOString();
   return {
-    id: `universe-project-link-${stableIdSegment(params.universeId)}-${stableIdSegment(params.projectId)}`,
+    // Database column storyflow_universe_project_links.id is uuid.
+    id: crypto.randomUUID(),
     universe_id: params.universeId,
     project_id: params.projectId,
     user_id: params.userId || null,

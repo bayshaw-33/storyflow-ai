@@ -140,8 +140,11 @@ export async function POST(request: NextRequest) {
       if (existingLinks.length && existingLinks[0].universe_id === universeId) {
         linkId = existingLinks[0].id;
         reusedLink = true;
+      } else if (existingLinks.length) {
+        throw new Error("PROJECT_ALREADY_LINKED_TO_ANOTHER_UNIVERSE");
       } else {
-        linkId = `universe-project-link-${stableIdSegment(universeId)}-${stableIdSegment(projectId)}`;
+        // storyflow_universe_project_links.id is uuid in the production schema.
+        linkId = crypto.randomUUID();
         const now = new Date().toISOString();
         // PRD §8.2：link 写失败时归档返回失败，禁止用 catch 兜底吞掉错误
         await serviceFetch("/rest/v1/storyflow_universe_project_links", {
@@ -176,6 +179,9 @@ export async function POST(request: NextRequest) {
     if (message === "PROJECT_FORBIDDEN") return apiError(error, "无权访问该项目。", 403);
     if (message === "UNIVERSE_NOT_FOUND") return apiError(error, "没有找到对应宇宙。", 404);
     if (message === "UNIVERSE_FORBIDDEN") return apiError(error, "无权访问该宇宙。", 403);
+    if (message === "PROJECT_ALREADY_LINKED_TO_ANOTHER_UNIVERSE") {
+      return apiError(error, "该项目已归属另一个宇宙，请先解除原关联。", 409);
+    }
     return apiError(error, "归档失败，请稍后重试。", 502);
   }
 }
@@ -184,8 +190,4 @@ function parseEpisodeNumber(label: string): number {
   const match = label.match(/\d+/);
   const n = match ? parseInt(match[0], 10) : 1;
   return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
-function stableIdSegment(id: string): string {
-  return id.replace(/[^a-zA-Z0-9]/g, "").slice(-12);
 }

@@ -321,6 +321,26 @@ test("E10: buildProductionPackage manifest has SHA-256 + overallStatus", async (
   }
 });
 
+test("E10b: empty manuscript is explicit partial_failure, never a successful empty script", async () => {
+  const result = await buildProductionPackage({
+    userId: "u1",
+    projectId: "proj-1",
+    sourceUnitId: "ep-1",
+    projectTitle: "测试",
+    manuscript: "   ",
+    revision: 1,
+    scenes: SCENES,
+    assets: [],
+    storyboardImages: [],
+    videos: [],
+    fetchStorageBytes: makeFetchSucceed(),
+  });
+  assert.equal(result.manifest.overallStatus, "partial_failure");
+  const script = result.manifest.entries.find((entry) => entry.path === "script.txt");
+  assert.equal(script?.status, "missing");
+  assert.equal(script?.errorCode, "SCRIPT_SOURCE_MISSING");
+});
+
 test("E11: buildProductionPackage uses correct buckets (art-assets vs storyboard-videos)", async () => {
   const calls = [];
   const fetcher = async (bucket, storagePath) => {

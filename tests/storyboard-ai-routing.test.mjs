@@ -157,6 +157,46 @@ test("DeepSeek 空输出时 fallback 到 Atlas Gemini", async () => {
   assert.equal(result.output, "atlas-output");
 });
 
+test("DeepSeek 返回不合格 JSON 时由任务校验器触发 Atlas fallback", async () => {
+  setupEnv();
+  mockFetch({
+    [DEEPSEEK_URL]: () => chatResponse("not-json", "deepseek-v4-flash"),
+    [ATLAS_URL]: () => chatResponse('{"scenes":[]}', "gemini-2.5-flash"),
+  });
+
+  const result = await callRoutedProvider({
+    taskType: "storyboard_script",
+    messages: MESSAGES,
+    validateOutput(output) {
+      JSON.parse(output);
+    },
+  });
+
+  assert.equal(result.provider, "atlas");
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(fetchLog.length, 2);
+});
+
+test("DeepSeek 与 Atlas 输出都不合格时显式抛出校验错误", async () => {
+  setupEnv();
+  mockFetch({
+    [DEEPSEEK_URL]: () => chatResponse("deepseek-invalid", "deepseek-v4-flash"),
+    [ATLAS_URL]: () => chatResponse("atlas-invalid", "gemini-2.5-flash"),
+  });
+
+  await assert.rejects(
+    () => callRoutedProvider({
+      taskType: "storyboard_script",
+      messages: MESSAGES,
+      validateOutput() {
+        throw new Error("ANALYZE_OUTPUT_INVALID");
+      },
+    }),
+    /ANALYZE_OUTPUT_INVALID/,
+  );
+  assert.equal(fetchLog.length, 2);
+});
+
 test("DeepSeek 4xx 输入错误不触发 fallback（直接抛错）", async () => {
   setupEnv();
   mockFetch({

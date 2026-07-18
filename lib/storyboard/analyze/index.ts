@@ -292,6 +292,9 @@ const defaultCallAI: CallStoryboardAI = async (scope) => {
       { role: "system", content: scope.systemPrompt },
       { role: "user", content: scope.userPrompt },
     ],
+    validateOutput: (output) => {
+      parseAnalyzeOutput(output);
+    },
   });
   const output = result.output;
   if (typeof output !== "string" || output.trim().length === 0) {

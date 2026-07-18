@@ -28,7 +28,7 @@ export type AtlasLLMOptions = {
  *   - MISSING_ATLAS_LLM_CONFIG：env 缺 key/base_url/model
  *   - ATLAS_LLM_TIMEOUT：请求超时
  *   - ATLAS_LLM_NETWORK_ERROR：网络失败
- *   - ATLAS_LLM_API_ERROR:<status>:<detail>：HTTP 非 2xx
+ *   - ATLAS_LLM_API_ERROR:<status>：HTTP 非 2xx
  *   - EMPTY_ATLAS_LLM_OUTPUT：返回空内容
  */
 export async function callAtlasLLM({
@@ -75,8 +75,9 @@ export async function callAtlasLLM({
   }
 
   if (!response.ok) {
-    const detail = await readErrorDetail(response);
-    throw new Error(`ATLAS_LLM_API_ERROR:${response.status}:${detail}`);
+    // Provider bodies may contain request IDs, account details or echoed
+    // input. Keep the public error stable and non-sensitive.
+    throw new Error(`ATLAS_LLM_API_ERROR:${response.status}`);
   }
 
   const data = await response.json();
@@ -98,15 +99,6 @@ function normalizeChatCompletionsUrl(value: string) {
   if (value.endsWith("/chat/completions")) return value;
   if (value.endsWith("/v1")) return `${value}/chat/completions`;
   return `${value}/v1/chat/completions`;
-}
-
-async function readErrorDetail(response: Response) {
-  try {
-    const data = await response.json();
-    return data.error?.message || JSON.stringify(data);
-  } catch {
-    return response.text();
-  }
 }
 
 /** 是否配置齐全（供路由层判断是否可作 fallback）。 */

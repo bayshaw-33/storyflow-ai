@@ -238,13 +238,16 @@ export async function buildProductionPackage(input: ExportPackageInput): Promise
   // --- 1. script.txt ---
   const scriptBytes = new TextEncoder().encode(input.manuscript || "");
   zip.file("script.txt", scriptBytes);
+  const hasScript = input.manuscript.trim().length > 0;
   entries.push({
     path: "script.txt",
     type: "script",
     sourceId: input.sourceUnitId,
-    sha256: sha256Hex(scriptBytes),
-    status: "ok",
+    sha256: hasScript ? sha256Hex(scriptBytes) : null,
+    status: hasScript ? "ok" : "missing",
+    ...(hasScript ? {} : { errorCode: "SCRIPT_SOURCE_MISSING" }),
   });
+  if (!hasScript) failedCount += 1;
 
   // --- 2. storyboard.json ---
   const storyboardJson = JSON.stringify({

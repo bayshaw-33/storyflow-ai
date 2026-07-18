@@ -39,6 +39,12 @@ type ProviderCallOptions = {
   messages: AIMessage[];
   temperature?: number;
   byoApi?: ByoApiConfig;
+  /**
+   * Optional task-level output validator. Storyboard analysis uses this to
+   * make malformed DeepSeek JSON participate in the provider fallback chain
+   * instead of failing only after the chain has already returned.
+   */
+  validateOutput?: (output: string) => void;
 };
 
 const deepSeekPreferredTasks = new Set<TaskType>([
@@ -116,6 +122,7 @@ async function callStoryboardProviderChain(options: ProviderCallOptions): Promis
       messages: options.messages,
       temperature: options.temperature,
     });
+    options.validateOutput?.(result.output);
     return { ...result, fallbackUsed: false };
   } catch (error) {
     if (!isStoryboardFallbackTrigger(error)) throw error;
@@ -126,6 +133,7 @@ async function callStoryboardProviderChain(options: ProviderCallOptions): Promis
       messages: options.messages,
       temperature: options.temperature,
     });
+    options.validateOutput?.(atlasResult.output);
     return { ...atlasResult, fallbackUsed: true };
   }
 }

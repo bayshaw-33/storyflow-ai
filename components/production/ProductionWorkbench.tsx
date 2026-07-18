@@ -252,13 +252,11 @@ export function ProductionWorkbench() {
       setSourceFiles(draft.sourceFiles || []);
       // 草稿中的 storyboard 字段（如果之前保存过）
       const draftScenes = (draft as ProductionProjectState & { storyboardScenes?: StoryboardScene[] }).storyboardScenes;
-      if (Array.isArray(draftScenes) && draftScenes.length > 0) {
-        setScenes(draftScenes);
-        const draftAssets = (draft as ProductionProjectState & { storyboardAssets?: StoryboardAssets }).storyboardAssets;
-        if (draftAssets) setAssets(draftAssets);
-        const draftRevision = (draft as ProductionProjectState & { storyboardRevision?: number }).storyboardRevision;
-        if (typeof draftRevision === "number") setRevision(draftRevision);
-      }
+      if (Array.isArray(draftScenes)) setScenes(draftScenes);
+      const draftAssets = (draft as ProductionProjectState & { storyboardAssets?: StoryboardAssets }).storyboardAssets;
+      if (draftAssets) setAssets(draftAssets);
+      const draftRevision = (draft as ProductionProjectState & { storyboardRevision?: number }).storyboardRevision;
+      if (typeof draftRevision === "number") setRevision(draftRevision);
     }
     // 草稿加载完成，标记 ready（云端加载由 loadFromServer 异步进行，不阻塞 ready）
     setHydrationPhase("ready");
@@ -416,12 +414,15 @@ export function ProductionWorkbench() {
       scenes,
       deletedSceneIds,
       deletedShotIds,
+      projectMetadata: { title: projectTitle, manuscript, sourceFiles },
     };
     try {
       const response: SaveResponse = await storyboardClient.saveState(request);
       // 应用服务端返回的稳定 ID 映射
       applyServerResponse(response);
-      setNotice(`已同步到云端（revision ${response.revision}）。`);
+      setNotice(response.projectMetadataSynced === false
+        ? `分镜已同步（revision ${response.revision}），但剧本元数据同步失败，请重试保存。`
+        : `已同步到云端（revision ${response.revision}）。`);
     } catch (err) {
       if (err instanceof StoryboardRevisionConflictError) {
         setConflictRevision(err.currentRevision);
@@ -520,10 +521,13 @@ export function ProductionWorkbench() {
           scenes,
           deletedSceneIds,
           deletedShotIds,
+          projectMetadata: { title, manuscript, sourceFiles },
         };
         const response: SaveResponse = await storyboardClient.saveState(request);
         applyServerResponse(response);
-        setNotice(`已归档并同步云端（revision ${response.revision}）。`);
+        setNotice(response.projectMetadataSynced === false
+          ? `已归档并保存分镜（revision ${response.revision}），但剧本元数据同步失败，请重试保存。`
+          : `已归档并同步云端（revision ${response.revision}）。`);
       } catch (err) {
         if (err instanceof StoryboardRevisionConflictError) {
           setConflictRevision(err.currentRevision);

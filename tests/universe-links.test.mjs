@@ -139,7 +139,7 @@ function withHarness(t, options = {}) {
   return { calls, consoleErrors };
 }
 
-test("buildProjectLink 生成确定性 id 并填充默认值", () => {
+test("buildProjectLink 生成数据库兼容的 UUID 并填充默认值", () => {
   const link = buildProjectLink({
     universeId: "universe-1",
     projectId: "project-1",
@@ -147,7 +147,7 @@ test("buildProjectLink 生成确定性 id 并填充默认值", () => {
     projectRole: "main_season",
   });
 
-  assert.equal(link.id, "universe-project-link-universe-1-project-1");
+  assert.match(link.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   assert.equal(link.universe_id, "universe-1");
   assert.equal(link.project_id, "project-1");
   assert.equal(link.project_role, "main_season");

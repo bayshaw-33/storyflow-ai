@@ -208,3 +208,14 @@ test("localStorage 写入失败显示错误（源码校验）", () => {
     "writeStoryboardDraft 失败必须 catch 并显示错误",
   );
 });
+
+test("空 Scene 草稿仍恢复资产与 revision", () => {
+  const src = PRODUCTION_WORKBENCH_SRC;
+  assert.doesNotMatch(
+    src,
+    /draftScenes\.length\s*>\s*0[\s\S]{0,500}setAssets/,
+    "资产恢复不得依赖 Scene 非空",
+  );
+  assert.match(src, /if \(draftAssets\) setAssets\(draftAssets\)/);
+  assert.match(src, /typeof draftRevision === "number"/);
+});

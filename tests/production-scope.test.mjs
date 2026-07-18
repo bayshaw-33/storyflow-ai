@@ -108,6 +108,14 @@ test("archive route: 相同 owner + project 已有 link 时复用", async () => 
   assert.match(route, /reusedLink/);
 });
 
+test("archive route: link id 使用数据库兼容的 UUID，跨宇宙重复绑定返回冲突", async () => {
+  const route = await read("../app/api/production/archive/route.ts");
+  assert.match(route, /linkId = crypto\.randomUUID\(\)/);
+  assert.doesNotMatch(route, /linkId = `universe-project-link-/);
+  assert.match(route, /PROJECT_ALREADY_LINKED_TO_ANOTHER_UNIVERSE/);
+  assert.match(route, /409/);
+});
+
 test("archive route: 写入顺序 project → link（FK 依赖）", async () => {
   const route = await read("../app/api/production/archive/route.ts");
   const projectPos = route.indexOf("storyflow_projects");

@@ -341,6 +341,13 @@ test("T16: PATCH body never includes providerTempUrl with non-null value", async
   assert.doesNotMatch(route, /body\.providerTempUrl/);
 });
 
+test("T16b: PATCH failure is never swallowed or retried without storage_path", async () => {
+  const route = await readJobRoute();
+  const helper = route.slice(route.indexOf("async function patchJob"), route.indexOf("type TransferResult"));
+  assert.doesNotMatch(helper, /catch\s*\{/);
+  assert.doesNotMatch(helper, /delete fallback\.storage_path/);
+});
+
 // ---------------------------------------------------------------------------
 // T17-T19: jobs/route.ts 源码契约
 // ---------------------------------------------------------------------------

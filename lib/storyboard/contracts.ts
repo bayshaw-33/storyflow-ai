@@ -153,6 +153,12 @@ export type SaveRequest = {
   scenes: StoryboardScene[];
   deletedSceneIds: string[];
   deletedShotIds: string[];
+  /** Human-authored source metadata needed by server-side exports. */
+  projectMetadata?: {
+    title: string;
+    manuscript: string;
+    sourceFiles: unknown[];
+  };
 };
 
 export type SaveResponse = {
@@ -161,6 +167,8 @@ export type SaveResponse = {
   revision: number;
   scenes: PersistedStoryboardScene[];
   idMap: Record<string, string>;
+  /** False means storyboard CAS succeeded but export metadata needs retry. */
+  projectMetadataSynced?: boolean;
 };
 
 export type SnapshotRequest = {
