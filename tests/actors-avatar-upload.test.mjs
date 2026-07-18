@@ -3,10 +3,10 @@
  *
  * 修复目标（验收 #3 #4 #6）：
  * - 废弃 Base64 (FileReader → data:image → JSON) 路径
- * - 客户端压缩到 ≤2048px / ≤6MB，自动旋转 + 去 EXIF
+ * - 客户端压缩到 ≤2048px / <1.4MB，自动旋转 + 去 EXIF
  * - 服务端上传到私有 art-assets Storage，DB 只存 storage_path
  * - 数据库禁止保存 data:image/... 字符串
- * - 原文件上限 20MB（客户端），服务端 6MB（压缩后）
+ * - 原文件上限 20MB（客户端），服务端 2MB（压缩后）
  * - 更换头像产生新资产版本（路径含 timestamp+uuid，不覆盖历史文件）
  * - 上传失败不创建半成品演员
  *
@@ -31,14 +31,14 @@ test("lib/actors.ts: ActorProfileInput.avatar_asset_id 字段存在；uploaded_a
 });
 
 // === 2. lib/avatar-processing.ts: 客户端处理模块关键常量与函数 ===
-test("lib/avatar-processing.ts: 20MB 原文件上限 + 2048px 最长边 + 6MB 目标 + 512px 降维下限", async () => {
+test("lib/avatar-processing.ts: 20MB 原文件上限 + 2048px 最长边 + 1.4MB 目标 + 512px 降维下限", async () => {
   const src = await read("../lib/avatar-processing.ts");
   // 原文件 20MB
   assert.match(src, /MAX_RAW_SIZE\s*=\s*20\s*\*\s*1024\s*\*\s*1024/, "MAX_RAW_SIZE = 20MB");
   // 最长边 2048
   assert.match(src, /MAX_DIMENSION\s*=\s*2048/, "MAX_DIMENSION = 2048");
-  // 目标 ≤ 6MB
-  assert.match(src, /TARGET_MAX_SIZE\s*=\s*6\s*\*\s*1024\s*\*\s*1024/, "TARGET_MAX_SIZE = 6MB");
+  // 目标 < 1.4MB（KIIKIS-TR-ACTOR-P0-008: 从 6MB 降到 1.4MB 绕过平台层限制）
+  assert.match(src, /TARGET_MAX_SIZE\s*=\s*1400\s*\*\s*1024/, "TARGET_MAX_SIZE = 1400 * 1024 (1.4MB)");
   // 降维下限 512
   assert.match(src, /MIN_DIMENSION\s*=\s*512/, "MIN_DIMENSION = 512");
   // 最低质量 0.3
@@ -80,8 +80,8 @@ test("lib/supabase/actor-avatar-storage.ts: 服务端上传到 art-assets 私有
   const src = await read("../lib/supabase/actor-avatar-storage.ts");
   // ART_BUCKET = "art-assets"
   assert.match(src, /ART_BUCKET\s*=\s*"art-assets"/, "ART_BUCKET 必须是 art-assets");
-  // 6MB 压缩后上限
-  assert.match(src, /MAX_UPLOAD_SIZE\s*=\s*6\s*\*\s*1024\s*\*\s*1024/, "MAX_UPLOAD_SIZE 必须是 6MB");
+  // 2MB 压缩后上限（KIIKIS-TR-ACTOR-P0-008: 从 6MB 降到 2MB）
+  assert.match(src, /MAX_UPLOAD_SIZE\s*=\s*2\s*\*\s*1024\s*\*\s*1024/, "MAX_UPLOAD_SIZE 必须是 2MB");
   // 路径规则：actor-avatars/{userId}/{timestamp}-{uuid}.{ext}
   assert.match(src, /actor-avatars\/\$\{input\.userId\}\/\$\{timestamp\}-\$\{uuid\}/, "路径必须含 timestamp+uuid 防覆盖");
   // x-upsert: false（不覆盖历史文件）

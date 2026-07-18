@@ -4,8 +4,8 @@
  * 流程：
  * 1. createImageBitmap(file, { imageOrientation: "from-image" }) 自动按 EXIF 旋转
  * 2. canvas 缩放到最长边 <= 2048px
- * 3. toBlob("image/jpeg", quality) 渐进降质量直到 <= 6MB
- * 4. 若仍超 6MB，降维到 512px 再试
+ * 3. toBlob("image/jpeg", quality) 渐进降质量直到 < 1.4MB
+ * 4. 若仍超 1.4MB，降维到 512px 再试
  *
  * 输出：Blob（image/jpeg，无 EXIF，已旋转，已压缩）
  *
@@ -15,7 +15,10 @@
 
 const MAX_RAW_SIZE = 20 * 1024 * 1024; // 原文件上限 20MB
 const MAX_DIMENSION = 2048; // 最长边
-const TARGET_MAX_SIZE = 6 * 1024 * 1024; // 目标文件 <= 6MB
+// KIIKIS-TR-ACTOR-P0-008: 客户端压缩目标降到 1.4MB（< 1.5MB）
+// 原因：Vercel/Edge 平台层对 multipart/form-data 请求体大小有不确定限制
+// （用户实测 1.5MB 以上会失败），把压缩目标降到 1.4MB 确保任何平台层都不会触发
+const TARGET_MAX_SIZE = 1400 * 1024; // 目标文件 < 1.4MB
 const MIN_DIMENSION = 512; // 降维下限
 const MIN_QUALITY = 0.3; // 最低质量
 

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * 接收客户端压缩后的头像 Blob（FormData: file=<Blob>），上传到私有 art-assets Storage。
  * 返回 { assetId, storagePath, previewUrl, contentType, size, requestId }。
  *
- * 客户端流程：选择图片 → createImageBitmap 自动旋转 → canvas 压缩到 ≤2048px/≤6MB
+ * 客户端流程：选择图片 → createImageBitmap 自动旋转 → canvas 压缩到 ≤2048px/<1.4MB
  * → POST 本端点 → 返回 assetId → POST /api/actors 时传 avatar_asset_id。
  *
  * 禁止：Base64 data URL、数据库存 data:image/...、20MB 以上原文件。

@@ -1,6 +1,8 @@
 const ART_BUCKET = "art-assets";
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_UPLOAD_SIZE = 6 * 1024 * 1024; // 6MB（客户端压缩后）
+// KIIKIS-TR-ACTOR-P0-008: 服务端接受上限 2MB（客户端压缩目标 1.4MB + 余量）
+// 仍在 Vercel 4.5MB App Router body size 限制内
+const MAX_UPLOAD_SIZE = 2 * 1024 * 1024; // 2MB
 
 /**
  * 演员头像上传到私有 art-assets Storage。

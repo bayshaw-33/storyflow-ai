@@ -92,7 +92,7 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
     setAvatarAssetId("");
 
     try {
-      // 客户端处理：自动旋转 + 压缩 + 去 EXIF（最长边 ≤ 2048px、目标 ≤ 6MB）
+      // 客户端处理：自动旋转 + 压缩 + 去 EXIF（最长边 ≤ 2048px、目标 < 1.4MB）
       const processed = await processAvatarImage(file);
 
       // 上传到服务端 Storage（FormData POST /api/actors/upload-avatar）
