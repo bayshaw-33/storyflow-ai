@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { signStoredArtImage } from "@/lib/supabase/art-storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,8 +70,7 @@ export async function GET(request: NextRequest) {
       serviceFetch<LinkRow[]>(`/rest/v1/storyflow_universe_project_links?${universeFilter}&select=universe_id,project_id`),
     ]);
 
-    // PRD §4.4 缩略图优先级：批量解析 cover_asset_version_id → storyflow_assets.public_url
-    // cover_asset_version_id 实际引用 storyflow_assets.id（PRD §8.2 暂不建 FK，服务端校验 owner）
+    // PRD §4.4：cover_asset_version_id 引用已持久化的 art asset version。
     const coverAssetIds = Array.from(
       new Set(
         universes
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
           .filter((id): id is string => Boolean(id)),
       ),
     );
-    const coverUrlById = await resolveCoverUrls(coverAssetIds, user.id);
+    const coverUrlById = await resolveCoverUrls(coverAssetIds, user.id, teamIds);
 
     type Counter = { workIds: Set<string>; characterCount: number; locationCount: number; pendingInboxCount: number };
     const counters = new Map<string, Counter>();
@@ -128,19 +128,44 @@ export async function GET(request: NextRequest) {
 // 批量解析 cover URL：仅返回属于当前用户/团队的 asset，避免越权读取
 // PRD §8.2: cover_asset_version_id 只能引用当前用户/团队可访问、已持久化的资产版本
 async function resolveCoverUrls(
-  assetIds: string[],
+  assetVersionIds: string[],
   userId: string,
+  teamIds: string[],
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
+  if (!assetVersionIds.length) return map;
+
+  const versions = await serviceFetch<Array<{ id: string; variant_id: string; storage_path: string }>>(
+    `/rest/v1/storyflow_art_asset_versions?id=in.(${assetVersionIds.map(encodeURIComponent).join(",")})&select=id,variant_id,storage_path`,
+  );
+  if (!versions.length) return map;
+  const variants = await serviceFetch<Array<{ id: string; asset_id: string }>>(
+    `/rest/v1/storyflow_art_asset_variants?id=in.(${versions.map((row) => encodeURIComponent(row.variant_id)).join(",")})&select=id,asset_id`,
+  );
+  const assetIdByVariant = new Map(variants.map((row) => [row.id, row.asset_id]));
+  const assetIds = Array.from(new Set(variants.map((row) => row.asset_id).filter(Boolean)));
   if (!assetIds.length) return map;
-  const rows = await serviceFetch<Array<{ id: string; public_url: string | null; user_id: string; team_id: string | null }>>(
-    `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,public_url,user_id,team_id`,
-  ).catch(() => [] as Array<{ id: string; public_url: string | null; user_id: string; team_id: string | null }>);
-  // 服务端二次校验 owner：service role 绕过 RLS，需手动过滤
-  for (const row of rows) {
-    if (row.user_id === userId && row.public_url) {
-      map.set(row.id, row.public_url);
-    }
+  const assets = await serviceFetch<Array<{ id: string; project_id: string }>>(
+    `/rest/v1/storyflow_art_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,project_id`,
+  );
+  const projectIdByAsset = new Map(assets.map((row) => [row.id, row.project_id]));
+  const projectIds = Array.from(new Set(assets.map((row) => row.project_id).filter(Boolean)));
+  const projects = projectIds.length
+    ? await serviceFetch<Array<{ id: string; owner_id: string; team_id: string | null }>>(
+        `/rest/v1/storyflow_art_projects?id=in.(${projectIds.map(encodeURIComponent).join(",")})&select=id,owner_id,team_id`,
+      )
+    : [];
+  const allowedProjectIds = new Set(
+    projects
+      .filter((row) => row.owner_id === userId || (row.team_id && teamIds.includes(row.team_id)))
+      .map((row) => row.id),
+  );
+
+  for (const version of versions) {
+    const assetId = assetIdByVariant.get(version.variant_id);
+    const projectId = assetId ? projectIdByAsset.get(assetId) : undefined;
+    if (!projectId || !allowedProjectIds.has(projectId) || !version.storage_path) continue;
+    map.set(version.id, await signStoredArtImage(version.storage_path));
   }
   return map;
 }

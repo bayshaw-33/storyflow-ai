@@ -16,7 +16,7 @@ type EntityRow = {
 type AssetVersionRow = {
   id: string;
   variant_id: string;
-  created_by: string;
+  storage_path: string;
 };
 
 type AssetVariantRow = {
@@ -26,7 +26,12 @@ type AssetVariantRow = {
 
 type AssetRow = {
   id: string;
-  user_id: string;
+  project_id: string;
+};
+
+type ArtProjectRow = {
+  id: string;
+  owner_id: string;
   team_id: string | null;
 };
 
@@ -55,23 +60,31 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ u
     // 验证 assetVersionId 属于同一 owner/team
     // 链路：storyflow_art_asset_versions -> storyflow_art_asset_variants -> storyflow_art_assets
     const versions = await serviceFetch<AssetVersionRow[]>(
-      `/rest/v1/storyflow_art_asset_versions?id=eq.${encodeURIComponent(assetVersionId)}&select=id,variant_id,created_by&limit=1`,
+      `/rest/v1/storyflow_art_asset_versions?id=eq.${encodeURIComponent(assetVersionId)}&select=id,variant_id,storage_path&limit=1`,
     );
     const version = versions[0];
     if (!version) throw new Error("ASSET_VERSION_NOT_FOUND");
 
     const variants = await serviceFetch<AssetVariantRow[]>(
       `/rest/v1/storyflow_art_asset_variants?id=eq.${encodeURIComponent(version.variant_id)}&select=id,asset_id&limit=1`,
-    ).catch(() => [] as AssetVariantRow[]);
+    );
     const variant = variants[0];
     if (!variant) throw new Error("ASSET_VERSION_NOT_FOUND");
 
     const assets = await serviceFetch<AssetRow[]>(
-      `/rest/v1/storyflow_art_assets?id=eq.${encodeURIComponent(variant.asset_id)}&select=id,user_id,team_id&limit=1`,
-    ).catch(() => [] as AssetRow[]);
+      `/rest/v1/storyflow_art_assets?id=eq.${encodeURIComponent(variant.asset_id)}&select=id,project_id&limit=1`,
+    );
     const asset = assets[0];
+    if (!asset || !version.storage_path) throw new Error("ASSET_VERSION_NOT_FOUND");
 
-    const ownerOk = asset && (asset.user_id === user.id || (asset.team_id && await isUserInTeam(user.id, asset.team_id)));
+    const artProjects = await serviceFetch<ArtProjectRow[]>(
+      `/rest/v1/storyflow_art_projects?id=eq.${encodeURIComponent(asset.project_id)}&select=id,owner_id,team_id&limit=1`,
+    );
+    const artProject = artProjects[0];
+    const ownerOk = artProject && (
+      artProject.owner_id === user.id
+      || (artProject.team_id && await isUserInTeam(user.id, artProject.team_id))
+    );
     if (!ownerOk) throw new Error("ASSET_FORBIDDEN");
 
     // UPDATE entity SET primary_asset_version_id = X

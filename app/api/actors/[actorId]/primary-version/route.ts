@@ -17,7 +17,6 @@ export const dynamic = "force-dynamic";
 type VersionRow = {
   id: string;
   variant_id: string;
-  metadata: Record<string, unknown> | null;
 };
 
 type VariantRow = {
@@ -52,7 +51,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
 
     // 拉取目标 version，校验它挂在当前 actor 的 art_project 下
     const versionRows = await serviceFetch<VersionRow[]>(
-      `/rest/v1/storyflow_art_asset_versions?id=eq.${encodeURIComponent(versionId)}&select=id,variant_id,metadata&limit=1`,
+      `/rest/v1/storyflow_art_asset_versions?id=eq.${encodeURIComponent(versionId)}&select=id,variant_id&limit=1`,
     );
     const version = versionRows[0];
     if (!version) throw new Error("VERSION_NOT_FOUND");
@@ -78,26 +77,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ a
     if (artProject.owner_id !== user.id) throw new Error("VERSION_FORBIDDEN");
     if (artProject.source_project_id !== `actor:${actorId}`) throw new Error("VERSION_FORBIDDEN");
 
-    // 把同 variant 下其他 version 的 is_primary 置 false
-    // PostgREST PATCH 支持 ?variant_id=eq.X 过滤
+    // 复用现有的权威主版本字段。单行更新天然原子，不改写任何 version metadata。
     await serviceFetch(
-      `/rest/v1/storyflow_art_asset_versions?variant_id=eq.${encodeURIComponent(variant.id)}`,
+      `/rest/v1/storyflow_art_asset_variants?id=eq.${encodeURIComponent(variant.id)}`,
       {
         method: "PATCH",
         body: JSON.stringify({
-          metadata: { is_primary: false },
-        }),
-      },
-    );
-
-    // 把目标 version 的 is_primary 置 true（保留原有 metadata 其他字段）
-    const existingMeta = version.metadata && typeof version.metadata === "object" ? version.metadata : {};
-    await serviceFetch(
-      `/rest/v1/storyflow_art_asset_versions?id=eq.${encodeURIComponent(versionId)}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({
-          metadata: { ...existingMeta, is_primary: true },
+          approved_version_id: versionId,
+          updated_at: new Date().toISOString(),
         }),
       },
     );

@@ -1,5 +1,42 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 19:05 +08 - Codex / Universe + Actors Stage E migration 与安全复查
+
+### 本次目标
+- 执行 `prop_refs` staging/production migration，复查 TRAE `44a4e02..4b66a41`，完成可执行的 Stage E 验证。
+
+### 已完成
+- staging 与 production 均已应用 `20260720020000_production_shots_prop_refs.sql`；核验为 `jsonb NOT NULL DEFAULT '[]'::jsonb`，非法行 0。
+- 修复 Actor 主版本 API 覆盖 sibling metadata 的数据损毁风险，改用 variant `approved_version_id` 作为权威主版本。
+- 修复 Universe 主图和封面的真实表链、owner/team 授权与 Storage 签名；失败不再静默伪装为 0 或成功。
+- Works 列表接入真实 `prop_refs` 统计，并增加专项回归测试。
+- 线上 `/`、`/universes`、`/actors` HTTP 均为 200。
+
+### 修改文件
+- `app/actors/[actorId]/page.tsx`
+- `app/api/actors/[actorId]/primary-version/route.ts`
+- `app/api/actors/generate-views/route.ts`
+- `app/api/actors/portrayals/counts/route.ts`
+- `app/api/universe/[universeId]/entities/[entityId]/primary-asset/route.ts`
+- `app/api/universe/[universeId]/works/route.ts`
+- `app/api/universe/summaries/route.ts`
+- `tests/actor-portrayal-auth.test.mjs`
+- `tests/universe-aggregate-api.test.mjs`
+- `tests/universe-assets.test.mjs`
+- `tests/universe-summaries.test.mjs`
+- `docs/reviews/2026-07-18-universe-actors-stage-e-validation.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- `node --test tests/*.test.mjs`：348/348 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `pnpm run build`：通过，67/67 静态页面生成。
+- production 只读盘点：6 Universe；Entity/Project Link/Actor/Portrayal/Art Version/Production Shot 均为 0。
+
+### 结论 / 未完成
+- `PASS WITH MUST-FIX`：Schema 和代码闸门已通过，但 production 没有可走完整链路的真实样本，不能宣称 Stage E 全链 PASS。
+- 浏览器控制加载线上页面连续超时；HTTP 可达性已验证，登录态交互仍需用内部验收样本补验。
+
 ## 2026-07-18 18:10 +08 - Codex / Universe + Actors Stage A migration rollout
 
 ### 本次目标

@@ -80,7 +80,7 @@ function makeRequest(pathname, { token, method = "GET", body } = {}) {
 }
 
 // 1. coverUrl 从 cover_asset_version_id 解析（owner 匹配）
-test("coverUrl 从 cover_asset_version_id 解析为持久化 public_url", async () => {
+test("coverUrl 从 cover_asset_version_id 解析为持久化 Storage 签名 URL", async () => {
   mockFetch((url) => {
     if (url.includes("/rest/v1/storyflow_team_members")) return jsonResponse([]);
     if (url.includes("/rest/v1/storyflow_universes")) {
@@ -99,12 +99,11 @@ test("coverUrl 从 cover_asset_version_id 解析为持久化 public_url", async 
         },
       ]);
     }
-    if (url.includes("/rest/v1/storyflow_assets")) {
-      // 必须用 id=in.(...) 批量查询
-      return jsonResponse([
-        { id: "asset-1", public_url: "https://cdn.test/u1/cover.png", user_id: USER_A, team_id: null },
-      ]);
-    }
+    if (url.includes("/rest/v1/storyflow_art_asset_versions")) return jsonResponse([{ id: "asset-1", variant_id: "var-1", storage_path: "covers/u1.png" }]);
+    if (url.includes("/rest/v1/storyflow_art_asset_variants")) return jsonResponse([{ id: "var-1", asset_id: "art-asset-1" }]);
+    if (url.includes("/rest/v1/storyflow_art_assets")) return jsonResponse([{ id: "art-asset-1", project_id: "art-project-1" }]);
+    if (url.includes("/rest/v1/storyflow_art_projects")) return jsonResponse([{ id: "art-project-1", owner_id: USER_A, team_id: null }]);
+    if (url.includes("/storage/v1/object/sign/art-assets/covers/u1.png")) return jsonResponse({ signedURL: "/object/sign/art-assets/covers/u1.png?token=test" });
     if (url.includes("/rest/v1/storyflow_universe_entities")) return jsonResponse([]);
     if (url.includes("/rest/v1/storyflow_universe_inbox_items")) return jsonResponse([]);
     if (url.includes("/rest/v1/storyflow_universe_project_links")) return jsonResponse([]);
@@ -114,7 +113,7 @@ test("coverUrl 从 cover_asset_version_id 解析为持久化 public_url", async 
   const res = await summariesRoute.GET(makeRequest("/api/universe/summaries", { token: "tok-a" }));
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.equal(body.universes[0].coverUrl, "https://cdn.test/u1/cover.png");
+  assert.equal(body.universes[0].coverUrl, "https://supabase.test/storage/v1/object/sign/art-assets/covers/u1.png?token=test");
 });
 
 // 2. coverUrl 跨 owner asset 不被读取（服务端二次校验 owner）
@@ -137,12 +136,10 @@ test("coverUrl 跨 owner 的 asset 不被读取，返回 null", async () => {
         },
       ]);
     }
-    if (url.includes("/rest/v1/storyflow_assets")) {
-      // asset 属于 USER_B，USER_A 不应拿到 URL
-      return jsonResponse([
-        { id: "asset-b", public_url: "https://cdn.test/b/cover.png", user_id: USER_B, team_id: null },
-      ]);
-    }
+    if (url.includes("/rest/v1/storyflow_art_asset_versions")) return jsonResponse([{ id: "asset-b", variant_id: "var-b", storage_path: "covers/b.png" }]);
+    if (url.includes("/rest/v1/storyflow_art_asset_variants")) return jsonResponse([{ id: "var-b", asset_id: "art-asset-b" }]);
+    if (url.includes("/rest/v1/storyflow_art_assets")) return jsonResponse([{ id: "art-asset-b", project_id: "art-project-b" }]);
+    if (url.includes("/rest/v1/storyflow_art_projects")) return jsonResponse([{ id: "art-project-b", owner_id: USER_B, team_id: null }]);
     return jsonResponse([]);
   });
 

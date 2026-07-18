@@ -93,14 +93,17 @@ test("PATCH primary-asset 设置成功返回 200", async () => {
     }
     // asset_version 链路：versions -> variants -> assets
     if (url.includes("/rest/v1/storyflow_art_asset_versions")) {
-      return jsonResponse([{ id: "asset-1", variant_id: "var-1", created_by: USER_A }]);
+      return jsonResponse([{ id: "asset-1", variant_id: "var-1", storage_path: "user/project/generated/asset-1.png" }]);
     }
     if (url.includes("/rest/v1/storyflow_art_asset_variants")) {
       return jsonResponse([{ id: "var-1", asset_id: "asset-art-1" }]);
     }
     // art_assets（注意：必须放在 storyflow_assets 之前，避免被 includes 误匹配）
     if (url.includes("/rest/v1/storyflow_art_assets")) {
-      return jsonResponse([{ id: "asset-art-1", user_id: USER_A, team_id: null }]);
+      return jsonResponse([{ id: "asset-art-1", project_id: "art-project-1" }]);
+    }
+    if (url.includes("/rest/v1/storyflow_art_projects")) {
+      return jsonResponse([{ id: "art-project-1", owner_id: USER_A, team_id: null }]);
     }
     if (url.includes("/rest/v1/storyflow_assets")) {
       return jsonResponse([{ id: "asset-1", user_id: USER_A, team_id: null, public_url: "https://cdn.test/a.png" }]);

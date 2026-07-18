@@ -57,11 +57,12 @@ export async function GET(request: NextRequest) {
       if (pack) packByAsset.set(asset.id, pack.key);
     }
 
-    const variants = await serviceFetch<Array<{ id: string; asset_id: string }>>(
-      `/rest/v1/storyflow_art_asset_variants?asset_id=in.(${assets.map((asset) => asset.id).join(",")})&select=id,asset_id`,
+    const variants = await serviceFetch<Array<{ id: string; asset_id: string; approved_version_id: string | null }>>(
+      `/rest/v1/storyflow_art_asset_variants?asset_id=in.(${assets.map((asset) => asset.id).join(",")})&select=id,asset_id,approved_version_id`,
     );
     if (!variants.length) return ok({ actorId, versions: [] });
     const assetByVariant = new Map(variants.map((variant) => [variant.id, variant.asset_id]));
+    const primaryByVariant = new Map(variants.map((variant) => [variant.id, variant.approved_version_id]));
     const rows = await serviceFetch<Array<{
       id: string;
       variant_id: string;
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
       const assetId = assetByVariant.get(row.variant_id) || "";
       const pack = packByAsset.get(assetId) || "";
       const meta = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
-      const isPrimary = meta.is_primary === true;
+      const isPrimary = primaryByVariant.get(row.variant_id) === row.id || meta.is_primary === true;
       return {
         versionId: row.id,
         previewUrl: await signStoredArtImage(row.storage_path),

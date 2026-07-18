@@ -150,6 +150,41 @@ test("PATCH primary-version version 挂在别人的 art_project 下返回 403", 
   assert.equal(res.status, 403);
 });
 
+test("PATCH primary-version 只更新 variant.approved_version_id，不覆盖版本 metadata", async () => {
+  const writes = [];
+  mockFetch((url, init = {}) => {
+    if (url.includes("/rest/v1/storyflow_actor_profiles")) {
+      return jsonResponse([{ id: "actor-a", owner_id: USER_A, team_id: null, visibility: "private", name: "A", status: "ready" }]);
+    }
+    if (url.includes("/rest/v1/storyflow_art_asset_versions")) {
+      if ((init.method || "GET").toUpperCase() === "PATCH") writes.push({ url, body: JSON.parse(init.body) });
+      return jsonResponse([{ id: "v-1", variant_id: "var-1" }]);
+    }
+    if (url.includes("/rest/v1/storyflow_art_asset_variants")) {
+      if ((init.method || "GET").toUpperCase() === "PATCH") {
+        writes.push({ url, body: JSON.parse(init.body) });
+        return jsonResponse([]);
+      }
+      return jsonResponse([{ id: "var-1", asset_id: "asset-1" }]);
+    }
+    if (url.includes("/rest/v1/storyflow_art_assets")) return jsonResponse([{ id: "asset-1", project_id: "art-1" }]);
+    if (url.includes("/rest/v1/storyflow_art_projects")) {
+      return jsonResponse([{ id: "art-1", owner_id: USER_A, source_project_id: "actor:actor-a" }]);
+    }
+    return jsonResponse([]);
+  });
+
+  const res = await primaryVersionRoute.PATCH(
+    makeRequest("/api/actors/actor-a/primary-version", { token: "tok-a", method: "PATCH", body: { versionId: "v-1" } }),
+    { params: params("actorId", "actor-a") },
+  );
+  assert.equal(res.status, 200);
+  assert.equal(writes.length, 1);
+  assert.match(writes[0].url, /storyflow_art_asset_variants/);
+  assert.equal(writes[0].body.approved_version_id, "v-1");
+  assert.equal(writes[0].body.metadata, undefined);
+});
+
 // 3. GET portrayals/counts 跨 owner 隔离：只统计自己可读的
 test("GET portrayals/counts 只统计当前用户可读的 portrayal", async () => {
   mockFetch((url) => {

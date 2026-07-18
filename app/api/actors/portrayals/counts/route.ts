@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     const rows = await serviceFetch<CountRow[]>(
       `/rest/v1/storyflow_character_portrayals?${accessFilter}&${actorFilter}&select=actor_profile_id&limit=1000`,
-    ).catch(() => [] as CountRow[]);
+    );
 
     const counts: Record<string, number> = {};
     for (const id of actorIds) counts[id] = 0;

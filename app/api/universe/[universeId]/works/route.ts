@@ -41,6 +41,7 @@ type ShotRow = {
   production_project_id: string;
   character_refs: unknown;
   scene_refs: unknown;
+  prop_refs: unknown;
   image_url: string | null;
 };
 
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
     const shotsByProdId = new Map<string, ShotRow[]>();
     if (accessibleProdIds.length) {
       const shots = await serviceFetch<ShotRow[]>(
-        `/rest/v1/storyflow_production_shots?production_project_id=in.(${accessibleProdIds.map(encodeURIComponent).join(",")})&select=id,production_project_id,character_refs,scene_refs,image_url`,
+        `/rest/v1/storyflow_production_shots?production_project_id=in.(${accessibleProdIds.map(encodeURIComponent).join(",")})&select=id,production_project_id,character_refs,scene_refs,prop_refs,image_url`,
       ).catch(() => [] as ShotRow[]);
       for (const shot of shots) {
         const arr = shotsByProdId.get(shot.production_project_id) || [];
@@ -128,11 +129,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
       for (const shot of shots) {
         for (const ref of asStringArray(shot.character_refs)) characterNames.add(ref);
         for (const ref of asStringArray(shot.scene_refs)) sceneNames.add(ref);
-        // prop_refs 没有独立列；从 scene_refs 里启发式拆分（暂同 scene_refs）
+        for (const ref of asStringArray(shot.prop_refs)) propNames.add(ref);
         if (!coverUrl && shot.image_url) coverUrl = shot.image_url;
       }
-      // 简单约定：propCount 暂用 scene_refs 与 character_refs 之外的引用计数，无独立列时为 0
-      void propNames;
 
       return {
         id: link.project_id,
@@ -142,7 +141,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
         shotCount: shots.length,
         characterCount: characterNames.size,
         sceneCount: sceneNames.size,
-        propCount: 0,
+        propCount: propNames.size,
         coverUrl,
         updatedAt: project?.updated_at || link.updated_at,
       };
@@ -184,7 +183,7 @@ function asStringArray(value: unknown): string[] {
       if (typeof item === "string") return item;
       if (item && typeof item === "object") {
         const record = item as Record<string, unknown>;
-        const name = record.name || record.id || record.character_name;
+        const name = record.name || record.id || record.character_name || record.prop_name;
         return name ? String(name) : "";
       }
       return String(item || "");

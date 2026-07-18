@@ -232,7 +232,7 @@ test("works 列表双重授权：仅返回 user 拥有的 project", async () => 
     }
     if (url.includes("/rest/v1/storyflow_production_shots")) {
       return jsonResponse([
-        { id: "s1", production_project_id: "pp-a", character_refs: ["Alice"], scene_refs: ["场景1"], image_url: "https://img.test/cover.png" },
+        { id: "s1", production_project_id: "pp-a", character_refs: ["Alice"], scene_refs: ["场景1"], prop_refs: ["魔戒"], image_url: "https://img.test/cover.png" },
       ]);
     }
     return jsonResponse([]);
@@ -251,6 +251,7 @@ test("works 列表双重授权：仅返回 user 拥有的 project", async () => 
   assert.equal(body.works[0].shotCount, 1);
   assert.equal(body.works[0].characterCount, 1);
   assert.equal(body.works[0].sceneCount, 1);
+  assert.equal(body.works[0].propCount, 1);
   assert.equal(body.works[0].coverUrl, "https://img.test/cover.png");
 });
 

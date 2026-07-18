@@ -191,18 +191,16 @@ export default function ActorDetailPage() {
     async (pack: ViewPackId, versionId: string) => {
       if (!token || !actorId) return;
       setPrimaryError("");
-      // 乐观更新：先改本地状态，让用户立刻看到反馈
-      setVersionsByPack((current) => ({
-        ...current,
-        [pack]: markVersionPrimary(current[pack] || [], versionId),
-      }));
       try {
         await actorApiFetch(`/api/actors/${encodeURIComponent(actorId)}/primary-version`, token, {
           method: "PATCH",
           body: JSON.stringify({ versionId }),
         });
+        setVersionsByPack((current) => ({
+          ...current,
+          [pack]: markVersionPrimary(current[pack] || [], versionId),
+        }));
       } catch (issue) {
-        // 持久化失败：恢复原状态由 useEffect 重新拉取，这里只提示错误
         setPrimaryError(issue instanceof Error ? issue.message : isZh ? "主版本持久化失败，请重试。" : "Failed to persist primary version.");
       }
     },
