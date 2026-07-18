@@ -81,11 +81,32 @@ const MESSAGES = [
 
 // ===== 测试用例 =====
 
-test("Atlas 成功时只调用 Atlas，fallbackUsed=false（Atlas primary 反转后）", async () => {
+test("DeepSeek 成功时只调用 DeepSeek，fallbackUsed=false", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
     [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
+  });
+
+  const result = await callRoutedProvider({
+    taskType: "storyboard_script",
+    messages: MESSAGES,
+    temperature: 0.2,
+  });
+
+  assert.equal(result.provider, "deepseek");
+  assert.equal(result.output, "deepseek-output");
+  assert.equal(result.fallbackUsed, false);
+  // 只调用了 DeepSeek，没调 Atlas
+  assert.equal(fetchLog.length, 1);
+  assert.ok(fetchLog[0].includes("deepseek.com"));
+});
+
+test("DeepSeek 429 时 fallback 一次到 Atlas", async () => {
+  setupEnv();
+  mockFetch({
+    [DEEPSEEK_URL]: () => errorResponse(429, "rate limited"),
+    [ATLAS_URL]: () => chatResponse("atlas-fallback-output", "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -95,40 +116,19 @@ test("Atlas 成功时只调用 Atlas，fallbackUsed=false（Atlas primary 反转
   });
 
   assert.equal(result.provider, "atlas");
-  assert.equal(result.output, "atlas-output");
-  assert.equal(result.fallbackUsed, false);
-  // 只调用了 Atlas，没调 DeepSeek
-  assert.equal(fetchLog.length, 1);
-  assert.ok(fetchLog[0].includes("atlascloud.ai"));
-});
-
-test("Atlas 429 时 fallback 一次到 DeepSeek（Atlas primary 反转后）", async () => {
-  setupEnv();
-  mockFetch({
-    [ATLAS_URL]: () => errorResponse(429, "rate limited"),
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-fallback-output", "deepseek-chat"),
-  });
-
-  const result = await callRoutedProvider({
-    taskType: "storyboard_script",
-    messages: MESSAGES,
-    temperature: 0.2,
-  });
-
-  assert.equal(result.provider, "deepseek");
-  assert.equal(result.output, "deepseek-fallback-output");
+  assert.equal(result.output, "atlas-fallback-output");
   assert.equal(result.fallbackUsed, true);
-  // 调用了 Atlas 一次 + DeepSeek 一次
+  // 调用了 DeepSeek 一次 + Atlas 一次
   assert.equal(fetchLog.length, 2);
-  assert.ok(fetchLog[0].includes("atlascloud.ai"));
-  assert.ok(fetchLog[1].includes("deepseek.com"));
+  assert.ok(fetchLog[0].includes("deepseek.com"));
+  assert.ok(fetchLog[1].includes("atlascloud.ai"));
 });
 
-test("Atlas 5xx 时 fallback 到 DeepSeek（Atlas primary 反转后）", async () => {
+test("DeepSeek 5xx 时 fallback 到 Atlas", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => errorResponse(503, "service unavailable"),
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
+    [DEEPSEEK_URL]: () => errorResponse(503, "service unavailable"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -136,15 +136,15 @@ test("Atlas 5xx 时 fallback 到 DeepSeek（Atlas primary 反转后）", async (
     messages: MESSAGES,
   });
 
-  assert.equal(result.provider, "deepseek");
+  assert.equal(result.provider, "atlas");
   assert.equal(result.fallbackUsed, true);
 });
 
-test("Atlas 空输出时 fallback 到 DeepSeek（Atlas primary 反转后）", async () => {
+test("DeepSeek 空输出时 fallback 到 Atlas", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("", "gemini-3.5-flash"),
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
+    [DEEPSEEK_URL]: () => chatResponse("", "deepseek-chat"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -152,16 +152,16 @@ test("Atlas 空输出时 fallback 到 DeepSeek（Atlas primary 反转后）", as
     messages: MESSAGES,
   });
 
-  assert.equal(result.provider, "deepseek");
+  assert.equal(result.provider, "atlas");
   assert.equal(result.fallbackUsed, true);
-  assert.equal(result.output, "deepseek-output");
+  assert.equal(result.output, "atlas-output");
 });
 
-test("Atlas 返回不合格 JSON 时由任务校验器触发 DeepSeek fallback（Atlas primary 反转后）", async () => {
+test("DeepSeek 返回不合格 JSON 时由任务校验器触发 Atlas fallback", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("not-json", "gemini-3.5-flash"),
-    [DEEPSEEK_URL]: () => chatResponse('{"scenes":[]}', "deepseek-chat"),
+    [DEEPSEEK_URL]: () => chatResponse("not-json", "deepseek-chat"),
+    [ATLAS_URL]: () => chatResponse('{"scenes":[]}', "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -172,16 +172,16 @@ test("Atlas 返回不合格 JSON 时由任务校验器触发 DeepSeek fallback�
     },
   });
 
-  assert.equal(result.provider, "deepseek");
+  assert.equal(result.provider, "atlas");
   assert.equal(result.fallbackUsed, true);
   assert.equal(fetchLog.length, 2);
 });
 
-test("Atlas 与 DeepSeek 输出都不合格时显式抛出校验错误（Atlas primary 反转后）", async () => {
+test("DeepSeek 与 Atlas 输出都不合格时显式抛出校验错误", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => chatResponse("atlas-invalid", "gemini-3.5-flash"),
     [DEEPSEEK_URL]: () => chatResponse("deepseek-invalid", "deepseek-chat"),
+    [ATLAS_URL]: () => chatResponse("atlas-invalid", "gemini-3.5-flash"),
   });
 
   await assert.rejects(
@@ -218,18 +218,18 @@ test("DeepSeek 4xx 输入错误不触发 fallback（直接抛错）", async () =
   assert.ok(fetchLog[0].includes("deepseek.com"));
 });
 
-test("Atlas 和 DeepSeek 都失败时抛错（不返回空输出，Atlas primary 反转后）", async () => {
+test("DeepSeek 和 Atlas 都失败时抛错（不返回空输出）", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => errorResponse(503, "atlas down"),
     [DEEPSEEK_URL]: () => errorResponse(500, "deepseek down"),
+    [ATLAS_URL]: () => errorResponse(503, "atlas down"),
   });
 
   await assert.rejects(
     () => callRoutedProvider({ taskType: "storyboard_script", messages: MESSAGES }),
     (error) => {
-      // DeepSeek 失败的错误冒泡上来
-      assert.ok(error.message.includes("DEEPSEEK"), `got: ${error.message}`);
+      // Atlas 失败的错误冒泡上来
+      assert.ok(error.message.includes("ATLAS_LLM"), `got: ${error.message}`);
       return true;
     },
   );
@@ -276,7 +276,7 @@ test("MiniMax 在 storyboard_script 链路零调用（即使配置了 MiniMax ke
   }
 });
 
-test("DeepSeek 缺 key 时 Atlas primary 正常工作（不依赖 DeepSeek）", async () => {
+test("DeepSeek 缺 key 时直接 fallback 到 Atlas（不抛 MISSING_DEEPSEEK_API_KEY）", async () => {
   setupEnv();
   delete process.env.DEEPSEEK_API_KEY;
   mockFetch({
@@ -289,7 +289,7 @@ test("DeepSeek 缺 key 时 Atlas primary 正常工作（不依赖 DeepSeek）", 
   });
 
   assert.equal(result.provider, "atlas");
-  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.fallbackUsed, true);
   assert.equal(result.output, "atlas-output");
 });
 
@@ -314,13 +314,13 @@ test("非 storyboard_script 任务仍走原 hybrid router（不受窄链影响�
   assert.equal(result.fallbackUsed, undefined); // 非 storyboard chain 没有 fallbackUsed
 });
 
-test("Atlas 网络错误时 fallback 到 DeepSeek（Atlas primary 反转后）", async () => {
+test("DeepSeek 网络错误时 fallback 到 Atlas", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => {
+    [DEEPSEEK_URL]: () => {
       throw new Error("network error");
     },
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -328,19 +328,19 @@ test("Atlas 网络错误时 fallback 到 DeepSeek（Atlas primary 反转后）",
     messages: MESSAGES,
   });
 
-  assert.equal(result.provider, "deepseek");
+  assert.equal(result.provider, "atlas");
   assert.equal(result.fallbackUsed, true);
 });
 
-test("Atlas 超时时 fallback 到 DeepSeek（Atlas primary 反转后）", async () => {
+test("DeepSeek 超时时 fallback 到 Atlas", async () => {
   setupEnv();
   mockFetch({
-    [ATLAS_URL]: () => {
+    [DEEPSEEK_URL]: () => {
       const err = new Error("aborted");
       err.name = "AbortError";
       throw err;
     },
-    [DEEPSEEK_URL]: () => chatResponse("deepseek-output", "deepseek-chat"),
+    [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-3.5-flash"),
   });
 
   const result = await callRoutedProvider({
@@ -348,22 +348,22 @@ test("Atlas 超时时 fallback 到 DeepSeek（Atlas primary 反转后）", async
     messages: MESSAGES,
   });
 
-  assert.equal(result.provider, "deepseek");
+  assert.equal(result.provider, "atlas");
   assert.equal(result.fallbackUsed, true);
 });
 
-test("fallback 仅执行一次（DeepSeek 失败不二次回 Atlas）", async () => {
+test("fallback 仅执行一次（Atlas 失败不二次回 DeepSeek）", async () => {
   setupEnv();
   let deepseekCallCount = 0;
   let atlasCallCount = 0;
   mockFetch({
-    [ATLAS_URL]: () => {
-      atlasCallCount++;
-      return errorResponse(503, "atlas down");
-    },
     [DEEPSEEK_URL]: () => {
       deepseekCallCount++;
       return errorResponse(500, "deepseek down");
+    },
+    [ATLAS_URL]: () => {
+      atlasCallCount++;
+      return errorResponse(503, "atlas down");
     },
   });
 
@@ -371,9 +371,9 @@ test("fallback 仅执行一次（DeepSeek 失败不二次回 Atlas）", async ()
     () => callRoutedProvider({ taskType: "storyboard_script", messages: MESSAGES }),
   );
 
-  // Atlas 只调用 1 次，DeepSeek 只调用 1 次（不二次回 Atlas）
-  assert.equal(atlasCallCount, 1);
+  // DeepSeek 只调用 1 次，Atlas 只调用 1 次（不二次回 DeepSeek）
   assert.equal(deepseekCallCount, 1);
+  assert.equal(atlasCallCount, 1);
 });
 
 
