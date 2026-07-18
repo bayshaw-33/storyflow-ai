@@ -85,6 +85,12 @@ export type ByoApiConfig = {
   customApiKey?: string;
   customModel?: string;
   customBaseUrl?: string;
+  /**
+   * 用户在 settings 页面选择的 Atlas Cloud LLM 模型名（可选）。
+   * 优先级：用户选择 > env ATLASCLOUD_LLM_MODEL > 默认 gemini-2.5-flash
+   * 不需要 atlasApiKey，统一用服务端 ATLASCLOUD_API_KEY。
+   */
+  atlasModel?: string;
 };
 
 export type GeneratePayload = {

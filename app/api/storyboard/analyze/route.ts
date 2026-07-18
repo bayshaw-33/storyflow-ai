@@ -24,6 +24,8 @@ import { parseAnalyzeOutput } from "@/lib/storyboard/analyze/parse";
 import type { AnalyzeDependencies, ExistingStateScope } from "@/lib/storyboard/analyze/types";
 import { parseAnalyzeJsonBody, validateAnalyzeRequest } from "@/lib/storyboard/analyze/schema";
 import { isStoryboardError, StoryboardError } from "@/lib/storyboard/analyze/types";
+import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
+import type { ByoApiConfig } from "@/lib/ai/prompts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -150,6 +152,13 @@ export async function POST(request: Request) {
     const dependencies: AnalyzeDependencies = {
       callAI: async ({ systemPrompt, userPrompt }) => {
         try {
+          // 读取用户的 saved byoApi config（用于 Atlas 模型选择等偏好）
+          let byoApi: ByoApiConfig | undefined;
+          try {
+            const saved = await resolveSavedApiConfig(userId);
+            if (saved?.atlasModel) byoApi = { atlasModel: saved.atlasModel };
+          } catch { /* 读不到就用默认配置 */ }
+
           const result = await callRoutedProvider({
             taskType: "storyboard_script",
             messages: [
@@ -157,6 +166,7 @@ export async function POST(request: Request) {
               { role: "user", content: userPrompt },
             ],
             temperature: 0.2,
+            byoApi,
             validateOutput: (output) => {
               parseAnalyzeOutput(output);
             },

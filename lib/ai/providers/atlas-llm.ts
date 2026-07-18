@@ -20,7 +20,30 @@ export type AtlasLLMOptions = {
   temperature?: number;
   timeoutMs?: number;
   maxTokens?: number;
+  /**
+   * 可选：调用方传入的模型名（优先级高于 env ATLASCLOUD_LLM_MODEL）。
+   * 用于前端用户在 settings 页面从模型下拉选择不同 Atlas Cloud 模型。
+   */
+  modelOverride?: string;
 };
+
+/**
+ * Atlas Cloud 支持的常用 LLM 模型列表（用户在 settings 页面下拉选择）。
+ * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
+ */
+export const ATLAS_LLM_MODEL_OPTIONS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
+  "gpt-4o-mini",
+  "gpt-4o",
+] as const;
+
+/**
+ * ATLASCLOUD_LLM_MODEL 未配置时的默认模型。
+ * 让 Vercel 不用配置任何环境变量 Atlas 即可启用。
+ */
+const DEFAULT_ATLAS_LLM_MODEL = "gemini-2.5-flash";
 
 /**
  * 调用 Atlas Cloud LLM（OpenAI-compatible）。
@@ -36,10 +59,13 @@ export async function callAtlasLLM({
   temperature = 0.2,
   timeoutMs = 90000,
   maxTokens = 8192,
+  modelOverride,
 }: AtlasLLMOptions): Promise<AIProviderResult> {
   const apiKey = process.env.ATLASCLOUD_API_KEY;
   const baseUrl = (process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1").trim().replace(/\/+$/, "");
-  const model = process.env.ATLASCLOUD_LLM_MODEL || "";
+  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 gemini-2.5-flash
+  // 这样即使用户没在 Vercel 配 ATLASCLOUD_LLM_MODEL，Atlas 也能自动启用
+  const model = (modelOverride?.trim() || process.env.ATLASCLOUD_LLM_MODEL || DEFAULT_ATLAS_LLM_MODEL).trim();
 
   if (!apiKey || !baseUrl || !model) {
     throw new Error("MISSING_ATLAS_LLM_CONFIG");
@@ -101,11 +127,9 @@ function normalizeChatCompletionsUrl(value: string) {
   return `${value}/v1/chat/completions`;
 }
 
-/** 是否配置齐全（供路由层判断是否可作 fallback）。 */
+/** 是否配置齐全（供路由层判断是否可作 fallback）。
+ * 只要 ATLASCLOUD_API_KEY 配置就算 configured（model/baseUrl 都有默认值）。
+ * 这样用户在 Vercel 只需配置 ATLASCLOUD_API_KEY 即可启用 Atlas。 */
 export function isAtlasLLMConfigured(): boolean {
-  return Boolean(
-    process.env.ATLASCLOUD_API_KEY &&
-      (process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1") &&
-      process.env.ATLASCLOUD_LLM_MODEL,
-  );
+  return Boolean(process.env.ATLASCLOUD_API_KEY);
 }

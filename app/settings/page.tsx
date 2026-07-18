@@ -44,6 +44,8 @@ type ByoApiSettings = {
   customApiKey: string;
   customModel: string;
   customBaseUrl: string;
+  /** 用户在 settings 页面选择的 Atlas Cloud LLM 模型名（独立于 provider 选择，作为 Atlas 路由的 modelOverride） */
+  atlasModel: string;
 };
 
 type ApiConnectionSummary = {
@@ -76,7 +78,19 @@ const EMPTY_BYO_API: ByoApiSettings = {
   customApiKey: "",
   customModel: "",
   customBaseUrl: "",
+  atlasModel: "",
 };
+
+/** Atlas Cloud 支持的 LLM 模型列表（用户从下拉选择）。
+ * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
+ * 不需要 API key（用服务端 ATLASCLOUD_API_KEY）。 */
+const ATLAS_LLM_MODEL_OPTIONS = [
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (默认，快速)" },
+  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (高质量)" },
+  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (稳定)" },
+  { value: "gpt-4o-mini", label: "GPT-4o mini (经济)" },
+  { value: "gpt-4o", label: "GPT-4o (旗舰)" },
+];
 
 const copy = {
   "en-US": {
@@ -510,6 +524,7 @@ export default function SettingsPage() {
         customApiKey: byoApi.customApiKey.trim(),
         customModel: byoApi.customModel.trim(),
         customBaseUrl: byoApi.customBaseUrl.trim(),
+        atlasModel: byoApi.atlasModel.trim(),
       }));
       setApiConnections((current) => [payload.connection, ...current.filter((item) => item.id !== payload.connection.id)]);
       setApiLabel("");
@@ -779,6 +794,22 @@ export default function SettingsPage() {
             />
           </label>
           <label>
+            Atlas Cloud 文本模型 <small>（推荐 · 不需要 API key）</small>
+            <select
+              value={byoApi.atlasModel}
+              disabled={!canUseByoApi}
+              onChange={(event) => setByoApi((current) => ({ ...current, atlasModel: event.target.value }))}
+            >
+              <option value="">使用默认（gemini-2.5-flash）</option>
+              {ATLAS_LLM_MODEL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <small style={{ display: "block", marginTop: 4, color: "var(--muted, #888)", fontSize: 11 }}>
+              所有文本 LLM 任务（剧本分析、翻译、本土化等）默认走 Atlas Cloud。这里选择模型可覆盖默认配置。
+            </small>
+          </label>
+          <label>
             {text.minimaxKey}
             <input
               type="password"
@@ -881,6 +912,7 @@ function readByoApiSettings(): ByoApiSettings {
       customApiKey: parsed.customApiKey || "",
       customModel: parsed.customModel || "",
       customBaseUrl: parsed.customBaseUrl || "",
+      atlasModel: parsed.atlasModel || "",
     };
   } catch {
     return EMPTY_BYO_API;

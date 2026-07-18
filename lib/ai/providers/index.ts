@@ -135,6 +135,7 @@ async function callStoryboardProviderChain(options: ProviderCallOptions): Promis
       const result = await callAtlasLLM({
         messages: options.messages,
         temperature: options.temperature,
+        modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
       });
       options.validateOutput?.(result.output);
       return { ...result, fallbackUsed: false };
@@ -171,6 +172,7 @@ async function callStoryboardProviderChain(options: ProviderCallOptions): Promis
     const atlasResult = await callAtlasLLM({
       messages: options.messages,
       temperature: options.temperature,
+      modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
     });
     options.validateOutput?.(atlasResult.output);
     return { ...atlasResult, fallbackUsed: true };
@@ -214,6 +216,7 @@ async function callProvider(provider: AIProviderName, options: ProviderCallOptio
     return callAtlasLLM({
       messages: options.messages,
       temperature: options.temperature,
+      modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
     });
   }
 

@@ -200,7 +200,7 @@ test("Atlas 与 DeepSeek 输出都不合格时显式抛出校验错误（Atlas p
 test("DeepSeek 4xx 输入错误不触发 fallback（直接抛错）", async () => {
   setupEnv();
   // Atlas 未配置 → storyboard chain 走原 DeepSeek primary 逻辑
-  delete process.env.ATLASCLOUD_LLM_MODEL;
+  delete process.env.ATLASCLOUD_API_KEY;
   mockFetch({
     [DEEPSEEK_URL]: () => errorResponse(400, "bad request"),
     [ATLAS_URL]: () => chatResponse("atlas-output", "gemini-2.5-flash"),
@@ -239,8 +239,7 @@ test("Atlas 和 DeepSeek 都失败时抛错（不返回空输出，Atlas primary
 test("Atlas 未配置时 DeepSeek 失败直接抛 DeepSeek 错误", async () => {
   setupEnv();
   // Atlas 未配置 → storyboard chain 走原 DeepSeek primary 逻辑
-  delete process.env.ATLASCLOUD_LLM_MODEL;
-  delete process.env.ATLASCLOUD_LLM_MODEL;
+  delete process.env.ATLASCLOUD_API_KEY;
   mockFetch({
     [DEEPSEEK_URL]: () => errorResponse(500, "deepseek down"),
   });
@@ -296,8 +295,8 @@ test("DeepSeek 缺 key 时 Atlas primary 正常工作（不依赖 DeepSeek）", 
 
 test("非 storyboard_script 任务仍走原 hybrid router（不受窄链影响）", async () => {
   setupEnv();
-  // Atlas 未配置 → storyboard chain 走原 DeepSeek primary 逻辑
-  delete process.env.ATLASCLOUD_LLM_MODEL;
+  // Atlas 未配置 → 走原 hybrid router 逻辑
+  delete process.env.ATLASCLOUD_API_KEY;
   process.env.MINIMAX_API_KEY = "test-minimax-key";
   // 用一个非 storyboard、非 novel、非 creation 的 taskType
   // 在 hybrid 模式下应走 MiniMax

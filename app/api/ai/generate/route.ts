@@ -149,9 +149,11 @@ async function resolveByoApi(config: ByoApiConfig | undefined, userId: string): 
     customApiKey: config.customApiKey?.trim() || undefined,
     customModel: config.customModel?.trim() || undefined,
     customBaseUrl: config.customBaseUrl?.trim() || undefined,
+    atlasModel: config.atlasModel?.trim() || undefined,
   };
 
-  const hasKey = Boolean(cleanConfig.deepseekApiKey || cleanConfig.minimaxApiKey || cleanConfig.customApiKey);
+  // Atlas 模型不需要 API key（用服务端 ATLASCLOUD_API_KEY），所以单独处理
+  const hasKey = Boolean(cleanConfig.deepseekApiKey || cleanConfig.minimaxApiKey || cleanConfig.customApiKey || cleanConfig.atlasModel);
   if (!hasKey) return resolveSavedApiConfig(userId, cleanConfig.provider).catch(() => null);
 
   const rows = await serviceFetch<Array<{ plan: string | null }>>(
