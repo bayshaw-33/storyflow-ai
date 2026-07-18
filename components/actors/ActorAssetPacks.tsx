@@ -70,7 +70,9 @@ export function ActorAssetPacks({
           </button>
         </div>
         {mainVisualUrl ? (
-          <div className={styles.mainVisual}>
+          // KIIKIS-TR-ACTOR-P0-010: 主视觉容器自适应图片真实比例
+          // reference-sheet 是 4:3 横版，不再强制 4/5 竖版 cover 裁切
+          <div className={styles.mainVisualAuto}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={mainVisualUrl} alt={`${actor.name} · ${copy.mainVisual}`} />
           </div>

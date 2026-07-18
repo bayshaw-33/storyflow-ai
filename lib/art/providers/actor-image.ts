@@ -66,12 +66,11 @@ export const ACTOR_VIEW_PACKS: ActorViewPack[] = [
       { key: "side", label: "侧面全身" },
       { key: "back", label: "背面全身" },
     ],
-    // 白T与白色背景太接近，改用深灰色背景增强对比
-    backgroundOverride: "neutral dark gray seamless studio background (RGB ~#3a3a3a), even soft lighting, no shadow on the floor",
+    // KIIKIS-TR-ACTOR-P0-010: 换回白色背景（深灰色背景视觉效果差且与 UI 容器不协调）
     promptVariants: [
-      "Character model sheet with three full-body views in a horizontal row.",
-      "Character reference sheet showing the same person from three angles in a row.",
-      "Studio character turnaround reference, three poses side by side.",
+      "Character model sheet with three full-body views in a horizontal row, clean white seamless studio background.",
+      "Character reference sheet showing the same person from three angles in a row, clean white seamless studio background.",
+      "Studio character turnaround reference, three poses side by side, clean white seamless studio background.",
     ],
   },
   {
