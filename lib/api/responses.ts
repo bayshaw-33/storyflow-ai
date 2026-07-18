@@ -10,7 +10,8 @@ export function apiError(error: unknown, fallback = "请求失败。", status = 
   const projectForbidden = message.includes("PROJECT_FORBIDDEN");
   // 约定：所有 *_FORBIDDEN 后缀的业务错误（PROJECT_/TEAM_/ACTOR_…）一律映射 403
   const forbidden = projectForbidden || message.includes("_FORBIDDEN");
-  const notFound = message.includes("PROJECT_NOT_FOUND") || message.includes("VERSION_NOT_FOUND") || message.includes("TASK_NOT_FOUND");
+  // 约定：所有 *_NOT_FOUND 后缀的业务错误（PROJECT_/UNIVERSE_/ACTOR_/VERSION_/TASK_…）一律映射 404
+  const notFound = message.includes("_NOT_FOUND");
   return NextResponse.json(
     {
       success: false,
