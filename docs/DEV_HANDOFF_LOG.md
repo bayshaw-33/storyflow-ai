@@ -30,6 +30,11 @@
 - `pnpm build`：通过（Next.js 15.5.20，67/67 静态页生成）。
 - 定向安全/状态机/导出回归：101/101 通过。
 - `git diff --check`：通过。
+- 修复提交：`afb6d42`；GitHub deployment `5502591068` 状态 `success`，
+  Vercel Production 已完成。
+- 线上健康检查：`https://www.kiikis.com/` 返回 200；analyze/archive/export-package
+  三个受保护端点在无登录态均返回 401。当前浏览器无可复用登录会话，因此没有把
+  未执行的真实 Provider/Storage 流程写成通过。
 
 ### 尚未关闭的生产 BLOCKER
 
