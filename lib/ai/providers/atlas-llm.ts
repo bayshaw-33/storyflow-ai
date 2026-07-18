@@ -33,10 +33,10 @@ export type AtlasLLMOptions = {
  */
 export const ATLAS_LLM_MODEL_OPTIONS = [
   "gemini-2.5-flash",
-  "gemini-2.5-pro",
-  "gemini-2.0-flash",
   "gpt-4o-mini",
   "gpt-4o",
+  "grok-2",
+  "deepseek-chat",
 ] as const;
 
 /**

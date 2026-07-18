@@ -86,10 +86,10 @@ const EMPTY_BYO_API: ByoApiSettings = {
  * 不需要 API key（用服务端 ATLASCLOUD_API_KEY）。 */
 const ATLAS_LLM_MODEL_OPTIONS = [
   { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (默认，快速)" },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (高质量)" },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (稳定)" },
   { value: "gpt-4o-mini", label: "GPT-4o mini (经济)" },
   { value: "gpt-4o", label: "GPT-4o (旗舰)" },
+  { value: "grok-2", label: "Grok 2 (xAI)" },
+  { value: "deepseek-chat", label: "DeepSeek V3 (Atlas Cloud)" },
 ];
 
 const copy = {
