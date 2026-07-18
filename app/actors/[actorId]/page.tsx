@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, TriangleAlert, UserRoundX } from "lucide-react";
+import { Archive, ArrowLeft, Pencil, TriangleAlert, UserRoundX } from "lucide-react";
 import { ActorAssetPacks } from "@/components/actors/ActorAssetPacks";
 import { ActorProfilePanel } from "@/components/actors/ActorProfilePanel";
 import { PortrayalGallery } from "@/components/actors/PortrayalGallery";
 import { ReferenceSheetExport } from "@/components/actors/ReferenceSheetExport";
 import { actorApiFetch } from "@/components/actors/actor-client";
-import { actorLibraryCopy } from "@/components/actors/actor-copy";
+import { actorLibraryCopy, type ActorLibraryCopy } from "@/components/actors/actor-copy";
 import {
+  computeProfileCompleteness,
   groupVersionsByPack,
+  markVersionPrimary,
   mergeVersions,
+  normalizeActorDetail,
   normalizePortrayals,
   normalizeTagList,
   normalizeViewVersions,
@@ -26,15 +29,16 @@ import styles from "@/components/actors/actors.module.css";
 import { useI18n } from "@/lib/i18n/useI18n";
 import type { ActorProfile } from "@/lib/actors";
 
-type ActorListPayload = { actors: ActorProfile[] };
-
-// 演员详情页：左侧人物设定，右侧图片资产（两个版本三视图 / 表情组 / 身体细节）+ 参演作品。
+// 演员详情页：
+// PRD §7.2 顶部身份区 + 左侧人物设定 + 右侧图片资产（带版本/主版本/历史）+ 参演作品。
+// 关键：使用 GET /api/actors/:actorId 单读，不再请求整个列表后客户端查找。
 export default function ActorDetailPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const ui = actorLibraryCopy[isZh ? "zh" : "en"];
   const params = useParams<{ actorId: string }>();
   const actorId = typeof params?.actorId === "string" ? params.actorId : "";
+  const router = useRouter();
   const { session, sessionLoaded } = useActorSession();
   const token = session?.access_token || "";
 
@@ -42,16 +46,22 @@ export default function ActorDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState("");
+  const [portrayalCount, setPortrayalCount] = useState(0);
 
   const [versionsByPack, setVersionsByPack] = useState<Record<string, ViewVersion[]>>({});
   const [packBusy, setPackBusy] = useState("");
   const [packErrors, setPackErrors] = useState<Record<string, string>>({});
+  const [versionErrors, setVersionErrors] = useState<Record<string, string>>({});
   const [historyFailed, setHistoryFailed] = useState(false);
 
   const [portrayals, setPortrayals] = useState<PortrayalLike[]>([]);
   const [portrayalsLoading, setPortrayalsLoading] = useState(false);
   const [portrayalsError, setPortrayalsError] = useState("");
 
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
+
+  // PRD §7.2 关键约束：详情页必须用 GET /api/actors/:actorId 单读。
   useEffect(() => {
     if (!token || !actorId) return;
     let active = true;
@@ -60,14 +70,27 @@ export default function ActorDetailPage() {
     setNotFound(false);
     void (async () => {
       try {
-        const result = await actorApiFetch<ActorListPayload>("/api/actors", token);
+        const result = await actorApiFetch<{ actor: unknown; requestId?: string }>(
+          `/api/actors/${encodeURIComponent(actorId)}`,
+          token,
+        );
         if (!active) return;
-        const found = (result.actors || []).find((item) => item.id === actorId) || null;
-        setActor(found);
-        setNotFound(!found);
+        const detail = normalizeActorDetail(result);
+        if (!detail) {
+          setActor(null);
+          setNotFound(true);
+        } else {
+          // 详情端点返回完整 ActorProfile 字段；用类型断言把 ActorDetail 视作 ActorProfile。
+          setActor(detail as unknown as ActorProfile);
+          setPortrayalCount(typeof detail.portrayalCount === "number" ? detail.portrayalCount : 0);
+        }
       } catch (issue) {
         if (!active) return;
-        setError(issue instanceof Error ? issue.message : ui.detailError);
+        const message = issue instanceof Error ? issue.message : ui.detailError;
+        // 404 / 403 在 actor-client 中以 ActorApiError.status 暴露
+        const status = (issue as { status?: number }).status;
+        if (status === 404) setNotFound(true);
+        setError(message);
       } finally {
         if (active) setLoading(false);
       }
@@ -83,7 +106,10 @@ export default function ActorDetailPage() {
     let active = true;
     void (async () => {
       try {
-        const result = await actorApiFetch<{ versions?: unknown }>(`/api/actors/generate-views?actorId=${encodeURIComponent(actorId)}`, token);
+        const result = await actorApiFetch<{ versions?: unknown }>(
+          `/api/actors/generate-views?actorId=${encodeURIComponent(actorId)}`,
+          token,
+        );
         if (!active) return;
         const versions = normalizeViewVersions(result);
         if (versions.length) setVersionsByPack(groupVersionsByPack(versions));
@@ -97,7 +123,7 @@ export default function ActorDetailPage() {
     };
   }, [token, actorId]);
 
-  // 参演作品。
+  // 参演作品：GET /api/actors/portrayals?actorId=X
   useEffect(() => {
     if (!token || !actorId) return;
     let active = true;
@@ -105,7 +131,10 @@ export default function ActorDetailPage() {
     setPortrayalsError("");
     void (async () => {
       try {
-        const result = await actorApiFetch<unknown>(`/api/actors/portrayals?actorId=${encodeURIComponent(actorId)}`, token);
+        const result = await actorApiFetch<unknown>(
+          `/api/actors/portrayals?actorId=${encodeURIComponent(actorId)}`,
+          token,
+        );
         if (!active) return;
         setPortrayals(normalizePortrayals(result));
       } catch (issue) {
@@ -130,15 +159,20 @@ export default function ActorDetailPage() {
           method: "POST",
           body: JSON.stringify({ actorId, pack }),
         });
-        const incoming = normalizeViewVersions(result).map((version) => ({ ...version, pack: version.pack || pack }));
-        if (!incoming.length) throw new Error(isZh ? "端点未返回图片版本。" : "Endpoint returned no versions.");
+        const incoming = normalizeViewVersions(result).map((version) => ({
+          ...version,
+          pack: version.pack || pack,
+        }));
+        if (!incoming.length) {
+          throw new Error(isZh ? "端点未返回图片版本。" : "Endpoint returned no versions.");
+        }
+        // PRD §7.2 关键：单张失败不清空其他版本，mergeVersions 保留旧版本。
         setVersionsByPack((current) => ({
           ...current,
           [pack]: mergeVersions(current[pack] || [], incoming.filter((version) => version.pack === pack)),
         }));
         setHistoryFailed(false);
       } catch (issue) {
-        // 降级态：保留已有图片，仅提示失败原因。
         setPackErrors((current) => ({
           ...current,
           [pack]: issue instanceof Error ? issue.message : isZh ? "生成失败。" : "Generation failed.",
@@ -150,6 +184,30 @@ export default function ActorDetailPage() {
     [token, actorId, packBusy, isZh],
   );
 
+  const handleSetPrimary = useCallback((pack: ViewPackId, versionId: string) => {
+    setVersionsByPack((current) => ({
+      ...current,
+      [pack]: markVersionPrimary(current[pack] || [], versionId),
+    }));
+  }, []);
+
+  const handleArchive = useCallback(async () => {
+    if (!token || !actorId || archiving) return;
+    if (!window.confirm(isZh ? "归档该演员？已生成的资产会保留，但不再出现在名册中。" : "Archive this actor? Generated assets stay, but the actor leaves the roster.")) {
+      return;
+    }
+    setArchiving(true);
+    setArchiveError("");
+    try {
+      await actorApiFetch(`/api/actors?id=${encodeURIComponent(actorId)}`, token, { method: "DELETE" });
+      router.push("/actors");
+    } catch (issue) {
+      setArchiveError(issue instanceof Error ? issue.message : isZh ? "归档失败。" : "Archive failed.");
+    } finally {
+      setArchiving(false);
+    }
+  }, [token, actorId, archiving, isZh, router]);
+
   const sheetSelection = useMemo(
     () => selectReferenceSheetImages({ avatarUrl: actor?.avatar_url, versionsByPack }),
     [actor?.avatar_url, versionsByPack],
@@ -157,6 +215,16 @@ export default function ActorDetailPage() {
   const sheetTags = useMemo(() => {
     if (!actor) return [];
     return [...normalizeTagList(actor.temperament), ...normalizeTagList(actor.playable_roles)].slice(0, 6);
+  }, [actor]);
+
+  const completeness = useMemo(() => {
+    if (!actor) return { percent: 0, filled: 0, total: 10 };
+    return computeProfileCompleteness(actor);
+  }, [actor]);
+
+  const playableTypes = useMemo(() => {
+    if (!actor) return [];
+    return normalizeTagList(actor.playable_roles).slice(0, 4);
   }, [actor]);
 
   const authRequired = sessionLoaded && !session;
@@ -174,12 +242,42 @@ export default function ActorDetailPage() {
             <span className={actor.visibility === "team" ? `${styles.badge} ${styles.badgeAccent}` : styles.badge}>
               {actor.visibility === "team" ? ui.teamBadge : ui.privateBadge}
             </span>
-            <span className={styles.badge}>{actor.status === "ready" ? ui.statusReady : ui.statusDraft}</span>
+            <span className={actor.status === "ready" ? `${styles.badge} ${styles.badgeReady}` : `${styles.badge} ${styles.badgeDraft}`}>
+              {actor.status === "ready" ? ui.statusReady : ui.statusDraft}
+            </span>
           </>
         ) : null}
         <span className={styles.topbarSpacer} />
-        {actor ? <ReferenceSheetExport actorName={actor.name} tags={sheetTags} selection={sheetSelection} copy={ui} /> : null}
+        {actor ? (
+          <span className={styles.detailActions}>
+            <button
+              className={styles.ghostBtn}
+              type="button"
+              disabled
+              title={isZh ? "编辑入口暂未开放，请使用文字创建补充资料。" : "Edit entry not available yet."}
+            >
+              <Pencil size={14} />
+              {isZh ? "编辑" : "Edit"}
+            </button>
+            <button
+              className={styles.ghostBtn}
+              type="button"
+              onClick={() => void handleArchive()}
+              disabled={archiving}
+            >
+              <Archive size={14} />
+              {archiving ? (isZh ? "归档中..." : "Archiving...") : isZh ? "归档" : "Archive"}
+            </button>
+            <ReferenceSheetExport actorName={actor.name} tags={sheetTags} selection={sheetSelection} copy={ui} />
+          </span>
+        ) : null}
       </header>
+
+      {archiveError ? (
+        <div className={styles.noticeBar} role="alert">
+          {archiveError}
+        </div>
+      ) : null}
 
       {authRequired ? (
         <section className={styles.statePanel}>
@@ -200,11 +298,14 @@ export default function ActorDetailPage() {
             </div>
           </div>
         </section>
-      ) : error ? (
+      ) : error && !actor ? (
         <section className={styles.statePanel}>
           <TriangleAlert size={22} color="#ffb1b3" />
           <h2>{ui.detailError}</h2>
           <p>{error}</p>
+          <button className={styles.primaryBtn} type="button" onClick={() => router.refresh()}>
+            {ui.detailErrorRetry}
+          </button>
         </section>
       ) : notFound || !actor ? (
         <section className={styles.statePanel}>
@@ -215,23 +316,102 @@ export default function ActorDetailPage() {
           </Link>
         </section>
       ) : (
-        <div className={styles.detailLayout}>
-          <ActorProfilePanel actor={actor} copy={ui} />
-          <div className={styles.assetsColumn}>
-            <ActorAssetPacks
-              actor={actor}
-              isZh={isZh}
-              copy={ui}
-              versionsByPack={versionsByPack}
-              packBusy={packBusy}
-              packErrors={packErrors}
-              historyFailed={historyFailed}
-              onGenerate={(pack) => void generatePack(pack)}
-            />
-            <PortrayalGallery copy={ui} portrayals={portrayals} loading={portrayalsLoading} error={portrayalsError} />
+        <>
+          <IdentityStrip
+            actor={actor}
+            copy={ui}
+            isZh={isZh}
+            portrayalCount={portrayalCount}
+            playableTypes={playableTypes}
+            completeness={completeness}
+          />
+          <div className={styles.detailLayout}>
+            <ActorProfilePanel actor={actor} copy={ui} />
+            <div className={styles.assetsColumn}>
+              <ActorAssetPacks
+                actor={actor}
+                isZh={isZh}
+                copy={ui}
+                versionsByPack={versionsByPack}
+                packBusy={packBusy}
+                packErrors={packErrors}
+                versionErrors={versionErrors}
+                historyFailed={historyFailed}
+                onGenerate={(pack) => void generatePack(pack)}
+                onSetPrimary={handleSetPrimary}
+              />
+              <PortrayalGallery copy={ui} portrayals={portrayals} loading={portrayalsLoading} error={portrayalsError} />
+            </div>
           </div>
-        </div>
+        </>
       )}
     </main>
+  );
+}
+
+type IdentityStripProps = {
+  actor: ActorProfile;
+  copy: ActorLibraryCopy;
+  isZh: boolean;
+  portrayalCount: number;
+  playableTypes: string[];
+  completeness: { percent: number; filled: number; total: number };
+};
+
+function IdentityStrip({ actor, copy, isZh, portrayalCount, playableTypes, completeness }: IdentityStripProps) {
+  const updatedAtText = actor.updated_at
+    ? new Date(actor.updated_at).toLocaleString(isZh ? "zh-CN" : "en-US")
+    : copy.notProvided;
+  return (
+    <section className={styles.identityStrip} aria-label={copy.identityKicker}>
+      <div className={styles.identityAvatar}>
+        {actor.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={actor.avatar_url} alt={actor.name} />
+        ) : (
+          <span className={styles.cardInitials}>{actor.name.slice(0, 1).toUpperCase() || "A"}</span>
+        )}
+      </div>
+      <div className={styles.identityBody}>
+        <div className={styles.identityRow}>
+          <span className={styles.identityName}>{actor.name}</span>
+          <span className={actor.visibility === "team" ? `${styles.badge} ${styles.badgeAccent}` : styles.badge}>
+            {actor.visibility === "team" ? copy.teamBadge : copy.privateBadge}
+          </span>
+          <span className={actor.status === "ready" ? `${styles.badge} ${styles.badgeReady}` : `${styles.badge} ${styles.badgeDraft}`}>
+            {actor.status === "ready" ? copy.statusReady : copy.statusDraft}
+          </span>
+        </div>
+        <div className={styles.identityRow}>
+          <span className={styles.identityLabel}>{copy.playableTypesLabel}</span>
+          {playableTypes.length ? (
+            <span className={styles.tagRow}>
+              {playableTypes.map((tag) => (
+                <span className={styles.tag} key={tag}>
+                  {tag}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className={styles.identityMeta}>{copy.notProvided}</span>
+          )}
+        </div>
+        <div className={styles.identityRow}>
+          <div className={styles.identityCompleteness}>
+            <span className={styles.identityLabel}>{copy.fieldCompleteness}</span>
+            <span className={styles.completenessValue}>{copy.completenessValue(completeness.filled, completeness.total, completeness.percent)}</span>
+            <span className={styles.completenessBar}>
+              <span className={styles.completenessFill} style={{ width: `${completeness.percent}%` }} />
+            </span>
+          </div>
+          <span className={styles.identityMeta}>
+            {copy.fieldPortrayalCount}: <strong>{portrayalCount}</strong>
+          </span>
+          <span className={styles.identityMeta}>
+            {copy.fieldUpdatedAt}: {updatedAtText}
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }

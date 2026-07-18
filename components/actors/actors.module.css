@@ -858,3 +858,588 @@
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
 }
+
+
+/* ── 阶段 D 扩展：列表筛选栏 + 身份条 + 卡片常驻身份 + 技术提示词折叠 + 版本/主版本 + 参演作品语义化 ── */
+
+/* 列表筛选栏 */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 12px 28px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8f999b;
+}
+
+.filterButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chipBtn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: #c6cdce;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.chipBtn:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #f4f7f8;
+}
+
+.chipBtnActive {
+  background: rgba(109, 231, 223, 0.14);
+  border-color: rgba(109, 231, 223, 0.55);
+  color: #6de7df;
+}
+
+.sortSelect {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f4f7f8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.sortSelect:focus {
+  border-color: rgba(109, 231, 223, 0.55);
+}
+
+/* 卡片常驻身份条：姓名 + 状态 + 标签始终可见（375px / 768px / 1440px 三档） */
+.cardIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+  background: #0d1011;
+  color: #f4f7f8;
+}
+
+.cardStatRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: #8f999b;
+}
+
+.cardStat strong {
+  color: #6de7df;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+.cardQuickAction {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(7, 8, 8, 0.72);
+  color: #c6cdce;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+
+.card:hover .cardQuickAction,
+.card:focus-visible .cardQuickAction {
+  opacity: 1;
+}
+
+.badgeReady {
+  color: #6de7df;
+  border-color: rgba(109, 231, 223, 0.4);
+}
+
+.badgeDraft {
+  color: #f0d99a;
+  border-color: rgba(240, 217, 154, 0.4);
+}
+
+/* 详情页顶部身份条 */
+.identityStrip {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 16px;
+  padding: 18px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b0d0e;
+  align-items: center;
+}
+
+.identityAvatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f4f4f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.identityAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.identityBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.identityRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.identityName {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f4f7f8;
+  letter-spacing: 0.01em;
+}
+
+.identityLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8f999b;
+}
+
+.identityMeta {
+  font-size: 12px;
+  color: #b7c0c1;
+  font-variant-numeric: tabular-nums;
+}
+
+.identityMeta strong {
+  color: #6de7df;
+  margin-left: 2px;
+}
+
+.identityCompleteness {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.completenessValue {
+  font-size: 11px;
+  color: #b7c0c1;
+  font-variant-numeric: tabular-nums;
+}
+
+.completenessBar {
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.completenessFill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6de7df 0%, #8fd8c9 100%);
+  transition: width 200ms ease;
+}
+
+.detailActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 人物设定面板：技术 prompt 折叠 */
+.profileTagBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profileBio {
+  margin: 0;
+  color: #b7c0c1;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tagMuted {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #9aa5a6;
+}
+
+.technicalBlock {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.technicalToggle {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  color: #c6cdce;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.technicalToggle:hover {
+  color: #f4f7f8;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.technicalToggleMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.technicalToggleHint {
+  font-size: 11px;
+  color: #6de7df;
+  font-weight: 500;
+}
+
+.technicalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.technicalHint {
+  margin: 0;
+  font-size: 11px;
+  color: #8f999b;
+  line-height: 1.6;
+}
+
+/* 图组：主版本 + 历史版本 */
+.packPrimary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.packItemWide {
+  aspect-ratio: 4 / 3;
+}
+
+.primaryBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(7, 8, 8, 0.82);
+  color: #6de7df;
+  border: 1px solid rgba(109, 231, 223, 0.5);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.versionErrorBox {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  border: 1px solid rgba(255, 177, 179, 0.45);
+  background: rgba(234, 0, 29, 0.12);
+  color: #ffb1b3;
+}
+
+.historyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.historyItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px;
+}
+
+.historyItem img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.historyItem figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: #8f999b;
+}
+
+.historyMeta {
+  font-variant-numeric: tabular-nums;
+  color: #b7c0c1;
+}
+
+.historyActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.historyActions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #6de7df;
+  text-decoration: none;
+  font-size: 10px;
+}
+
+.historyActions button {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+  border-radius: 6px;
+}
+
+.historyEmpty {
+  margin: 12px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  text-align: center;
+  color: #8f999b;
+  font-size: 11px;
+}
+
+/* 参演作品卡：作品标题 / Universe / Character / 造型 / 形象版本 / 可复用 */
+.portrayalCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.portrayalMedia {
+  position: relative;
+}
+
+.portrayalReusableBadge,
+.portrayalSoloBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(7, 8, 8, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.portrayalReusableBadge {
+  color: #6de7df;
+  border-color: rgba(109, 231, 223, 0.4);
+}
+
+.portrayalSoloBadge {
+  color: #f0d99a;
+  border-color: rgba(240, 217, 154, 0.4);
+}
+
+.portrayalTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portrayalCharacter {
+  font-size: 12px;
+  color: #6de7df;
+  font-weight: 600;
+}
+
+.portrayalSpec {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+
+.portrayalSpec div {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 6px;
+  min-width: 0;
+}
+
+.portrayalSpec dt {
+  color: #8f999b;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.portrayalSpec dd {
+  margin: 0;
+  color: #c6cdce;
+  overflow-wrap: anywhere;
+}
+
+.portrayalUpdatedAt {
+  font-size: 10px;
+  color: #5c6668;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 14px 16px 10px;
+    gap: 12px;
+  }
+
+  .gridWrap {
+    padding: 16px 14px 40px;
+  }
+
+  .filterBar {
+    padding: 10px 14px 0;
+    gap: 12px;
+  }
+
+  .identityStrip {
+    grid-template-columns: 64px 1fr;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .identityAvatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .identityName {
+    font-size: 16px;
+  }
+
+  .detailTopbar {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .detailLayout {
+    grid-template-columns: 1fr;
+    padding: 16px 14px 40px;
+  }
+
+  .detailActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .completenessBar {
+    width: 80px;
+  }
+}
+
+@media (max-width: 425px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .cardName {
+    font-size: 14px;
+  }
+
+  .cardIdentity {
+    padding: 10px 10px 12px;
+  }
+
+  .filterBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filterGroup {
+    width: 100%;
+  }
+}

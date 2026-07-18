@@ -9,7 +9,16 @@ import { ActorCard } from "@/components/actors/ActorCard";
 import { CreateActorModal } from "@/components/actors/CreateActorModal";
 import { actorApiFetch } from "@/components/actors/actor-client";
 import { actorLibraryCopy } from "@/components/actors/actor-copy";
-import { filterActors, toActorCard } from "@/components/actors/actor-view-model";
+import {
+  collectActorTags,
+  filterActors,
+  filterByStatus,
+  filterByTag,
+  sortActors,
+  toActorCard,
+  type ActorSortKey,
+  type ActorStatusFilter,
+} from "@/components/actors/actor-view-model";
 import { useActorSession } from "@/components/actors/use-actor-session";
 import styles from "@/components/actors/actors.module.css";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -21,7 +30,9 @@ type ActorListPayload = {
   warning?: string;
 };
 
-// 演员库 · 模特公司模式：全屏白底特写卡片墙，悬停显示名字 + 标签。
+// 演员库 · 模特公司模式：白底正面特写卡片墙。
+// PRD §7.1：搜索 + 状态筛选 + 标签筛选 + 排序 + 三态 + 文字/头像创建入口。
+// PRD §11：未知服务端错误必须显式展示，不得伪装成空演员库。
 export default function ActorsPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -30,10 +41,14 @@ export default function ActorsPage() {
   const { session, sessionLoaded } = useActorSession();
 
   const [actors, setActors] = useState<ActorProfile[]>([]);
+  const [portrayalCounts, setPortrayalCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ActorStatusFilter>("all");
+  const [tagFilter, setTagFilter] = useState("");
+  const [sortKey, setSortKey] = useState<ActorSortKey>("updated");
   const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -42,20 +57,67 @@ export default function ActorsPage() {
     setError("");
     try {
       const result = await actorApiFetch<ActorListPayload>("/api/actors", session.access_token);
-      setActors(Array.isArray(result.actors) ? result.actors : []);
-      setWarning(result.warning || (result.storageMode && result.storageMode !== "structured" ? ui.fallbackWarning : ""));
+      const list = Array.isArray(result.actors) ? result.actors : [];
+      setActors(list);
+      setWarning(
+        result.warning || (result.storageMode && result.storageMode !== "structured" ? ui.fallbackWarning : ""),
+      );
+      // 并行补全参演数（最多 24 位，超出按需进入详情页查看；避免 N+1 风暴）
+      void enrichPortrayalCounts(list.slice(0, 24));
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : ui.errorTitle);
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.access_token, ui.errorTitle, ui.fallbackWarning]);
+
+  const enrichPortrayalCounts = useCallback(
+    async (targets: ActorProfile[]) => {
+      if (!session?.access_token || !targets.length) return;
+      const token = session.access_token;
+      const results = await Promise.all(
+        targets.map((actor) =>
+          actorApiFetch<{ actor: { portrayalCount?: number } }>(
+            `/api/actors/${encodeURIComponent(actor.id)}`,
+            token,
+          )
+            .then((response) => ({
+              id: actor.id,
+              count: typeof response.actor?.portrayalCount === "number" ? response.actor.portrayalCount : 0,
+            }))
+            .catch(() => null),
+        ),
+      );
+      setPortrayalCounts((current) => {
+        const next = { ...current };
+        for (const entry of results) {
+          if (entry) next[entry.id] = entry.count;
+        }
+        return next;
+      });
+    },
+    [session?.access_token],
+  );
 
   useEffect(() => {
     if (session?.access_token) void load();
   }, [session?.access_token, load]);
 
-  const cards = useMemo(() => filterActors(actors, query).map((actor) => toActorCard(actor)), [actors, query]);
+  const availableTags = useMemo(() => collectActorTags(actors, 12), [actors]);
+
+  const enrichedActors = useMemo(
+    () => actors.map((actor) => ({ ...actor, portrayalCount: portrayalCounts[actor.id] ?? 0 })),
+    [actors, portrayalCounts],
+  );
+
+  const cards = useMemo(() => {
+    const filtered = filterActors(enrichedActors, query);
+    const byStatus = filterByStatus(filtered, statusFilter);
+    const byTag = tagFilter ? filterByTag(byStatus, tagFilter) : byStatus;
+    const sorted = sortActors(byTag, sortKey);
+    return sorted.map((actor) => toActorCard(actor, 3));
+  }, [enrichedActors, query, statusFilter, tagFilter, sortKey]);
 
   function handleCreated(actor: ActorProfile) {
     setCreateOpen(false);
@@ -66,6 +128,8 @@ export default function ActorsPage() {
   }
 
   const authRequired = sessionLoaded && !session;
+  const showEmpty = !loading && !error && actors.length === 0;
+  const showNoResult = !loading && !error && actors.length > 0 && cards.length === 0;
 
   return (
     <main className={styles.page}>
@@ -86,7 +150,12 @@ export default function ActorsPage() {
             </span>
             <label className={styles.searchBox}>
               <Search size={14} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={ui.searchPlaceholder} aria-label={ui.searchPlaceholder} />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={ui.searchPlaceholder}
+                aria-label={ui.searchPlaceholder}
+              />
             </label>
             <button className={styles.primaryBtn} type="button" onClick={() => setCreateOpen(true)}>
               <Plus size={15} />
@@ -95,6 +164,66 @@ export default function ActorsPage() {
           </>
         ) : null}
       </header>
+
+      {!authRequired && actors.length > 0 ? (
+        <section className={styles.filterBar} aria-label={ui.filterBarAria}>
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>{ui.statusFilterLabel}</span>
+            <div className={styles.filterButtons} role="group" aria-label={ui.statusFilterLabel}>
+              {(["all", "ready", "draft"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={statusFilter === value ? `${styles.chipBtn} ${styles.chipBtnActive}` : styles.chipBtn}
+                  aria-pressed={statusFilter === value}
+                  onClick={() => setStatusFilter(value)}
+                >
+                  {value === "all" ? ui.statusAll : value === "ready" ? ui.statusReady : ui.statusDraft}
+                </button>
+              ))}
+            </div>
+          </div>
+          {availableTags.length ? (
+            <div className={styles.filterGroup}>
+              <span className={styles.filterLabel}>{ui.tagFilterLabel}</span>
+              <div className={styles.filterButtons} role="group" aria-label={ui.tagFilterLabel}>
+                <button
+                  type="button"
+                  className={!tagFilter ? `${styles.chipBtn} ${styles.chipBtnActive}` : styles.chipBtn}
+                  aria-pressed={!tagFilter}
+                  onClick={() => setTagFilter("")}
+                >
+                  {ui.tagAll}
+                </button>
+                {availableTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={tagFilter === tag ? `${styles.chipBtn} ${styles.chipBtnActive}` : styles.chipBtn}
+                    aria-pressed={tagFilter === tag}
+                    onClick={() => setTagFilter(tag === tagFilter ? "" : tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>{ui.sortLabel}</span>
+            <select
+              className={styles.sortSelect}
+              value={sortKey}
+              onChange={(event) => setSortKey(event.target.value as ActorSortKey)}
+              aria-label={ui.sortLabel}
+            >
+              <option value="updated">{ui.sortUpdated}</option>
+              <option value="name">{ui.sortName}</option>
+              <option value="portrayals">{ui.sortPortrayals}</option>
+            </select>
+          </div>
+        </section>
+      ) : null}
 
       {warning ? (
         <div className={styles.noticeBar} role="status">
@@ -131,7 +260,7 @@ export default function ActorsPage() {
             {ui.retry}
           </button>
         </section>
-      ) : !actors.length ? (
+      ) : showEmpty ? (
         <section className={styles.statePanel}>
           <Users size={22} color="#6de7df" />
           <h2>{ui.emptyTitle}</h2>
@@ -141,17 +270,28 @@ export default function ActorsPage() {
             {ui.emptyAction}
           </button>
         </section>
-      ) : !cards.length ? (
+      ) : showNoResult ? (
         <section className={styles.statePanel}>
           <ImageOff size={22} color="#8f999b" />
-          <h2>{ui.emptyTitle}</h2>
-          <p>{query}</p>
+          <h2>{ui.noResultTitle}</h2>
+          <p>{ui.noResultBody}</p>
+          <button
+            className={styles.ghostBtn}
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setStatusFilter("all");
+              setTagFilter("");
+            }}
+          >
+            {ui.tagAll}
+          </button>
         </section>
       ) : (
         <section className={styles.gridWrap}>
           <ul className={styles.grid}>
             {cards.map((card) => (
-              <ActorCard key={card.id} card={card} badges={{ team: ui.teamBadge, private: ui.privateBadge }} />
+              <ActorCard key={card.id} card={card} copy={ui} />
             ))}
           </ul>
         </section>
