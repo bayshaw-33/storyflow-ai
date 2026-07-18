@@ -134,7 +134,7 @@ test("evidence package is private, scoped and excludes sensitive data", async ()
 });
 
 test("authoritative hooks only form scoped, server-derived evidence facts", async () => {
-  const { completedGenerationEvidenceEvent, exportEvidenceEvent, snapshotEvidenceEvent } = await import("../lib/evidence/hooks.ts");
+  const { completedGenerationEvidenceEvent, exportEvidenceEvent, snapshotEvidenceEvent, storyboardSaveEvidenceEvent } = await import("../lib/evidence/hooks.ts");
   const snapshot = snapshotEvidenceEvent({
     ownerId: "owner-1", projectId: "project-1", sourceUnitId: "episode-1", snapshotId: "snapshot-1",
     revision: 5, reason: "manual", sceneCount: 3,
@@ -153,6 +153,20 @@ test("authoritative hooks only form scoped, server-derived evidence facts", asyn
   });
   assert.equal(exported.objectSha256, "a".repeat(64));
   assert.equal(exported.payload.storagePath, undefined);
+
+  const saved = storyboardSaveEvidenceEvent({
+    ownerId: "owner-1", projectId: "project-1", sourceUnitId: "episode-1", revision: 6, sceneCount: 4,
+  });
+  assert.equal(saved.subjectType, "storyboard_state");
+  assert.equal(saved.subjectVersionId, "6");
+  assert.equal(saved.idempotencyKey, "storyboard-state:project-1:episode-1:6");
+  assert.deepEqual(saved.payload, { revision: 6, sceneCount: 4 });
+});
+
+test("normal storyboard save route records the authoritative saved revision", async () => {
+  const route = await readFile(new URL("../app/api/storyboard/state/route.ts", import.meta.url), "utf8");
+  assert.match(route, /const state = await saveStoryboardState[\s\S]*storyboardSaveEvidenceEvent\(\{[\s\S]*revision: state\.revision/);
+  assert.doesNotMatch(route, /revision:\s*body\.expectedRevision/);
 });
 
 test("evidence ledger defaults on after rollout and supports an explicit kill switch", async () => {

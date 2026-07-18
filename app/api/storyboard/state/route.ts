@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/supabase/server";
+import { isEvidenceLedgerEnabled } from "@/lib/evidence/feature-flags";
+import { storyboardSaveEvidenceEvent } from "@/lib/evidence/hooks";
+import { recordEvidenceEvent } from "@/lib/evidence/ledger";
 import { RevisionConflictError, loadStoryboardState, saveStoryboardState } from "@/lib/storyboard/state-api";
 import type { SaveRequest } from "@/lib/storyboard/contracts";
 import { isSaveRequest } from "@/lib/storyboard/validators";
@@ -33,7 +36,22 @@ export async function PUT(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
     const state = await saveStoryboardState(user.id, body);
-    return NextResponse.json({ success: true, ...state });
+    let evidenceSynced = !isEvidenceLedgerEnabled();
+    if (isEvidenceLedgerEnabled()) {
+      try {
+        await recordEvidenceEvent(storyboardSaveEvidenceEvent({
+          ownerId: user.id,
+          projectId: body.projectId,
+          sourceUnitId: body.sourceUnitId,
+          revision: state.revision,
+          sceneCount: state.scenes.length,
+        }));
+        evidenceSynced = true;
+      } catch (evidenceError) {
+        console.error("[evidence] storyboard save trace failed", evidenceError);
+      }
+    }
+    return NextResponse.json({ success: true, ...state, evidenceSynced });
   } catch (error) {
     return storyboardError(error);
   }

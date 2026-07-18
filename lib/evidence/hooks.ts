@@ -1,5 +1,25 @@
 import type { EvidenceEventInput } from "./types.ts";
 
+export function storyboardSaveEvidenceEvent(input: {
+  ownerId: string;
+  projectId: string;
+  sourceUnitId: string;
+  revision: number;
+  sceneCount: number;
+}): EvidenceEventInput {
+  return {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    sourceUnitId: input.sourceUnitId,
+    eventType: "storyboard_snapshot_saved",
+    subjectType: "storyboard_state",
+    subjectId: `${input.projectId}:${input.sourceUnitId}`,
+    subjectVersionId: String(input.revision),
+    payload: { revision: input.revision, sceneCount: input.sceneCount },
+    idempotencyKey: `storyboard-state:${input.projectId}:${input.sourceUnitId}:${input.revision}`,
+  };
+}
+
 export function snapshotEvidenceEvent(input: {
   ownerId: string;
   projectId: string;

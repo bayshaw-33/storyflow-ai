@@ -12,12 +12,13 @@
 - 已向 production `StoryFlow`（`vgcafbzksizlwmylphzu`）原样执行 staging 验证过的 `evidence_ledger` 与 `harden_evidence_ledger` 两条 migration。
 - 执行后核验：4 张 Evidence 表、`evidence-artifacts` 私有 bucket、append RPC、events RLS 均存在；authenticated 只能 SELECT、不能 INSERT，只有 service_role 可执行 append RPC；Supabase Advisor 无 Evidence 相关安全告警。
 - 制作工作台现有「导出」菜单新增「下载制作证据包」：单击完成服务端生成、获取最长 300 秒私密签名 URL 并下载；未登录/草稿态禁用，空证据链会给出明确提示。
+- 普通稳定保存成功后也会用服务端返回的实际 revision 追加幂等 Evidence 事件；留痕失败不回滚用户已经保存的分镜，但会写服务端错误日志并在响应中返回 `evidenceSynced:false`。
 - Evidence 在 schema 完成生产 rollout 后默认启用，仍可用 `EVIDENCE_LEDGER_ENABLED=false|0` 作为紧急 kill switch。
 
 ### 验证
-- 专项 TDD：`tests/evidence-download.test.mjs` + `tests/evidence-ledger.test.mjs`，8/8 通过。
+- 专项 TDD：`tests/evidence-download.test.mjs` + `tests/evidence-ledger.test.mjs`，9/9 通过。
 - `pnpm exec tsc --noEmit`：通过。
-- 全量：`node --test tests/*.test.mjs`，267/267 通过。
+- 全量：`node --test tests/*.test.mjs`，268/268 通过。
 - `pnpm build`：成功，67/67 静态页面生成；Evidence 创建与下载路由均进入构建产物。
 
 ## 2026-07-18 +08 - Codex / Kimi 中断成果恢复、Universe/演员链路收口
