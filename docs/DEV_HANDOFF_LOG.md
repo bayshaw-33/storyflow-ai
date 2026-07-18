@@ -1,5 +1,40 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 18:10 +08 - Codex / Universe + Actors Stage A migration rollout
+
+### 本次目标
+- 审查 TRAE Stage A migration，在 staging 验证后对 production 执行同一套 Schema/RLS 变更。
+
+### 已完成
+- staging `kiikis-staging` 与 production `StoryFlow` 均已应用 actor metadata、Universe 卡片/主图字段、casting/portrayal owner+team RLS。
+- 将 8 条全开放 casting/portrayal 策略替换为 owner + active team role 策略；两张表 RLS 均保持启用。
+- 发现并关闭残余函数攻击面：邮箱反查仅保留 service role；团队辅助函数撤销 anon/PUBLIC 权限并强制只能检查当前 JWT 用户。
+- 将原会恢复开放 RLS、删除用户摘要/主图字段的回滚脚本改为 fail-closed owner-only 回退，保留全部新增列和用户数据。
+- 两环境 casting/portrayal 均为 0 行；回填没有改写用户创作数据，孤儿 owner、跨 owner link、重复 project link 均为 0。
+
+### 修改文件
+- `supabase/migrations/20260718100702_harden_team_authorization_helpers.sql`
+- `supabase/migrations/20260720010000_casting_portrayal_owner_rls.sql`
+- `supabase/migrations/rollback/20260720_rollback.sql`
+- `tests/universe-migrations.test.mjs`
+- `docs/reviews/2026-07-18-universe-actors-stage-a-migration-rollout.md`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- staging：4 条迁移全部应用；9 个字段、8 个索引、8 条受限 RLS、函数授权与审计通过。
+- production：同套 4 条 SQL 全部应用；开放 casting/portrayal policy=0，函数 self-guard 与权限通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `node --test tests/*.test.mjs`：296/296 通过。
+- `pnpm run build`：通过，67/67 静态页面生成。
+
+### Git / 部署
+- migration：完成，production 记录版本与本地版本映射见 rollout 报告。
+- commit / push：见本次提交。
+
+### 未完成 / 风险
+- Supabase Advisor 仍会通用提示两个 authenticated `SECURITY DEFINER` 团队函数；这是 RLS 调用所需，函数已强制 `p_user_id = auth.uid()`，无法查询其他用户。
+- 全库仍有其他历史表的开放 RLS Advisor 告警，不属于本次 casting/portrayal migration 范围，未顺带改写。
+
 ## 2026-07-18 +08 - Codex / Universe 与演员库优化升级 PRD
 
 ### 本次目标

@@ -108,6 +108,13 @@ test("A.2 casting_portrayal: owner/team 索引", () => {
   assert.match(sql, /idx_portrayals_actor_owner/);
 });
 
+test("A.2 casting_portrayal: SECURITY DEFINER 团队函数不向 anon/PUBLIC 开放", () => {
+  const sql = readSql("20260720010000_casting_portrayal_owner_rls.sql");
+  assert.match(sql, /REVOKE EXECUTE ON FUNCTION public\.is_team_member\(uuid, uuid, text\[\]\) FROM anon, PUBLIC/);
+  assert.match(sql, /REVOKE EXECUTE ON FUNCTION public\.is_team_owner\(uuid, uuid\) FROM anon, PUBLIC/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.is_team_member\(uuid, uuid, text\[\]\) TO authenticated, service_role/);
+});
+
 // ============================================================
 // A.3 rollback 脚本
 // ============================================================
@@ -120,18 +127,17 @@ test("A.3 rollback: 不删除已回填的 owner_id 数据", () => {
   assert.match(sql, /owner_id.*保留|保留.*owner_id|不删除.*数据/);
 });
 
-test("A.3 rollback: 恢复开放策略仅作紧急回滚", () => {
+test("A.3 rollback: 安全降级为 owner-only，不恢复开放策略", () => {
   const sql = readSql(join("rollback", "20260720_rollback.sql"));
-  assert.match(sql, /USING \(true\)/);
-  assert.match(sql, /紧急回滚|不作为长期方案/);
+  assert.doesNotMatch(sql, /USING \(true\)|WITH CHECK \(true\)/);
+  assert.match(sql, /owner-only/);
+  assert.match(sql, /owner_id = auth\.uid\(\)/);
 });
 
-test("A.3 rollback: 回滚 universe 卡片字段（drop columns）", () => {
+test("A.3 rollback: 保留 universe 卡片字段，避免丢失用户数据", () => {
   const sql = readSql(join("rollback", "20260720_rollback.sql"));
-  assert.match(sql, /DROP COLUMN IF EXISTS card_summary/);
-  assert.match(sql, /DROP COLUMN IF EXISTS cover_asset_version_id/);
-  assert.match(sql, /DROP COLUMN IF EXISTS archived_at/);
-  assert.match(sql, /DROP COLUMN IF EXISTS primary_asset_version_id/);
+  assert.doesNotMatch(sql, /DROP COLUMN IF EXISTS (card_summary|cover_asset_version_id|archived_at|primary_asset_version_id)/);
+  assert.match(sql, /删除字段会丢失用户/);
 });
 
 // ============================================================
@@ -176,6 +182,14 @@ test("§8.1 actor metadata migration 存在且幂等", () => {
   const sql = readSql("20260718060000_actor_metadata_and_email_revoke.sql");
   assert.match(sql, /ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb/);
   assert.match(sql, /REVOKE EXECUTE ON FUNCTION public\.get_user_id_by_email\(text\) FROM anon, PUBLIC/);
+});
+
+test("安全补丁：邮箱反查只保留 service role，团队函数只能检查当前用户", () => {
+  const sql = readSql("20260718100702_harden_team_authorization_helpers.sql");
+  assert.match(sql, /REVOKE EXECUTE ON FUNCTION public\.get_user_id_by_email\(text\) FROM authenticated/);
+  assert.match(sql, /SELECT p_user_id = auth\.uid\(\)/);
+  assert.match(sql, /SET search_path = pg_catalog, public/);
+  assert.match(sql, /REVOKE EXECUTE ON FUNCTION public\.is_team_member\(uuid, uuid, text\[\]\) FROM anon, PUBLIC/);
 });
 
 // ============================================================

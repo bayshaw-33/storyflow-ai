@@ -9,6 +9,13 @@
 
 BEGIN;
 
+-- RLS 会以 authenticated 身份调用团队权限辅助函数；这些 SECURITY DEFINER
+-- 函数不应继续暴露给 anon / PUBLIC，避免匿名枚举团队成员关系。
+REVOKE EXECUTE ON FUNCTION public.is_team_member(uuid, uuid, text[]) FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.is_team_owner(uuid, uuid) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_team_member(uuid, uuid, text[]) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.is_team_owner(uuid, uuid) TO authenticated, service_role;
+
 -- ------------------------------------------------------------
 -- 1. 加列
 -- ------------------------------------------------------------
