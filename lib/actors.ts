@@ -1,6 +1,6 @@
 export type TeamRole = "owner" | "admin" | "editor" | "viewer";
 export type TeamMemberStatus = "active" | "invited" | "removed";
-export type ActorVisibility = "private" | "team";
+export type ActorVisibility = "private" | "team" | "platform";
 export type ActorStatus = "draft" | "ready" | "archived";
 export type AppearanceVariantStatus = "draft" | "approved" | "archived";
 
@@ -144,7 +144,7 @@ export const ACTOR_REFERENCE_SHEET_PROMPT_TEMPLATE = `为图1生成专业完整�
 export function normalizeActorInput(input: ActorProfileInput) {
   return {
     team_id: input.team_id || null,
-    visibility: input.visibility === "team" ? "team" : "private" as ActorVisibility,
+    visibility: input.visibility === "team" ? "team" : input.visibility === "platform" ? "platform" : "private" as ActorVisibility,
     name: cleanText(input.name),
     bio: cleanText(input.bio),
     age_range: cleanText(input.age_range),
@@ -214,7 +214,7 @@ export function mergeActorUpdate(existing: Partial<ActorProfile>, input: ActorPr
 
   return {
     team_id: normalized.team_id || existing.team_id || null,
-    visibility: input.visibility ? normalized.visibility : (existing.visibility === "team" ? "team" : "private"),
+    visibility: input.visibility ? normalized.visibility : (existing.visibility === "team" ? "team" : existing.visibility === "platform" ? "platform" : "private"),
     name: keepText(normalized.name, existing.name),
     bio: keepText(normalized.bio, existing.bio),
     age_range: keepText(normalized.age_range, existing.age_range),

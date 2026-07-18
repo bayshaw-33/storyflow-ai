@@ -130,14 +130,16 @@ async function listStructuredActorsForUser(userId: string) {
   const userIdEnc = encodeURIComponent(userId);
 
   // 修复 PGRST100/PGRST106：or()/and() 内部必须用 col.op.val 点号语法（不能用 col=op.val）。
-  // team 表达式放首项，规避 owner_id 的 o 前缀被 or 词法器误吞；
-  // 无团队时退化为顶层 owner 过滤（顶层 col=op.val 仍合法）。
+  // PGRST100 词法 bug：or() 首项不能是 owner_id 的 o 前缀，所以 platform 或 team 表达式放首项。
+  // platform 分支始终存在（任何 authenticated 用户都能看到平台共享演员，不依赖 team_id）。
+  // 无团队时 team 表达式为空，但仍需 platform 分支 + owner 分支。
   const ownerInOr = `owner_id.eq.${userIdEnc}`;
-  const ownerTop = `owner_id=eq.${userIdEnc}`;
   const teamExpr = teamIds.length
     ? `and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`
     : "";
-  const accessQuery = teamExpr ? `or=(${teamExpr},${ownerInOr})` : ownerTop;
+  const accessQuery = teamExpr
+    ? `or=(visibility.eq.platform,${teamExpr},${ownerInOr})`
+    : `or=(visibility.eq.platform,${ownerInOr})`;
 
   const actors = await serviceFetch<ActorProfile[]>(
     `/rest/v1/storyflow_actor_profiles?${accessQuery}&status=neq.archived&select=*&order=updated_at.desc`,
@@ -461,6 +463,8 @@ async function listMemberships(userId: string) {
 
 async function assertCanReadActor(userId: string, actor: ActorProfile) {
   if (actor.owner_id === userId) return;
+  // PRD §权限矩阵：platform 可见性对所有已登录用户可读（用于"使用此演员"流程）
+  if (actor.visibility === "platform") return;
   if (actor.visibility === "team" && actor.team_id) {
     await assertTeamRole(userId, actor.team_id, new Set<TeamRole>(["owner", "admin", "editor", "viewer"]));
     return;

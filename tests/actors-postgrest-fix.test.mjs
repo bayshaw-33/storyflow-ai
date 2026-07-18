@@ -21,14 +21,16 @@ import { readFile } from "node:fs/promises";
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 // === 1. actors.ts: or() 内部使用 owner_id.eq. 点号语法 ===
+// Commit 4 更新：无团队路径不再用 ownerTop，改为 or=(visibility.eq.platform,owner_id.eq.X)
+// 原因：platform 共享演员对所有 authenticated 可见，无团队用户也需看到平台共享演员。
 test("actors.ts: listStructuredActorsForUser or() 内部使用 owner_id.eq. 点号语法", async () => {
   const src = await read("../lib/supabase/actors.ts");
   // 必须有 ownerInOr = `owner_id.eq.${userIdEnc}`（or() 内部用）
   assert.match(src, /ownerInOr\s*=\s*`owner_id\.eq\.\$\{userIdEnc\}`/, "必须有 ownerInOr 点号语法变量");
-  // 必须有 ownerTop = `owner_id=eq.${userIdEnc}`（顶层用，合法）
-  assert.match(src, /ownerTop\s*=\s*`owner_id=eq\.\$\{userIdEnc\}`/, "必须有 ownerTop 顶层语法变量");
-  // accessQuery 必须在 or() 中把 team 表达式放首项
-  assert.match(src, /accessQuery\s*=\s*teamExpr\s*\?\s*`or=\(\$\{teamExpr\},\$\{ownerInOr\}\)`\s*:\s*ownerTop/, "or() 中 team 表达式放首项");
+  // accessQuery 有团队路径：or=(visibility.eq.platform,teamExpr,ownerInOr)
+  assert.match(src, /accessQuery\s*=\s*teamExpr\s*\?\s*`or=\(visibility\.eq\.platform,\$\{teamExpr\},\$\{ownerInOr\}\)`/, "有团队路径：or=(platform,team,owner)");
+  // accessQuery 无团队路径：or=(visibility.eq.platform,ownerInOr)
+  assert.match(src, /:\s*`or=\(visibility\.eq\.platform,\$\{ownerInOr\}\)`/, "无团队路径：or=(platform,owner)");
   // 禁止 or=(...owner_id=eq.X...)（旧 bug 语法）
   assert.doesNotMatch(src, /or=\([^)]*owner_id=eq\./, "or() 内部不得出现 owner_id=eq. 旧语法");
 });
@@ -163,12 +165,14 @@ test("apiError: 保留 PGRST204/42703/42P01/PGRST205 真实 schema 错误码", a
 });
 
 // === 8. 三种用户场景的代码路径存在性（actors.ts）===
+// Commit 4 更新：无团队路径不再退化为 ownerTop，而是 or=(visibility.eq.platform,owner_id.eq.X)
+// 原因：platform 共享演员对所有 authenticated 用户可见，无团队用户也需看到平台共享演员。
 test("actors.ts: 三种用户场景代码路径覆盖：无团队 / 单团队 / 多团队", async () => {
   const src = await read("../lib/supabase/actors.ts");
-  // 有团队路径：or() 拼接
-  assert.match(src, /teamExpr\s*\?\s*`or=\(/, "有团队路径：or() 拼接");
-  // 无团队路径：退化为 ownerTop
-  assert.match(src, /:\s*ownerTop/, "无团队路径：退化为 ownerTop 顶层过滤");
+  // 有团队路径：or() 拼接（platform + team + owner）
+  assert.match(src, /teamExpr\s*\?\s*`or=\(visibility\.eq\.platform/, "有团队路径：or() 含 platform 首项");
+  // 无团队路径：or=(visibility.eq.platform,owner_id.eq.X)
+  assert.match(src, /:\s*`or=\(visibility\.eq\.platform,\$\{ownerInOr\}\)`/, "无团队路径：or=(platform,owner)");
   // 多团队路径：join(",") 支持 N 个 team_id
   assert.match(src, /teamIds\.map\(encodeURIComponent\)\.join\(","\)/, "多团队路径：join(,) 支持多个 team_id");
   // filter(Boolean) 确保 teamId 为空字符串/null 时被过滤

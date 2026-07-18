@@ -238,8 +238,9 @@ test("app/actors/[actorId]/page.tsx: 非创建者不渲染编辑按钮", async (
 });
 
 // === 18. lib/actors.ts: mergeActorUpdate 的 visibility 总是采用 input ===
+// Commit 4 更新：existing.visibility 继承分支加入 platform（private/team/platform 三态）
 test("lib/actors.ts: mergeActorUpdate visibility 总是采用 input（用户可主动改共享范围）", async () => {
   const src = await read("../lib/actors.ts");
-  // visibility: input.visibility ? normalized.visibility : (existing.visibility === "team" ? "team" : "private")
-  assert.match(src, /visibility: input\.visibility \? normalized\.visibility : \(existing\.visibility === "team" \? "team" : "private"\)/, "visibility 必须按 input 优先");
+  // visibility: input.visibility ? normalized.visibility : (existing.visibility === "team" ? "team" : existing.visibility === "platform" ? "platform" : "private")
+  assert.match(src, /visibility: input\.visibility \? normalized\.visibility : \(existing\.visibility === "team" \? "team" : existing\.visibility === "platform" \? "platform" : "private"\)/, "visibility 必须按 input 优先，existing 继承含 platform");
 });

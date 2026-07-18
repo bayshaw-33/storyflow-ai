@@ -65,7 +65,7 @@ export function EditActorModal({ open, token, copy, actor, onClose, onUpdated }:
     setBio(actor.bio || "");
     setBasePrompt(actor.base_prompt || "");
     setNegativePrompt(actor.negative_prompt || "");
-    setVisibility(actor.visibility === "team" ? "team" : "private");
+    setVisibility(actor.visibility === "team" ? "team" : actor.visibility === "platform" ? "platform" : "private");
     setTeamId(actor.team_id || "");
     setAvatarPreviewUrl(actor.avatar_url || "");
     setAvatarAssetId("");
@@ -250,6 +250,7 @@ export function EditActorModal({ open, token, copy, actor, onClose, onUpdated }:
               <select value={visibility} onChange={(event) => setVisibility(event.target.value as ActorVisibility)} disabled={busy}>
                 <option value="private">{copy.visibilityPrivate}</option>
                 <option value="team">{copy.visibilityTeam}</option>
+                <option value="platform">{copy.visibilityPlatform}</option>
               </select>
             </label>
 
