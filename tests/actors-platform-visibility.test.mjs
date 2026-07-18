@@ -144,7 +144,7 @@ test("S3: assertCanEditActorBasicProfile 仍仅创建者可写（platform 共享
 
 test("E1: EditActorModal visibility 下拉含 platform 选项", async () => {
   const src = await read("../components/actors/EditActorModal.tsx");
-  assert.match(src, /<option value="platform">\{copy\.visibilityPlatform\}<\/option>/);
+  assert.match(src, /<option value="platform"[^>]*>[\s\S]*?\{copy\.visibilityPlatform\}[\s\S]*?<\/option>/);
 });
 
 test("E2: EditActorModal 预填字段时正确处理 platform", async () => {

@@ -1,7 +1,9 @@
 import {
+  assertCanSetPlatformVisibility,
   buildActorBasePrompt,
   buildActorNegativePrompt,
   buildReferenceSheetPrompt,
+  computeRightsState,
   mergeActorUpdate,
   normalizeActorInput,
   type ActorProfile,
@@ -9,6 +11,7 @@ import {
   type CharacterAppearanceVariant,
   type Team,
   type TeamMember,
+  type ActorRightsState,
   type TeamRole,
 } from "@/lib/actors";
 import { hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
@@ -173,6 +176,11 @@ export async function createActorForUser(userId: string, input: ActorProfileInpu
       if (!normalized.team_id) throw new Error("TEAM_REQUIRED");
       await assertTeamRole(userId, normalized.team_id, TEAM_WRITE_ROLES);
     }
+    // PRD §肖像权安全边界：platform 共享需校验权利状态
+    if (normalized.visibility === "platform") {
+      const rightsState = computeRightsState(input);
+      assertCanSetPlatformVisibility(normalized.visibility, rightsState);
+    }
   } catch (error) {
     if (isActorSchemaUnavailable(error)) return createFallbackActor(userId, input);
     throw error;
@@ -248,6 +256,12 @@ export async function updateActorForUser(userId: string, actorId: string, input:
   if (normalized.visibility === "team") {
     if (!normalized.team_id) throw new Error("TEAM_REQUIRED");
     await assertTeamRole(userId, normalized.team_id, TEAM_WRITE_ROLES);
+  }
+  // PRD §肖像权安全边界：platform 共享需校验权利状态
+  if (normalized.visibility === "platform") {
+    const existingRightsState = (actor.metadata?.rights_state as string | undefined) || "ai_generated";
+    const rightsState = input.origin_type ? computeRightsState(input) : existingRightsState as ActorRightsState;
+    assertCanSetPlatformVisibility(normalized.visibility, rightsState);
   }
 
   const patch: Partial<ActorProfile> = {

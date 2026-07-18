@@ -2,7 +2,7 @@
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { ImagePlus, LoaderCircle, X } from "lucide-react";
-import type { ActorProfile, ActorVisibility } from "@/lib/actors";
+import type { ActorOriginType, ActorProfile, ActorVisibility } from "@/lib/actors";
 import { actorApiFetch } from "./actor-client";
 import type { ActorLibraryCopy } from "./actor-copy";
 import { normalizeTagList } from "./actor-view-model";
@@ -44,6 +44,8 @@ export function EditActorModal({ open, token, copy, actor, onClose, onUpdated }:
   const [negativePrompt, setNegativePrompt] = useState("");
   const [visibility, setVisibility] = useState<ActorVisibility>("private");
   const [teamId, setTeamId] = useState<string>("");
+  const [originType, setOriginType] = useState<ActorOriginType>("ai_generated");
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
   const [avatarAssetId, setAvatarAssetId] = useState("");
   const [avatarPhase, setAvatarPhase] = useState<AvatarPhase>("idle");
@@ -67,6 +69,9 @@ export function EditActorModal({ open, token, copy, actor, onClose, onUpdated }:
     setNegativePrompt(actor.negative_prompt || "");
     setVisibility(actor.visibility === "team" ? "team" : actor.visibility === "platform" ? "platform" : "private");
     setTeamId(actor.team_id || "");
+    const existingRightsState = (actor.metadata?.rights_state as string | undefined) || "ai_generated";
+    setOriginType(existingRightsState === "ai_generated" ? "ai_generated" : "real_person");
+    setRightsConfirmed(existingRightsState === "portrait_confirmed");
     setAvatarPreviewUrl(actor.avatar_url || "");
     setAvatarAssetId("");
     setAvatarPhase("idle");
@@ -156,6 +161,15 @@ export function EditActorModal({ open, token, copy, actor, onClose, onUpdated }:
       };
       if (visibility === "team" && teamId) body.team_id = teamId;
       if (avatarAssetId) body.avatar_asset_id = avatarAssetId;
+      // PRD §肖像权安全边界：真人照片未确认肖像授权时禁止 platform 共享
+      if (visibility === "platform" && originType === "real_person" && !rightsConfirmed) {
+        setError(copy.portraitRightsRequired);
+        setBusy(false);
+        return;
+      }
+      body.origin_type = originType;
+      body.rights_confirmed = rightsConfirmed;
+      body.visibility = visibility;
 
       const result = await actorApiFetch<{ actor: ActorProfile }>("/api/actors", token, {
         method: "PATCH",
@@ -246,11 +260,33 @@ export function EditActorModal({ open, token, copy, actor, onClose, onUpdated }:
             </label>
 
             <label className={`${styles.field} ${styles.fieldWide}`}>
+              {copy.originTypeLabel}
+              <select value={originType} onChange={(event) => setOriginType(event.target.value as ActorOriginType)} disabled={busy}>
+                <option value="ai_generated">{copy.originTypeAi}</option>
+                <option value="real_person">{copy.originTypeReal}</option>
+              </select>
+            </label>
+
+            {originType === "real_person" ? (
+              <label className={`${styles.field} ${styles.fieldWide}`}>
+                <input
+                  type="checkbox"
+                  checked={rightsConfirmed}
+                  onChange={(event) => setRightsConfirmed(event.target.checked)}
+                  disabled={busy}
+                />
+                {copy.portraitRightsConfirm}
+              </label>
+            ) : null}
+
+            <label className={`${styles.field} ${styles.fieldWide}`}>
               {copy.visibilityLabel}
               <select value={visibility} onChange={(event) => setVisibility(event.target.value as ActorVisibility)} disabled={busy}>
                 <option value="private">{copy.visibilityPrivate}</option>
                 <option value="team">{copy.visibilityTeam}</option>
-                <option value="platform">{copy.visibilityPlatform}</option>
+                <option value="platform" disabled={originType === "real_person" && !rightsConfirmed}>
+                  {copy.visibilityPlatform}
+                </option>
               </select>
             </label>
 

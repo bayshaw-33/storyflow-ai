@@ -2,7 +2,7 @@
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { ImagePlus, LoaderCircle, X } from "lucide-react";
-import type { ActorProfile } from "@/lib/actors";
+import type { ActorOriginType, ActorProfile, ActorVisibility } from "@/lib/actors";
 import { actorApiFetch } from "./actor-client";
 import type { ActorLibraryCopy } from "./actor-copy";
 import { normalizeTagList } from "./actor-view-model";
@@ -37,6 +37,9 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
   const [avatarAssetId, setAvatarAssetId] = useState("");
   const [avatarPhase, setAvatarPhase] = useState<AvatarPhase>("idle");
+  const [originType, setOriginType] = useState<ActorOriginType>("ai_generated");
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
+  const [visibility, setVisibility] = useState<ActorVisibility>("private");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -53,6 +56,9 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
     setAvatarPreviewUrl("");
     setAvatarAssetId("");
     setAvatarPhase("idle");
+    setOriginType("ai_generated");
+    setRightsConfirmed(false);
+    setVisibility("private");
     setError("");
     setTab("text");
   }
@@ -119,6 +125,11 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
       setError(copy.avatarInProgress);
       return;
     }
+    // PRD §肖像权安全边界：真人照片未确认肖像授权时禁止 platform 共享
+    if (visibility === "platform" && originType === "real_person" && !rightsConfirmed) {
+      setError(copy.portraitRightsRequired);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -133,6 +144,9 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
           playable_roles: normalizeTagList(roles),
           bio: bio.trim(),
           avatar_asset_id: avatarAssetId || undefined,
+          origin_type: originType,
+          rights_confirmed: rightsConfirmed,
+          visibility,
         }),
       });
       reset();
@@ -220,6 +234,43 @@ export function CreateActorModal({ open, token, copy, onClose, onCreated }: Prop
                 </label>
               </>
             ) : null}
+          </div>
+
+          <div className={styles.formGrid}>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              {copy.originTypeLabel}
+              <select value={originType} onChange={(event) => setOriginType(event.target.value as ActorOriginType)} disabled={busy}>
+                <option value="ai_generated">{copy.originTypeAi}</option>
+                <option value="real_person">{copy.originTypeReal}</option>
+              </select>
+            </label>
+
+            {originType === "real_person" ? (
+              <label className={`${styles.field} ${styles.fieldWide}`}>
+                <input
+                  type="checkbox"
+                  checked={rightsConfirmed}
+                  onChange={(event) => setRightsConfirmed(event.target.checked)}
+                  disabled={busy}
+                />
+                {copy.portraitRightsConfirm}
+              </label>
+            ) : null}
+
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              {copy.visibilityLabel}
+              <select
+                value={visibility}
+                onChange={(event) => setVisibility(event.target.value as ActorVisibility)}
+                disabled={busy}
+              >
+                <option value="private">{copy.visibilityPrivate}</option>
+                <option value="team">{copy.visibilityTeam}</option>
+                <option value="platform" disabled={originType === "real_person" && !rightsConfirmed}>
+                  {copy.visibilityPlatform}
+                </option>
+              </select>
+            </label>
           </div>
 
           {error ? <div className={styles.modalError}>{error}</div> : null}

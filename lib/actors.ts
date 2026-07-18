@@ -1,6 +1,17 @@
 export type TeamRole = "owner" | "admin" | "editor" | "viewer";
 export type TeamMemberStatus = "active" | "invited" | "removed";
 export type ActorVisibility = "private" | "team" | "platform";
+
+// PRD §肖像权安全边界
+// origin_type: 演员来源（AI 生成 / 真人照片）
+// rights_state: 权利状态（计算字段，存入 metadata.rights_state）
+//   - ai_generated: AI 生成演员，默认允许平台共享
+//   - portrait_confirmed: 真人照片，用户已明确确认肖像授权，可平台共享
+//   - portrait_pending: 真人照片，未确认肖像授权，仅允许 private/team
+export type ActorOriginType = "ai_generated" | "real_person";
+export type ActorRightsState = "ai_generated" | "portrait_confirmed" | "portrait_pending";
+
+export const PLATFORM_ALLOWED_RIGHTS: ReadonlySet<ActorRightsState> = new Set(["ai_generated", "portrait_confirmed"]);
 export type ActorStatus = "draft" | "ready" | "archived";
 export type AppearanceVariantStatus = "draft" | "approved" | "archived";
 
@@ -78,6 +89,10 @@ export type ActorProfileInput = {
    * 数据库禁止保存 data:image/... 开头的 Base64 字符串。
    */
   uploaded_avatar_data_url?: never;
+  // PRD §肖像权安全边界
+  origin_type?: ActorOriginType;
+  // 真人照片时，用户是否明确确认拥有肖像使用及再授权权利
+  rights_confirmed?: boolean;
   metadata?: {
     identity_passport?: {
       identity_core_prompt?: string;
@@ -141,6 +156,31 @@ export const ACTOR_REFERENCE_SHEET_PROMPT_TEMPLATE = `为图1生成专业完整�
 - 参考表排版整齐
 - 不生成多个人物`;
 
+/**
+ * 计算演员肖像权状态（PRD §肖像权安全边界）。
+ * - origin_type="ai_generated" → rights_state="ai_generated"（默认允许平台共享）
+ * - origin_type="real_person" + rights_confirmed=true → rights_state="portrait_confirmed"
+ * - origin_type="real_person" + rights_confirmed=false/undefined → rights_state="portrait_pending"
+ * - 默认（未指定 origin_type）→ rights_state="ai_generated"（向后兼容）
+ */
+export function computeRightsState(input: Pick<ActorProfileInput, "origin_type" | "rights_confirmed">): ActorRightsState {
+  if (input.origin_type === "real_person") {
+    return input.rights_confirmed === true ? "portrait_confirmed" : "portrait_pending";
+  }
+  // ai_generated 或未指定
+  return "ai_generated";
+}
+
+/**
+ * 校验 visibility=platform 时权利状态是否允许（PRD §肖像权安全边界）。
+ * 真人照片未确认肖像授权时，禁止设为 platform 共享。
+ */
+export function assertCanSetPlatformVisibility(visibility: ActorVisibility, rightsState: ActorRightsState): void {
+  if (visibility === "platform" && !PLATFORM_ALLOWED_RIGHTS.has(rightsState)) {
+    throw new Error("ACTOR_PORTRAIT_RIGHTS_REQUIRED");
+  }
+}
+
 export function normalizeActorInput(input: ActorProfileInput) {
   return {
     team_id: input.team_id || null,
@@ -157,7 +197,7 @@ export function normalizeActorInput(input: ActorProfileInput) {
     playable_roles: normalizeTags(input.playable_roles),
     base_prompt: cleanText(input.base_prompt),
     negative_prompt: cleanText(input.negative_prompt),
-    metadata: input.metadata ?? undefined,
+    metadata: mergeRightsStateIntoMetadata(input.metadata, computeRightsState(input)),
   };
 }
 
@@ -211,6 +251,17 @@ export function mergeActorUpdate(existing: Partial<ActorProfile>, input: ActorPr
 
   // metadata 深合并：existing.metadata + input.metadata + identity_passport 二级合并
   const mergedMetadata = mergeActorMetadata(existing.metadata, input.metadata);
+  // rights_state 处理：
+  // - input 显式传 origin_type → 重新计算 rights_state（用户主动改来源或确认）
+  // - input 未传 origin_type → 保留 existing.metadata.rights_state（避免误覆盖真人授权状态）
+  if (input.origin_type) {
+    const newRightsState = computeRightsState(input);
+    if (mergedMetadata) {
+      mergedMetadata.rights_state = newRightsState;
+    }
+  } else if (mergedMetadata && existing.metadata?.rights_state) {
+    mergedMetadata.rights_state = existing.metadata.rights_state;
+  }
 
   return {
     team_id: normalized.team_id || existing.team_id || null,
@@ -315,7 +366,7 @@ export function buildReferenceSheetPrompt(params: {
     .replace("{costumeDirection}", params.costumeDirection || "Neutral modern costume, no story-specific canon override.");
 }
 
-export function createEmptyActorInput(): Required<Omit<ActorProfileInput, "avatar_asset_id" | "uploaded_avatar_data_url">> {
+export function createEmptyActorInput(): Required<Omit<ActorProfileInput, "avatar_asset_id" | "uploaded_avatar_data_url" | "origin_type" | "rights_confirmed">> {
   return {
     team_id: null,
     visibility: "private",
@@ -343,6 +394,23 @@ export function createEmptyActorInput(): Required<Omit<ActorProfileInput, "avata
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * 把 rights_state 合并到 metadata（不覆盖用户传入的其他 metadata 字段）。
+ * rights_state 由 computeRightsState 计算，强制写入 metadata。
+ */
+function mergeRightsStateIntoMetadata(
+  metadata: ActorProfileInput["metadata"],
+  rightsState: ActorRightsState,
+): ActorProfile["metadata"] | undefined {
+  const base = (metadata || {}) as Record<string, unknown>;
+  const existingPassport = base.identity_passport as Record<string, string | undefined> | undefined;
+  return {
+    ...base,
+    rights_state: rightsState,
+    ...(existingPassport ? { identity_passport: existingPassport } : {}),
+  } as ActorProfile["metadata"];
 }
 
 export function normalizeTags(value: unknown): string[] {

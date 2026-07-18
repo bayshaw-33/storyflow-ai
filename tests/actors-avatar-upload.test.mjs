@@ -151,7 +151,7 @@ test("lib/supabase/actors.ts: updateActorForUser 用 avatar_asset_id 校验+绑�
   // 找到 updateActorForUser 函数体
   const idx = src.indexOf("export async function updateActorForUser");
   assert.ok(idx >= 0, "updateActorForUser must exist");
-  const slice = src.slice(idx, idx + 2000);
+  const slice = src.slice(idx, idx + 3000);
   assert.match(slice, /validateAvatarAssetBelongsToUser\(userId,\s*input\.avatar_asset_id\)/, "updateActorForUser 必须校验 avatar_asset_id 归属");
   assert.match(slice, /patch\.avatar_asset_id\s*=\s*input\.avatar_asset_id/, "patch.avatar_asset_id 必须赋值");
 });
@@ -261,8 +261,8 @@ test("lib/supabase/actors.ts: createActorForUser 在 avatar 校验失败时抛�
 });
 
 // === 16. 旧 Base64 字段在 ActorProfileInput 标记为 never，编译期拒绝 ===
-test("lib/actors.ts: createEmptyActorInput 在 Omit 中排除 avatar_asset_id 和 uploaded_avatar_data_url", async () => {
+test("lib/actors.ts: createEmptyActorInput 在 Omit 中排除 avatar_asset_id、uploaded_avatar_data_url、origin_type、rights_confirmed", async () => {
   const src = await read("../lib/actors.ts");
   // createEmptyActorInput 的返回类型 Omit 必须排除两个字段
-  assert.match(src, /Required<Omit<ActorProfileInput,\s*"avatar_asset_id"\s*\|\s*"uploaded_avatar_data_url">>/, "Omit 必须排除 avatar_asset_id 和 uploaded_avatar_data_url");
+  assert.match(src, /Required<Omit<ActorProfileInput,\s*"avatar_asset_id"\s*\|\s*"uploaded_avatar_data_url"\s*\|\s*"origin_type"\s*\|\s*"rights_confirmed">>/, "Omit 必须排除 avatar_asset_id、uploaded_avatar_data_url、origin_type、rights_confirmed");
 });
