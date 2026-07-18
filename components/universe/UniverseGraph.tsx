@@ -6,9 +6,25 @@ import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 import { devStore, DEV } from "@/lib/dev/trace";
 import type { GraphNode, UniverseGraph as UniverseGraphData } from "@/lib/universe/graph";
 
+/**
+ * PRD §5.4 关系图：作为第二种浏览方式，不独占首屏。
+ * 节点显示 Universe 名称、作品数和角色数。
+ * 点击进详情；详情返回时恢复视图和滚动位置（由列表页通过 sessionStorage 处理）。
+ * 无数据显示明确空状态。
+ */
+
+export type UniverseGraphSummary = {
+  workCount?: number;
+  characterCount?: number;
+};
+
 type UniverseGraphProps = {
   graph: UniverseGraphData;
   height?: number;
+  /** universeId -> 摘要；用于在 world 节点上叠加作品数/角色数 */
+  summaries?: Record<string, UniverseGraphSummary>;
+  /** 空状态文案 */
+  emptyLabel?: string;
 };
 
 const MAX_VISIBLE_NODES = 48;
@@ -23,9 +39,17 @@ function isNodeInViewport(node: GraphNode): boolean {
   );
 }
 
+/** 从 node.id（形如 "world-<universeId>"）解析出 universeId；非 world 节点返回 null。 */
+function universeIdFromNode(node: GraphNode): string | null {
+  if (node.type !== "world") return null;
+  const prefix = "world-";
+  return node.id.startsWith(prefix) ? node.id.slice(prefix.length) : null;
+}
+
 type UniverseNodeButtonProps = {
   node: GraphNode;
   active: boolean;
+  summary?: UniverseGraphSummary;
   onActivate: (node: GraphNode) => void;
   onHover: (id: string) => void;
 };
@@ -33,11 +57,16 @@ type UniverseNodeButtonProps = {
 const UniverseNodeButton = memo(function UniverseNodeButton({
   node,
   active,
+  summary,
   onActivate,
   onHover,
 }: UniverseNodeButtonProps) {
   const handleClick = useCallback(() => onActivate(node), [node, onActivate]);
   const handleMouseEnter = useCallback(() => onHover(node.id), [node.id, onHover]);
+
+  const meta = summary && (summary.workCount != null || summary.characterCount != null)
+    ? `${summary.workCount ?? 0}w · ${summary.characterCount ?? 0}c`
+    : null;
 
   return (
     <button
@@ -50,11 +79,12 @@ const UniverseNodeButton = memo(function UniverseNodeButton({
     >
       <DesignAssetImage token={node.asset} alt="" aria-hidden="true" draggable={false} />
       {node.label ? <span className="universe-node-label">{node.label}</span> : null}
+      {meta ? <span className="universe-node-meta" aria-hidden="true">{meta}</span> : null}
     </button>
   );
 });
 
-export const UniverseGraph = memo(function UniverseGraph({ graph, height }: UniverseGraphProps) {
+export const UniverseGraph = memo(function UniverseGraph({ graph, height, summaries, emptyLabel }: UniverseGraphProps) {
   const router = useRouter();
   const [activeId, setActiveId] = useState<string | null>(null);
   const hoverFrame = useRef<number | null>(null);
@@ -79,6 +109,9 @@ export const UniverseGraph = memo(function UniverseGraph({ graph, height }: Univ
       ),
     [graph.edges, visibleNodeIds],
   );
+
+  // PRD §5.4 无数据显示明确空状态
+  const hasWorldNodes = useMemo(() => graph.nodes.some((node) => node.type === "world"), [graph.nodes]);
 
   useEffect(() => {
     return () => {
@@ -111,6 +144,21 @@ export const UniverseGraph = memo(function UniverseGraph({ graph, height }: Univ
     [router],
   );
 
+  if (!hasWorldNodes && emptyLabel) {
+    return (
+      <div
+        className="universe-graph universe-graph-empty"
+        style={height ? { height, display: "grid", placeItems: "center" } : { display: "grid", placeItems: "center", minHeight: 240 }}
+        role="application"
+        aria-label="Universe story graph"
+      >
+        <p style={{ margin: 0, padding: 24, textAlign: "center", color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
+          {emptyLabel}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="universe-graph"
@@ -136,15 +184,20 @@ export const UniverseGraph = memo(function UniverseGraph({ graph, height }: Univ
         })}
       </svg>
 
-      {visibleNodes.map((node) => (
-        <UniverseNodeButton
-          key={node.id}
-          node={node}
-          active={activeId === node.id}
-          onActivate={activate}
-          onHover={scheduleHover}
-        />
-      ))}
+      {visibleNodes.map((node) => {
+        const universeId = universeIdFromNode(node);
+        const summary = universeId && summaries ? summaries[universeId] : undefined;
+        return (
+          <UniverseNodeButton
+            key={node.id}
+            node={node}
+            active={activeId === node.id}
+            summary={summary}
+            onActivate={activate}
+            onHover={scheduleHover}
+          />
+        );
+      })}
 
     </div>
   );

@@ -1,10 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, CheckCircle2, Download, FilePlus2, Loader2, XCircle, Palette} from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Download,
+  FilePlus2,
+  Loader2,
+  Palette,
+  XCircle,
+} from "lucide-react";
 import {
   createContinuationProject,
   createNovelProject,
@@ -26,48 +34,30 @@ import {
   DEFAULT_INHERITANCE_SETTINGS,
   exportUniverseMarkdown,
   getUniverseBundle,
-  getUniverseEntityThumbnail,
   readUniverseEntitlement,
   rejectInboxItem,
   saveInboxItems,
-  upsertCanonStateSnapshot,
-  type CanonStateSnapshot,
-  type UniverseEntity,
+  upsertUniverseProjectLink,
   type UniverseBundle,
-  type UniverseInheritanceSettings,
   type UniverseInboxItem,
-  type UniverseProjectLink,
+  type UniverseInheritanceSettings,
   type UniverseProjectRole,
   type UniverseSyncResult,
-  upsertUniverseProjectLink,
 } from "@/lib/universe";
-import { EntityThumbnail, GenerateAppearanceButton } from "@/components/universe/EntityThumbnail";
+import { UniverseOverview } from "@/components/universe/UniverseOverview";
+import { UniverseAssets } from "@/components/universe/UniverseAssets";
+import { UniverseWorks } from "@/components/universe/UniverseWorks";
+import { UniverseCanon } from "@/components/universe/UniverseCanon";
+import { UniverseInbox } from "@/components/universe/UniverseInbox";
+import {
+  getUniverseCopy,
+  type UniverseOverviewData,
+} from "@/components/universe/universe-view-model";
+import styles from "@/components/universe/universe.module.css";
 
-type TabKey = "overview" | "characters" | "relationships" | "timeline" | "facts" | "assets" | "inbox" | "works" | "projects" | "checks";
-
-type UniverseAssetRow = {
-  title: string;
-  type: string;
-  url: string;
-  prompt: string;
-  source: string;
-  snapshotId: string;
-  assetIndex: number;
-  assetGroup: "assets" | "production_assets";
-  raw: Record<string, unknown>;
-};
+type TabKey = "overview" | "assets" | "works" | "canon" | "inbox";
 
 type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
-
-type ProjectWorkSummary = {
-  projectId: string;
-  title: string;
-  coverUrl: string;
-  characters: string[];
-  scenes: string[];
-  props: string[];
-  shotCount: number;
-};
 
 const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: string }> = [
   { value: "continuation", label: "Script Creation" },
@@ -77,21 +67,25 @@ const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: s
   { value: "video", label: "Video Creation" },
 ];
 
+const VALID_TABS: TabKey[] = ["overview", "assets", "works", "canon", "inbox"];
+
 export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
   const router = useRouter();
-  const { t, locale } = useI18n();
+  const searchParams = useSearchParams();
+  const { locale } = useI18n();
   const isZh = locale === "zh-CN";
+  const copy = getUniverseCopy(isZh);
+
   const [session, setSession] = useState<Session | null>(null);
   const [bundle, setBundle] = useState<UniverseBundle | null>(null);
+  const [overview, setOverview] = useState<UniverseOverviewData | null>(null);
+  const [overviewError, setOverviewError] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
-  const [works, setWorks] = useState<Record<string, ProjectWorkSummary>>({});
-  const [worksLoading, setWorksLoading] = useState(false);
-  const [expandedWorkId, setExpandedWorkId] = useState<string | null>(null);
   const [entitlement, setEntitlement] = useState(canUseUniverseEngine(null));
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -107,16 +101,25 @@ export default function UniverseDetailPage() {
 
   // Local projects (for extract / canon-check project selector)
   const [projects, setProjects] = useState<DramaProject[]>([]);
-  const [extractProjectId, setExtractProjectId] = useState("");
   const [extracting, setExtracting] = useState(false);
-  const [checkProjectId, setCheckProjectId] = useState("");
   const [checking, setChecking] = useState(false);
-  const [editingInboxItem, setEditingInboxItem] = useState<UniverseInboxItem | null>(null);
-  const [inboxDraft, setInboxDraft] = useState("");
-  const [inboxDraftError, setInboxDraftError] = useState("");
-  const [editingAsset, setEditingAsset] = useState<UniverseAssetRow | null>(null);
-  const [assetDraft, setAssetDraft] = useState("");
-  const [assetDraftError, setAssetDraftError] = useState("");
+
+  // Sync ?tab=... searchParam
+  useEffect(() => {
+    const fromUrl = searchParams?.get("tab");
+    if (fromUrl && (VALID_TABS as string[]).includes(fromUrl)) {
+      setActiveTab(fromUrl as TabKey);
+    }
+  }, [searchParams]);
+
+  // Update ?tab=... when changing tabs (no history spam; replace)
+  const switchTab = useCallback((next: TabKey) => {
+    setActiveTab(next);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") === next) return;
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url.toString());
+  }, []);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -133,6 +136,7 @@ export default function UniverseDetailPage() {
 
     if (!supabase) void refresh(null);
     return () => listener?.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.universeId]);
 
   useEffect(() => {
@@ -146,7 +150,9 @@ export default function UniverseDetailPage() {
       }
 
       const cloudProjects = await readProjectsFromSupabase({ accessToken: session.access_token }).catch(() => []);
-      if (!cancelled) setProjects(getUniverseSourceProjects(mergeProjectsForUniverseDetail(localProjects, cloudProjects)));
+      if (!cancelled) {
+        setProjects(getUniverseSourceProjects(mergeProjectsForUniverseDetail(localProjects, cloudProjects)));
+      }
     }
 
     void loadProjects();
@@ -164,92 +170,37 @@ export default function UniverseDetailPage() {
     [bundle?.links, projectsById],
   );
 
+  // Load overview via /api/universe/:id/overview (PRD §6.1)
   useEffect(() => {
     let cancelled = false;
-
-    async function loadWorks() {
-      const links = bundle?.links || [];
-      const base = Object.fromEntries(
-        links.map((link) => [link.project_id, emptyWork(link, projectsById.get(link.project_id))]),
-      );
-      if (!links.length) {
-        setWorks({});
+    async function loadOverview() {
+      if (!session?.access_token) {
+        setOverview(null);
+        setOverviewError("");
         return;
       }
-
-      const supabase = getSupabaseBrowserClient();
-      if (!supabase || !session?.access_token) {
-        setWorks(base);
-        return;
-      }
-
-      setWorksLoading(true);
-      const projectIds = links.map((link) => link.project_id);
       try {
-        const { data: productionProjects, error: productionError } = await supabase
-          .from("storyflow_production_projects")
-          .select("id,project_id")
-          .in("project_id", projectIds);
-        if (productionError) throw productionError;
-
-        const productionIds = (productionProjects || []).map((row) => row.id);
-        const projectByProduction = new Map((productionProjects || []).map((row) => [row.id, String(row.project_id || "")]));
-        if (productionIds.length) {
-          const { data: shots, error: shotsError } = await supabase
-            .from("storyflow_production_shots")
-            .select("production_project_id,scene_title,character_refs,scene_refs,image_url,index")
-            .in("production_project_id", productionIds)
-            .order("index", { ascending: true });
-          if (shotsError) throw shotsError;
-          for (const shot of shots || []) {
-            const projectId = projectByProduction.get(shot.production_project_id);
-            const work = projectId ? base[projectId] : null;
-            if (!work) continue;
-            work.shotCount += 1;
-            mergeNames(work.characters, shot.character_refs);
-            mergeNames(work.scenes, shot.scene_refs);
-            mergeNames(work.scenes, [shot.scene_title]);
-            if (!work.coverUrl && typeof shot.image_url === "string") work.coverUrl = shot.image_url;
-          }
+        const res = await fetch(`/api/universe/${encodeURIComponent(params.universeId)}/overview`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const payload = await res.json().catch(() => null);
+        if (!res.ok || !payload?.universe) {
+          throw new Error(payload?.error || `HTTP ${res.status}`);
         }
-
-        const { data: artProjects, error: artProjectError } = await supabase
-          .from("storyflow_art_projects")
-          .select("id,source_project_id")
-          .in("source_project_id", projectIds);
-        if (artProjectError) throw artProjectError;
-        const artIds = (artProjects || []).map((row) => row.id);
-        const projectByArt = new Map((artProjects || []).map((row) => [row.id, String(row.source_project_id || "")]));
-        if (artIds.length) {
-          const { data: assets, error: assetsError } = await supabase
-            .from("storyflow_art_assets")
-            .select("project_id,kind,name")
-            .in("project_id", artIds);
-          if (assetsError) throw assetsError;
-          for (const asset of assets || []) {
-            const projectId = projectByArt.get(asset.project_id);
-            const work = projectId ? base[projectId] : null;
-            if (!work || !asset.name) continue;
-            if (asset.kind === "prop") mergeNames(work.props, [asset.name]);
-            if (asset.kind === "character") mergeNames(work.characters, [asset.name]);
-            if (asset.kind === "scene") mergeNames(work.scenes, [asset.name]);
-          }
-        }
-      } catch (workError) {
-        console.error("[universe] linked work assets failed to load; showing project cards only.", workError);
-      } finally {
         if (!cancelled) {
-          setWorks({ ...base });
-          setWorksLoading(false);
+          setOverview(payload as UniverseOverviewData);
+          setOverviewError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setOverview(null);
+          setOverviewError(err instanceof Error ? err.message : "Failed to load overview");
         }
       }
     }
-
-    void loadWorks();
-    return () => {
-      cancelled = true;
-    };
-  }, [bundle?.links, projectsById, session?.access_token]);
+    void loadOverview();
+    return () => { cancelled = true; };
+  }, [params.universeId, session?.access_token]);
 
   function reportWriteSync(result: UniverseSyncResult, successMessage: string) {
     if (result.synced) {
@@ -269,7 +220,9 @@ export default function UniverseDetailPage() {
     const accessToken = nextSession?.access_token || null;
     const [nextBundle, nextEntitlement] = await Promise.all([
       getUniverseBundle(params.universeId, { accessToken }),
-      readUniverseEntitlement({ accessToken }).catch(() => canUseUniverseEngine({ email: nextSession?.user.email || "" })),
+      readUniverseEntitlement({ accessToken }).catch(() =>
+        canUseUniverseEngine({ email: nextSession?.user.email || "" }),
+      ),
     ]);
     setBundle(nextBundle);
     setEntitlement(nextEntitlement);
@@ -278,69 +231,18 @@ export default function UniverseDetailPage() {
 
   async function acceptItem(item: UniverseInboxItem, editedPayload?: Record<string, unknown>) {
     const result = await acceptInboxItem(item, editedPayload, { accessToken: session?.access_token });
-    reportWriteSync(result.sync, "Inbox item accepted into canon.");
-    await refresh();
-  }
-
-  function openInboxEditor(item: UniverseInboxItem) {
-    setEditingInboxItem(item);
-    setInboxDraft(JSON.stringify(item.proposed_payload || {}, null, 2));
-    setInboxDraftError("");
-  }
-
-  async function acceptEditedInboxItem() {
-    if (!editingInboxItem) return;
-    const parsed = parseJsonDraft(inboxDraft);
-    if (!parsed.ok) {
-      setInboxDraftError(parsed.error);
-      return;
-    }
-    await acceptItem(editingInboxItem, parsed.value);
-    setEditingInboxItem(null);
-    setInboxDraft("");
-    setInboxDraftError("");
-  }
-
-  function openAssetEditor(asset: UniverseAssetRow) {
-    setEditingAsset(asset);
-    setAssetDraft(JSON.stringify(asset.raw, null, 2));
-    setAssetDraftError("");
-  }
-
-  async function saveEditedAsset() {
-    if (!editingAsset || !bundle) return;
-    if (!entitlement.canUse) {
-      setAssetDraftError(entitlement.reason);
-      return;
-    }
-    const parsed = parseJsonDraft(assetDraft);
-    if (!parsed.ok) {
-      setAssetDraftError(parsed.error);
-      return;
-    }
-
-    const snapshot = bundle.snapshots.find((item) => item.id === editingAsset.snapshotId);
-    if (!snapshot) {
-      setAssetDraftError("Snapshot not found.");
-      return;
-    }
-    const nextSnapshot = updateSnapshotAsset(snapshot, editingAsset, parsed.value);
-    const sync = await upsertCanonStateSnapshot(nextSnapshot, { accessToken: session?.access_token });
-    reportWriteSync(sync, "Asset updated.");
-    setEditingAsset(null);
-    setAssetDraft("");
-    setAssetDraftError("");
+    reportWriteSync(result.sync, isZh ? "Inbox 候选项已接受写入 canon。" : "Inbox item accepted into canon.");
     await refresh();
   }
 
   async function rejectItem(item: UniverseInboxItem) {
     const result = await rejectInboxItem(item, { accessToken: session?.access_token });
-    reportWriteSync(result.sync, "Inbox item rejected.");
+    reportWriteSync(result.sync, isZh ? "Inbox 候选项已拒绝。" : "Inbox item rejected.");
     await refresh();
   }
 
-  async function extractFromProject() {
-    const project = projectsById.get(extractProjectId);
+  async function extractFromProject(projectId: string) {
+    const project = projectsById.get(projectId);
     if (!project || !bundle) return;
     setExtracting(true);
     setStatus("");
@@ -357,16 +259,16 @@ export default function UniverseDetailPage() {
       if (!res.ok) throw new Error(await res.text().catch(() => ""));
       const data = await res.json().catch(() => ({}));
       const sync = await saveInboxItems(data.items || [], { accessToken: session?.access_token });
-      reportWriteSync(sync, "Inbox updated with extracted candidates.");
+      reportWriteSync(sync, isZh ? "已从项目抽取候选项进入 Inbox。" : "Inbox updated with extracted candidates.");
       await refresh();
     } catch {
-      setError("Extract failed. Please try again.");
+      setError(isZh ? "抽取失败，请稍后重试。" : "Extract failed. Please try again.");
     }
     setExtracting(false);
   }
 
-  async function runCheck() {
-    const project = projectsById.get(checkProjectId);
+  async function runCheck(projectId: string) {
+    const project = projectsById.get(projectId);
     if (!project || !bundle) return;
     setChecking(true);
     setStatus("");
@@ -382,9 +284,9 @@ export default function UniverseDetailPage() {
       });
       if (!res.ok) throw new Error(await res.text().catch(() => ""));
       await refresh();
-      setStatus("Canon check complete.");
+      setStatus(isZh ? "Canon Check 完成。" : "Canon check complete.");
     } catch {
-      setError("Canon check failed. Please try again.");
+      setError(isZh ? "Canon Check 失败，请稍后重试。" : "Canon check failed. Please try again.");
     }
     setChecking(false);
   }
@@ -397,7 +299,7 @@ export default function UniverseDetailPage() {
     }
     const title = createForm.title.trim();
     if (!title) {
-      setError("Project title is required.");
+      setError(isZh ? "请填写项目标题。" : "Project title is required.");
       return;
     }
 
@@ -427,10 +329,14 @@ export default function UniverseDetailPage() {
     try {
       await upsertProjectToSupabase(project, { accessToken: session?.access_token });
       const linkSync = await upsertUniverseProjectLink(link, { accessToken: session?.access_token });
-      reportWriteSync(linkSync, "Project linked to Universe.");
+      reportWriteSync(linkSync, isZh ? "项目已关联到宇宙。" : "Project linked to Universe.");
     } catch (linkError) {
       const message = linkError instanceof Error ? linkError.message : String(linkError);
-      setError(isZh ? `项目已保存在本机，但宇宙关联失败：${message}` : `Project saved locally, but Universe linking failed: ${message}`);
+      setError(
+        isZh
+          ? `项目已保存在本机，但宇宙关联失败：${message}`
+          : `Project saved locally, but Universe linking failed: ${message}`,
+      );
       return;
     }
 
@@ -440,28 +346,35 @@ export default function UniverseDetailPage() {
   function exportBundle(format: "json" | "md") {
     if (!bundle) return;
     const content = format === "json" ? createUniverseJsonExport(bundle) : exportUniverseMarkdown(bundle);
-    downloadBlob(`${safeFileName(bundle.universe.name)}-universe.${format === "json" ? "json" : "md"}`, content, format === "json" ? "application/json" : "text/markdown");
+    downloadBlob(
+      `${safeFileName(bundle.universe.name)}-universe.${format === "json" ? "json" : "md"}`,
+      content,
+      format === "json" ? "application/json" : "text/markdown",
+    );
   }
 
   const tabs = useMemo<Array<{ key: TabKey; label: string; count?: number }>>(() => [
-    { key: "overview", label: "Overview" },
-    { key: "characters", label: "Characters", count: bundle?.entities.filter((item) => item.type === "character").length },
-    { key: "relationships", label: "Relationships", count: bundle?.relationships.length },
-    { key: "timeline", label: "Timeline", count: bundle?.timeline.length },
-    { key: "facts", label: "Canon Facts", count: bundle?.canonFacts.length },
-    { key: "assets", label: "Assets", count: bundle ? getAcceptedAssets(bundle).length : 0 },
-    { key: "inbox", label: "Inbox", count: bundle?.inbox.filter((item) => item.status === "pending").length },
-    { key: "works", label: isZh ? "作品" : "Works", count: bundle?.links.length },
-    { key: "projects", label: "Linked Projects", count: bundle?.links.length },
-    { key: "checks", label: "Canon Checks", count: bundle?.reports.length },
-  ], [bundle, isZh]);
+    { key: "overview", label: copy.detail.overview },
+    { key: "assets", label: copy.detail.assets, count: bundle?.entities.length },
+    { key: "works", label: copy.detail.works, count: bundle?.links.length },
+    {
+      key: "canon",
+      label: copy.detail.canon,
+      count: bundle ? bundle.canonFacts.length + bundle.relationships.length + bundle.timeline.length + bundle.reports.length : 0,
+    },
+    {
+      key: "inbox",
+      label: copy.detail.inbox,
+      count: bundle?.inbox.filter((item) => item.status === "pending").length,
+    },
+  ], [bundle, copy]);
 
   if (loading) {
     return (
-      <main className="app-shell">
-        <section className="empty-state">
-          <Loader2 className="spin" size={28} />
-          <h1>{t("universe.loading")}</h1>
+      <main className={styles.page}>
+        <section className={styles.loadingState}>
+          <Loader2 size={28} className="spin" />
+          <span>{copy.list.loading}</span>
         </section>
       </main>
     );
@@ -469,292 +382,265 @@ export default function UniverseDetailPage() {
 
   if (!bundle) {
     return (
-      <main className="app-shell">
-        <section className="empty-state">
-          <h1>{t("universe.notFound")}</h1>
-          <Link className="primary-button" href="/universes">Back to Universes</Link>
+      <main className={styles.page}>
+        <section className={styles.emptyState}>
+          <strong>{isZh ? "未找到宇宙" : "Universe not found"}</strong>
+          <Link className={styles.primaryButton} href="/universes">
+            {copy.detail.back}
+          </Link>
         </section>
       </main>
     );
   }
 
-  const characters = bundle.entities.filter((item) => item.type === "character");
-  const locations = bundle.entities.filter((item) => item.type === "location");
-  const pendingInbox = bundle.inbox.filter((item) => item.status === "pending");
-  const hasLinks = selectableLinks.length > 0;
-  const acceptedAssets = getAcceptedAssets(bundle);
+  const fallbackLinks = bundle.links.map((link) => ({
+    projectId: link.project_id,
+    projectRole: link.project_role,
+    updatedAt: link.updated_at,
+    title: projectsById.get(link.project_id)?.title || link.project_id,
+  }));
+
+  const inboxSelectableLinks = selectableLinks.map((link) => ({
+    projectId: link.project_id,
+    title: projectsById.get(link.project_id)?.title || link.project_id,
+  }));
 
   return (
-    <main className="app-shell universe-shell">
-      <header className="app-header">
-        <div className="brand-lockup">
-          <Link className="icon-button" href="/universes" title="Back">
+    <main className={`${styles.page} ${styles.detailShell}`}>
+      <header className={styles.detailHeader}>
+        <div className={styles.titleBrand}>
+          <Link className={styles.iconButton} href="/universes" title={copy.detail.back} aria-label={copy.detail.back}>
             <ArrowLeft size={18} />
           </Link>
-          <div>
-            <span className="kicker">Universe</span>
-            <h1>{bundle.universe.name}</h1>
+          <div className={styles.titleCopy}>
+            <span className={styles.kicker}>{isZh ? "宇宙" : "Universe"}</span>
+            <h1 className={styles.detailTitle}>{bundle.universe.name}</h1>
           </div>
         </div>
-        <div className="header-actions">
-          <button className="secondary-button" onClick={() => exportBundle("json")}><Download size={17} /> JSON</button>
-          <button className="secondary-button" onClick={() => exportBundle("md")}><Download size={17} /> MD</button>
-          <Link className="secondary-button" href={`/production?mode=art&setup=1&universeId=${encodeURIComponent(params.universeId)}`}>
-            <Palette size={17} /> 美术工作台
+        <div className={styles.headerActions}>
+          <button type="button" className={styles.secondaryButton} onClick={() => exportBundle("json")}>
+            <Download size={15} /> JSON
+          </button>
+          <button type="button" className={styles.secondaryButton} onClick={() => exportBundle("md")}>
+            <Download size={15} /> MD
+          </button>
+          <Link
+            className={styles.secondaryButton}
+            href={`/production?mode=art&setup=1&universeId=${encodeURIComponent(params.universeId)}`}
+          >
+            <Palette size={15} /> {isZh ? "美术工作台" : "Art workbench"}
           </Link>
-          <button className="primary-button" onClick={() => setCreateOpen(true)} disabled={!entitlement.canUse}>
-            <FilePlus2 size={17} /> Create Project
+          <button
+            type="button"
+            className={styles.primaryButton}
+            onClick={() => setCreateOpen(true)}
+            disabled={!entitlement.canUse}
+          >
+            <FilePlus2 size={15} /> {isZh ? "创建项目" : "Create Project"}
           </button>
         </div>
       </header>
 
-      {status ? <div className="notice success"><CheckCircle2 size={16} /> {status}</div> : null}
-      {error ? <div className="notice error">{error}</div> : null}
-      {syncWarning ? <div className="notice error"><XCircle size={16} /> {syncWarning}</div> : null}
+      {status ? (
+        <div className={`${styles.notice} ${styles.noticeSuccess}`}>
+          <CheckCircle2 size={15} /> {status}
+        </div>
+      ) : null}
+      {error ? (
+        <div className={`${styles.notice} ${styles.noticeError}`}>{error}</div>
+      ) : null}
+      {syncWarning ? (
+        <div className={`${styles.notice} ${styles.noticeError}`}>
+          <XCircle size={15} /> {syncWarning}
+        </div>
+      ) : null}
+      {overviewError ? (
+        <div className={`${styles.notice} ${styles.noticeError}`}>
+          {isZh ? `概览加载失败：${overviewError}` : `Overview failed to load: ${overviewError}`}
+        </div>
+      ) : null}
 
-      <nav className="universe-tabs">
+      <nav className={styles.tabs} aria-label="Universe sections">
         {tabs.map((tab) => (
-          <button key={tab.key} className={activeTab === tab.key ? "active" : ""} onClick={() => setActiveTab(tab.key)}>
-            {tab.label}{typeof tab.count === "number" ? <span>{tab.count}</span> : null}
+          <button
+            key={tab.key}
+            type="button"
+            className={`${styles.tabButton} ${activeTab === tab.key ? "active" : ""}`}
+            aria-selected={activeTab === tab.key}
+            onClick={() => switchTab(tab.key)}
+          >
+            {tab.label}
+            {typeof tab.count === "number" ? <span className={styles.tabCount}>{tab.count}</span> : null}
           </button>
         ))}
       </nav>
 
-      {activeTab === "overview" ? (
-        <section className="universe-detail-grid">
-          <article className="universe-panel large">
-            <span className="kicker">Overview</span>
-            <h2>{bundle.universe.description || "No description yet."}</h2>
-            <div className="universe-meta">
-              <span>{bundle.universe.genre || "Genre TBD"}</span>
-              <span>{bundle.universe.default_language}</span>
-              <span>{bundle.universe.target_markets.join(", ") || "Markets TBD"}</span>
-              <span>{bundle.universe.access_level}</span>
-              <span>{bundle.universe.team_id ? "Team shared" : "Private"}</span>
+      <section className={styles.tabPanel}>
+        {activeTab === "overview" ? (
+          overview ? (
+            <UniverseOverview overview={overview} isZh={isZh} />
+          ) : (
+            <div className={styles.loadingState}>
+              <Loader2 size={20} className="spin" />
+              <span>{isZh ? "正在加载概览…" : "Loading overview…"}</span>
             </div>
-          </article>
-          <article className="universe-panel">
-            <span className="kicker">Canon State</span>
-            <h2>{bundle.snapshots[0]?.title || "No state snapshot"}</h2>
-            <p>{bundle.snapshots[0]?.summary || "Accept state changes from Inbox to build current canon state."}</p>
-          </article>
-          <article className="universe-panel">
-            <span className="kicker">Counts</span>
-            <div className="universe-counts">
-              <strong>{characters.length}<span>Characters</span></strong>
-              <strong>{bundle.canonFacts.length}<span>Facts</span></strong>
-              <strong>{bundle.timeline.length}<span>Events</span></strong>
-              <strong>{acceptedAssets.length}<span>Assets</span></strong>
-              <strong>{pendingInbox.length}<span>Inbox</span></strong>
-            </div>
-          </article>
-        </section>
-      ) : null}
+          )
+        ) : null}
 
-      {activeTab === "characters" ? <CharacterAssetSection characters={characters} isZh={isZh} /> : null}
-      {activeTab === "relationships" ? <ListSection items={bundle.relationships} render={(item) => ({ title: item.relationship_type, body: item.summary, meta: item.status })} /> : null}
-      {activeTab === "timeline" ? <ListSection items={bundle.timeline} render={(item) => ({ title: item.title, body: item.description, meta: item.date_label || item.status })} /> : null}
-      {activeTab === "facts" ? <ListSection items={bundle.canonFacts} render={(item) => ({ title: item.fact_text, body: item.source_location_text || "", meta: `${item.importance}${item.is_locked ? " / locked" : ""}` })} /> : null}
-      {activeTab === "assets" ? (
-        <AssetEditorSection assets={acceptedAssets} canEdit={entitlement.canUse} onEdit={openAssetEditor} />
-      ) : null}
-
-      {activeTab === "works" ? (
-        <WorksSection
-          links={bundle.links}
-          works={works}
-          loading={worksLoading}
-          expandedId={expandedWorkId}
-          onToggle={(projectId) => setExpandedWorkId((current) => current === projectId ? null : projectId)}
-          isZh={isZh}
-        />
-      ) : null}
-
-      {activeTab === "projects" ? (
-        <ListSection
-          items={bundle.links}
-          render={(item) => {
-            const proj = projectsById.get(item.project_id);
-            const enabledFlags = Object.entries(item.inheritance_settings)
-              .filter(([, v]) => v)
-              .map(([k]) => k.replace(/_/g, " "))
-              .join(", ");
-            return {
-              title: proj?.title || item.project_id,
-              body: enabledFlags || "No inheritance settings",
-              meta: item.project_role + (item.season_number != null ? ` · S${item.season_number}` : ""),
-            };
-          }}
-        />
-      ) : null}
-
-      {activeTab === "inbox" ? (
-        <section className="universe-list">
-          <div className="universe-action-bar">
-            <select
-              value={extractProjectId}
-              onChange={(e) => setExtractProjectId(e.target.value)}
-              disabled={!hasLinks}
-            >
-              <option value="">— Select project to extract from —</option>
-              {selectableLinks.map((link) => {
-                const proj = projectsById.get(link.project_id);
-                return (
-                  <option key={link.project_id} value={link.project_id}>
-                    {proj?.title || link.project_id}
-                  </option>
-                );
-              })}
-            </select>
-            <button
-              className="secondary-button"
-              onClick={extractFromProject}
-              disabled={!hasLinks || !extractProjectId || extracting || !session}
-            >
-              {extracting ? <Loader2 size={15} className="spin" /> : null}
-              Extract Updates
-            </button>
-          </div>
-          {bundle.inbox.length === 0 ? (
-            <div className="empty-state">
-              <h2>Inbox is empty</h2>
-              <p>Select a linked project above and click Extract Updates to review canon candidates here.</p>
-            </div>
-          ) : null}
-          {bundle.inbox.map((item) => (
-            <article className="universe-row" key={item.id}>
-              <div>
-                <span>{item.item_type} / {Math.round(item.confidence * 100)}% / {item.status}</span>
-                <h2>{item.title}</h2>
-                <p>{item.source_excerpt}</p>
-                <pre>{JSON.stringify(item.proposed_payload, null, 2)}</pre>
-              </div>
-              <div className="universe-row-actions">
-                <button className="primary-button" disabled={item.status !== "pending" || !entitlement.canUse} onClick={() => acceptItem(item)}>
-                  <CheckCircle2 size={16} /> Accept
-                </button>
-                <button className="secondary-button" disabled={item.status !== "pending" || !entitlement.canUse} onClick={() => openInboxEditor(item)}>
-                  Edit + Accept
-                </button>
-                <button className="secondary-button" disabled={item.status !== "pending" || !entitlement.canUse} onClick={() => rejectItem(item)}>
-                  <XCircle size={16} /> Reject
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
-
-      {activeTab === "checks" ? (
-        <>
-          <div className="universe-action-bar">
-            <select
-              value={checkProjectId}
-              onChange={(e) => setCheckProjectId(e.target.value)}
-              disabled={!hasLinks}
-            >
-              <option value="">— Select project to check —</option>
-              {selectableLinks.map((link) => {
-                const proj = projectsById.get(link.project_id);
-                return (
-                  <option key={link.project_id} value={link.project_id}>
-                    {proj?.title || link.project_id}
-                  </option>
-                );
-              })}
-            </select>
-            <button
-              className="secondary-button"
-              onClick={runCheck}
-              disabled={!hasLinks || !checkProjectId || checking || !session}
-            >
-              {checking ? <Loader2 size={15} className="spin" /> : null}
-              Run Canon Check
-            </button>
-          </div>
-          <ListSection
-            items={bundle.reports}
-            render={(item) => ({
-              title: `Score ${item.score}`,
-              body: item.issues_json.map((issue) => `${issue.severity}: ${issue.title}`).join("\n"),
-              meta: new Date(item.created_at).toLocaleString(),
-            })}
+        {activeTab === "assets" ? (
+          <UniverseAssets
+            entities={bundle.entities}
+            links={bundle.links}
+            projectsById={projectsById}
+            isZh={isZh}
           />
-        </>
-      ) : null}
+        ) : null}
 
-      {locations.length > 0 && activeTab === "overview" ? (
-        <LocationAssetSection locations={locations} isZh={isZh} />
+        {activeTab === "works" ? (
+          <UniverseWorks
+            universeId={params.universeId}
+            accessToken={session?.access_token || null}
+            isZh={isZh}
+            fallbackLinks={fallbackLinks}
+          />
+        ) : null}
+
+        {activeTab === "canon" ? (
+          <UniverseCanon
+            canonFacts={bundle.canonFacts}
+            relationships={bundle.relationships}
+            timeline={bundle.timeline}
+            reports={bundle.reports}
+            isZh={isZh}
+          />
+        ) : null}
+
+        {activeTab === "inbox" ? (
+          <UniverseInbox
+            inbox={bundle.inbox}
+            entitlement={entitlement}
+            isZh={isZh}
+            projectsById={projectsById}
+            onAccept={acceptItem}
+            onReject={rejectItem}
+            onExtract={extractFromProject}
+            selectableLinks={inboxSelectableLinks}
+            extracting={extracting}
+          />
+        ) : null}
+      </section>
+
+      {/* Canon Check runner — accessible from Canon tab toolbar */}
+      {activeTab === "canon" && selectableLinks.length ? (
+        <CanonCheckRunner
+          isZh={isZh}
+          selectableLinks={inboxSelectableLinks}
+          onRun={runCheck}
+          checking={checking}
+        />
       ) : null}
 
       {createOpen ? (
-        <div className="modal-backdrop">
-          <div className="modal wizard-modal">
-            <h2>{t("universe.createProject.title")}</h2>
-            <p>{t("universe.createProject.body")}</p>
-            <div className="wizard-grid">
-              <label>Title<input value={createForm.title} onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))} autoFocus /></label>
+        <div className={styles.modalBackdrop}>
+          <div className={styles.modal}>
+            <h2 className={styles.panelTitle}>
+              {isZh ? "从宇宙创建项目" : "Create Project from Universe"}
+            </h2>
+            <p className={styles.panelBody}>
+              {isZh
+                ? "项目会继承宇宙的角色、世界观与 Canon。可在工作台里继续修改。"
+                : "Project inherits Universe characters, world and canon. You can keep editing in the workbench."}
+            </p>
+            <div className={styles.titleBar}>
               <label>
-                Workflow
-                <select value={createForm.workflowType} onChange={(event) => setCreateForm((current) => ({ ...current, workflowType: event.target.value as UniverseCreateWorkflow }))}>
+                {isZh ? "标题" : "Title"}
+                <input
+                  value={createForm.title}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
+                  autoFocus
+                />
+              </label>
+              <label>
+                {isZh ? "工作流" : "Workflow"}
+                <select
+                  value={createForm.workflowType}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, workflowType: event.target.value as UniverseCreateWorkflow }))
+                  }
+                >
                   {UNIVERSE_CREATE_WORKFLOWS.map((workflow) => (
-                    <option key={workflow.value} value={workflow.value}>{workflow.label}</option>
+                    <option key={workflow.value} value={workflow.value}>
+                      {workflow.label}
+                    </option>
                   ))}
                 </select>
               </label>
               <label>
-                Role
-                <select value={createForm.projectRole} onChange={(event) => setCreateForm((current) => ({ ...current, projectRole: event.target.value as UniverseProjectRole }))}>
-                  <option value="main_season">{t("universe.projectType.mainSeason")}</option>
-                  <option value="spin_off">Spin-off</option>
-                  <option value="prequel">Prequel</option>
-                  <option value="adaptation">Adaptation</option>
-                  <option value="localization">Localization</option>
-                  <option value="other">Other</option>
+                {isZh ? "角色" : "Role"}
+                <select
+                  value={createForm.projectRole}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, projectRole: event.target.value as UniverseProjectRole }))
+                  }
+                >
+                  <option value="main_season">{isZh ? "主线季" : "Main season"}</option>
+                  <option value="spin_off">{isZh ? "衍生" : "Spin-off"}</option>
+                  <option value="prequel">{isZh ? "前传" : "Prequel"}</option>
+                  <option value="adaptation">{isZh ? "改编" : "Adaptation"}</option>
+                  <option value="localization">{isZh ? "本地化" : "Localization"}</option>
+                  <option value="other">{isZh ? "其他" : "Other"}</option>
                 </select>
               </label>
-              <label>Season<input type="number" value={createForm.seasonNumber} onChange={(event) => setCreateForm((current) => ({ ...current, seasonNumber: Number(event.target.value) || 1 }))} /></label>
-              <label>Market<input value={createForm.market} onChange={(event) => setCreateForm((current) => ({ ...current, market: event.target.value }))} /></label>
-              <label>Language<input value={createForm.language} onChange={(event) => setCreateForm((current) => ({ ...current, language: event.target.value }))} /></label>
-              <label>Episodes<input type="number" value={createForm.episodeCount} onChange={(event) => setCreateForm((current) => ({ ...current, episodeCount: Number(event.target.value) || 12 }))} /></label>
+              <label>
+                {isZh ? "季" : "Season"}
+                <input
+                  type="number"
+                  value={createForm.seasonNumber}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, seasonNumber: Number(event.target.value) || 1 }))
+                  }
+                />
+              </label>
+              <label>
+                {isZh ? "市场" : "Market"}
+                <input
+                  value={createForm.market}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, market: event.target.value }))}
+                />
+              </label>
+              <label>
+                {isZh ? "语言" : "Language"}
+                <input
+                  value={createForm.language}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, language: event.target.value }))}
+                />
+              </label>
+              <label>
+                {isZh ? "集数" : "Episodes"}
+                <input
+                  type="number"
+                  value={createForm.episodeCount}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, episodeCount: Number(event.target.value) || 12 }))
+                  }
+                />
+              </label>
+              <label>
+                {isZh ? "单集时长" : "Episode duration"}
+                <input
+                  value={createForm.episodeDuration}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, episodeDuration: event.target.value }))
+                  }
+                />
+              </label>
             </div>
-            <label>{t("universe.episodeDuration.label")}<input value={createForm.episodeDuration} onChange={(event) => setCreateForm((current) => ({ ...current, episodeDuration: event.target.value }))} /></label>
-            <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setCreateOpen(false)}>Cancel</button>
-              <button className="primary-button" onClick={createProjectFromUniverse}>Create</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {editingInboxItem ? (
-        <div className="modal-backdrop">
-          <div className="modal wizard-modal universe-json-modal">
-            <h2>Edit Inbox Candidate</h2>
-            <p>Adjust the structured payload before writing it into canon. This does not overwrite existing locked canon automatically.</p>
-            <textarea value={inboxDraft} onChange={(event) => setInboxDraft(event.target.value)} />
-            {inboxDraftError ? <p className="form-error">{inboxDraftError}</p> : null}
-            <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setEditingInboxItem(null)}>Cancel</button>
-              <button className="primary-button" onClick={() => void acceptEditedInboxItem()}>
-                <CheckCircle2 size={16} /> Accept Edited
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.secondaryButton} onClick={() => setCreateOpen(false)}>
+                {isZh ? "取消" : "Cancel"}
               </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {editingAsset ? (
-        <div className="modal-backdrop">
-          <div className="modal wizard-modal universe-json-modal">
-            <h2>Edit Asset</h2>
-            <p>Update the asset metadata stored in the accepted canon state snapshot.</p>
-            <textarea value={assetDraft} onChange={(event) => setAssetDraft(event.target.value)} />
-            {assetDraftError ? <p className="form-error">{assetDraftError}</p> : null}
-            <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setEditingAsset(null)}>Cancel</button>
-              <button className="primary-button" onClick={() => void saveEditedAsset()}>
-                <CheckCircle2 size={16} /> Save Asset
+              <button type="button" className={styles.primaryButton} onClick={() => void createProjectFromUniverse()}>
+                {isZh ? "创建" : "Create"}
               </button>
             </div>
           </div>
@@ -764,278 +650,48 @@ export default function UniverseDetailPage() {
   );
 }
 
-function ListSection<T>({ items, render }: { items: T[]; render: (item: T) => { title: string; body: string; meta: string } }) {
-  return (
-    <section className="universe-list">
-      {items.length === 0 ? <div className="empty-state"><h2>No records yet</h2></div> : null}
-      {items.map((item, index) => {
-        const row = render(item);
-        return (
-          <article className="universe-row" key={index}>
-            <div>
-              <span>{row.meta}</span>
-              <h2>{row.title}</h2>
-              {row.body ? <p>{row.body}</p> : null}
-            </div>
-          </article>
-        );
-      })}
-    </section>
-  );
-}
-
-function CharacterAssetSection({ characters, isZh }: { characters: UniverseEntity[]; isZh: boolean }) {
-  return (
-    <section className="universe-list">
-      {characters.length === 0 ? <div className="empty-state"><h2>No characters yet</h2></div> : null}
-      {characters.map((character) => {
-        const variants = getCharacterVariants(character.details_json);
-        const thumbnail = getUniverseEntityThumbnail(character);
-        return (
-          <article className="universe-row universe-character-card" key={character.id}>
-            <div>
-              <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-                <EntityThumbnail name={character.name} imageUrl={thumbnail} size={72} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span>{character.status} · {variants.length} appearance versions</span>
-                  <h2>{character.name}</h2>
-                  <p>{character.summary}</p>
-                </div>
-              </div>
-              {!thumbnail ? <GenerateAppearanceButton isZh={isZh} /> : null}
-              <div className="universe-character-meta">
-                {stringValue(character.details_json.actor_name) ? <span>Actor: {stringValue(character.details_json.actor_name)}</span> : null}
-                {stringValue(character.details_json.actor_id) ? <span>Actor ID: {stringValue(character.details_json.actor_id)}</span> : null}
-                {character.source_project_id ? <span>Source: {character.source_project_id}</span> : null}
-              </div>
-              {variants.length ? (
-                <div className="universe-variant-grid">
-                  {variants.map((variant, index) => (
-                    <article className="universe-variant-card" key={stringValue(variant.id) || index}>
-                      {firstVisualAssetUrl(variant) ? <img src={firstVisualAssetUrl(variant)} alt="" /> : <div className="universe-variant-empty">{stringValue(variant.source_workflow) || "project"}</div>}
-                      <div>
-                        <strong>{stringValue(variant.title) || `Version ${index + 1}`}</strong>
-                        <span>{[stringValue(variant.source_workflow), stringValue(variant.actor_name), stringValue(variant.actor_id)].filter(Boolean).join(" · ") || "project image"}</span>
-                        <p>{stringValue(variant.appearance) || stringValue(variant.prompt) || "No visual notes yet."}</p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="field-note">No project appearance versions yet. Accept character Inbox items with appearance, actor_id, actor_name, project_variant or visual_assets to populate this area.</p>
-              )}
-            </div>
-          </article>
-        );
-      })}
-    </section>
-  );
-}
-
-function LocationAssetSection({ locations, isZh }: { locations: UniverseEntity[]; isZh: boolean }) {
-  return (
-    <section className="universe-list">
-      <h2>{isZh ? "场景资产" : "Locations"}</h2>
-      {locations.map((location) => {
-        const thumbnail = getUniverseEntityThumbnail(location);
-        return (
-          <article className="universe-row" key={location.id}>
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-              <EntityThumbnail name={location.name} imageUrl={thumbnail} size={64} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span>{location.status}</span>
-                <h2>{location.name}</h2>
-                <p>{location.summary}</p>
-                {!thumbnail ? <GenerateAppearanceButton isZh={isZh} /> : null}
-              </div>
-            </div>
-          </article>
-        );
-      })}
-    </section>
-  );
-}
-
-function WorksSection({
-  links,
-  works,
-  loading,
-  expandedId,
-  onToggle,
+/**
+ * Canon Check runner — kept inline because PRD §6.4 allows a project selector + run button
+ * anchored under the Canon tab. Uses local project list (no cross-table client fetch).
+ */
+function CanonCheckRunner({
   isZh,
+  selectableLinks,
+  onRun,
+  checking,
 }: {
-  links: UniverseProjectLink[];
-  works: Record<string, ProjectWorkSummary>;
-  loading: boolean;
-  expandedId: string | null;
-  onToggle: (projectId: string) => void;
   isZh: boolean;
+  selectableLinks: Array<{ projectId: string; title: string }>;
+  onRun: (projectId: string) => Promise<void>;
+  checking: boolean;
 }) {
-  if (!links.length) {
-    return <section className="empty-state"><h2>{isZh ? "还没有关联作品" : "No linked works yet"}</h2></section>;
-  }
-
+  const [projectId, setProjectId] = useState("");
   return (
-    <section className="universe-list">
-      {loading ? <p className="field-note">{isZh ? "正在读取作品资产…" : "Loading work assets…"}</p> : null}
-      {links.map((link) => {
-        const work = works[link.project_id] || emptyWork(link);
-        const expanded = expandedId === link.project_id;
-        return (
-          <article className="universe-row" key={link.id}>
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-start", width: "100%" }}>
-              <EntityThumbnail name={work.title} imageUrl={work.coverUrl} size={72} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span>{link.project_role}{link.season_number ? ` · S${link.season_number}` : ""}</span>
-                <h2>{work.title}</h2>
-                <p>{isZh ? `${work.shotCount} 个镜头 · ${work.characters.length} 个角色 · ${work.scenes.length} 个场景 · ${work.props.length} 个关键道具` : `${work.shotCount} shots · ${work.characters.length} characters · ${work.scenes.length} scenes · ${work.props.length} props`}</p>
-                <button className="secondary-button" type="button" onClick={() => onToggle(link.project_id)}>
-                  {expanded ? (isZh ? "收起作品资产" : "Hide assets") : (isZh ? "查看角色、场景与道具" : "View cast, scenes and props")}
-                </button>
-                {expanded ? (
-                  <div className="universe-character-meta" style={{ marginTop: 16 }}>
-                    <WorkAssetGroup title={isZh ? "角色" : "Characters"} values={work.characters} empty={isZh ? "暂无角色资产" : "No character assets"} />
-                    <WorkAssetGroup title={isZh ? "场景" : "Scenes"} values={work.scenes} empty={isZh ? "暂无场景资产" : "No scene assets"} />
-                    <WorkAssetGroup title={isZh ? "关键道具" : "Key props"} values={work.props} empty={isZh ? "暂无道具资产" : "No prop assets"} />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </article>
-        );
-      })}
-    </section>
-  );
-}
-
-function WorkAssetGroup({ title, values, empty }: { title: string; values: string[]; empty: string }) {
-  return (
-    <div style={{ minWidth: 180 }}>
-      <strong>{title}</strong>
-      <p>{values.length ? values.join(" · ") : empty}</p>
+    <div className={styles.actionBar} style={{ marginTop: 12 }}>
+      <select
+        className={styles.select}
+        value={projectId}
+        onChange={(event) => setProjectId(event.target.value)}
+        disabled={!selectableLinks.length}
+      >
+        <option value="">{isZh ? "选择要检查的项目" : "Select a project to check"}</option>
+        {selectableLinks.map((link) => (
+          <option key={link.projectId} value={link.projectId}>
+            {link.title}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className={styles.secondaryButton}
+        onClick={() => projectId && void onRun(projectId)}
+        disabled={!projectId || checking}
+      >
+        {checking ? <Loader2 size={14} className="spin" /> : null}
+        {isZh ? "运行 Canon Check" : "Run Canon Check"}
+      </button>
     </div>
   );
-}
-
-function emptyWork(link: UniverseProjectLink, project?: DramaProject): ProjectWorkSummary {
-  return {
-    projectId: link.project_id,
-    title: project?.title || link.project_id,
-    coverUrl: "",
-    characters: [],
-    scenes: [],
-    props: [],
-    shotCount: 0,
-  };
-}
-
-function mergeNames(target: string[], value: unknown) {
-  const values = Array.isArray(value) ? value : [];
-  for (const item of values) {
-    const label = typeof item === "string"
-      ? item.trim()
-      : item && typeof item === "object"
-        ? stringValue((item as Record<string, unknown>).name).trim()
-        : "";
-    if (label && !target.includes(label)) target.push(label);
-  }
-}
-
-function AssetEditorSection({ assets, canEdit, onEdit }: { assets: UniverseAssetRow[]; canEdit: boolean; onEdit: (asset: UniverseAssetRow) => void }) {
-  return (
-    <section className="universe-list">
-      {assets.length === 0 ? <div className="empty-state"><h2>No accepted production assets yet</h2></div> : null}
-      {assets.map((item) => (
-        <article className="universe-row universe-asset-row" key={`${item.snapshotId}-${item.assetGroup}-${item.assetIndex}`}>
-          <div>
-            <span>{item.type} · {item.source}</span>
-            <h2>{item.title}</h2>
-            {item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.url}</a> : null}
-            {item.prompt ? <p>{item.prompt}</p> : null}
-          </div>
-          <div className="universe-row-actions">
-            <button className="secondary-button" onClick={() => onEdit(item)} disabled={!canEdit}>Edit Asset</button>
-          </div>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function getAcceptedAssets(bundle: UniverseBundle): UniverseAssetRow[] {
-  return bundle.snapshots.flatMap((snapshot) => {
-    const groups: Array<{ key: "assets" | "production_assets"; items: unknown[] }> = [
-      { key: "assets", items: Array.isArray(snapshot.state_json.assets) ? snapshot.state_json.assets : [] },
-      { key: "production_assets", items: Array.isArray(snapshot.state_json.production_assets) ? snapshot.state_json.production_assets : [] },
-    ];
-    return groups.flatMap((group) => group.items
-      .filter((asset): asset is Record<string, unknown> => Boolean(asset) && typeof asset === "object" && !Array.isArray(asset))
-      .map((asset, index): UniverseAssetRow => ({
-        title: stringValue(asset.title) || `${snapshot.title} asset ${index + 1}`,
-        type: stringValue(asset.type) || "asset",
-        url: stringValue(asset.url),
-        prompt: stringValue(asset.prompt) || formatAssetMetadata(asset),
-        source: snapshot.title,
-        snapshotId: snapshot.id,
-        assetIndex: index,
-        assetGroup: group.key,
-        raw: asset,
-      })));
-  });
-}
-
-function formatAssetMetadata(asset: Record<string, unknown>) {
-  const pairs = [
-    ["scenes", asset.scene_count],
-    ["shots", asset.shot_count],
-    ["done", asset.completed_count],
-    ["workflow", asset.source_workflow],
-  ]
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
-    .map(([label, value]) => `${label}: ${String(value)}`);
-
-  return pairs.join(" · ");
-}
-
-function parseJsonDraft(value: string): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { ok: false, error: "JSON payload must be an object." };
-    }
-    return { ok: true, value: parsed as Record<string, unknown> };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Invalid JSON." };
-  }
-}
-
-function updateSnapshotAsset(snapshot: CanonStateSnapshot, asset: UniverseAssetRow, nextAsset: Record<string, unknown>): CanonStateSnapshot {
-  const currentItems = Array.isArray(snapshot.state_json[asset.assetGroup])
-    ? [...(snapshot.state_json[asset.assetGroup] as unknown[])]
-    : [];
-  currentItems[asset.assetIndex] = nextAsset;
-  return {
-    ...snapshot,
-    state_json: {
-      ...snapshot.state_json,
-      [asset.assetGroup]: currentItems,
-    },
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function getCharacterVariants(details: Record<string, unknown>) {
-  return Array.isArray(details.appearance_variants)
-    ? details.appearance_variants.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
-    : [];
-}
-
-function firstVisualAssetUrl(variant: Record<string, unknown>) {
-  const assets = Array.isArray(variant.visual_assets)
-    ? variant.visual_assets.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
-    : [];
-  const first = assets[0];
-  return first ? stringValue(first.url) || stringValue(first.public_url) || stringValue(first.imageUrl) : "";
 }
 
 function buildProjectFromUniverse(input: {
@@ -1077,7 +733,11 @@ function buildProjectFromUniverse(input: {
         input.bundle.canonFacts.slice(0, 20).map((fact) => `- ${fact.fact_text}`).join("\n"),
         "",
         "## Characters",
-        input.bundle.entities.filter((entity) => entity.type === "character").slice(0, 12).map((entity) => `- ${entity.name}: ${entity.summary}`).join("\n"),
+        input.bundle.entities
+          .filter((entity) => entity.type === "character")
+          .slice(0, 12)
+          .map((entity) => `- ${entity.name}: ${entity.summary}`)
+          .join("\n"),
       ].join("\n"),
       novelBrief: inheritanceSummary,
       novelStyleGuide: input.bundle.universe.tone || bible.languageStyle,
@@ -1150,11 +810,21 @@ function buildUniverseInheritanceSummary(bundle: UniverseBundle) {
     bundle.canonFacts.slice(0, 12).map((fact) => `- ${fact.fact_text}`).join("\n"),
     "",
     "Characters:",
-    bundle.entities.filter((entity) => entity.type === "character").slice(0, 10).map((entity) => `- ${entity.name}: ${entity.summary}`).join("\n"),
+    bundle.entities
+      .filter((entity) => entity.type === "character")
+      .slice(0, 10)
+      .map((entity) => `- ${entity.name}: ${entity.summary}`)
+      .join("\n"),
     "",
     "Locations:",
-    bundle.entities.filter((entity) => entity.type === "location").slice(0, 8).map((entity) => `- ${entity.name}: ${entity.summary}`).join("\n"),
-  ].filter(Boolean).join("\n");
+    bundle.entities
+      .filter((entity) => entity.type === "location")
+      .slice(0, 8)
+      .map((entity) => `- ${entity.name}: ${entity.summary}`)
+      .join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildUniverseSongMarkdown(bundle: UniverseBundle, title: string) {
@@ -1162,7 +832,9 @@ function buildUniverseSongMarkdown(bundle: UniverseBundle, title: string) {
     `${title} is an OST/theme song concept inherited from ${bundle.universe.name}.`,
     bundle.universe.description,
     bundle.canonFacts.slice(0, 8).map((fact) => `- ${fact.fact_text}`).join("\n"),
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return [
     `# ${title}`,
@@ -1232,7 +904,9 @@ function buildUniverseVideoPayload(bundle: UniverseBundle, title: string) {
     bundle.universe.tone || "cinematic short drama",
     bundle.universe.description,
     bundle.canonFacts[0]?.fact_text,
-  ].filter(Boolean).join(". ");
+  ]
+    .filter(Boolean)
+    .join(". ");
 
   return {
     state: {
@@ -1252,28 +926,6 @@ function buildUniverseVideoPayload(bundle: UniverseBundle, title: string) {
     selectedUniverseId: bundle.universe.id,
     uploadedSourceName: "",
   };
-}
-
-function formatCharacterBody(details: Record<string, unknown>, summary: string) {
-  const variants = Array.isArray(details.appearance_variants)
-    ? details.appearance_variants.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
-    : [];
-  const variantLines = variants.slice(0, 4).map((variant) => {
-    const workflow = stringValue(variant.source_workflow) || "project";
-    const title = stringValue(variant.title) || "appearance variant";
-    const appearance = stringValue(variant.appearance);
-    return `- ${workflow}: ${title}${appearance ? ` / ${appearance}` : ""}`;
-  });
-
-  return [
-    summary,
-    variants.length ? `Appearance variants: ${variants.length}` : "",
-    ...variantLines,
-  ].filter(Boolean).join("\n");
-}
-
-function stringValue(value: unknown) {
-  return typeof value === "string" ? value : "";
 }
 
 function downloadBlob(filename: string, content: string, type: string) {

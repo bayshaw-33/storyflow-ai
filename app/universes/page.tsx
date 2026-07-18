@@ -1,19 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search, LayoutGrid, Share2, Plus, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import type { TeamRole } from "@/lib/actors";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import {
   createUniverseFromProject,
-  getUniverseBundle,
   listUniverses,
   type Universe,
-  type UniverseBundle,
-  type UniverseEntityType,
 } from "@/lib/universe";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
@@ -21,6 +19,19 @@ import { useOS } from "@/lib/os/uiState";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { buildUniverseGraphFromUniverses } from "@/lib/universe/graph";
 import { UniverseGraph } from "@/components/universe/UniverseGraph";
+import { UniverseCard } from "@/components/universe/UniverseCard";
+import {
+  DEFAULT_UNIVERSE_FILTER,
+  filterAndSortUniverses,
+  collectUniverseTags,
+  getUniverseCopy,
+  type UniverseListItem,
+  type UniverseListFilter,
+  type UniverseStatusFilter,
+  type UniverseSortKey,
+  type UniverseViewMode,
+} from "@/components/universe/universe-view-model";
+import styles from "@/components/universe/universe.module.css";
 
 type CreateForm = {
   projectId: string;
@@ -39,21 +50,6 @@ type TeamOption = {
   role?: TeamRole;
 };
 
-type UniverseSummary = {
-  characterCount: number;
-  locationCount: number;
-  organizationCount: number;
-  ruleCount: number;
-  relationshipCount: number;
-  canonCount: number;
-  lockedCanonCount: number;
-  pendingInbox: number;
-  linkedProjects: number;
-  linkedWorkflowCount: number;
-  timelineCount: number;
-  productionAssetCount: number;
-};
-
 const EMPTY_FORM: CreateForm = {
   projectId: "",
   teamId: "",
@@ -65,23 +61,64 @@ const EMPTY_FORM: CreateForm = {
   tone: "",
 };
 
+const VIEW_STORAGE_KEY = "storyflow-universe-view-mode";
+const SCROLL_STORAGE_KEY = "storyflow-universe-list-scroll";
+
 export default function UniversesPage() {
   const router = useRouter();
   const os = useOS();
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
+  const copy = getUniverseCopy(isZh);
 
   const [session, setSession] = useState<Session | null>(null);
+  const [items, setItems] = useState<UniverseListItem[]>([]);
   const [universes, setUniverses] = useState<Universe[]>([]);
-  const [universeSummaries, setUniverseSummaries] = useState<Record<string, UniverseSummary>>({});
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [filter, setFilter] = useState<UniverseListFilter>(DEFAULT_UNIVERSE_FILTER);
+  const [view, setView] = useState<UniverseViewMode>("cards");
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // 视图模式持久化（会话内）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.sessionStorage.getItem(VIEW_STORAGE_KEY);
+    if (stored === "cards" || stored === "graph") setView(stored);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(VIEW_STORAGE_KEY, view);
+  }, [view]);
+
+  // 滚动位置恢复（详情返回时）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.sessionStorage.getItem(SCROLL_STORAGE_KEY);
+    if (saved && scrollRef.current) {
+      const top = Number(saved);
+      if (Number.isFinite(top)) {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top, behavior: "auto" });
+          window.sessionStorage.removeItem(SCROLL_STORAGE_KEY);
+        });
+      }
+    }
+  }, [loading]);
+
+  // 记录滚动位置（点击卡片前）
+  function rememberScroll() {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
+    }
+  }
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -106,12 +143,12 @@ export default function UniversesPage() {
         }
         setUniverses(rows);
         setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
-
-        setUniverseSummaries(await loadUniverseSummaries(rows, accessToken));
+        setItems(await loadUniverseItems(accessToken));
       } catch (loadIssue) {
         setLoadError(loadIssue instanceof Error ? loadIssue.message : "Universe load failed.");
         setProjects(getUniverseSourceProjects(readProjectsFromStorage()));
         setTeams([]);
+        setItems([]);
       } finally {
         setLoading(false);
       }
@@ -135,101 +172,24 @@ export default function UniversesPage() {
   }, []);
 
   const signedOut = !session;
-  const universeAccessPending = Boolean(session) && !os.planReady;
-  const noUniverseAccess = Boolean(session) && os.planReady && !os.access.universe;
   const canWriteUniverse = Boolean(session) && os.planReady && os.access.universe;
 
-  const totals = useMemo(() => {
-    const values = Object.values(universeSummaries);
-    return {
-      active: universes.filter((universe) => universe.status === "active").length,
-      characters: sum(values, "characterCount"),
-      locations: sum(values, "locationCount"),
-      organizations: sum(values, "organizationCount"),
-      relationships: sum(values, "relationshipCount"),
-      rules: sum(values, "ruleCount"),
-      canon: sum(values, "canonCount"),
-      lockedCanon: sum(values, "lockedCanonCount"),
-      inbox: sum(values, "pendingInbox"),
-      linkedProjects: sum(values, "linkedProjects"),
-      linkedWorkflows: sum(values, "linkedWorkflowCount"),
-      timelines: sum(values, "timelineCount"),
-      productionAssets: sum(values, "productionAssetCount"),
-    };
-  }, [universes, universeSummaries]);
+  const tags = useMemo(() => collectUniverseTags(items), [items]);
+  const filtered = useMemo(() => filterAndSortUniverses(items, filter), [items, filter]);
   const universeGraph = useMemo(() => buildUniverseGraphFromUniverses(universes), [universes]);
+  const graphSummaries = useMemo(() => {
+    const map: Record<string, { workCount?: number; characterCount?: number }> = {};
+    for (const item of items) {
+      map[item.id] = { workCount: item.workCount, characterCount: item.characterCount };
+    }
+    return map;
+  }, [items]);
 
-  const stateLabel = signedOut
-    ? isZh ? "预览模式" : "Preview Mode"
-    : universeAccessPending
-      ? isZh ? "校验中" : "Checking"
-      : noUniverseAccess
-        ? isZh ? "锁定 — 升级解锁" : "Locked — Upgrade to Unlock"
-        : isZh ? "准备建造" : "Ready to Build";
-
-  const assetCards = [
-    {
-      title: isZh ? "项目资产" : "Project assets",
-      body: isZh
-        ? "小说、剧本、分镜、视频、歌曲和爆款内容都作为来源项目或生产资产进入同一资产视图。"
-        : "Novels, scripts, storyboards, videos, songs, and viral references stay visible as source projects or production assets.",
-      value: totals.linkedProjects,
-      meta: isZh ? `${totals.productionAssets} 个生产资产` : `${totals.productionAssets} production assets`,
-    },
-    {
-      title: isZh ? "角色资产" : "Character assets",
-      body: isZh
-        ? "管理 canon 角色设定、关系、locked facts，并保留项目形象版本入口。"
-        : "Canon character sheets, relationships, locked facts, and entry points for project appearance versions.",
-      value: totals.characters,
-      meta: isZh ? `${totals.relationships} 条关系 · ${totals.lockedCanon} locked` : `${totals.relationships} relationships · ${totals.lockedCanon} locked`,
-    },
-    {
-      title: isZh ? "场景资产" : "Scene assets",
-      body: isZh
-        ? "地点、房间、城市与关键空间会沉淀为可被剧本、分镜和视频继承的空间资产。"
-        : "Locations, rooms, cities, and key spaces become reusable scene assets for scripts, storyboards, and video.",
-      value: totals.locations + totals.organizations,
-      meta: isZh ? `${totals.locations} 地点 · ${totals.organizations} 组织` : `${totals.locations} locations · ${totals.organizations} organizations`,
-    },
-    {
-      title: isZh ? "故事资产" : "Story assets",
-      body: isZh
-        ? "时间线、事件、伏笔和世界规则只在用户确认后进入 canon，后续项目按权限继承。"
-        : "Timeline, events, foreshadowing, and world rules become canon only after user confirmation.",
-      value: totals.timelines + totals.rules + totals.canon,
-      meta: isZh ? `${totals.timelines} 时间线 · ${totals.rules} 规则` : `${totals.timelines} timeline · ${totals.rules} rules`,
-    },
-    {
-      title: "Inbox",
-      body: isZh
-        ? "AI 抽取出的角色、地点、关系、事件和规则先进入 Inbox，由你确认、编辑确认或拒绝。"
-        : "AI-extracted characters, places, relations, events, and rules enter Inbox before canon.",
-      value: totals.inbox,
-      meta: isZh ? "待审候选项" : "pending candidates",
-    },
-  ];
-
-  const flowCards = [
-    {
-      title: isZh ? "项目接入" : "Project Intake",
-      body: isZh
-        ? "从剧本、小说、歌曲、分镜或视频项目中创建宇宙，保留来源链接。"
-        : "Create Universes from script, novel, song, storyboard, or video projects while keeping source links.",
-    },
-    {
-      title: isZh ? "Inbox 审核" : "Inbox Review",
-      body: isZh
-        ? "AI 提取的角色、地点、关系与规则，必须先进入 Inbox。"
-        : "AI-extracted characters, places, relations, and rules must enter Inbox first.",
-    },
-    {
-      title: isZh ? "正史库" : "Canon Memory",
-      body: isZh
-        ? "经用户批准的事实成为 Canon，用于长期 IP 复用与一致性校验。"
-        : "User-approved facts become Canon for long-term IP reuse and consistency checks.",
-    },
-  ];
+  const totals = useMemo(() => ({
+    total: items.length,
+    active: items.filter((item) => item.status === "active").length,
+    inbox: items.reduce((sum, item) => sum + item.pendingInboxCount, 0),
+  }), [items]);
 
   function openCreate() {
     setError("");
@@ -290,227 +250,152 @@ export default function UniversesPage() {
     }
   }
 
+  const showEmpty = !loading && filtered.length === 0;
+
   return (
-    <main className="cosmic-page universe-page">
-      <section className="cosmic-title-band universe-title-band">
-        <Link className="universe-brand-inline" href="/" aria-label="Home">
+    <main className={styles.page} ref={scrollRef}>
+      <section className={styles.titleBar}>
+        <Link className={styles.titleBrand} href="/" aria-label="Home">
           <KiikisLogo compact />
         </Link>
-        <div>
-          <span>{isZh ? "核心 · 宇宙引擎" : "THE CORE · UNIVERSE ENGINE"}</span>
-          <h1>{isZh ? "一个宇宙。所有工作流自动继承。" : "One Universe. Every Workflow Inherits It."}</h1>
-          <p>
-            {isZh
-              ? "你的角色。你的世界观。你的正史。一次定义，到处继承。所有小说、剧本、分镜、视频、歌曲都源自同一份唯一真源。"
-              : "Your characters. Your worlds. Your canon. Define once. Inherit everywhere. Every novel, script, storyboard, video, and song draws from the same source of truth."}
-          </p>
-          {loadError ? <small className="universe-load-warning">{loadError}</small> : null}
+        <div className={styles.titleCopy}>
+          <span className={styles.kicker}>{isZh ? "核心 · 宇宙引擎" : "THE CORE · UNIVERSE ENGINE"}</span>
+          <h1 className={styles.title}>{copy.list.title}</h1>
+          <p className={styles.subtitle}>{copy.list.subtitle}</p>
+          {loadError ? <span style={{ color: "#ff8a8a", fontSize: 12 }}>{loadError}</span> : null}
+        </div>
+        <div className={styles.titleActions}>
+          {canWriteUniverse ? (
+            <button type="button" className={styles.primaryButton} onClick={openCreate} disabled={projects.length === 0}>
+              <Plus size={15} />
+              {copy.list.create}
+            </button>
+          ) : (
+            <Link className={styles.primaryButton} href={signedOut ? "/login" : "/subscription"}>
+              {signedOut ? (isZh ? "登录" : "Sign In") : (isZh ? "升级 ULTRA" : "Upgrade to ULTRA")}
+            </Link>
+          )}
         </div>
       </section>
 
-      <section className="universe-module-layout">
-        {universes.length ? (
-          <section className="dashboard-panel universe-overview-card">
-            <div className="dashboard-panel-head">
-              <div>
-                <span>{isZh ? "宇宙星图" : "Universe Graph"}</span>
-                <h2>{isZh ? "从唯一真源进入每个宇宙" : "Navigate every source of truth"}</h2>
-              </div>
-            </div>
-            <UniverseGraph graph={universeGraph} height={440} />
-          </section>
-        ) : null}
+      <section className={styles.toolbar}>
+        <div className={styles.searchBox}>
+          <span className={styles.searchIcon}><Search size={14} /></span>
+          <input
+            type="search"
+            value={filter.search}
+            onChange={(event) => setFilter((current) => ({ ...current, search: event.target.value }))}
+            placeholder={copy.list.searchPlaceholder}
+            aria-label={copy.list.searchPlaceholder}
+          />
+        </div>
+        <select
+          className={styles.select}
+          value={filter.status}
+          onChange={(event) => setFilter((current) => ({ ...current, status: event.target.value as UniverseStatusFilter }))}
+          aria-label="status filter"
+        >
+          <option value="all">{copy.list.statusAll}</option>
+          <option value="active">{copy.list.statusActive}</option>
+          <option value="archived">{copy.list.statusArchived}</option>
+        </select>
+        <select
+          className={styles.select}
+          value={filter.tag}
+          onChange={(event) => setFilter((current) => ({ ...current, tag: event.target.value }))}
+          aria-label="tag filter"
+        >
+          <option value="">{copy.list.tagAll}</option>
+          {tags.map((tag) => (
+            <option key={tag} value={tag}>{tag}</option>
+          ))}
+        </select>
+        <select
+          className={styles.sortSelect}
+          value={filter.sort}
+          onChange={(event) => setFilter((current) => ({ ...current, sort: event.target.value as UniverseSortKey }))}
+          aria-label="sort"
+        >
+          <option value="updated">{copy.list.sortUpdated}</option>
+          <option value="name">{copy.list.sortName}</option>
+          <option value="works">{copy.list.sortWorks}</option>
+        </select>
+        <div className={styles.viewSwitch} role="tablist" aria-label="view mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "cards"}
+            className={view === "cards" ? "active" : ""}
+            onClick={() => setView("cards")}
+          >
+            <LayoutGrid size={14} />
+            {copy.list.viewCards}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "graph"}
+            className={view === "graph" ? "active" : ""}
+            onClick={() => setView("graph")}
+          >
+            <Share2 size={14} />
+            {copy.list.viewGraph}
+          </button>
+        </div>
+      </section>
 
-        <section className="dashboard-panel universe-overview-card">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "你的宇宙一目了然" : "Your Universe At A Glance"}</span>
-              <h2>{isZh ? "实时资产状态" : "Live asset status"}</h2>
-            </div>
-          </div>
-          <div className="universe-status-grid">
-            <strong>{universes.length}<span>{isZh ? "宇宙" : "Universes"}</span></strong>
-            <strong>{totals.active}<span>{isZh ? "活跃中" : "Active Now"}</span></strong>
-            <strong>{projects.length}<span>{isZh ? "源项目" : "Source Projects"}</span></strong>
-            <strong>{totals.inbox}<span>{isZh ? "待审 Inbox" : "Inbox Items"}</span></strong>
-            <strong>{totals.linkedWorkflows}<span>{isZh ? "联动工作流" : "Linked Workflows"}</span></strong>
-            <strong>{stateLabel}<span>{isZh ? "状态" : "State"}</span></strong>
-          </div>
-        </section>
+      <section className={styles.countsStrip}>
+        <span><strong>{totals.total}</strong> {copy.list.countsUniverses}</span>
+        <span><strong>{totals.active}</strong> {copy.list.countsActive}</span>
+        <span><strong>{totals.inbox}</strong> {copy.list.countsInbox}</span>
+      </section>
 
-        {(signedOut || universeAccessPending || noUniverseAccess) ? (
-          <section className="dashboard-panel universe-access-banner">
-            <div>
-              <span>{isZh ? "预览模式" : "PREVIEW MODE"}</span>
-              <h2>{isZh ? "可浏览。如要建造，请升级。" : "You Can Browse. Upgrade to Build."}</h2>
-              <p>
-                {signedOut
-                  ? isZh
-                    ? "登录后可以读取你的云端宇宙。当前页面展示 Universe 如何管理角色、正史、项目和 Inbox。"
-                    : "Sign in to load your cloud Universes. This page previews how Universe manages characters, canon, projects, and Inbox."
-                  : universeAccessPending
-                    ? isZh
-                      ? "正在读取账号套餐。校验完成前不会开放创建、Inbox 写入或 canon 确认操作。"
-                      : "Reading account plan. Create, Inbox write, and canon confirmation stay disabled while checking."
-                    : isZh
-                      ? "当前为预览模式。你可以阅读所有宇宙、追溯正史决策，并理解继承如何跨工作流流动。要创建自己的宇宙、写入 Inbox 或确认正史 — 请升级至 ULTRA。"
-                      : "You are in preview. You can read every Universe, trace canon decisions, and understand how inheritance flows across workflows. To create your own Universe, write to Inbox, or confirm canon — upgrade to ULTRA."}
-              </p>
-            </div>
-            <Link className="primary-button" href={signedOut ? "/login" : "/subscription"}>
-              {signedOut ? (isZh ? "登录" : "Sign In") : (isZh ? "升级 ULTRA" : "Upgrade to ULTRA")}
-            </Link>
-          </section>
-        ) : null}
-
-        <section className="dashboard-panel universe-asset-card">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "资产规划" : "Asset Map"}</span>
-              <h2>{isZh ? "Universe 应该展示哪些资产" : "What belongs in Universe"}</h2>
-            </div>
+      <section className={styles.content}>
+        {loading ? (
+          <div className={styles.loadingState}>
+            <Loader2 size={16} className="spin" />
+            {copy.list.loading}
           </div>
-          <div className="universe-asset-grid">
-            {assetCards.map((card) => (
-              <article key={card.title}>
-                <strong>{card.value}</strong>
-                <div>
-                  <h3>{card.title}</h3>
-                  <p>{card.body}</p>
-                  <small>{card.meta}</small>
-                </div>
-              </article>
-            ))}
+        ) : view === "graph" ? (
+          <div className={styles.graphWrap}>
+            <UniverseGraph
+              graph={universeGraph}
+              height={560}
+              summaries={graphSummaries}
+              emptyLabel={copy.list.graphEmpty}
+            />
           </div>
-        </section>
-
-        <section className="dashboard-panel universe-action-card">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "开启新宇宙" : "Start A New Universe"}</span>
-              <h2>{isZh ? "从现有项目提取第一批资产" : "Lift the first assets from a project"}</h2>
-            </div>
-          </div>
-          <p className="subtle">
-            {isZh
-              ? "从你已有的任意小说、剧本、分镜、视频或歌曲中选一个。系统会将其角色、世界观和正史提取到全新宇宙，等待你审核后再写入 canon。"
-              : "Pick any novel, script, storyboard, video, or song you already started. We will lift its characters, world, and canon into a fresh Universe, then route candidates through Inbox before canon."}
-          </p>
-          <div className="universe-module-actions">
-            {!canWriteUniverse ? (
-              <Link className="primary-button" href={signedOut ? "/login" : "/subscription"}>
-                {signedOut ? (isZh ? "登录" : "Sign In") : (isZh ? "查看套餐" : "See Plans")}
-              </Link>
-            ) : (
-              <button className="primary-button" onClick={openCreate} disabled={projects.length === 0}>
-                {isZh ? "挑选项目" : "Pick A Project"}
+        ) : showEmpty ? (
+          <div className={styles.emptyState}>
+            <strong>{copy.list.empty}</strong>
+            <p>{copy.list.emptyHint}</p>
+            {canWriteUniverse ? (
+              <button type="button" className={styles.primaryButton} onClick={openCreate} disabled={projects.length === 0} style={{ marginTop: 8 }}>
+                <Plus size={14} />
+                {copy.list.create}
               </button>
-            )}
-            <Link className="secondary-button" href="/dashboard">
-              {isZh ? "打开工作台" : "Open Workspace"}
-            </Link>
-          </div>
-        </section>
-
-        <section className="dashboard-panel universe-workflow-card">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "一个宇宙如何诞生" : "How A Universe Is Born"}</span>
-              <h2>{isZh ? "三步完成。从原始项目到可复用正史。" : "Three steps. From raw project to reusable canon."}</h2>
-            </div>
-          </div>
-          <div className="universe-flow-grid">
-            {flowCards.map((card, index) => (
-              <article key={card.title}>
-                <strong>{String(index + 1).padStart(2, "0")}</strong>
-                <h3>{card.title}</h3>
-                <p>{card.body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="dashboard-panel universe-list-card">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "宇宙列表" : "Universe list"}</span>
-              <h2>{isZh ? "已创建的唯一真源" : "Existing sources of truth"}</h2>
-            </div>
-          </div>
-          <div className="universe-card-grid">
-            {loading ? (
-              <article className="universe-module-empty">
-                <strong>{isZh ? "加载中" : "Loading"}</strong>
-                <p>{isZh ? "正在读取宇宙和项目状态。" : "Reading Universe and project status."}</p>
-              </article>
-            ) : universes.length === 0 ? (
-              <article className="universe-module-empty">
-                <strong>{isZh ? "还没有宇宙" : "No Universe yet"}</strong>
-                <p>{isZh ? "已创建的宇宙会出现在这里，含题材、语言、目标市场和更新时间。" : "Created Universes will appear here with genre, language, market, and update time."}</p>
-              </article>
-            ) : (
-              universes.map((universe) => {
-                const summary = universeSummaries[universe.id] || summarizeUniverse(null);
-                return (
-                  <Link className="universe-record-card" href={`/universes/${universe.id}`} key={universe.id}>
-                    <span>{universe.status === "active" ? (isZh ? "活跃中" : "Active") : (isZh ? "已归档" : "Archived")}</span>
-                    <h3>{universe.name}</h3>
-                    <p>{universe.description || (isZh ? "暂无简介。" : "No description yet.")}</p>
-                    <div className="universe-record-metrics">
-                      <strong>{summary.characterCount}<span>{isZh ? "角色" : "Cast"}</span></strong>
-                      <strong>{summary.canonCount}<span>Canon</span></strong>
-                      <strong>{summary.pendingInbox}<span>Inbox</span></strong>
-                      <strong>{summary.productionAssetCount}<span>{isZh ? "资产" : "Assets"}</span></strong>
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>{isZh ? "类型" : "Genre"}</dt>
-                        <dd>{universe.genre || "—"}</dd>
-                      </div>
-                      <div>
-                        <dt>{isZh ? "语言" : "Language"}</dt>
-                        <dd>{universe.default_language || "—"}</dd>
-                      </div>
-                      <div>
-                        <dt>{isZh ? "市场" : "Markets"}</dt>
-                        <dd>{universe.target_markets?.join(", ") || "—"}</dd>
-                      </div>
-                    </dl>
-                  </Link>
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        <section className="dashboard-panel universe-source-card">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "来源项目" : "Source projects"}</span>
-              <h2>{isZh ? "可以转化为 Universe 的创作" : "Projects available for Universe"}</h2>
-            </div>
-          </div>
-          <div className="universe-source-list">
-            {projects.slice(0, 8).map((project) => (
-              <article key={project.id}>
-                <span>{workflowLabel(project, isZh)}</span>
-                <strong>{project.title || project.id}</strong>
-                <small>{[project.genre, project.targetLanguage, project.projectGroup].filter(Boolean).join(" · ") || (isZh ? "本地草稿" : "Local draft")}</small>
-              </article>
-            ))}
-            {projects.length === 0 ? (
-              <article className="universe-module-empty">
-                <strong>{isZh ? "还没有本地项目" : "No local projects"}</strong>
-                <p>{isZh ? "已保存到项目列表的歌曲会出现在这里；登录用户还会合并云端项目。" : "Songs saved to the project list will appear here; signed-in users also merge cloud projects."}</p>
-              </article>
             ) : null}
           </div>
-        </section>
+        ) : (
+          <div className={styles.cardGrid} onClick={rememberScroll}>
+            {filtered.map((item) => (
+              <UniverseCard
+                key={item.id}
+                universe={item}
+                isZh={isZh}
+                onArchive={(target) => {
+                  // PRD §5.3 本轮提供归档入口；归档实现走 PATCH 端点，本期仅占位提示
+                  setError(isZh ? `归档功能即将开放：${target.name}` : `Archive coming soon: ${target.name}`);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {createOpen ? (
-        <div className="modal-backdrop">
-          <div className="modal wizard-modal">
+        <div className={styles.modalBackdrop} role="dialog" aria-modal="true">
+          <div className={styles.modal}>
             <h2>{isZh ? "从项目创建宇宙" : "Create Universe from Project"}</h2>
             <p>
               {isZh
@@ -518,8 +403,8 @@ export default function UniversesPage() {
                 : "Pick an existing project as the foundation. Add characters, timeline, and world rules after creation."}
             </p>
 
-            <div className="wizard-grid">
-              <label>
+            <div className="wizard-grid" style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
                 {isZh ? "来源项目" : "Source project"}
                 <select value={createForm.projectId} onChange={(event) => handleProjectSelect(event.target.value)}>
                   <option value="">{isZh ? "— 选择项目 —" : "— Select project —"}</option>
@@ -531,7 +416,7 @@ export default function UniversesPage() {
                 </select>
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
                 {isZh ? "共享团队" : "Shared team"}
                 <select value={createForm.teamId} onChange={(event) => setCreateForm((current) => ({ ...current, teamId: event.target.value }))}>
                   <option value="">{isZh ? "仅自己可见" : "Private to me"}</option>
@@ -543,7 +428,7 @@ export default function UniversesPage() {
                 </select>
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
                 {isZh ? "宇宙名称" : "Universe name"}
                 <input
                   value={createForm.name}
@@ -553,7 +438,7 @@ export default function UniversesPage() {
                 />
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
                 {isZh ? "简介" : "Description"}
                 <input
                   value={createForm.description}
@@ -562,7 +447,7 @@ export default function UniversesPage() {
                 />
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {isZh ? "类型" : "Genre"}
                 <input
                   value={createForm.genre}
@@ -571,7 +456,7 @@ export default function UniversesPage() {
                 />
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {isZh ? "主要语言" : "Default language"}
                 <input
                   value={createForm.default_language}
@@ -579,7 +464,7 @@ export default function UniversesPage() {
                 />
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
                 {isZh ? "目标市场（逗号分隔）" : "Target markets (comma-separated)"}
                 <input
                   value={createForm.target_markets}
@@ -588,7 +473,7 @@ export default function UniversesPage() {
                 />
               </label>
 
-              <label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
                 {isZh ? "基调" : "Tone"}
                 <input
                   value={createForm.tone}
@@ -598,13 +483,13 @@ export default function UniversesPage() {
               </label>
             </div>
 
-            {error ? <p className="form-error">{error}</p> : null}
+            {error ? <p className={styles.formError}>{error}</p> : null}
 
-            <div className="modal-actions">
-              <button className="secondary-button" onClick={() => setCreateOpen(false)} disabled={creating}>
+            <div className={styles.modalActions}>
+              <button className={styles.secondaryButton} onClick={() => setCreateOpen(false)} disabled={creating}>
                 {isZh ? "取消" : "Cancel"}
               </button>
-              <button className="primary-button" onClick={submitCreate} disabled={creating || !canWriteUniverse}>
+              <button className={styles.primaryButton} onClick={submitCreate} disabled={creating || !canWriteUniverse}>
                 {creating ? (isZh ? "创建中…" : "Creating…") : isZh ? "创建宇宙" : "Create Universe"}
               </button>
             </div>
@@ -615,100 +500,26 @@ export default function UniversesPage() {
   );
 }
 
-function summarizeUniverse(bundle: UniverseBundle | null): UniverseSummary {
-  if (!bundle) {
-    return {
-      characterCount: 0,
-      locationCount: 0,
-      organizationCount: 0,
-      ruleCount: 0,
-      relationshipCount: 0,
-      canonCount: 0,
-      lockedCanonCount: 0,
-      pendingInbox: 0,
-      linkedProjects: 0,
-      linkedWorkflowCount: 0,
-      timelineCount: 0,
-      productionAssetCount: 0,
-    };
-  }
-
-  const entityCounts = countEntities(bundle);
-  return {
-    characterCount: entityCounts.character,
-    locationCount: entityCounts.location,
-    organizationCount: entityCounts.organization,
-    ruleCount: entityCounts.rule + entityCounts.concept,
-    relationshipCount: bundle.relationships.length,
-    canonCount: bundle.canonFacts.length,
-    lockedCanonCount: bundle.canonFacts.filter((fact) => fact.is_locked).length,
-    pendingInbox: bundle.inbox.filter((item) => item.status === "pending").length,
-    linkedProjects: bundle.links.length,
-    linkedWorkflowCount: new Set(bundle.links.map((link) => link.project_role)).size,
-    timelineCount: bundle.timeline.length,
-    productionAssetCount: bundle.snapshots.reduce((count, snapshot) => {
-      return count + countSnapshotAssets(snapshot.state_json);
-    }, 0),
-  };
-}
-
-async function loadUniverseSummaries(universes: Universe[], accessToken: string | null) {
-  if (accessToken) {
-    try {
-      const response = await fetch("/api/universe/summaries", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const payload = await response.json().catch(() => null);
-      if (response.ok && payload?.success && payload.summaries) {
-        return payload.summaries as Record<string, UniverseSummary>;
-      }
-      console.error(`[universes] summaries API returned ${response.status}; falling back to per-Universe reads.`);
-    } catch (error) {
-      console.error("[universes] summaries API failed; falling back to per-Universe reads.", error);
+/**
+ * PRD §5 列表页：调用阶段 B 的 /api/universe/summaries 获取 UniverseListItem[]。
+ * 不得对完整 description 做前端全文扫描；cardSummary 已由服务端截断/去标记。
+ */
+async function loadUniverseItems(accessToken: string | null): Promise<UniverseListItem[]> {
+  if (!accessToken) return [];
+  try {
+    const response = await fetch("/api/universe/summaries", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const payload = await response.json().catch(() => null);
+    if (response.ok && payload?.universes && Array.isArray(payload.universes)) {
+      return payload.universes as UniverseListItem[];
     }
+    console.error(`[universes] summaries API returned ${response.status}; falling back to empty list.`);
+    return [];
+  } catch (error) {
+    console.error("[universes] summaries API failed.", error);
+    return [];
   }
-
-  const summaryPairs = await Promise.all(
-    universes.map(async (universe) => {
-      const bundle = await getUniverseBundle(universe.id, { accessToken }).catch(() => null);
-      return [universe.id, summarizeUniverse(bundle)] as const;
-    }),
-  );
-  return Object.fromEntries(summaryPairs);
-}
-
-function countSnapshotAssets(state: Record<string, unknown>) {
-  const assets = Array.isArray(state.assets) ? state.assets.length : 0;
-  const productionAssets = Array.isArray(state.production_assets) ? state.production_assets.length : 0;
-  return assets + productionAssets;
-}
-
-function countEntities(bundle: UniverseBundle) {
-  const counts: Record<UniverseEntityType, number> = {
-    character: 0,
-    location: 0,
-    organization: 0,
-    object: 0,
-    rule: 0,
-    concept: 0,
-  };
-  for (const entity of bundle.entities) {
-    counts[entity.type] += 1;
-  }
-  return counts;
-}
-
-function sum(items: UniverseSummary[], key: keyof UniverseSummary) {
-  return items.reduce((total, item) => total + item[key], 0);
-}
-
-function workflowLabel(project: DramaProject, isZh: boolean) {
-  if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
-  if (project.workflowType === "novel") return isZh ? "小说" : "Novel";
-  if (project.workflowType === "storyboard") return isZh ? "分镜" : "Storyboard";
-  if (project.workflowType === "video") return isZh ? "视频" : "Video";
-  if (project.workflowType === "continuation") return isZh ? "续写剧本" : "Continuation Script";
-  return isZh ? "剧本" : "Script";
 }
 
 function getUniverseSourceProjects(projects: DramaProject[]) {
