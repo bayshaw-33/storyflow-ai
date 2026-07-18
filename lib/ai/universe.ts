@@ -1,8 +1,7 @@
 import type { DramaProject } from "@/lib/projects";
 import type { CanonCheckIssue, CanonCheckReport, UniverseBundle, UniverseInboxItem } from "@/lib/universe";
-import type { CreativePackage } from "@/lib/universe/creative-package";
-import { creativePackageToSourceText } from "@/lib/universe/creative-package";
-import { callMiniMax } from "@/lib/ai/providers/minimax";
+import { creativePackageToSourceText, type CreativePackage } from "../universe/creative-package.ts";
+import { callDeepSeek } from "./providers/deepseek.ts";
 
 type ExtractInput = {
   universeId: string;
@@ -17,7 +16,14 @@ type CanonCheckInput = {
   userId: string;
 };
 
-export async function extractUniverseInboxItems(input: ExtractInput): Promise<UniverseInboxItem[]> {
+export type UniverseExtractionResult = {
+  items: UniverseInboxItem[];
+  degraded: boolean;
+  source: "ai" | "fallback";
+  error: string | null;
+};
+
+export async function extractUniverseInboxItems(input: ExtractInput): Promise<UniverseExtractionResult> {
   const sourceText = buildExtractionSourceText(input);
   const prompt = [
     "Extract candidate IP universe updates from this StoryFlow project.",
@@ -29,7 +35,7 @@ export async function extractUniverseInboxItems(input: ExtractInput): Promise<Un
   ].join("\n");
 
   try {
-    const result = await callMiniMax({
+    const result = await callDeepSeek({
       temperature: 0.2,
       maxTokens: 6000,
       messages: [
@@ -39,20 +45,22 @@ export async function extractUniverseInboxItems(input: ExtractInput): Promise<Un
     });
     const parsed = parseJsonObject(result.output);
     const inbox = normalizeExtractedJson(parsed, input);
-    if (inbox.length) return inbox;
-  } catch {
-    // Fall back to deterministic extraction below.
+    if (inbox.length) {
+      return { items: inbox, degraded: false, source: "ai", error: null };
+    }
+    return degradedExtraction(input, "AI extraction returned no usable items; deterministic fallback output is marked as source=fallback.");
+  } catch (error) {
+    return degradedExtraction(input, errorMessage(error));
   }
-
-  return heuristicInboxItems(input);
 }
 
 export async function runCanonCheck(input: CanonCheckInput): Promise<Omit<CanonCheckReport, "id" | "created_at">> {
   const canonContext = buildCanonContext(input.bundle);
   const projectText = buildProjectSourceText(input.project);
 
+  let output: string;
   try {
-    const result = await callMiniMax({
+    const result = await callDeepSeek({
       temperature: 0.15,
       maxTokens: 5000,
       messages: [
@@ -75,29 +83,46 @@ export async function runCanonCheck(input: CanonCheckInput): Promise<Omit<CanonC
         },
       ],
     });
-    const parsed = parseJsonObject(result.output);
-    const issues = normalizeIssues(parsed.issues, input.bundle);
-    return {
-      universe_id: input.bundle.universe.id,
-      project_id: input.project.id,
-      user_id: input.userId,
-      target_scope: "project",
-      score: clampScore(Number(parsed.score ?? 100 - issues.length * 18)),
-      issues_json: issues,
-      suggestions_json: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-    };
-  } catch {
-    const issues = heuristicCanonIssues(input);
-    return {
-      universe_id: input.bundle.universe.id,
-      project_id: input.project.id,
-      user_id: input.userId,
-      target_scope: "project",
-      score: clampScore(issues.length ? 100 - issues.length * 24 : 92),
-      issues_json: issues,
-      suggestions_json: issues.map((issue) => ({ title: issue.title, suggested_fix: issue.suggested_fix })),
-    };
+    output = result.output;
+  } catch (error) {
+    throw new Error(`CANON_CHECK_AI_UNAVAILABLE: ${errorMessage(error)}`);
   }
+
+  const parsed = parseJsonObject(output);
+  if (!Object.keys(parsed).length) {
+    throw new Error("CANON_CHECK_INVALID_AI_OUTPUT");
+  }
+  const issues = normalizeIssues(parsed.issues, input.bundle);
+  return {
+    universe_id: input.bundle.universe.id,
+    project_id: input.project.id,
+    user_id: input.userId,
+    target_scope: "project",
+    score: clampScore(Number(parsed.score ?? 100 - issues.length * 18)),
+    issues_json: issues,
+    suggestions_json: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+  };
+}
+
+function degradedExtraction(input: ExtractInput, reason: string): UniverseExtractionResult {
+  return {
+    items: markFallbackItems(heuristicInboxItems(input)),
+    degraded: true,
+    source: "fallback",
+    error: reason,
+  };
+}
+
+function markFallbackItems(items: UniverseInboxItem[]): UniverseInboxItem[] {
+  return items.map((item) => ({
+    ...item,
+    confidence: 0.3,
+    proposed_payload: { ...item.proposed_payload, source: "fallback" },
+  }));
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || "UNKNOWN_AI_ERROR");
 }
 
 function normalizeExtractedJson(parsed: Record<string, unknown>, input: ExtractInput): UniverseInboxItem[] {
@@ -403,53 +428,6 @@ function heuristicCreativePackageInboxItems(input: ExtractInput): UniverseInboxI
   return items;
 }
 
-function heuristicCanonIssues(input: CanonCheckInput): CanonCheckIssue[] {
-  const text = buildProjectSourceText(input.project).toLowerCase();
-  const issues: CanonCheckIssue[] = [];
-
-  for (const fact of input.bundle.canonFacts) {
-    const factText = fact.fact_text.toLowerCase();
-    const mentionsMotherAlive = /(mother|mom|母亲|妈妈).{0,30}(alive|still alive|活着|还活着)/i.test(fact.fact_text);
-    const projectMotherDead = /(mother|mom|母亲|妈妈).{0,40}(dead|died|death|死亡|去世|死了)/i.test(text);
-    if (mentionsMotherAlive && projectMotherDead) {
-      issues.push({
-        severity: "critical",
-        title: "Mother survival canon conflict",
-        description: "The universe canon says the mother is alive, but the target project states or implies she died.",
-        related_canon_fact_id: fact.id,
-        source_excerpt: findExcerpt(text, ["mother", "母亲", "dead", "死亡", "去世"]),
-        suggested_fix: "Keep the mother alive, or make the death claim a lie, fake record, or character misconception.",
-      });
-    }
-
-    const mentionsVisitedEstate = /(estate|manor|grey estate|庄园|府邸).{0,40}(visited|arrived|went|去过|到过|来过)/i.test(fact.fact_text);
-    const projectFirstEstate = /(first time|第一次).{0,50}(estate|manor|grey estate|庄园|府邸)/i.test(text);
-    if (mentionsVisitedEstate && projectFirstEstate) {
-      issues.push({
-        severity: "warning",
-        title: "First-visit timeline conflict",
-        description: "The target project claims a first visit to a location that canon indicates was already visited.",
-        related_canon_fact_id: fact.id,
-        source_excerpt: findExcerpt(text, ["first time", "第一次", "estate", "庄园"]),
-        suggested_fix: "Change the scene to a return visit or specify it is the first visit under a new identity.",
-      });
-    }
-
-    if (fact.is_locked && fact.importance === "critical" && text.includes("retcon") && factText.length > 20) {
-      issues.push({
-        severity: "note",
-        title: "Locked fact retcon risk",
-        description: "The draft appears to revise locked canon. Confirm whether this is a deliberate retcon.",
-        related_canon_fact_id: fact.id,
-        source_excerpt: "retcon",
-        suggested_fix: "Move the change to Universe Inbox as an alternative instead of overwriting canon.",
-      });
-    }
-  }
-
-  return issues.slice(0, 12);
-}
-
 function normalizeIssues(value: unknown, bundle: UniverseBundle): CanonCheckIssue[] {
   const factIds = new Set(bundle.canonFacts.map((fact) => fact.id));
   return arrayObjects(value)
@@ -583,12 +561,6 @@ function clampConfidence(value: number) {
 function clampScore(value: number) {
   if (!Number.isFinite(value)) return 80;
   return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function findExcerpt(text: string, needles: string[]) {
-  const index = needles.map((needle) => text.indexOf(needle.toLowerCase())).find((item) => item >= 0) ?? -1;
-  if (index < 0) return "";
-  return text.slice(Math.max(0, index - 120), index + 240);
 }
 
 function createId() {

@@ -24,11 +24,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Please sign in before running Canon Check." }, { status: 401 });
   }
 
-  const checked = await runCanonCheck({
-    bundle: body.bundle,
-    project: body.project,
-    userId: user.id,
-  });
+  let checked;
+  try {
+    checked = await runCanonCheck({
+      bundle: body.bundle,
+      project: body.project,
+      userId: user.id,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 503 }
+    );
+  }
 
   const report: CanonCheckReport = {
     ...checked,

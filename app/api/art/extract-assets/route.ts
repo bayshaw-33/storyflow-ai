@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { callMiniMax } from "@/lib/ai/providers/minimax";
+import { callDeepSeek } from "@/lib/ai/providers/deepseek";
 import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
 import { authenticateRequest } from "@/lib/supabase/server";
 import { fallbackExtractArtAssets, type ArtCharacterPriority, type ExtractedArtAssets } from "@/lib/art-workbench";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type ExtractRequest = {
   title?: string;
@@ -23,11 +26,10 @@ export async function POST(request: Request) {
 
   try {
     const user = await authenticateRequest(request);
-    const savedConfig = await resolveSavedApiConfig(user.id, "minimax").catch(() => null);
-    const result = await callMiniMax({
-      apiKeyOverride: savedConfig?.minimaxApiKey,
-      modelOverride: savedConfig?.minimaxModel,
-      baseUrlOverride: savedConfig?.minimaxBaseUrl,
+    const savedConfig = await resolveSavedApiConfig(user.id, "deepseek").catch(() => null);
+    const result = await callDeepSeek({
+      apiKeyOverride: savedConfig?.deepseekApiKey,
+      modelOverride: savedConfig?.deepseekModel,
       temperature: 0.3,
       maxTokens: 6000,
       messages: [
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
       ],
     });
     const parsed = parseExtraction(result.output);
-    return NextResponse.json({ success: true, ...parsed, provider: result.provider, model: result.model, error: null });
+    return NextResponse.json({ success: true, ...parsed, provider: result.provider, model: result.model, degraded: false, error: null });
   } catch (error) {
     if (isAuthError(error)) return failure("请先登录后再使用美术资产自动拆解。", 401);
     const fallback = fallbackExtractArtAssets(sourceText);
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
       ...fallback,
       provider: "local",
       model: "fallback-extractor",
+      degraded: true,
       warning: toFriendlyError(error),
       error: null,
     });
@@ -170,9 +173,9 @@ function isAuthError(error: unknown) {
 
 function toFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message === "MISSING_MINIMAX_API_KEY") return "MiniMax 暂未配置，已使用本地规则生成初稿。";
-  if (message.includes("MINIMAX_API_ERROR")) return "MiniMax 拆解失败，已使用本地规则生成初稿。";
-  if (message === "MINIMAX_TIMEOUT" || message === "MINIMAX_NETWORK_ERROR") return "MiniMax 连接失败，已使用本地规则生成初稿。";
+  if (message === "MISSING_DEEPSEEK_API_KEY") return "DeepSeek 暂未配置，已使用本地规则生成初稿。";
+  if (message.includes("DEEPSEEK_API_ERROR")) return "DeepSeek 拆解失败，已使用本地规则生成初稿。";
+  if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return "DeepSeek 连接失败，已使用本地规则生成初稿。";
   if (message === "ART_EXTRACTION_JSON_PARSE_FAILED" || message.includes("JSON")) return "AI 返回格式无法解析，已使用本地规则生成初稿。";
   return "AI 拆解失败，已使用本地规则生成初稿。";
 }

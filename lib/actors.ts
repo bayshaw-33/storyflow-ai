@@ -156,6 +156,35 @@ export function normalizeActorInput(input: ActorProfileInput) {
   };
 }
 
+/**
+ * 生成提示词专用合并：输入字段为空时保留已有演员数据，避免只传 actorId 的
+ * 重新生成请求把已有 name/face_description 等字段覆盖为空（数据损毁 bug）。
+ * 非空输入字段仍然覆盖已有值。
+ */
+export function mergeActorPromptInput(existing: Partial<ActorProfile>, input: ActorProfileInput): ActorProfileInput {
+  const normalized = normalizeActorInput(input);
+  const keepText = (incoming: string, fallback: unknown) => incoming || cleanText(fallback);
+  const keepTags = (incoming: string[], fallback: unknown) => (incoming.length ? incoming : normalizeTags(fallback));
+
+  return {
+    team_id: normalized.team_id || existing.team_id || null,
+    visibility: input.visibility ? normalized.visibility : existing.visibility === "team" ? "team" : "private",
+    name: keepText(normalized.name, existing.name),
+    bio: keepText(normalized.bio, existing.bio),
+    age_range: keepText(normalized.age_range, existing.age_range),
+    gender_expression: keepText(normalized.gender_expression, existing.gender_expression),
+    ethnicity_style: keepText(normalized.ethnicity_style, existing.ethnicity_style),
+    face_description: keepText(normalized.face_description, existing.face_description),
+    hair_description: keepText(normalized.hair_description, existing.hair_description),
+    body_description: keepText(normalized.body_description, existing.body_description),
+    temperament: keepTags(normalized.temperament, existing.temperament),
+    playable_roles: keepTags(normalized.playable_roles, existing.playable_roles),
+    base_prompt: keepText(normalized.base_prompt, existing.base_prompt),
+    negative_prompt: keepText(normalized.negative_prompt, existing.negative_prompt),
+    metadata: input.metadata ?? existing.metadata ?? undefined,
+  };
+}
+
 export function buildActorBasePrompt(actor: Partial<ActorProfile | ActorProfileInput>) {
   const parts = [
     "Virtual actor portrait, original fictional performer, not a real person.",

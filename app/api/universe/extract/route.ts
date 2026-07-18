@@ -24,20 +24,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Please sign in before extracting Universe updates." }, { status: 401 });
   }
 
-  const items = await extractUniverseInboxItems({
+  const extraction = await extractUniverseInboxItems({
     universeId: body.universeId,
     project: body.project,
     creativePackage: body.creativePackage,
     userId: user.id,
   });
 
-  if (hasServiceRoleConfig() && items.length) {
+  if (hasServiceRoleConfig() && extraction.items.length) {
     await serviceFetch("/rest/v1/storyflow_universe_inbox_items?on_conflict=id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify(items),
+      body: JSON.stringify(extraction.items),
     }).catch(() => null);
   }
 
-  return NextResponse.json({ success: true, items });
+  return NextResponse.json({
+    success: true,
+    items: extraction.items,
+    degraded: extraction.degraded,
+    source: extraction.source,
+    error: extraction.error,
+  });
 }

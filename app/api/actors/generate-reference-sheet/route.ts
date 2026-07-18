@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
-import { generateMiniMaxImage } from "@/lib/ai/providers/minimax";
+import { generateArtImages, isAtlasAuthorizedUser } from "@/lib/art/providers";
+import { buildActorReferenceImageRequest, firstArtImageResult, sanitizeReferenceUrls } from "@/lib/art/providers/actor-image";
 import { authenticateRequest } from "@/lib/supabase/server";
 import { buildActorReferencePrompt, getActorForUser, saveGeneratedActorImage } from "@/lib/supabase/actors";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +20,19 @@ export async function POST(request: NextRequest) {
       characterRole: String(body.characterRole || "").trim(),
       costumeDirection: String(body.costumeDirection || "").trim(),
     });
-    const result = await generateMiniMaxImage(prompt);
+    // 参考图驱动：演员头像作为 images 参考输入（Atlas 图生图模型）；
+    // 无可用 http 头像时退化为文生图，并通过 referenceUsed 显式告知前端。
+    const referenceUrls = sanitizeReferenceUrls([actor.avatar_url]);
+    const generated = await generateArtImages(
+      buildActorReferenceImageRequest({
+        prompt,
+        negativePrompt: actor.negative_prompt || "",
+        referenceUrls,
+        aspectRatio: "4:3",
+      }),
+      { atlasAuthorized: isAtlasAuthorizedUser(user) },
+    );
+    const result = firstArtImageResult(generated);
     const saved = await saveGeneratedActorImage({
       userId: user.id,
       actorId,
@@ -26,7 +42,14 @@ export async function POST(request: NextRequest) {
       provider: result.provider,
       model: result.model,
     });
-    return ok({ imageUrl: result.imageUrl, actor: saved.actor, asset: saved.asset, prompt });
+    return ok({
+      imageUrl: result.imageUrl,
+      actor: saved.actor,
+      asset: saved.asset,
+      prompt,
+      referenceUsed: referenceUrls.length > 0,
+      references: referenceUrls,
+    });
   } catch (error) {
     return apiError(error, "生成角色参考表失败。", 502);
   }

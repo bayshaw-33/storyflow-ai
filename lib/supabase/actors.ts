@@ -125,13 +125,17 @@ export async function listActorsForUser(userId: string): Promise<ActorProfile[]>
 async function listStructuredActorsForUser(userId: string) {
   const memberships = await listMemberships(userId);
   const teamIds = memberships.map((item) => item.team_id);
-  const filters = [`owner_id=eq.${encodeURIComponent(userId)}`];
-  if (teamIds.length) {
-    filters.push(`and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`);
-  }
+  const ownerFilter = `owner_id=eq.${encodeURIComponent(userId)}`;
+  const teamFilter = teamIds.length
+    ? `and(visibility.eq.team,team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`
+    : "";
+
+  // PGRST100 词法 bug：or(...) 首项不能是 o 开头列（owner_id 会被词法器误吞 or 前缀），
+  // 因此团队过滤放在首位；无团队时退化为普通 owner 过滤，不使用 or(...)。
+  const query = teamFilter ? `or=(${teamFilter},${ownerFilter})` : ownerFilter;
 
   const actors = await serviceFetch<ActorProfile[]>(
-    `/rest/v1/storyflow_actor_profiles?or=(${filters.join(",")})&status=neq.archived&select=*&order=updated_at.desc`,
+    `/rest/v1/storyflow_actor_profiles?${query}&status=neq.archived&select=*&order=updated_at.desc`,
   );
 
   return hydrateActorAssets(actors);
@@ -466,7 +470,7 @@ async function assertCanEditActor(userId: string, actor: ActorProfile) {
   throw new Error("ACTOR_FORBIDDEN");
 }
 
-async function assertTeamRole(userId: string, teamId: string, allowed: Set<TeamRole>) {
+export async function assertTeamRole(userId: string, teamId: string, allowed: Set<TeamRole>) {
   const rows = await serviceFetch<TeamMember[]>(
     `/rest/v1/storyflow_team_members?team_id=eq.${encodeURIComponent(teamId)}&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=*&limit=1`,
   );
@@ -763,7 +767,7 @@ function isActorSchemaUnavailable(error: unknown) {
     message.includes("storyflow_projects") ||
     message.includes("Could not find") ||
     message.includes("PGRST205") ||
-    message.includes("PGRST204") ||
+    // PGRST204（未知列）不再视为“schema 整体不可用”：让它直接抛出，暴露真实列缺失错误
     message.includes("42P01") ||
     message.includes("42703") ||
     message.includes("ACTOR_SCHEMA_UNAVAILABLE")

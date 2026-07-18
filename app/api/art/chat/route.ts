@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { callMiniMax } from "@/lib/ai/providers/minimax";
+import { callDeepSeek } from "@/lib/ai/providers/deepseek";
 import { normalizeArtActions } from "@/lib/art/actions";
 import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
 import { authenticateRequest } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type ChatRequest = {
   message?: string;
@@ -23,13 +26,12 @@ export async function POST(request: Request) {
 
   try {
     const user = await authenticateRequest(request);
-    const saved = await resolveSavedApiConfig(user.id, "minimax").catch(() => null);
+    const saved = await resolveSavedApiConfig(user.id, "deepseek").catch(() => null);
     const attachments = (body.attachments || []).filter((attachment) => attachment.kind === "image" && attachment.url?.startsWith("http"));
     const userContent = JSON.stringify({ projectTitle: body.projectTitle || "美术项目", message, attachments: body.attachments || [], assets: (body.assets || []).slice(0, 80) });
-    const result = await callMiniMax({
-      apiKeyOverride: saved?.minimaxApiKey,
-      modelOverride: saved?.minimaxModel,
-      baseUrlOverride: saved?.minimaxBaseUrl,
+    const result = await callDeepSeek({
+      apiKeyOverride: saved?.deepseekApiKey,
+      modelOverride: saved?.deepseekModel,
       temperature: 0.25,
       maxTokens: 3000,
       messages: [
@@ -38,11 +40,12 @@ export async function POST(request: Request) {
       ],
     });
     const parsed = parseJson(result.output);
-    return NextResponse.json({ success: true, assistantText: String(parsed.assistantText || "已整理您的美术修改。"), actions: normalizeArtActions(parsed.actions), provider: result.provider, model: result.model, error: null });
+    return NextResponse.json({ success: true, assistantText: String(parsed.assistantText || "已整理您的美术修改。"), actions: normalizeArtActions(parsed.actions), provider: result.provider, model: result.model, degraded: false, error: null });
   } catch (error) {
     if (isAuthError(error)) return failure("请先登录后再使用 KK 美术助理。", 401);
     const fallback = fallbackReply(message);
-    return NextResponse.json({ success: true, ...fallback, provider: "local", model: "art-intent-fallback", warning: "AI 暂时不可用，已按明确指令创建草稿。", error: null });
+    const detail = error instanceof Error ? error.message : "UNKNOWN_AI_ERROR";
+    return NextResponse.json({ success: true, ...fallback, provider: "local", model: "art-intent-fallback", degraded: true, warning: `AI 暂时不可用（${detail}），已按明确指令创建草稿。`, error: null });
   }
 }
 

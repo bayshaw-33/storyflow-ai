@@ -7,7 +7,9 @@ export function ok<T>(payload: T) {
 export function apiError(error: unknown, fallback = "请求失败。", status = 400) {
   const message = error instanceof Error ? error.message : "";
   const authError = message.includes("MISSING_AUTH_TOKEN") || message.includes("INVALID_AUTH_TOKEN");
-  const forbidden = message.includes("PROJECT_FORBIDDEN");
+  const projectForbidden = message.includes("PROJECT_FORBIDDEN");
+  // 约定：所有 *_FORBIDDEN 后缀的业务错误（PROJECT_/TEAM_/ACTOR_…）一律映射 403
+  const forbidden = projectForbidden || message.includes("_FORBIDDEN");
   const notFound = message.includes("PROJECT_NOT_FOUND") || message.includes("VERSION_NOT_FOUND") || message.includes("TASK_NOT_FOUND");
   return NextResponse.json(
     {
@@ -15,7 +17,9 @@ export function apiError(error: unknown, fallback = "请求失败。", status = 
       error: authError
         ? "请先登录。"
         : forbidden
-          ? "无权访问该项目。"
+          ? projectForbidden
+            ? "无权访问该项目。"
+            : "没有执行该操作的权限。"
           : notFound
             ? "没有找到对应数据。"
             : message.includes("SUPABASE_SERVICE_ERROR")

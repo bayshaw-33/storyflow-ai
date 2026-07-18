@@ -1,5 +1,6 @@
 import type { DramaProject, StoryBible } from "@/lib/projects";
-import { getPlanEntitlement } from "@/lib/billing/plans";
+// 相对路径导入：保证 node:test 的 .mjs 测试可以直接 import 本模块（Node 不解析 "@/" 别名）。
+import { getPlanEntitlement } from "./billing/plans";
 
 export type UniverseAccessLevel = "studio_annual" | "enterprise";
 export type UniverseStatus = "active" | "archived";
@@ -194,6 +195,57 @@ export type UniverseEntitlement = {
   reason: string;
 };
 
+/**
+ * 云端同步结果：所有写路径统一返回。
+ * - { synced: true }：远端写入成功，或当前为本地模式（未配置 Supabase / 无 token），无需上报。
+ * - { synced: false, error }：远端写入被尝试且失败，已 console.error 上报，UI 应显示「未同步」标记。
+ */
+export type UniverseSyncResult = {
+  synced: boolean;
+  error?: string;
+};
+
+export type SupabaseOptions = {
+  accessToken?: string | null;
+};
+
+/** 测试注入缝：默认实现走 lib/supabase/projects 的 upsertProjectToSupabase。 */
+export type EnsureProjectSyncedHook = (project: DramaProject, options: SupabaseOptions) => Promise<void>;
+
+export type CreateUniverseFromProjectResult = {
+  universe: Universe;
+  link: UniverseProjectLink;
+  /** true 表示按 project_id 命中已有 link 并复用宇宙（不再产生重复宇宙）。 */
+  reused: boolean;
+  sync: UniverseSyncResult;
+};
+
+export type UniverseInboxWriteResult = {
+  item: UniverseInboxItem;
+  sync: UniverseSyncResult;
+};
+
+function reportUniverseSyncFailure(scope: string, error: unknown): UniverseSyncResult {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[universe] ${scope} 云端同步失败: ${message}`);
+  return { synced: false, error: message };
+}
+
+async function attemptSync(scope: string, action: () => Promise<unknown>): Promise<UniverseSyncResult> {
+  try {
+    await action();
+    return { synced: true };
+  } catch (error) {
+    return reportUniverseSyncFailure(scope, error);
+  }
+}
+
+function combineSyncResults(results: UniverseSyncResult[]): UniverseSyncResult {
+  const failed = results.filter((result) => !result.synced);
+  if (!failed.length) return { synced: true };
+  return { synced: false, error: failed.map((result) => result.error || "unknown").join("; ") };
+}
+
 export const UNIVERSE_STORAGE_KEY = "storyflow-ai-universes-v1";
 export const UNIVERSE_ENTITY_STORAGE_KEY = "storyflow-ai-universe-entities-v1";
 export const UNIVERSE_RELATION_STORAGE_KEY = "storyflow-ai-universe-relationships-v1";
@@ -226,10 +278,6 @@ const TABLES = {
   inbox: "storyflow_universe_inbox_items",
   links: "storyflow_universe_project_links",
   reports: "storyflow_canon_check_reports",
-};
-
-type SupabaseOptions = {
-  accessToken?: string | null;
 };
 
 /**
@@ -288,11 +336,16 @@ export async function readCurrentProfile(options: SupabaseOptions = {}) {
   if (!options.accessToken || !isSupabaseConfigured()) return null;
   const userId = getUserIdFromAccessToken(options.accessToken);
   if (!userId) return null;
-  const rows = await supabaseFetch<Array<{ plan?: string | null; email?: string | null }>>(
-    `${tableUrl("storyflow_profiles")}?user_id=eq.${encodeURIComponent(userId)}&select=plan,email&limit=1`,
-    {},
-    options,
-  ).catch(() => []);
+  let rows: Array<{ plan?: string | null; email?: string | null }> = [];
+  try {
+    rows = await supabaseFetch<Array<{ plan?: string | null; email?: string | null }>>(
+      `${tableUrl("storyflow_profiles")}?user_id=eq.${encodeURIComponent(userId)}&select=plan,email&limit=1`,
+      {},
+      options,
+    );
+  } catch (error) {
+    reportUniverseSyncFailure("readCurrentProfile", error);
+  }
   return rows[0] || null;
 }
 
@@ -303,14 +356,18 @@ export async function readUniverseEntitlement(options: SupabaseOptions = {}) {
 
 export async function listUniverses(options: SupabaseOptions = {}): Promise<Universe[]> {
   if (isSupabaseConfigured() && options.accessToken) {
-    const rows = await supabaseFetch<Universe[]>(
-      `${tableUrl(TABLES.universes)}?select=*&order=updated_at.desc`,
-      {},
-      options,
-    ).catch(() => null);
-    if (rows) {
-      saveLocalList(UNIVERSE_STORAGE_KEY, rows);
-      return rows;
+    try {
+      const rows = await supabaseFetch<Universe[]>(
+        `${tableUrl(TABLES.universes)}?select=*&order=updated_at.desc`,
+        {},
+        options,
+      );
+      if (rows) {
+        saveLocalList(UNIVERSE_STORAGE_KEY, rows);
+        return rows;
+      }
+    } catch (error) {
+      reportUniverseSyncFailure("listUniverses", error);
     }
   }
 
@@ -341,7 +398,27 @@ export async function createUniverseFromProject(params: {
   form: Pick<Universe, "name" | "description" | "genre" | "default_language" | "target_markets" | "tone">;
   teamId?: string | null;
   accessToken?: string | null;
-}) {
+  ensureProjectSynced?: EnsureProjectSyncedHook;
+}): Promise<CreateUniverseFromProjectResult> {
+  const options: SupabaseOptions = { accessToken: params.accessToken };
+  const remoteReady = isSupabaseConfigured() && Boolean(params.accessToken);
+
+  // P0 防重复：升级前按 project_id 查已有 link，有则复用宇宙，绝不二次造宇宙。
+  const existingLink = await getProjectUniverseLink(params.project.id, options);
+  if (existingLink) {
+    const universes = await listUniverses(options);
+    const found = universes.find((item) => item.id === existingLink.universe_id);
+    // link 存在但宇宙行丢失（孤儿 link）：按原 universe_id 重建宇宙行修复断链，而不是新建宇宙。
+    const universe = found || buildReusedUniverse(existingLink, params);
+    const sync = await upsertUniverse(universe, options);
+    if (remoteReady) {
+      // 远端复用路径同样保证「项目行 → link」的写入顺序（FK 依赖），断链时顺势修复远端。
+      await ensureProjectRowForLink(params.project, options, params.ensureProjectSynced);
+      await upsertUniverseProjectLink(existingLink, options);
+    }
+    return { universe, link: existingLink, reused: true, sync };
+  }
+
   const now = new Date().toISOString();
   const userId = getUserIdFromAccessToken(params.accessToken);
   const universe: Universe = {
@@ -370,53 +447,107 @@ export async function createUniverseFromProject(params: {
     inheritanceSettings: params.project.inheritanceSettings || DEFAULT_INHERITANCE_SETTINGS,
   });
 
-  await upsertUniverse(universe, { accessToken: params.accessToken });
-  await upsertUniverseProjectLink(link, { accessToken: params.accessToken });
-  return { universe, link };
+  if (remoteReady) {
+    // P0 断链修复：project_links.project_id 有指向 storyflow_projects.id 的外键，
+    // 必须先把项目 upsert 到 storyflow_projects，再写 link；项目写入失败直接抛出。
+    await ensureProjectRowForLink(params.project, options, params.ensureProjectSynced);
+  }
+  const sync = await upsertUniverse(universe, options);
+  // link 写失败必须抛出（upsertUniverseProjectLink 不再吞错），杜绝「本地有、云端无」的断链。
+  await upsertUniverseProjectLink(link, options);
+  return { universe, link, reused: false, sync };
 }
 
-export async function upsertUniverse(universe: Universe, options: SupabaseOptions = {}) {
+function buildReusedUniverse(
+  link: UniverseProjectLink,
+  params: {
+    project: DramaProject;
+    form: Pick<Universe, "name" | "description" | "genre" | "default_language" | "target_markets" | "tone">;
+    teamId?: string | null;
+    accessToken?: string | null;
+  },
+): Universe {
+  const now = new Date().toISOString();
+  return {
+    id: link.universe_id,
+    user_id: link.user_id || getUserIdFromAccessToken(params.accessToken) || null,
+    team_id: params.teamId || null,
+    name: params.form.name.trim() || `${params.project.title} Universe`,
+    description: params.form.description.trim(),
+    genre: params.form.genre || params.project.genre,
+    default_language: params.form.default_language || params.project.targetLanguage,
+    target_markets: params.form.target_markets.length ? params.form.target_markets : [params.project.market].filter(Boolean),
+    tone: params.form.tone || "",
+    status: "active",
+    access_level: "studio_annual",
+    metadata: { source: "project_upgrade", sharing: params.teamId ? "team" : "private", healed_orphaned_link: true },
+    created_at: link.created_at || now,
+    updated_at: now,
+  };
+}
+
+async function ensureProjectRowForLink(
+  project: DramaProject,
+  options: SupabaseOptions,
+  override?: EnsureProjectSyncedHook,
+) {
+  if (override) {
+    await override(project, options);
+    return;
+  }
+  // 动态引入，避免把 supabase/projects 的 "@/" 别名依赖链带进 node:test 的直接 import。
+  const { upsertProjectToSupabase } = await import("@/lib/supabase/projects");
+  await upsertProjectToSupabase(project, options);
+}
+
+export async function upsertUniverse(universe: Universe, options: SupabaseOptions = {}): Promise<UniverseSyncResult> {
   upsertLocalItem(UNIVERSE_STORAGE_KEY, universe);
-  if (!isSupabaseConfigured() || !options.accessToken) return;
-  await supabaseUpsert(TABLES.universes, universe, "id", options).catch(() => null);
+  if (!isSupabaseConfigured() || !options.accessToken) return { synced: true };
+  return attemptSync("upsertUniverse", () => supabaseUpsert(TABLES.universes, universe, "id", options));
 }
 
-export async function upsertUniverseProjectLink(link: UniverseProjectLink, options: SupabaseOptions = {}) {
+export async function upsertUniverseProjectLink(link: UniverseProjectLink, options: SupabaseOptions = {}): Promise<UniverseSyncResult> {
   upsertLocalItem(UNIVERSE_LINK_STORAGE_KEY, link);
-  if (!isSupabaseConfigured() || !options.accessToken) return;
-  await supabaseUpsert(TABLES.links, link, "id", options).catch(() => null);
+  if (!isSupabaseConfigured() || !options.accessToken) return { synced: true };
+  // P0：link 是宇宙 ⇄ 项目的唯一关联，远端写失败必须抛出（不再静默吞错），让调用方显性处理断链。
+  await supabaseUpsert(TABLES.links, link, "id", options);
+  return { synced: true };
 }
 
-export async function saveInboxItems(items: UniverseInboxItem[], options: SupabaseOptions = {}) {
+export async function saveInboxItems(items: UniverseInboxItem[], options: SupabaseOptions = {}): Promise<UniverseSyncResult> {
   for (const item of items) upsertLocalItem(UNIVERSE_INBOX_STORAGE_KEY, item);
-  if (!isSupabaseConfigured() || !options.accessToken || !items.length) return;
-  await supabaseFetch(`${tableUrl(TABLES.inbox)}?on_conflict=id`, {
+  if (!isSupabaseConfigured() || !options.accessToken || !items.length) return { synced: true };
+  return attemptSync("saveInboxItems", () => supabaseFetch(`${tableUrl(TABLES.inbox)}?on_conflict=id`, {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify(items),
-  }, options).catch(() => null);
+  }, options));
 }
 
-export async function saveCanonCheckReport(report: CanonCheckReport, options: SupabaseOptions = {}) {
+export async function saveCanonCheckReport(report: CanonCheckReport, options: SupabaseOptions = {}): Promise<UniverseSyncResult> {
   upsertLocalItem(CANON_REPORT_STORAGE_KEY, report);
-  if (!isSupabaseConfigured() || !options.accessToken) return;
-  await supabaseUpsert(TABLES.reports, report, "id", options).catch(() => null);
+  if (!isSupabaseConfigured() || !options.accessToken) return { synced: true };
+  return attemptSync("saveCanonCheckReport", () => supabaseUpsert(TABLES.reports, report, "id", options));
 }
 
-export async function upsertCanonStateSnapshot(snapshot: CanonStateSnapshot, options: SupabaseOptions = {}) {
+export async function upsertCanonStateSnapshot(snapshot: CanonStateSnapshot, options: SupabaseOptions = {}): Promise<UniverseSyncResult> {
   upsertLocalItem(CANON_STATE_STORAGE_KEY, snapshot);
-  if (!isSupabaseConfigured() || !options.accessToken) return;
-  await supabaseUpsert(TABLES.snapshots, snapshot, "id", options).catch(() => null);
+  if (!isSupabaseConfigured() || !options.accessToken) return { synced: true };
+  return attemptSync("upsertCanonStateSnapshot", () => supabaseUpsert(TABLES.snapshots, snapshot, "id", options));
 }
 
 export async function getProjectUniverseLink(projectId: string, options: SupabaseOptions = {}) {
   if (isSupabaseConfigured() && options.accessToken) {
-    const rows = await supabaseFetch<UniverseProjectLink[]>(
-      `${tableUrl(TABLES.links)}?project_id=eq.${encodeURIComponent(projectId)}&select=*&limit=1`,
-      {},
-      options,
-    ).catch(() => null);
-    if (rows?.[0]) return rows[0];
+    try {
+      const rows = await supabaseFetch<UniverseProjectLink[]>(
+        `${tableUrl(TABLES.links)}?project_id=eq.${encodeURIComponent(projectId)}&select=*&order=updated_at.desc&limit=1`,
+        {},
+        options,
+      );
+      if (rows?.[0]) return rows[0];
+    } catch (error) {
+      reportUniverseSyncFailure("getProjectUniverseLink", error);
+    }
   }
 
   return readLocalList<UniverseProjectLink>(UNIVERSE_LINK_STORAGE_KEY).find((link) => link.project_id === projectId) || null;
