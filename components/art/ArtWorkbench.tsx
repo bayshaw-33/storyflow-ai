@@ -219,6 +219,23 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     setState((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
   }
 
+  // 自动同步项目资料：当 projects 加载完成且 state.sourceText 为空但 state.projectId 存在时，
+  // 自动从 projects 查找对应项目并填充 sourceText（含 idea/brief/storyBible/characters/script）。
+  // 修复"关联项目后自动拆解按钮灰色"问题：嵌入模式下 hydration 不主动加载项目数据，
+  // 需要这里在 projects 异步加载完成后补填 sourceText。
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (state.sourceText.trim()) return; // 已有资料不覆盖
+    if (!state.projectId) return; // 无关联项目
+    const project = projects.find((item) => item.id === state.projectId);
+    if (!project) return;
+    const patch = artStateFromProject(project);
+    if (!patch.sourceText?.trim()) return; // 项目本身无资料
+    patchState(patch);
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已自动同步《${project.title}》的资料（共 ${(patch.sourceText || "").length.toLocaleString()} 字），现在可以点击「自动拆解」了。` }]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, projects, state.projectId, state.sourceText]);
+
   function selectProject(projectId: string) {
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;

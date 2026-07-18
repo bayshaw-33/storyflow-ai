@@ -245,7 +245,7 @@ test("1. TXT 上传：parseCreativeHandoff 接收稳定 sourceUnitId", () => {
 // 2. DeepSeek 正常分析 → callRoutedProvider 返回合法 JSON
 // ===========================================================================
 
-test("2. DeepSeek 正常分析：callRoutedProvider 返回合法 JSON", async () => {
+test("2. Atlas 正常分析（Atlas primary 反转后）：callRoutedProvider 返回合法 JSON", async () => {
   process.env.DEEPSEEK_API_KEY = "test-key";
   process.env.DEEPSEEK_MODEL = "deepseek-v4-flash";
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
@@ -257,7 +257,7 @@ test("2. DeepSeek 正常分析：callRoutedProvider 返回合法 JSON", async ()
   globalThis.fetch = async (input) => {
     const url = typeof input === "string" ? input : input.url;
     fetchUrls.push(url);
-    if (url.includes("deepseek.com")) {
+    if (url.includes("atlascloud.ai")) {
       return new Response(
         JSON.stringify({
           choices: [
@@ -308,13 +308,13 @@ test("2. DeepSeek 正常分析：callRoutedProvider 返回合法 JSON", async ()
     temperature: 0.2,
   });
 
-  assert.equal(result.provider, "deepseek", "primary 路径是 DeepSeek");
+  assert.equal(result.provider, "atlas", "primary 路径是 Atlas（反转后）");
   assert.equal(result.fallbackUsed, false, "无 fallback");
   assert.ok(result.output, "返回非空内容");
-  assert.ok(fetchUrls.some((u) => u.includes("deepseek.com")), "调用 DeepSeek");
+  assert.ok(fetchUrls.some((u) => u.includes("atlascloud.ai")), "调用 Atlas");
   assert.ok(
-    !fetchUrls.some((u) => u.includes("atlascloud.ai")),
-    "DeepSeek 成功时不调 Atlas",
+    !fetchUrls.some((u) => u.includes("deepseek.com")),
+    "Atlas 成功时不调 DeepSeek",
   );
   assert.ok(
     !fetchUrls.some((u) => u.includes("minimax")),
@@ -326,27 +326,27 @@ test("2. DeepSeek 正常分析：callRoutedProvider 返回合法 JSON", async ()
 // 3. DeepSeek 失败 → Atlas Gemini fallback（MiniMax 零调用）
 // ===========================================================================
 
-test("3. DeepSeek 429 → Atlas Gemini fallback 一次，MiniMax 零调用", async () => {
+test("3. Atlas 429 → DeepSeek fallback 一次，MiniMax 零调用（Atlas primary 反转后）", async () => {
   process.env.DEEPSEEK_API_KEY = "test-key";
-  process.env.DEEPSEEK_MODEL = "deepseek-v4-flash";
+  process.env.DEEPSEEK_MODEL = "deepseek-chat";
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
   process.env.ATLASCLOUD_LLM_BASE_URL = "https://api.atlascloud.ai/v1";
   process.env.ATLASCLOUD_LLM_MODEL = "gemini-2.5-flash";
   delete process.env.MINIMAX_API_KEY;
 
   const fetchUrls = [];
-  let atlasCallCount = 0;
+  let deepseekCallCount = 0;
   globalThis.fetch = async (input) => {
     const url = typeof input === "string" ? input : input.url;
     fetchUrls.push(url);
-    if (url.includes("deepseek.com")) {
+    if (url.includes("atlascloud.ai")) {
       return new Response(JSON.stringify({ error: { message: "rate limit" } }), {
         status: 429,
         headers: { "content-type": "application/json" },
       });
     }
-    if (url.includes("atlascloud.ai")) {
-      atlasCallCount++;
+    if (url.includes("deepseek.com")) {
+      deepseekCallCount++;
       return new Response(
         JSON.stringify({
           choices: [
@@ -383,10 +383,10 @@ test("3. DeepSeek 429 → Atlas Gemini fallback 一次，MiniMax 零调用", asy
     temperature: 0.2,
   });
 
-  assert.equal(result.provider, "atlas", "fallback 到 Atlas");
+  assert.equal(result.provider, "deepseek", "fallback 到 DeepSeek");
   assert.equal(result.fallbackUsed, true, "fallbackUsed=true");
-  assert.equal(atlasCallCount, 1, "fallback 仅一次（PRD §5.2.6）");
-  assert.ok(result.output, "Atlas 返回非空内容");
+  assert.equal(deepseekCallCount, 1, "fallback 仅一次（PRD §5.2.6）");
+  assert.ok(result.output, "DeepSeek 返回非空内容");
   assert.ok(
     !fetchUrls.some((u) => u.includes("minimax")),
     "MiniMax 零调用（PRD §5.1）",

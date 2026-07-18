@@ -18,7 +18,14 @@ const storyboardScriptTasks = new Set<TaskType>(["storyboard_script"]);
 function isStoryboardFallbackTrigger(error: unknown): boolean {
   const message = error instanceof Error ? error.message : "";
   if (!message) return true;
-  // 缺 key / 超时 / 网络 / 空输出 → 触发 fallback
+  // Atlas 错误 → 触发 fallback 到 DeepSeek
+  if (message === "MISSING_ATLAS_LLM_CONFIG") return true;
+  if (message === "ATLAS_LLM_TIMEOUT" || message === "ATLAS_LLM_NETWORK_ERROR") return true;
+  if (message === "EMPTY_ATLAS_LLM_OUTPUT") return true;
+  if (message.startsWith("ATLAS_LLM_API_ERROR:429")) return true;
+  if (message.startsWith("ATLAS_LLM_API_ERROR:5")) return true;
+  if (message.startsWith("ATLAS_LLM_API_ERROR:4")) return false;
+  // DeepSeek 错误 → 触发 fallback 到 Atlas
   if (message === "MISSING_DEEPSEEK_API_KEY") return true;
   if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return true;
   if (message === "EMPTY_DEEPSEEK_OUTPUT") return true;
@@ -28,7 +35,7 @@ function isStoryboardFallbackTrigger(error: unknown): boolean {
   // 4xx 输入错误（400/401/403）、未认证、跨作用域不得触发 fallback
   // （401/403 由路由层鉴权处理，不会走到这里；400 是输入错误，fallback 无意义）
   if (message.startsWith("DEEPSEEK_API_ERROR:4")) return false;
-  // 其他未知错误保守触发 fallback（让 Atlas 试一次）
+  // 其他未知错误保守触发 fallback
   return true;
 }
 
@@ -77,7 +84,12 @@ export function getProviderStatus() {
     mode: getProviderMode(),
     deepseek: {
       configured: Boolean(process.env.DEEPSEEK_API_KEY),
-      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    },
+    atlas: {
+      configured: isAtlasLLMConfigured(),
+      model: process.env.ATLASCLOUD_LLM_MODEL || "",
+      baseUrl: process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1",
     },
     minimax: {
       configured: Boolean(getMiniMaxApiKey()),
@@ -116,7 +128,34 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
  * 返回结果带 fallbackUsed 标记，供路由层透传给客户端做非敏感诊断。
  */
 async function callStoryboardProviderChain(options: ProviderCallOptions): Promise<AIProviderResult> {
-  // Primary: DeepSeek
+  // Primary: Atlas Cloud（用户要求所有文本 LLM 切到 Atlas，避免 DeepSeek 模型名锁定问题）
+  // Atlas 未配置时回退到 DeepSeek primary → Atlas fallback（原逻辑）
+  if (isAtlasLLMConfigured()) {
+    try {
+      const result = await callAtlasLLM({
+        messages: options.messages,
+        temperature: options.temperature,
+      });
+      options.validateOutput?.(result.output);
+      return { ...result, fallbackUsed: false };
+    } catch (error) {
+      if (!isStoryboardFallbackTrigger(error)) throw error;
+      // Atlas 失败 → fallback 到 DeepSeek（仅一次）
+      try {
+        const dsResult = await callDeepSeek({
+          messages: options.messages,
+          temperature: options.temperature,
+        });
+        options.validateOutput?.(dsResult.output);
+        return { ...dsResult, fallbackUsed: true };
+      } catch (fallbackError) {
+        // DeepSeek 也失败，抛最后一个错误
+        throw fallbackError;
+      }
+    }
+  }
+
+  // Atlas 未配置：DeepSeek primary → Atlas fallback（原逻辑，仅当 DeepSeek key 可用时）
   try {
     const result = await callDeepSeek({
       messages: options.messages,
@@ -142,6 +181,10 @@ function chooseProvider(taskType: TaskType, byoApi?: ByoApiConfig): AIProviderNa
   if (byoApi?.provider === "deepseek") return "deepseek";
   if (byoApi?.provider === "minimax") return "minimax";
   if (byoApi?.provider === "custom") return "custom";
+  // 文本 LLM 任务优先用 Atlas Cloud（如果已配置），避免 DeepSeek 模型名锁定问题
+  // 用户明确要求：所有文本 LLM 切到 Atlas Cloud 文本模型
+  if (isAtlasLLMConfigured()) return "atlas";
+  // Atlas 未配置时回退到原逻辑
   if (isNovelTask(taskType) || taskType.startsWith("creation_")) return "deepseek";
   const mode = getProviderMode();
   if (mode === "deepseek") return "deepseek";
@@ -161,10 +204,19 @@ function getProviderMode(): ProviderMode {
 
 function getFallbackProvider(provider: AIProviderName): AIProviderName {
   if (provider === "custom") return "deepseek";
-  return provider === "deepseek" ? "minimax" : "deepseek";
+  if (provider === "atlas") return "deepseek";
+  if (provider === "deepseek") return isAtlasLLMConfigured() ? "atlas" : "minimax";
+  return "deepseek";
 }
 
 async function callProvider(provider: AIProviderName, options: ProviderCallOptions) {
+  if (provider === "atlas") {
+    return callAtlasLLM({
+      messages: options.messages,
+      temperature: options.temperature,
+    });
+  }
+
   if (provider === "deepseek") {
     return callDeepSeek({
       messages: options.messages,
@@ -201,5 +253,5 @@ function cleanSecret(value: string | undefined) {
 
 function isMissingProviderKey(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  return message === "MISSING_DEEPSEEK_API_KEY" || message === "MISSING_MINIMAX_API_KEY" || message === "MISSING_CUSTOM_API_KEY";
+  return message === "MISSING_DEEPSEEK_API_KEY" || message === "MISSING_MINIMAX_API_KEY" || message === "MISSING_CUSTOM_API_KEY" || message === "MISSING_ATLAS_LLM_CONFIG";
 }
