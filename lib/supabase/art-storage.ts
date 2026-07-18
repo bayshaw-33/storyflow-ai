@@ -53,7 +53,37 @@ export async function persistRemoteArtImage(input: {
   return uploadAndSign(path, contentType, await source.arrayBuffer());
 }
 
+// KIIKIS-TR-ACTOR-P0-009: 签名 URL 内存 LRU 缓存
+// 默认 1 小时有效期，缓存 TTL 50 分钟（留 10 分钟 buffer 避免边界过期）
+// Next.js prod nodejs runtime 进程内有效；dev HMR 会清缓存（可接受）
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000; // 50 分钟
+const SIGNED_URL_CACHE_MAX = 500; // 最多缓存 500 条签名 URL
+
+function getCachedSignedUrl(storagePath: string): string | null {
+  const cached = signedUrlCache.get(storagePath);
+  if (!cached) return null;
+  if (Date.now() >= cached.expiresAt) {
+    signedUrlCache.delete(storagePath);
+    return null;
+  }
+  return cached.url;
+}
+
+function setCachedSignedUrl(storagePath: string, url: string): void {
+  // 简单 LRU：超过上限时删除最早一条
+  if (signedUrlCache.size >= SIGNED_URL_CACHE_MAX) {
+    const firstKey = signedUrlCache.keys().next().value;
+    if (firstKey) signedUrlCache.delete(firstKey);
+  }
+  signedUrlCache.set(storagePath, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_TTL_MS });
+}
+
 export async function signStoredArtImage(storagePath: string, expiresIn = 60 * 60) {
+  // 先查缓存
+  const cached = getCachedSignedUrl(storagePath);
+  if (cached) return cached;
+
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!supabaseUrl || !serviceKey) throw new Error("MISSING_SUPABASE_STORAGE_CONFIG");
@@ -67,7 +97,9 @@ export async function signStoredArtImage(storagePath: string, expiresIn = 60 * 6
   const payload = await signed.json() as { signedURL?: string; signedUrl?: string };
   const signedPath = payload.signedURL || payload.signedUrl;
   if (!signedPath) throw new Error("ART_STORAGE_SIGN_EMPTY");
-  return signedPath.startsWith("http") ? signedPath : `${supabaseUrl}/storage/v1${signedPath}`;
+  const url = signedPath.startsWith("http") ? signedPath : `${supabaseUrl}/storage/v1${signedPath}`;
+  setCachedSignedUrl(storagePath, url);
+  return url;
 }
 
 async function uploadAndSign(path: string, contentType: string, body: ArrayBuffer) {

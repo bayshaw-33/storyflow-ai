@@ -102,20 +102,22 @@ export default function UniversesPage() {
       setLoading(true);
       setLoadError("");
       try {
-        const cloudProjects = accessToken
-          ? await readProjectsFromSupabase({ accessToken }).catch(() => [])
-          : [];
-        if (accessToken) {
-          const teamResponse = await fetch("/api/teams", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }).catch(() => null);
-          const teamPayload = teamResponse?.ok ? await teamResponse.json().catch(() => null) : null;
-          setTeams(Array.isArray(teamPayload?.teams) ? teamPayload.teams : []);
-        } else {
-          setTeams([]);
-        }
+        // KIIKIS-TR-ACTOR-P0-009: 三个独立请求并发（之前是串行 3 段链路）
+        const [cloudProjects, teamResult, universeItems] = await Promise.all([
+          accessToken
+            ? readProjectsFromSupabase({ accessToken }).catch(() => [])
+            : Promise.resolve([]),
+          accessToken
+            ? fetch("/api/teams", {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              }).catch(() => null)
+            : Promise.resolve(null),
+          loadUniverseItems(accessToken),
+        ]);
+        const teamPayload = teamResult?.ok ? await teamResult.json().catch(() => null) : null;
+        setTeams(Array.isArray(teamPayload?.teams) ? teamPayload.teams : []);
         setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
-        setItems(await loadUniverseItems(accessToken));
+        setItems(universeItems);
       } catch (loadIssue) {
         setLoadError(loadIssue instanceof Error ? loadIssue.message : "Universe load failed.");
         setProjects(getUniverseSourceProjects(readProjectsFromStorage()));

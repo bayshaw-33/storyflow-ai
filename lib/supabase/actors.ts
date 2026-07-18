@@ -144,8 +144,11 @@ async function listStructuredActorsForUser(userId: string) {
     ? `or=(visibility.eq.platform,${teamExpr},${ownerInOr})`
     : `or=(visibility.eq.platform,${ownerInOr})`;
 
+  // KIIKIS-TR-ACTOR-P0-009: 列表查询精简字段 + 强制 limit=50 避免拉全表
+  // 列表卡片只需要这些字段（详情页才需要 base_prompt/negative_prompt/bio 等大字段）
+  const listSelect = "id,owner_id,team_id,visibility,name,age_range,gender_expression,ethnicity_style,temperament,playable_roles,avatar_asset_id,reference_sheet_asset_id,status,updated_at";
   const actors = await serviceFetch<ActorProfile[]>(
-    `/rest/v1/storyflow_actor_profiles?${accessQuery}&status=neq.archived&select=*&order=updated_at.desc`,
+    `/rest/v1/storyflow_actor_profiles?${accessQuery}&status=neq.archived&select=${encodeURIComponent(listSelect)}&order=updated_at.desc&limit=50`,
   );
 
   return hydrateActorAssets(actors);

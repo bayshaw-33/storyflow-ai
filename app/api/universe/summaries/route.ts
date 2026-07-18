@@ -54,8 +54,9 @@ export async function GET(request: NextRequest) {
       ? `or=(user_id.eq.${encodeURIComponent(user.id)},team_id.in.(${teamIds.map(encodeURIComponent).join(",")}))`
       : `user_id=eq.${encodeURIComponent(user.id)}`;
 
+    // KIIKIS-TR-ACTOR-P0-009: 列表移除 description（Bible 可能数十 KB，列表页只用 card_summary）
     const universes = await serviceFetch<UniverseRow[]>(
-      `/rest/v1/storyflow_universes?${accessFilter}&archived_at=is.null&select=id,name,status,card_summary,description,cover_asset_version_id,metadata,genre,updated_at,archived_at&order=updated_at.desc`,
+      `/rest/v1/storyflow_universes?${accessFilter}&archived_at=is.null&select=id,name,status,card_summary,cover_asset_version_id,metadata,genre,updated_at,archived_at&order=updated_at.desc&limit=50`,
     );
 
     if (!universes.length) return ok({ universes: [], requestId });
@@ -161,11 +162,27 @@ async function resolveCoverUrls(
       .map((row) => row.id),
   );
 
-  for (const version of versions) {
-    const assetId = assetIdByVariant.get(version.variant_id);
-    const projectId = assetId ? projectIdByAsset.get(assetId) : undefined;
-    if (!projectId || !allowedProjectIds.has(projectId) || !version.storage_path) continue;
-    map.set(version.id, await signStoredArtImage(version.storage_path));
+  // KIIKIS-TR-ACTOR-P0-009: 串行签名改并发 + LRU 缓存（缓存已在 signStoredArtImage 内实现）
+  const signEntries = versions
+    .map((version) => {
+      const assetId = assetIdByVariant.get(version.variant_id);
+      const projectId = assetId ? projectIdByAsset.get(assetId) : undefined;
+      if (!projectId || !allowedProjectIds.has(projectId) || !version.storage_path) return null;
+      return { id: version.id, storagePath: version.storage_path as string };
+    })
+    .filter((entry): entry is { id: string; storagePath: string } => entry !== null);
+
+  const signedUrls = await Promise.all(
+    signEntries.map(async (entry) => {
+      try {
+        return [entry.id, await signStoredArtImage(entry.storagePath)] as const;
+      } catch {
+        return [entry.id, ""] as const;
+      }
+    }),
+  );
+  for (const [id, url] of signedUrls) {
+    if (url) map.set(id, url);
   }
   return map;
 }

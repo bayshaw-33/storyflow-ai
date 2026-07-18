@@ -147,8 +147,17 @@ export async function attachAvatarAssetToActor(assetId: string, actorId: string)
   }
 }
 
+// KIIKIS-TR-ACTOR-P0-009: 演员头像签名 URL 内存 LRU 缓存（同 art-storage）
+const avatarSignedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const AVATAR_SIGNED_URL_CACHE_TTL_MS = 50 * 60 * 1000;
+const AVATAR_SIGNED_URL_CACHE_MAX = 500;
+
 /** Sign a private actor asset for an authenticated response. */
 export async function signActorAssetUrl(storagePath: string, expiresIn = 60 * 60): Promise<string> {
+  // 先查缓存
+  const cached = avatarSignedUrlCache.get(storagePath);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!supabaseUrl || !serviceKey) throw new Error("MISSING_SUPABASE_STORAGE_CONFIG");
@@ -162,5 +171,13 @@ export async function signActorAssetUrl(storagePath: string, expiresIn = 60 * 60
   const payload = await signed.json() as { signedURL?: string; signedUrl?: string };
   const signedPath = payload.signedURL || payload.signedUrl;
   if (!signedPath) throw new Error("AVATAR_SIGN_EMPTY");
-  return signedPath.startsWith("http") ? signedPath : `${supabaseUrl}/storage/v1${signedPath}`;
+  const url = signedPath.startsWith("http") ? signedPath : `${supabaseUrl}/storage/v1${signedPath}`;
+
+  // 写入缓存
+  if (avatarSignedUrlCache.size >= AVATAR_SIGNED_URL_CACHE_MAX) {
+    const firstKey = avatarSignedUrlCache.keys().next().value;
+    if (firstKey) avatarSignedUrlCache.delete(firstKey);
+  }
+  avatarSignedUrlCache.set(storagePath, { url, expiresAt: Date.now() + AVATAR_SIGNED_URL_CACHE_TTL_MS });
+  return url;
 }

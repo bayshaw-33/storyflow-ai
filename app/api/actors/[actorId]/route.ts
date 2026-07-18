@@ -60,15 +60,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ act
 async function resolveImagePackCompleteness(actor: ActorProfile): Promise<ImagePackCompleteness> {
   const assetIds = [actor.avatar_asset_id, actor.reference_sheet_asset_id].filter(Boolean) as string[];
   // 查询该 actor 关联的所有 asset（通过 metadata.actor_id 反查 + 直接 id 查询）
-  const directAssets = assetIds.length
-    ? await serviceFetch<AssetRow[]>(
-        `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,user_id,team_id,asset_type,metadata`,
-      ).catch(() => [] as AssetRow[])
-    : [];
-
-  const actorAssets = await serviceFetch<AssetRow[]>(
-    `/rest/v1/storyflow_assets?metadata->>actor_id=eq.${encodeURIComponent(actor.id)}&select=id,user_id,team_id,asset_type,metadata`,
-  ).catch(() => [] as AssetRow[]);
+  // KIIKIS-TR-ACTOR-P0-009: 两次独立查询并行化
+  const [directAssets, actorAssets] = await Promise.all([
+    assetIds.length
+      ? serviceFetch<AssetRow[]>(
+          `/rest/v1/storyflow_assets?id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id,user_id,team_id,asset_type,metadata`,
+        ).catch(() => [] as AssetRow[])
+      : Promise.resolve([] as AssetRow[]),
+    serviceFetch<AssetRow[]>(
+      `/rest/v1/storyflow_assets?metadata->>actor_id=eq.${encodeURIComponent(actor.id)}&select=id,user_id,team_id,asset_type,metadata`,
+    ).catch(() => [] as AssetRow[]),
+  ]);
 
   const all = [...directAssets, ...actorAssets];
   const types = new Set<string>();
@@ -92,18 +94,20 @@ async function resolveImagePackCompleteness(actor: ActorProfile): Promise<ImageP
 }
 
 async function countPortrayalsForActor(userId: string, actor: ActorProfile): Promise<number> {
+  // KIIKIS-TR-ACTOR-P0-009: owner 和 team 查询并行 + 改用 select=id&limit=0 拿总数（避免拉 1000 行）
+  // PostgREST 在 limit=0 时仍返回 Content-Range header，但 serviceFetch 不解析 header
+  // 退而求其次：用 select=id&limit=1000 但只取 length（与原逻辑一致，但并行）
   const ownerFilter = `actor_profile_id=eq.${encodeURIComponent(actor.id)}&owner_id=eq.${encodeURIComponent(userId)}`;
-  const rows = await serviceFetch<Array<{ id: string }>>(
+  const ownerPromise = serviceFetch<Array<{ id: string }>>(
     `/rest/v1/storyflow_character_portrayals?${ownerFilter}&select=id&limit=1000`,
   ).catch(() => [] as Array<{ id: string }>);
-  let count = rows.length;
-  if (actor.team_id) {
-    const teamRows = await serviceFetch<Array<{ id: string }>>(
-      `/rest/v1/storyflow_character_portrayals?actor_profile_id=eq.${encodeURIComponent(actor.id)}&team_id=eq.${encodeURIComponent(actor.team_id)}&select=id&limit=1000`,
-    ).catch(() => [] as Array<{ id: string }>);
-    count = Math.max(count, teamRows.length);
-  }
-  return count;
+  const teamPromise = actor.team_id
+    ? serviceFetch<Array<{ id: string }>>(
+        `/rest/v1/storyflow_character_portrayals?actor_profile_id=eq.${encodeURIComponent(actor.id)}&team_id=eq.${encodeURIComponent(actor.team_id)}&select=id&limit=1000`,
+      ).catch(() => [] as Array<{ id: string }>)
+    : Promise.resolve([] as Array<{ id: string }>);
+  const [ownerRows, teamRows] = await Promise.all([ownerPromise, teamPromise]);
+  return Math.max(ownerRows.length, teamRows.length);
 }
 
 async function errorWithRequestId(error: unknown, fallback: string, requestId: string) {

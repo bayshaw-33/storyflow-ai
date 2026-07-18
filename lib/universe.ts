@@ -357,8 +357,10 @@ export async function readUniverseEntitlement(options: SupabaseOptions = {}) {
 export async function listUniverses(options: SupabaseOptions = {}): Promise<Universe[]> {
   if (isSupabaseConfigured() && options.accessToken) {
     try {
+      // KIIKIS-TR-ACTOR-P0-009: 列表精简字段，避免拉 description(metadata Bible 可能数十 KB)
+      const listSelect = "id,user_id,team_id,name,status,card_summary,cover_asset_version_id,metadata,genre,tone,default_language,target_markets,archived_at,created_at,updated_at";
       const rows = await supabaseFetch<Universe[]>(
-        `${tableUrl(TABLES.universes)}?select=*&order=updated_at.desc`,
+        `${tableUrl(TABLES.universes)}?select=${encodeURIComponent(listSelect)}&order=updated_at.desc`,
         {},
         options,
       );
@@ -375,8 +377,21 @@ export async function listUniverses(options: SupabaseOptions = {}): Promise<Univ
 }
 
 export async function getUniverseBundle(universeId: string, options: SupabaseOptions = {}): Promise<UniverseBundle | null> {
-  const universes = await listUniverses(options);
-  const universe = universes.find((item) => item.id === universeId);
+  // KIIKIS-TR-ACTOR-P0-009: 详情页直接单行查询，不再先 listUniverses 再 find
+  // 避免"为了加载 1 个宇宙先拉全部宇宙列表"
+  let universe: Universe | null = null;
+  if (isSupabaseConfigured() && options.accessToken) {
+    try {
+      const rows = await supabaseFetch<Universe[]>(
+        `${tableUrl(TABLES.universes)}?id=eq.${encodeURIComponent(universeId)}&select=*&limit=1`,
+        {},
+        options,
+      );
+      universe = rows && rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+      reportUniverseSyncFailure("getUniverseBundle", error);
+    }
+  }
   if (!universe) return null;
 
   const [entities, relationships, timeline, canonFacts, snapshots, inbox, links, reports] = await Promise.all([
