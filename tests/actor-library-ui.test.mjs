@@ -5,12 +5,19 @@ import {
   ACTOR_VIEW_PACKS,
   actorInitials,
   buildExportFileName,
+  computeProfileCompleteness,
   filterActors,
+  filterByStatus,
+  filterByTag,
   groupVersionsByPack,
+  markVersionPrimary,
   mergeVersions,
+  normalizeActorDetail,
   normalizePortrayals,
   normalizeViewVersions,
+  sortActors,
   toActorCard,
+  toPortrayalCard,
 } from "../components/actors/actor-view-model.ts";
 import {
   REFERENCE_SHEET_HEIGHT,
@@ -193,4 +200,188 @@ test("buildExportFileName：文件名清洗", () => {
   assert.equal(buildExportFileName("Astra Lin"), "astra-lin-reference-sheet.png");
   assert.equal(buildExportFileName("林寒 / 狼人"), "林寒-狼人-reference-sheet.png");
   assert.equal(buildExportFileName(""), "actor-reference-sheet.png");
+});
+
+
+// ============================================================
+// PRD v3.0 扩展：markVersionPrimary / normalizeActorDetail / toPortrayalCard
+// ============================================================
+
+test("markVersionPrimary 切换主版本并清掉其他主版本标记", () => {
+  const versions = [
+    { versionId: "v1", previewUrl: "https://x/1.png", pack: "expressions", isPrimary: true },
+    { versionId: "v2", previewUrl: "https://x/2.png", pack: "expressions", isPrimary: false },
+    { versionId: "v3", previewUrl: "https://x/3.png", pack: "expressions", isPrimary: false },
+  ];
+  const next = markVersionPrimary(versions, "v2");
+  assert.equal(next.find((v) => v.versionId === "v2")?.isPrimary, true);
+  assert.equal(next.find((v) => v.versionId === "v1")?.isPrimary, false, "原主版本必须取消");
+  assert.equal(next.find((v) => v.versionId === "v3")?.isPrimary, false);
+});
+
+test("markVersionPrimary versionId 不存在时不修改原数组", () => {
+  const versions = [
+    { versionId: "v1", previewUrl: "https://x/1.png", pack: "expressions", isPrimary: true },
+  ];
+  const next = markVersionPrimary(versions, "v-missing");
+  // 不存在时回退：把第一个标为主版本（保持至少一个主版本的不变式）
+  assert.equal(next[0].isPrimary, true);
+});
+
+test("normalizeActorDetail 解析 imagePackCompleteness 和 portrayalCount", () => {
+  const detail = normalizeActorDetail({
+    actor: {
+      id: "a1",
+      name: "Astra",
+      avatar_url: "https://x/a.png",
+      temperament: ["冷静"],
+      status: "ready",
+      updated_at: "2026-07-18T00:00:00.000Z",
+      imagePackCompleteness: {
+        avatar: true,
+        threeViewCasual: false,
+        threeViewSwimwear: true,
+        expressions: false,
+        bodyDetails: true,
+      },
+      portrayalCount: 5,
+    },
+  });
+  assert.ok(detail);
+  assert.equal(detail.id, "a1");
+  assert.equal(detail.portrayalCount, 5);
+  assert.equal(detail.imagePackCompleteness?.avatar, true);
+  assert.equal(detail.imagePackCompleteness?.threeViewCasual, false);
+  assert.equal(detail.imagePackCompleteness?.threeViewSwimwear, true);
+});
+
+test("normalizeActorDetail 坏数据返回 null", () => {
+  assert.equal(normalizeActorDetail(null), null);
+  assert.equal(normalizeActorDetail({}), null);
+  assert.equal(normalizeActorDetail({ actor: null }), null);
+  assert.equal(normalizeActorDetail({ actor: { id: "" } }), null);
+});
+
+test("toPortrayalCard 不暴露 project_id，使用语义化字段", () => {
+  const card = toPortrayalCard(
+    {
+      id: "pt-1",
+      workTitle: "陨神第一季",
+      universeName: "陨神之墓",
+      characterName: "Alice",
+      costumeDirection: "白裙",
+      visualPrompt: "prompt",
+      referenceImageUrl: "https://x/a.png",
+      isReusable: true,
+      updated_at: "2026-07-18T00:00:00.000Z",
+    },
+    { untitledWork: "未关联作品", untitledCharacter: "未命名角色" },
+  );
+  assert.equal(card.workTitle, "陨神第一季");
+  assert.equal(card.universeName, "陨神之墓");
+  assert.equal(card.characterName, "Alice");
+  assert.equal(card.projectId, undefined, "PortrayalCard 类型不得包含 projectId");
+});
+
+test("toPortrayalCard 旧 raw 行 fallback 到 portrayal_name", () => {
+  const card = toPortrayalCard(
+    {
+      id: "pt-2",
+      portrayal_name: "Alice 形象",
+      project_id: "proj-x",  // legacy 字段，不应出现在 card
+      reference_image_url: "https://x/b.png",
+      is_reusable: false,
+      updated_at: "2026-07-18T00:00:00.000Z",
+    },
+    { untitledWork: "未关联作品", untitledCharacter: "未命名角色" },
+  );
+  // 旧 raw 行没 workTitle → fallback 到 portrayal_name → 兜底 "未关联作品"
+  assert.equal(card.workTitle, "Alice 形象");
+  assert.equal(card.characterName, "Alice 形象");
+  assert.equal(card.referenceImageUrl, "https://x/b.png");
+  assert.equal(card.isReusable, false);
+  assert.equal(card.projectId, undefined, "PortrayalCard 不得保留 project_id");
+});
+
+test("computeProfileCompleteness 计算身份完成度", () => {
+  const result = computeProfileCompleteness({
+    avatar_url: "https://x/a.png",
+    age_range: "20代",
+    gender_expression: "女性",
+    ethnicity_style: "东亚",
+    face_description: "瓜子脸",
+    hair_description: "长发",
+    body_description: "苗条",
+    temperament: ["冷静"],
+    playable_roles: ["反派"],
+    bio: "演员简介",
+  });
+  assert.equal(result.filled, 10);
+  assert.equal(result.total, 10);
+  assert.equal(result.percent, 100);
+});
+
+test("computeProfileCompleteness 空数据返回 0%", () => {
+  const result = computeProfileCompleteness({});
+  assert.equal(result.filled, 0);
+  assert.equal(result.percent, 0);
+});
+
+test("filterByStatus 按 ready/draft 筛选", () => {
+  const actors = [
+    { id: "1", status: "ready" },
+    { id: "2", status: "draft" },
+  ];
+  assert.equal(filterByStatus(actors, "ready").length, 1);
+  assert.equal(filterByStatus(actors, "draft").length, 1);
+  assert.equal(filterByStatus(actors, "all").length, 2);
+});
+
+test("filterByTag 按标签筛选（大小写不敏感）", () => {
+  const actors = [
+    { id: "1", temperament: ["冷静"] },
+    { id: "2", temperament: ["危险"] },
+  ];
+  assert.equal(filterByTag(actors, "冷静").length, 1);
+  assert.equal(filterByTag(actors, "冷").length, 0, "标签必须精确匹配，不模糊匹配");
+});
+
+test("sortActors 按 portrayals 数倒序", () => {
+  const actors = [
+    { id: "1", portrayalCount: 5, updated_at: "2026-07-18T00:00:00.000Z" },
+    { id: "2", portrayalCount: 10, updated_at: "2026-07-18T00:00:00.000Z" },
+  ];
+  const sorted = sortActors(actors, "portrayals");
+  assert.equal(sorted[0].id, "2");
+  assert.equal(sorted[1].id, "1");
+});
+
+test("mergeVersions 单张失败保留旧版本（incoming 为空时 existing 不丢失）", () => {
+  const existing = [
+    { versionId: "v1", previewUrl: "https://x/1.png", pack: "expressions", isPrimary: true },
+  ];
+  // 模拟新生成失败：incoming 为空数组
+  const merged = mergeVersions(existing, []);
+  assert.equal(merged.length, 1, "incoming 空时 existing 必须保留");
+  assert.equal(merged[0].versionId, "v1");
+});
+
+test("mergeVersions incoming isPrimary=true 时清掉旧主版本", () => {
+  const existing = [
+    { versionId: "v1", previewUrl: "https://x/1.png", pack: "expressions", isPrimary: true },
+  ];
+  const incoming = [
+    { versionId: "v2", previewUrl: "https://x/2.png", pack: "expressions", isPrimary: true },
+  ];
+  const merged = mergeVersions(existing, incoming);
+  assert.equal(merged.find((v) => v.versionId === "v2")?.isPrimary, true);
+  assert.equal(merged.find((v) => v.versionId === "v1")?.isPrimary, false, "新主版本出现时旧的必须取消");
+});
+
+test("mergeVersions 无任何 isPrimary 时自动标第一个为主版本", () => {
+  const merged = mergeVersions(
+    [],
+    [{ versionId: "v1", previewUrl: "https://x/1.png", pack: "expressions" }],
+  );
+  assert.equal(merged[0].isPrimary, true);
 });

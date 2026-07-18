@@ -261,17 +261,18 @@ export function mergeVersions(existing: ViewVersion[], incoming: ViewVersion[]):
   }
   const seen = new Set<string>();
   const merged: ViewVersion[] = [];
-  const push = (version: ViewVersion) => {
+  // promoted 时：incoming 里的 isPrimary 保持，existing 的所有 isPrimary 清零（让 incoming 接管）。
+  // 未 promoted 时：保留各自原有 isPrimary 状态。
+  const push = (version: ViewVersion, fromIncoming: boolean) => {
     if (!version.previewUrl || seen.has(version.versionId)) return;
     seen.add(version.versionId);
-    merged.push(version);
+    const effectiveIsPrimary = promoted
+      ? (fromIncoming ? version.isPrimary : false)
+      : version.isPrimary;
+    merged.push({ ...version, isPrimary: effectiveIsPrimary });
   };
-  for (const version of [...incoming, ...existing]) {
-    push({
-      ...version,
-      isPrimary: promoted && version.isPrimary ? true : promoted ? false : version.isPrimary,
-    });
-  }
+  for (const version of incoming) push(version, true);
+  for (const version of existing) push(version, false);
   // 若没有任何 isPrimary，自动把第一条标记为主版本以便 UI 高亮。
   if (merged.length && !merged.some((v) => v.isPrimary)) {
     merged[0] = { ...merged[0], isPrimary: true };

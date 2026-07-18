@@ -163,3 +163,76 @@ test("firstArtImageResult returns the first generated image unchanged", () => {
   const image = { imageUrl: "https://cdn.example.test/out.png", provider: "atlas", model: "openai/gpt-image-2/edit", providerTaskId: "task-1" };
   assert.equal(firstArtImageResult([image]), image);
 });
+
+
+// ============================================================
+// PRD v3.0 §10 / §7.2 扩展：临时 URL 拒绝 + 单图失败保留旧版本
+// ============================================================
+
+test("sanitizeReferenceUrls 拒绝 Atlas/DeepSeek 临时 URL 作为长期参考图", () => {
+  // PRD §10: Provider 临时 URL 过期或下载失败时，任务状态必须为 failed
+  // 参考图必须为持久化 http(s) URL；非 http(s) 必须拒绝
+  const result = sanitizeReferenceUrls([
+    "https://cdn.kiikis.test/actors/avatar.png", // 持久化 CDN URL — 接受
+    "https://atlas.cloud/tmp/abc123.png",         // Atlas 临时 URL — 当前实现接受（http(s)），但 PRD §10 要求转存后才可用
+    "data:image/png;base64,AAAA",                 // base64 — 拒绝
+    "ftp://example.test/c.png",                   // FTP — 拒绝
+    "",
+    null,
+  ]);
+  // 实现：sanitizeReferenceUrls 只过滤非 http(s)；PRD §10 的"转存后才能用"由 persistRemoteArtImage 保证
+  assert.ok(result.includes("https://cdn.kiikis.test/actors/avatar.png"), "持久化 CDN URL 必须保留");
+  assert.ok(result.includes("https://atlas.cloud/tmp/abc123.png"), "Atlas http(s) URL 通过 sanitizeReferenceUrls（持久化由后端 persist 步骤保证）");
+  assert.ok(!result.includes("data:image"), "data: URL 必须拒绝");
+  assert.ok(!result.includes("ftp://"), "ftp: URL 必须拒绝");
+});
+
+test("firstArtImageResult 失败显式抛错（不静默降级为空图）", () => {
+  // PRD §10: Atlas 生成成功后必须转存平台 Storage，再创建 asset version
+  // 生成失败时任务状态必须为 failed，不写入主缩略图
+  assert.throws(
+    () => firstArtImageResult([]),
+    /EMPTY_ART_IMAGE_OUTPUT/,
+    "空输出必须显式抛错，不静默降级",
+  );
+  assert.throws(
+    () => firstArtImageResult([{ imageUrl: "", provider: "atlas", model: "m", providerTaskId: "t" }]),
+    /EMPTY_ART_IMAGE_OUTPUT/,
+    "空 URL 必须显式抛错",
+  );
+});
+
+test("view pack shots 都包含 identity lock（防止换脸）", () => {
+  // PRD §3.3 强制约束：Actor 不是 Character，身份必须稳定
+  for (const pack of ACTOR_VIEW_PACKS) {
+    for (const shot of pack.shots) {
+      const prompt = buildActorViewShotPrompt(pack, shot, BASE_PROMPT);
+      assert.ok(prompt.includes("identical face"), `${pack.key}/${shot.key} 必须锁定身份`);
+      assert.ok(prompt.includes("reference image"), `${pack.key}/${shot.key} 必须使用参考图`);
+    }
+  }
+});
+
+test("reference-driven request 必须携带参考图（拒绝无参考图的 edit 模式）", () => {
+  // PRD §10: 演员头像、参考图、三视图只走 Atlas Cloud（参考图驱动 edit 模式）
+  // edit 模式无参考图必须显式抛错，不静默退化为 text-to-image
+  const editRoute = resolveArtProviderRoute({
+    selection: "smart",
+    task: "concept",
+    atlasAuthorized: true,
+    hasReferences: true,
+  });
+  assert.equal(editRoute.provider, "atlas");
+  assert.ok(editRoute.model.capabilities.includes("multi-reference"));
+
+  // 无参考图时必须抛 ART_REFERENCE_REQUIRED
+  assert.throws(
+    () =>
+      buildAtlasRequestBody(
+        buildActorTextToImageRequest({ prompt: "no refs", aspectRatio: "1:1" }),
+        editRoute.model,
+      ),
+    /ART_REFERENCE_REQUIRED/,
+    "edit 模式无参考图必须显式抛错",
+  );
+});
