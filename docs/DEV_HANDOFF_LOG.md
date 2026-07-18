@@ -51,9 +51,11 @@
 - 新增测试文件：`tests/actor-view-packs-contract.test.mjs`（16 项契约检查）
 - 更新测试：`tests/actor-library-ui.test.mjs`（pack id 断言改 canonical）、`tests/actor-portrayal-auth.test.mjs`（mock 改 actor_id）、`tests/actors-production-smoke.test.mjs`（versions map 匹配 successes.map）
 
-### Migration 待执行
+### Migration 执行记录
 
-- `supabase/migrations/20260724000000_actor_art_projects_actor_scope.sql` — TRAE 已写入，需 Codex 在 staging 核验后应用，再推 production。
+- staging（`kiikis-staging` / `cwpyolxitkcpitqizgtq`）：TRAE 于 2026-07-19 执行 `supabase db push`，应用 `20260724000000_actor_art_projects_actor_scope.sql` 成功。
+- 验证：`storyflow_art_projects.actor_id` (uuid) 列已创建；FK `storyflow_art_projects_actor_id_fkey` 已建立；UNIQUE INDEX `storyflow_art_projects_actor_scope_unique` (owner_id, actor_id) WHERE actor_id IS NOT NULL 已创建；INDEX `storyflow_art_assets_actor_anchor_idx` (actor_id, identity_anchor) 已创建。
+- Production（`StoryFlow` / `vgcafbzksizlwmylphzu`）：未链接，待 Codex 核验 staging 无误后推 production。
 - Production 当前无成功生成的演员 art project / asset，无需清理或回填旧数据。
 
 ### 线上验收
