@@ -109,6 +109,12 @@ export type AnalyzeResponse = {
     locations: StoryboardAssetUsage[];
     props: StoryboardAssetUsage[];
   };
+  /** PRD §5.2: 非敏感诊断 —— provider/model/fallbackUsed。不含 key/baseURL/raw 响应。 */
+  provider?: {
+    provider: string;
+    model: string;
+    fallbackUsed: boolean;
+  };
 };
 
 export type PromptRequest = {

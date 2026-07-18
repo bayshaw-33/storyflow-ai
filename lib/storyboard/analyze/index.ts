@@ -237,7 +237,10 @@ export async function runAnalyze(
 
   const systemPrompt = buildAnalyzeSystemPrompt(request);
   const userPrompt = buildAnalyzeUserPrompt(request, { sceneSourceText });
-  const rawOutput = await deps.callAI({ systemPrompt, userPrompt });
+  const aiCallResult = await deps.callAI({ systemPrompt, userPrompt });
+  // CallStoryboardAI 可返回纯 string（旧 mock）或 { output, provider }（新路由）
+  const rawOutput = typeof aiCallResult === "string" ? aiCallResult : aiCallResult.output;
+  const providerInfo = typeof aiCallResult === "string" ? undefined : aiCallResult.provider;
 
   const aiOutput = parseAnalyzeOutput(rawOutput);
 
@@ -267,6 +270,7 @@ export async function runAnalyze(
     revision,
     scenes,
     assets: groupAssets(assets),
+    ...(providerInfo ? { provider: providerInfo } : {}),
   };
 }
 
@@ -293,7 +297,14 @@ const defaultCallAI: CallStoryboardAI = async (scope) => {
   if (typeof output !== "string" || output.trim().length === 0) {
     throw new StoryboardError("AI_CALL_FAILED", "AI 返回为空，无法解析分镜。");
   }
-  return output;
+  return {
+    output,
+    provider: {
+      provider: result.provider,
+      model: result.model,
+      fallbackUsed: Boolean(result.fallbackUsed),
+    },
+  };
 };
 
 const defaultLoadExistingState: LoadExistingStoryboardState = async () => ({ scenes: [] });

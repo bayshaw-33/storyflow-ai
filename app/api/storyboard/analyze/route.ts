@@ -157,7 +157,15 @@ export async function POST(request: Request) {
             ],
             temperature: 0.2,
           });
-          return result.output;
+          // PRD §5.2: 返回 output + provider 诊断（非敏感）
+          return {
+            output: result.output,
+            provider: {
+              provider: result.provider,
+              model: result.model,
+              fallbackUsed: Boolean(result.fallbackUsed),
+            },
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw new StoryboardError("AI_CALL_FAILED", `AI 调用失败: ${message}`);

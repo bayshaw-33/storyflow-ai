@@ -118,8 +118,16 @@ export type AnalyzeAIScope = {
   userPrompt: string;
 };
 
-/** Injected AI call — route wires callRoutedProvider, tests wire mocks. */
-export type CallStoryboardAI = (scope: AnalyzeAIScope) => Promise<string>;
+/** Provider 诊断（非敏感，PRD §5.2）。 */
+export type AnalyzeProviderInfo = {
+  provider: string;
+  model: string;
+  fallbackUsed: boolean;
+};
+
+/** Injected AI call — route wires callRoutedProvider, tests wire mocks.
+ * 返回 raw output 与可选 provider 诊断；route 层会把诊断透传到 AnalyzeResponse。 */
+export type CallStoryboardAI = (scope: AnalyzeAIScope) => Promise<string | { output: string; provider?: AnalyzeProviderInfo }>;
 
 export type ExistingStateScope = {
   ownerId: string;
