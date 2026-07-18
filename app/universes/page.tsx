@@ -3,33 +3,22 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, LayoutGrid, Share2, Plus, Loader2 } from "lucide-react";
+import { Search, Plus, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import type { TeamRole } from "@/lib/actors";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
-import {
-  createUniverseFromProject,
-  listUniverses,
-  type Universe,
-} from "@/lib/universe";
+import { createUniverseFromProject } from "@/lib/universe";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { useOS } from "@/lib/os/uiState";
 import { useI18n } from "@/lib/i18n/useI18n";
-import { buildUniverseGraphFromUniverses } from "@/lib/universe/graph";
-import { UniverseGraph } from "@/components/universe/UniverseGraph";
 import { UniverseCard } from "@/components/universe/UniverseCard";
 import {
   DEFAULT_UNIVERSE_FILTER,
   filterAndSortUniverses,
-  collectUniverseTags,
   getUniverseCopy,
   type UniverseListItem,
-  type UniverseListFilter,
-  type UniverseStatusFilter,
-  type UniverseSortKey,
-  type UniverseViewMode,
 } from "@/components/universe/universe-view-model";
 import styles from "@/components/universe/universe.module.css";
 
@@ -61,7 +50,6 @@ const EMPTY_FORM: CreateForm = {
   tone: "",
 };
 
-const VIEW_STORAGE_KEY = "storyflow-universe-view-mode";
 const SCROLL_STORAGE_KEY = "storyflow-universe-list-scroll";
 
 export default function UniversesPage() {
@@ -73,11 +61,9 @@ export default function UniversesPage() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [items, setItems] = useState<UniverseListItem[]>([]);
-  const [universes, setUniverses] = useState<Universe[]>([]);
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [teams, setTeams] = useState<TeamOption[]>([]);
-  const [filter, setFilter] = useState<UniverseListFilter>(DEFAULT_UNIVERSE_FILTER);
-  const [view, setView] = useState<UniverseViewMode>("cards");
+  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
@@ -85,18 +71,6 @@ export default function UniversesPage() {
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  // 视图模式持久化（会话内）
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.sessionStorage.getItem(VIEW_STORAGE_KEY);
-    if (stored === "cards" || stored === "graph") setView(stored);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem(VIEW_STORAGE_KEY, view);
-  }, [view]);
 
   // 滚动位置恢复（详情返回时）
   useEffect(() => {
@@ -128,10 +102,9 @@ export default function UniversesPage() {
       setLoading(true);
       setLoadError("");
       try {
-        const [rows, cloudProjects] = await Promise.all([
-          listUniverses({ accessToken }),
-          accessToken ? readProjectsFromSupabase({ accessToken }).catch(() => []) : Promise.resolve([]),
-        ]);
+        const cloudProjects = accessToken
+          ? await readProjectsFromSupabase({ accessToken }).catch(() => [])
+          : [];
         if (accessToken) {
           const teamResponse = await fetch("/api/teams", {
             headers: { Authorization: `Bearer ${accessToken}` },
@@ -141,7 +114,6 @@ export default function UniversesPage() {
         } else {
           setTeams([]);
         }
-        setUniverses(rows);
         setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
         setItems(await loadUniverseItems(accessToken));
       } catch (loadIssue) {
@@ -174,16 +146,10 @@ export default function UniversesPage() {
   const signedOut = !session;
   const canWriteUniverse = Boolean(session) && os.planReady && os.access.universe;
 
-  const tags = useMemo(() => collectUniverseTags(items), [items]);
-  const filtered = useMemo(() => filterAndSortUniverses(items, filter), [items, filter]);
-  const universeGraph = useMemo(() => buildUniverseGraphFromUniverses(universes), [universes]);
-  const graphSummaries = useMemo(() => {
-    const map: Record<string, { workCount?: number; characterCount?: number }> = {};
-    for (const item of items) {
-      map[item.id] = { workCount: item.workCount, characterCount: item.characterCount };
-    }
-    return map;
-  }, [items]);
+  const filtered = useMemo(
+    () => filterAndSortUniverses(items, { ...DEFAULT_UNIVERSE_FILTER, search }),
+    [items, search],
+  );
 
   const totals = useMemo(() => ({
     total: items.length,
@@ -253,7 +219,7 @@ export default function UniversesPage() {
   const showEmpty = !loading && filtered.length === 0;
 
   return (
-    <main className={styles.page} ref={scrollRef}>
+    <main className={`${styles.page} universe-library-page`} ref={scrollRef}>
       <section className={styles.titleBar}>
         <Link className={styles.titleBrand} href="/" aria-label="Home">
           <KiikisLogo compact />
@@ -265,6 +231,16 @@ export default function UniversesPage() {
           {loadError ? <span style={{ color: "#ff8a8a", fontSize: 12 }}>{loadError}</span> : null}
         </div>
         <div className={styles.titleActions}>
+          <div className={styles.compactSearch}>
+            <span className={styles.searchIcon}><Search size={14} /></span>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={copy.list.searchPlaceholder}
+              aria-label={copy.list.searchPlaceholder}
+            />
+          </div>
           {canWriteUniverse ? (
             <button type="button" className={styles.primaryButton} onClick={openCreate} disabled={projects.length === 0}>
               <Plus size={15} />
@@ -275,72 +251,6 @@ export default function UniversesPage() {
               {signedOut ? (isZh ? "登录" : "Sign In") : (isZh ? "升级 ULTRA" : "Upgrade to ULTRA")}
             </Link>
           )}
-        </div>
-      </section>
-
-      <section className={styles.toolbar}>
-        <div className={styles.searchBox}>
-          <span className={styles.searchIcon}><Search size={14} /></span>
-          <input
-            type="search"
-            value={filter.search}
-            onChange={(event) => setFilter((current) => ({ ...current, search: event.target.value }))}
-            placeholder={copy.list.searchPlaceholder}
-            aria-label={copy.list.searchPlaceholder}
-          />
-        </div>
-        <select
-          className={styles.select}
-          value={filter.status}
-          onChange={(event) => setFilter((current) => ({ ...current, status: event.target.value as UniverseStatusFilter }))}
-          aria-label="status filter"
-        >
-          <option value="all">{copy.list.statusAll}</option>
-          <option value="active">{copy.list.statusActive}</option>
-          <option value="archived">{copy.list.statusArchived}</option>
-        </select>
-        <select
-          className={styles.select}
-          value={filter.tag}
-          onChange={(event) => setFilter((current) => ({ ...current, tag: event.target.value }))}
-          aria-label="tag filter"
-        >
-          <option value="">{copy.list.tagAll}</option>
-          {tags.map((tag) => (
-            <option key={tag} value={tag}>{tag}</option>
-          ))}
-        </select>
-        <select
-          className={styles.sortSelect}
-          value={filter.sort}
-          onChange={(event) => setFilter((current) => ({ ...current, sort: event.target.value as UniverseSortKey }))}
-          aria-label="sort"
-        >
-          <option value="updated">{copy.list.sortUpdated}</option>
-          <option value="name">{copy.list.sortName}</option>
-          <option value="works">{copy.list.sortWorks}</option>
-        </select>
-        <div className={styles.viewSwitch} role="tablist" aria-label="view mode">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "cards"}
-            className={view === "cards" ? "active" : ""}
-            onClick={() => setView("cards")}
-          >
-            <LayoutGrid size={14} />
-            {copy.list.viewCards}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "graph"}
-            className={view === "graph" ? "active" : ""}
-            onClick={() => setView("graph")}
-          >
-            <Share2 size={14} />
-            {copy.list.viewGraph}
-          </button>
         </div>
       </section>
 
@@ -355,15 +265,6 @@ export default function UniversesPage() {
           <div className={styles.loadingState}>
             <Loader2 size={16} className="spin" />
             {copy.list.loading}
-          </div>
-        ) : view === "graph" ? (
-          <div className={styles.graphWrap}>
-            <UniverseGraph
-              graph={universeGraph}
-              height={560}
-              summaries={graphSummaries}
-              emptyLabel={copy.list.graphEmpty}
-            />
           </div>
         ) : showEmpty ? (
           <div className={styles.emptyState}>

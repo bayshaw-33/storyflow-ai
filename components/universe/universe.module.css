@@ -67,25 +67,15 @@
   flex-wrap: wrap;
 }
 
-.toolbar {
-  display: flex;
-  gap: 12px;
-  padding: 14px 28px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: #0b0d0e;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.searchBox {
+.compactSearch {
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1;
-  min-width: 220px;
+  width: clamp(180px, 18vw, 280px);
+  max-width: 280px;
 }
 
-.searchBox input {
+.compactSearch input {
   width: 100%;
   height: 36px;
   padding: 0 12px 0 32px;
@@ -97,7 +87,7 @@
   outline: none;
 }
 
-.searchBox input:focus {
+.compactSearch input:focus {
   border-color: rgba(109, 231, 223, 0.55);
 }
 
@@ -109,45 +99,6 @@
   color: #8f999b;
   pointer-events: none;
   display: flex;
-}
-
-.select,
-.sortSelect {
-  height: 36px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  color: #f4f7f8;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.viewSwitch {
-  display: inline-flex;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.viewSwitch button {
-  height: 36px;
-  padding: 0 14px;
-  border: none;
-  background: transparent;
-  color: #8f999b;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.viewSwitch button:global(.active) {
-  background: rgba(109, 231, 223, 0.14);
-  color: #6de7df;
 }
 
 .countsStrip {
@@ -1529,7 +1480,6 @@
 
 @media (max-width: 768px) {
   .titleBar,
-  .toolbar,
   .countsStrip,
   .content,
   .detailHeader,
@@ -1547,6 +1497,14 @@
   .title {
     font-size: 18px;
   }
+  .titleActions {
+    width: 100%;
+  }
+  .compactSearch {
+    flex: 1 1 220px;
+    width: auto;
+    max-width: none;
+  }
   .detailTitle h1 {
     font-size: 17px;
   }
@@ -1554,7 +1512,6 @@
 
 @media (max-width: 375px) {
   .titleBar,
-  .toolbar,
   .countsStrip,
   .content,
   .detailHeader,
@@ -1563,10 +1520,7 @@
     padding-left: 12px;
     padding-right: 12px;
   }
-  .toolbar {
-    gap: 8px;
-  }
-  .searchBox input {
+  .compactSearch input {
     font-size: 12px;
   }
   .cardBody {

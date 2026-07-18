@@ -941,6 +941,7 @@ input:focus, textarea:focus, select:focus {
   .novel-workbench-page,
   .art-workbench-page,
   .art-workbench-shell,
+  .universe-library-page,
   .storyboard-workbench-page,
   .video-workbench-page {
     padding-left: var(--workspace-nav-offset);

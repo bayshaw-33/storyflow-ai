@@ -1,5 +1,35 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-18 19:45 +08 - Codex / Universe 列表布局止血
+
+### 本次目标
+- 修复 Universe 列表被全局固定侧栏覆盖、筛选控件撑满首屏的问题。
+
+### 已完成
+- 根因确认：Universe 页面未加入全局 `--workspace-nav-offset` 安全边距；全局 `select { width: 100% }` 使原筛选栏全部换行。
+- 按负责人要求移除状态、标签、排序和关系图切换，只保留紧凑搜索框、Universe 数据统计和卡片墙。
+- 删除关系图视图对应的额外 Universe 列表请求，列表只读取聚合 summaries 数据。
+- 桌面端为固定侧栏预留 128px；720px 以下侧栏隐藏后恢复全宽。
+
+### 修改文件
+- `app/universes/page.tsx`
+- `components/universe/universe.module.css`
+- `app/globals.css`
+- `tests/universe-list-layout.test.mjs`
+- `e2e/universe-list-layout.spec.ts`
+- `docs/DEV_HANDOFF_LOG.md`
+
+### 验证结果
+- TDD：新增静态回归先失败，修复后通过。
+- `node --test tests/*.test.mjs`：349/349 通过。
+- `pnpm exec tsc --noEmit`：通过。
+- `pnpm run build`：通过，67/67 静态页面生成；保留既有 autoprefixer warning。
+- Playwright Chromium：桌面侧栏安全边距 + 移动端恢复全宽，2/2 通过。
+- 本地 1440×900 页面截图确认：紧凑搜索、统计条和内容区均未与侧栏重叠。
+
+### 未完成 / 风险
+- 本次只修改 Universe 列表；演员库若存在同类侧栏覆盖需单独审查，不在本次范围内。
+
 ## 2026-07-18 19:05 +08 - Codex / Universe + Actors Stage E migration 与安全复查
 
 ### 本次目标
