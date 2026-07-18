@@ -1,5 +1,113 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-07-19 01:30 +08 - TRAE / KIIKIS-TR-ACTOR-P0-004 演员库生产故障修复
+
+### 本次目标
+
+修复演员库生产故障，建立平台共享演员的完整安全边界：
+1. 查询 400 止血（PostgREST or/and 语法）
+2. 头像上传改为 Storage 私有 bucket
+3. 开放演员资料编辑（仅创建者可写 + metadata 深合并）
+4. platform 共享可见性 + RLS + 修复 baseline team SELECT bug
+5. storyflow_actor_usages 使用留痕表 + "使用此演员"流程
+6. 肖像权安全边界（真人照片需明确确认肖像授权才能 platform 共享）
+7. E2E 覆盖 + 交接证据
+
+### 确认方案（用户原文）
+
+> AI 生成演员默认平台共享。真人照片默认私有，确认肖像授权后才能平台共享。
+> 其他用户只能"使用"，不能修改原演员。每次使用生成授权留痕和项目形象记录。
+> 初期免费共享，定价、支付和分账后续独立开发。
+
+### Commit Range
+
+`399243c..8c82c8e`（6 个 feat/fix commit）+ 本 commit（Commit 7 E2E + 交接）
+
+- `399243c` fix(actors): 修复 PostgREST or()/and() 语法错误导致 /api/actors 返回 400
+- `bcc3104` feat(actors): 头像上传改为 Storage 私有 bucket + 客户端压缩
+- `814b061` feat(actors): 开放演员资料编辑 + metadata 深合并 + 仅创建者可写
+- `d96cdf2` feat(actors): platform 共享可见性 + RLS + 修复 baseline team SELECT bug
+- `a9c4a75` feat(actors): storyflow_actor_usages 使用留痕表 + 平台共享"使用此演员"流程
+- `8c82c8e` feat(actors): 肖像权安全边界 - platform 共享强制真人照片授权确认
+- 本 commit test(actors): E2E flow 跨 Commit 1-6 集成验证 + 交接证据
+
+### 关键契约
+
+#### PostgREST 语法（Commit 1）
+- `or()` / `and()` 内部必须用 `col.op.val` 点号语法（不能用 `col=op.val`）
+- PGRST100 词法 bug：`or()` 首项不能是 `o` 开头列名 → platform 表达式放首项
+- 修复前：`or=(owner_id.eq.X,team_id.eq.Y)` → 400
+- 修复后：`or=(visibility.eq.platform,and(visibility.eq.team,team_id.in.(...)),owner_id.eq.X)`
+
+#### 头像上传（Commit 2）
+- 客户端压缩（processAvatarImage）→ Storage 私有 bucket（uploadProcessedAvatar）
+- 禁止保存 Base64 data URL（`uploaded_avatar_data_url?: never` 编译期拒绝）
+- 头像归属校验：`validateAvatarAssetBelongsToUser` + `attachAvatarAssetToActor`
+
+#### 资料编辑（Commit 3）
+- `mergeActorUpdate`：空字段不覆盖已有内容；metadata 深合并
+- `assertCanEditActorBasicProfile`：仅创建者可写（不因 platform 共享而放宽）
+- `mergeActorPromptInput`：重新生成提示词时保留已有字段（防止数据损毁）
+
+#### platform 共享 + RLS（Commit 4）
+- `ActorVisibility` 加 `"platform"`
+- migration `20260721000000`：扩展 visibility CHECK + 重建 SELECT/INSERT RLS
+- 修复 baseline bug：`m.team_id = m.team_id`（自引用）→ `m.team_id = storyflow_actor_profiles.team_id`
+- platform 对所有 authenticated 可读；INSERT 仍要求 `owner_id = auth.uid()`
+- `listStructuredActorsForUser` accessQuery 始终含 platform 分支
+
+#### 使用留痕（Commit 5）
+- 表 `storyflow_actor_usages`：actor_id/consumer_id/project_id/creator_snapshot/usage_type
+- `UNIQUE(actor_id, consumer_id, project_id)` 幂等约束
+- `createActorUsage`：校验 visibility===platform + 禁止 owner 自用 + ON CONFLICT
+- `listPlatformActors`：不暴露 owner email/UUID/供应商 URL/存储路径
+- API：`POST /api/actors/[actorId]/use`、`GET /api/actors/platform`、`GET /api/actors/usages`
+
+#### 肖像权安全边界（Commit 6）
+- `ActorOriginType`：`"ai_generated" | "real_person"`
+- `ActorRightsState`：`"ai_generated" | "portrait_confirmed" | "portrait_pending"`
+- `PLATFORM_ALLOWED_RIGHTS = new Set(["ai_generated", "portrait_confirmed"])`
+- `computeRightsState(input)`：根据 origin_type + rights_confirmed 计算
+- `assertCanSetPlatformVisibility(visibility, rightsState)`：portrait_pending 禁止 platform
+- `normalizeActorInput` 把 rights_state 写入 metadata
+- `mergeActorUpdate`：input 未传 origin_type 时保留 existing.metadata.rights_state
+- `createActorForUser` / `updateActorForUser`：visibility=platform 时调用校验
+- `CreateActorModal` / `EditActorModal`：origin_type select + rights_confirmed checkbox
+  platform 选项在 real_person && !rightsConfirmed 时 disabled
+- migration `20260723000000`：COMMENT ON COLUMN 文档化 rights_state 约束（应用层强约束）
+
+### 验证结果
+
+- `npx tsc --noEmit`：0 错误
+- `pnpm build`：成功
+- `node --test tests/*.test.mjs`：598/598 通过
+  - Commit 1: 8 场景（actors-postgrest-fix）
+  - Commit 2: 16 场景（actors-avatar-upload）
+  - Commit 3: 18 场景（actors-edit-profile）
+  - Commit 4: 18 场景（actors-platform-visibility）
+  - Commit 5: 21 场景（actor-usages）
+  - Commit 6: 18 场景（actor-portrait-rights）
+  - Commit 7: 18 场景（actors-e2e-flow，跨 commit 集成）
+  - 其余既有测试：481 场景
+
+### 待 Codex / 用户处理
+
+1. **staging 执行 migration**（TRAE 不自行执行迁移）：
+   - `supabase/migrations/20260721000000_actor_platform_visibility.sql`
+   - `supabase/migrations/20260722000000_actor_usages.sql`
+   - `supabase/migrations/20260723000000_actor_portrait_rights.sql`
+2. **用户负责**：安全审查 + 双用户权限验证 + 线上验收
+3. **真实浏览器 E2E**：代码层面已就绪，需在 production 环境用真实账号验证完整流程
+
+### 已知风险
+
+- 真人照片的肖像权确认是应用层强约束（非 DB CHECK），如果绕过 API 直接写库可绕过
+  缓解：RLS INSERT 要求 `owner_id = auth.uid()`，service_role 走应用层校验
+- `creator_snapshot` 存使用时的演员快照，防止后续篡改；但快照本身不可信（无签名）
+  缓解：使用记录不可改不可删（RLS 无 UPDATE/DELETE 策略）
+- 平台共享演员列表的 `creator_display_name` 来自 `storyflow_profiles` 表
+  如果该表未初始化，display_name 为 null（前端显示"匿名创作者"）
+
 ## 2026-07-19 00:06 +08 - Codex / KIIKIS 战略白皮书 v2
 
 ### 本次目标
