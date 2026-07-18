@@ -222,7 +222,8 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   function selectProject(projectId: string) {
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
-    patchState(artStateFromProject(project));
+    const patch = artStateFromProject(project);
+    patchState(patch);
     // 嵌入模式（制作工作台美术 Tab）：同步更新 URL 的 projectId，
     // 让父组件 ProductionWorkbench 在下次刷新时能感知到 art 关联的项目切换。
     if (isEmbedded && typeof window !== "undefined") {
@@ -232,7 +233,19 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         window.history.replaceState(null, "", url.toString());
       } catch { /* URL 更新失败不阻塞关联 */ }
     }
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已关联《${project.title}》。现有剧本、项目背景和角色资料已经进入分析上下文。` }]);
+    // 明确告知用户同步了哪些资料 + 字数，避免"看不到资料"的错觉
+    const syncedParts: string[] = [];
+    if (project.idea?.trim()) syncedParts.push("项目创意");
+    if (project.brief?.trim()) syncedParts.push("项目背景");
+    if (project.storyBible) syncedParts.push("故事圣经");
+    if (project.characters?.trim()) syncedParts.push("角色资料");
+    if (project.characterCards?.length) syncedParts.push("角色卡");
+    if (project.finalScript?.trim() || project.chineseScript?.trim() || project.importedScript?.trim()) syncedParts.push("剧本");
+    const charCount = (patch.sourceText || "").length;
+    const syncedText = syncedParts.length
+      ? `已同步资料：${syncedParts.join("、")}（共 ${charCount.toLocaleString()} 字）。`
+      : `该项目暂无可同步的剧本/资料，请先在创作工作台补充内容，或直接上传资料。`;
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已关联《${project.title}》。${syncedText}${syncedParts.length ? "点击右上方「自动拆解」按钮即可让 KK 拆解角色、场景和道具。" : ""}` }]);
   }
 
   async function newProject() {
@@ -416,19 +429,19 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       <div className={`${styles.workspace} ${collapseStyles.workspace} ${isAssistantCollapsed ? collapseStyles.assistantCollapsed : ""}`}>
         <section className={styles.chatPanel}>
           <div className={`${styles.chatHead} ${collapseStyles.chatHead}`}><div><MessageSquareText size={18} /><strong>KK 美术助理</strong></div><div className={collapseStyles.chatHeadActions}><button className={collapseStyles.collapseButton} type="button" aria-expanded={!isAssistantCollapsed} aria-label={isAssistantCollapsed ? "展开 KK 美术助理" : "折叠 KK 美术助理"} title={isAssistantCollapsed ? "展开 KK 美术助理" : "折叠 KK 美术助理"} onClick={() => setIsAssistantCollapsed((collapsed) => !collapsed)}>{isAssistantCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</button><button className={collapseStyles.manageSourcesButton} type="button" onClick={() => sourceInput.current?.click()}><FilePlus2 size={15} />管理资料</button></div></div>
-          <div className={`${styles.sourceChips} ${collapseStyles.sourceChips}`}>{state.sourceFiles.slice(0, 5).map((file) => <span key={file.id}>{file.name}</span>)}{state.projectTitle ? <span>Universe · {state.projectTitle}</span> : null}{!state.sourceFiles.length && !state.projectTitle ? <small>还没有资料，上传剧本或关联项目即可开始</small> : null}</div>
+          <div className={`${styles.sourceChips} ${collapseStyles.sourceChips}`}>{state.sourceFiles.slice(0, 5).map((file) => <span key={file.id}>{file.name}</span>)}{state.projectTitle ? <span>Universe · {state.projectTitle}</span> : null}{state.sourceText.trim() ? <span title={state.sourceText.slice(0, 200)}>已同步资料 · {state.sourceText.length.toLocaleString()} 字</span> : null}{!state.sourceFiles.length && !state.projectTitle && !state.sourceText.trim() ? <small>还没有资料，上传剧本或关联项目即可开始</small> : null}</div>
           <div className={`${styles.messages} ${collapseStyles.messages}`}>{messages.map((item) => <article key={item.id} className={item.role === "user" ? styles.userMessage : styles.assistantMessage}><p>{item.content}</p>{item.note ? <small>{item.note}</small> : null}</article>)}{busy === "chat" ? <div className={styles.thinking}><LoaderCircle className={styles.spin} size={16} />KK 正在整理美术仓库...</div> : null}</div>
           <div className={`${styles.composer} ${collapseStyles.composer}`}>
             {pendingImage ? <div className={styles.pendingImage}><img src={pendingImage.url} alt="待发送参考" /><span>{pendingImage.name}</span><button type="button" onClick={() => setPendingImage(null)}>×</button></div> : null}
             <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void sendMessage(); }} placeholder="告诉 KK 要增加、编辑或修改什么，也可以上传剧本、图片和角色参考……" />
-            <div className={styles.composerActions}><div><button type="button" onClick={() => sourceInput.current?.click()} title="上传资料"><Upload size={16} />文件</button><button type="button" onClick={() => imageInput.current?.click()} title="上传图片"><ImagePlus size={16} />图片</button><button type="button" onClick={extractAssets} disabled={busy === "extract"}><Sparkles size={16} />自动拆解</button></div><button className={styles.sendButton} type="button" onClick={sendMessage} disabled={busy === "chat"}><Send size={17} /></button></div>
+            <div className={styles.composerActions}><div><button type="button" onClick={() => sourceInput.current?.click()} title="上传资料"><Upload size={16} />文件</button><button type="button" onClick={() => imageInput.current?.click()} title="上传图片"><ImagePlus size={16} />图片</button></div><button className={styles.sendButton} type="button" onClick={sendMessage} disabled={busy === "chat"}><Send size={17} /></button></div>
             <input ref={sourceInput} hidden multiple type="file" accept=".txt,.md,.json,.csv,.doc,.docx,.pdf,.html,.htm,.xlsx" onChange={uploadSource} />
             <input ref={imageInput} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage} />
           </div>
         </section>
 
         <section className={styles.repository}>
-          <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div>
+          <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.repoActions}><button type="button" className={styles.extractButton} onClick={extractAssets} disabled={busy === "extract" || !state.sourceText.trim()} title={!state.sourceText.trim() ? "请先关联项目或上传资料" : "AI 自动拆解角色、场景、道具"}>{busy === "extract" ? <LoaderCircle className={styles.spin} size={16} /> : <Sparkles size={16} />}{busy === "extract" ? "拆解中..." : "自动拆解"}</button><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
           <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
