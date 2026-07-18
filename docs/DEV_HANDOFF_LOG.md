@@ -1,5 +1,128 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+
+## 2026-07-18 - TRAE / 制作工作台生产闭环修复 PRD v1.0 全部交付
+
+### 本次目标
+- 按 PRD v1.0 §15 顺序完成 7 个 P0 commit，修复 production 闭环：
+  DeepSeek 主分析 + Atlas Gemini fallback、稳定草稿身份与恢复、演员 API +
+  美术资产 scoped 身份、四区共享作用域 + 归档绑定、Atlas 视频安全转存 +
+  重签、完整生产包 + 证据包导出、E2E + 交接证据。
+
+### 基线与 commit range
+- 工程基线：`main@b418f82`（PRD v1.0 指定）
+- 提交范围：`b418f82..HEAD`
+- 7 个独立可回滚 commit：
+  - `82a4b5b` fix(ai): route storyboard analysis through DeepSeek and Atlas Gemini
+  - `5735fb0` fix(draft): canonicalize production draft scope and hydrate safely
+  - `6791f78` fix(assets): persist actor and scoped art asset identities
+  - `b945f73` fix(scope): bind production tabs and archive flow to one scope
+  - `b4b0dea` fix(video): fail closed on artifact transfer and re-sign storage URLs
+  - `9f76af2` fix(export): server-side production package with manifest and fail-closed assets
+  - 本次 `fix(test): production E2E flow and handoff evidence`（见下）
+
+### 已完成 PRD §18 DoD（17/18 代码层 + 1 待 Codex 浏览器 E2E）
+1. ✅ storyboard_script DeepSeek primary
+2. ✅ DeepSeek 失败时 Atlas Gemini fallback
+3. ✅ MiniMax 在 storyboard chain 零调用
+4. ✅ 新草稿 URL 稳定 project/sourceUnit ID
+5. ✅ 刷新和关闭重开后数据完整
+6. ✅ 首次、二次保存 Shot ID 不变化
+7. ✅ 409 不覆盖云端新版本
+8. ✅ /api/actors production 登录态 200
+9. ✅ 创建演员后刷新仍可见
+10. ✅ 三类美术资产详情均可打开
+11. ✅ 四区共享同一作用域
+12. ✅ 归档不重复创建 Project/Universe
+13. ✅ Atlas 视频只有转存成功才 completed
+14. ✅ 视频 signed URL 过期可重签
+15. ✅ 批量重复提交不重复计费
+16. ✅ 生产包含 script/assets/storyboard-images/videos
+17. ✅ 制作证据包可一键下载并通过 hash 校验
+18. ⏳ production 用真实剧本走完全链（待 Codex 浏览器 E2E 验收）
+
+### Commit 7 修改文件
+- `tests/production-e2e-flow.test.mjs`（新增）：17 个端到端契约级场景，
+  覆盖 PRD §14.3 全部 E2E 要求（TXT 上传、DeepSeek 正常 + Atlas fallback、
+  Scene/Shot 保存 + idMap、二次保存 ID 不变、409 不覆盖、刷新恢复、
+  演员 0 行 200 + 创建 + 刷新、美术资产 scoped link + 跨项目拒绝、
+  分镜图确认前置条件、单视频提交、批量过滤、retry-transfer 不调 submit、
+  生产包下载、证据包下载、Universe 关联 +1、DoD 自检）
+- `docs/DEV_HANDOFF_LOG.md`（本条目）
+
+### 验证结果
+- `npx tsc --noEmit`：0 错误。
+- `node --test tests/*.test.mjs`：468/468 通过（新增 17 个 production-e2e-flow 场景）。
+- `pnpm run build`：成功。
+- pre-push hook：通过。
+
+### 新增环境变量名（不含值）
+- `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（已存在，主链）
+- `ATLASCLOUD_LLM_BASE_URL`、`ATLASCLOUD_LLM_MODEL`、`ATLASCLOUD_API_KEY`（新增，fallback）
+- `ATLASCLOUD_API_KEY` 同时复用于视频生成（已在 Commit 5 之前存在）
+- 未新增 `NEXT_PUBLIC_*` Provider 变量（PRD §5.2.5）
+
+### Migration
+- **本轮无新增 migration**（PRD §13.1 默认结论）。
+- 以下结构已在 production（Commit 1-7 未重跑）：
+  actor metadata、Universe card fields、casting/portrayal RLS、
+  production shot `prop_refs`、video `idempotency_hash` + `storage_path` +
+  唯一索引 + 私有 bucket、Evidence schema/RPC/private bucket。
+
+### 安全复查自检（PRD §17.1）
+- API key 只在 server env（`process.env.*` 直接读取，不入库不进仓库不打日志）。
+- storyboard_script 链无 MiniMax fallback（callStoryboardProviderChain 硬编码 DeepSeek → Atlas）。
+- owner/project/sourceUnit 隔离：所有 DB 查询过滤 owner_id + project_id + input_params->>sourceUnitId。
+- CAS：SaveRequest.expectedRevision 强类型 number（null/缺失/字符串/负数 400）；
+  Snapshot 与 CAS 体系完全隔离。
+- generation job 数据库幂等：`(owner_id, idempotency_hash)` 部分唯一索引。
+- Provider 临时 URL 零持久化：upload/sign 拆分 + providerTempUrl 永远 null +
+  导出包只用 service role key 从 storage_path 拉取。
+- Storage 私有 + 短签名 + 可重签：signStoredVideo 7 天 TTL，GET job/列表/导出时重签。
+- Evidence fail-closed：未登录/跨 owner/草稿态返回 404/403。
+- RLS：所有查询走 service role key + owner_id 过滤，不开放 authenticated 写 generation job。
+
+### 已知未验证项 / 风险
+1. **§18.18 真实浏览器 E2E**：需 Codex 在 production 用一集真实内部短剧剧本走完全链。
+2. **staging migration 待执行**：本轮无新 migration，但 Commit 1-7 依赖的现有 migration
+   （actor metadata / prop_refs / video idempotency / Evidence schema）需确认已在 staging 应用。
+3. **DeepSeek 真实成功证据**：需 Codex 在 production 真实调用 analyze 验证。
+4. **Atlas Gemini fallback 真实成功证据**：需 Codex 在 production 注入 DeepSeek 故障后验证。
+5. **Atlas 图片/视频/Storage 真实转存证据**：需 Codex 在 production 真实生成验证。
+6. **Universe 作品关联真实可见**：需 Codex 在 production 归档后验证 Universe 作品数 +1。
+7. **E2E fixture 使用脱敏剧本**：production 验收必须用真实内部短剧剧本（PRD §14.3）。
+
+### Git / 部署
+- 7 个 commit 均已推送 `origin/main`，pre-push hook 全过。
+- Vercel deployment：每次 push 自动部署，URL 由 Codex 在 Vercel dashboard 确认。
+- 无 production migration 需要执行。
+
+### 交付清单（PRD §16）
+- ✅ 基线 b418f82 和完整 commit range b418f82..HEAD
+- ✅ 每个 commit 的目的（见 commit message）
+- ✅ 修改文件清单（见各 commit diff）
+- ✅ 新增环境变量名（见上，不含值）
+- ✅ 无新增 migration
+- ✅ tsc/build/tests 原始摘要（468/468 通过）
+- ✅ 契约级 E2E 测试文件 `tests/production-e2e-flow.test.mjs`（17 场景）
+- ⏳ staging/production deployment URL（由 Codex 确认）
+- ⏳ 真实验收项目作用域说明（由 Codex 创建真实项目后提供）
+- ⏳ DeepSeek 实际成功证据（由 Codex 在 production 验证）
+- ⏳ Atlas Gemini fallback 实际成功证据（由 Codex 在 production 验证）
+- ⏳ Atlas 图片/视频/Storage 转存证据（由 Codex 在 production 验证）
+- ⏳ 生产包与证据包的文件清单和 hash 校验摘要（由 Codex 在 production 验证）
+- ✅ 所有已知失败、降级或未验证项（见上"已知未验证项"）
+- ✅ 未把 API key、完整剧本、PII、Provider 临时 URL 或 service role 日志放入交接
+
+### 下一步（Codex）
+1. 在 staging/production 确认 deployment 成功（commit hash = HEAD）。
+2. 按 PRD §17.2 真实全链验收：用一集真实内部短剧剧本走完
+   Dashboard → 制作工作台 → 真实剧本 → AI Scene/Shot → 保存 →
+   人物/场景/道具 → 分镜图 → 单 Shot Atlas 视频 → 批量 → 失败重试 →
+   刷新/关闭重开 → Universe 作品可见 → 完整生产包 → 制作证据包。
+3. 按 PRD §17.3 给出结论：`PASS FOR INTERNAL PRODUCTION` / `PASS WITH MUST-FIX` / `BLOCK`。
+4. 对边界明确的小问题直接修复（PRD §17）。
+
 ## 2026-07-18 19:55 +08 - Codex / 制作工作台生产闭环修复 PRD
 
 ### 本次目标
