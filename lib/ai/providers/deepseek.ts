@@ -18,13 +18,21 @@ export async function callDeepSeek({
   modelOverride,
 }: DeepSeekOptions): Promise<AIProviderResult> {
   const apiKey = apiKeyOverride || process.env.DEEPSEEK_API_KEY;
-  // Vercel 环境变量 DEEPSEEK_MODEL 可能被锁定为不存在的旧值（如 deepseek-v4-flash），
-  // 这里做兜底：已知不存在的模型名自动回退到官方模型 deepseek-chat，
-  // 避免 DeepSeek API 返回 400 Model Not Exist。
-  // 优先级：modelOverride（API 调用方传入）> DEEPSEEK_MODEL > 默认值
-  const KNOWN_INVALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-flash", "deepseek-v4", "deepseek-flash", "deepseek-v3-flash"]);
-  const rawModel = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const model = KNOWN_INVALID_DEEPSEEK_MODELS.has(rawModel) ? "deepseek-chat" : rawModel;
+  // DeepSeek 官方支持的模型名：deepseek-v4-pro 或 deepseek-v4-flash
+  // （来源：DeepSeek API 错误信息明确提示）
+  // 默认用 deepseek-v4-flash（快速），优先级：
+  //   modelOverride（API 调用方传入）> DEEPSEEK_MODEL > 默认值
+  // 保护：如果 DEEPSEEK_MODEL 被误填成 API key（以 sk- 开头）或其他无效值，
+  // 自动回退到默认模型，避免 400。
+  const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
+  const KNOWN_VALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-pro", "deepseek-v4-flash"]);
+  let rawModel = (modelOverride?.trim() || process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL).trim();
+  // 兜底：model 看起来像 API key（sk- 开头）或为空 → 用默认模型
+  if (!rawModel || rawModel.startsWith("sk-") || rawModel.length > 60) {
+    rawModel = DEFAULT_DEEPSEEK_MODEL;
+  }
+  // 已知合法模型名直接用，其他值也放行（让 API 自己校验，避免误判）
+  const model = rawModel;
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");

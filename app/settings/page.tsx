@@ -790,7 +790,7 @@ export default function SettingsPage() {
             <input
               value={byoApi.deepseekModel}
               disabled={!canUseByoApi}
-              placeholder="deepseek-chat"
+              placeholder="deepseek-v4-flash"
               onChange={(event) => setByoApi((current) => ({ ...current, deepseekModel: event.target.value }))}
             />
           </label>
