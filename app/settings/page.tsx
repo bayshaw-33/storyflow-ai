@@ -87,8 +87,10 @@ const EMPTY_BYO_API: ByoApiSettings = {
 const ATLAS_LLM_MODEL_OPTIONS = [
   { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (默认，快速)" },
   { value: "gpt-5.6", label: "GPT-5.6 (旗舰)" },
+  { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5 (Anthropic)" },
   { value: "grok-4.5", label: "Grok 4.5 (xAI)" },
-  { value: "deepseek-v4", label: "DeepSeek V4 (Atlas Cloud)" },
+  { value: "deepseek-v4", label: "DeepSeek V4 (性价比)" },
+  { value: "glm-5.2", label: "GLM-5.2 (智谱开源)" },
 ];
 
 const copy = {

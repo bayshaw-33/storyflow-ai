@@ -34,8 +34,10 @@ export type AtlasLLMOptions = {
 export const ATLAS_LLM_MODEL_OPTIONS = [
   "gemini-3.5-flash",
   "gpt-5.6",
+  "claude-sonnet-4.5",
   "grok-4.5",
   "deepseek-v4",
+  "glm-5.2",
 ] as const;
 
 /**
