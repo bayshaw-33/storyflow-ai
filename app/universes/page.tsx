@@ -19,6 +19,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { useOS } from "@/lib/os/uiState";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { buildUniverseGraphFromUniverses } from "@/lib/universe/graph";
+import { UniverseGraph } from "@/components/universe/UniverseGraph";
 
 type CreateForm = {
   projectId: string;
@@ -105,13 +107,7 @@ export default function UniversesPage() {
         setUniverses(rows);
         setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
 
-        const summaryPairs = await Promise.all(
-          rows.map(async (universe) => {
-            const bundle = await getUniverseBundle(universe.id, { accessToken }).catch(() => null);
-            return [universe.id, summarizeUniverse(bundle)] as const;
-          }),
-        );
-        setUniverseSummaries(Object.fromEntries(summaryPairs));
+        setUniverseSummaries(await loadUniverseSummaries(rows, accessToken));
       } catch (loadIssue) {
         setLoadError(loadIssue instanceof Error ? loadIssue.message : "Universe load failed.");
         setProjects(getUniverseSourceProjects(readProjectsFromStorage()));
@@ -161,6 +157,7 @@ export default function UniversesPage() {
       productionAssets: sum(values, "productionAssetCount"),
     };
   }, [universes, universeSummaries]);
+  const universeGraph = useMemo(() => buildUniverseGraphFromUniverses(universes), [universes]);
 
   const stateLabel = signedOut
     ? isZh ? "预览模式" : "Preview Mode"
@@ -312,6 +309,18 @@ export default function UniversesPage() {
       </section>
 
       <section className="universe-module-layout">
+        {universes.length ? (
+          <section className="dashboard-panel universe-overview-card">
+            <div className="dashboard-panel-head">
+              <div>
+                <span>{isZh ? "宇宙星图" : "Universe Graph"}</span>
+                <h2>{isZh ? "从唯一真源进入每个宇宙" : "Navigate every source of truth"}</h2>
+              </div>
+            </div>
+            <UniverseGraph graph={universeGraph} height={440} />
+          </section>
+        ) : null}
+
         <section className="dashboard-panel universe-overview-card">
           <div className="dashboard-panel-head">
             <div>
@@ -641,6 +650,31 @@ function summarizeUniverse(bundle: UniverseBundle | null): UniverseSummary {
       return count + countSnapshotAssets(snapshot.state_json);
     }, 0),
   };
+}
+
+async function loadUniverseSummaries(universes: Universe[], accessToken: string | null) {
+  if (accessToken) {
+    try {
+      const response = await fetch("/api/universe/summaries", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload?.success && payload.summaries) {
+        return payload.summaries as Record<string, UniverseSummary>;
+      }
+      console.error(`[universes] summaries API returned ${response.status}; falling back to per-Universe reads.`);
+    } catch (error) {
+      console.error("[universes] summaries API failed; falling back to per-Universe reads.", error);
+    }
+  }
+
+  const summaryPairs = await Promise.all(
+    universes.map(async (universe) => {
+      const bundle = await getUniverseBundle(universe.id, { accessToken }).catch(() => null);
+      return [universe.id, summarizeUniverse(bundle)] as const;
+    }),
+  );
+  return Object.fromEntries(summaryPairs);
 }
 
 function countSnapshotAssets(state: Record<string, unknown>) {

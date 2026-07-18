@@ -26,6 +26,7 @@ import {
   DEFAULT_INHERITANCE_SETTINGS,
   exportUniverseMarkdown,
   getUniverseBundle,
+  getUniverseEntityThumbnail,
   readUniverseEntitlement,
   rejectInboxItem,
   saveInboxItems,
@@ -35,11 +36,14 @@ import {
   type UniverseBundle,
   type UniverseInheritanceSettings,
   type UniverseInboxItem,
+  type UniverseProjectLink,
   type UniverseProjectRole,
+  type UniverseSyncResult,
   upsertUniverseProjectLink,
 } from "@/lib/universe";
+import { EntityThumbnail, GenerateAppearanceButton } from "@/components/universe/EntityThumbnail";
 
-type TabKey = "overview" | "characters" | "relationships" | "timeline" | "facts" | "assets" | "inbox" | "projects" | "checks";
+type TabKey = "overview" | "characters" | "relationships" | "timeline" | "facts" | "assets" | "inbox" | "works" | "projects" | "checks";
 
 type UniverseAssetRow = {
   title: string;
@@ -55,6 +59,16 @@ type UniverseAssetRow = {
 
 type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
 
+type ProjectWorkSummary = {
+  projectId: string;
+  title: string;
+  coverUrl: string;
+  characters: string[];
+  scenes: string[];
+  props: string[];
+  shotCount: number;
+};
+
 const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: string }> = [
   { value: "continuation", label: "Script Creation" },
   { value: "novel", label: "Novel Creation" },
@@ -66,13 +80,18 @@ const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: s
 export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
   const [bundle, setBundle] = useState<UniverseBundle | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [syncWarning, setSyncWarning] = useState("");
+  const [works, setWorks] = useState<Record<string, ProjectWorkSummary>>({});
+  const [worksLoading, setWorksLoading] = useState(false);
+  const [expandedWorkId, setExpandedWorkId] = useState<string | null>(null);
   const [entitlement, setEntitlement] = useState(canUseUniverseEngine(null));
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -145,6 +164,106 @@ export default function UniverseDetailPage() {
     [bundle?.links, projectsById],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWorks() {
+      const links = bundle?.links || [];
+      const base = Object.fromEntries(
+        links.map((link) => [link.project_id, emptyWork(link, projectsById.get(link.project_id))]),
+      );
+      if (!links.length) {
+        setWorks({});
+        return;
+      }
+
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase || !session?.access_token) {
+        setWorks(base);
+        return;
+      }
+
+      setWorksLoading(true);
+      const projectIds = links.map((link) => link.project_id);
+      try {
+        const { data: productionProjects, error: productionError } = await supabase
+          .from("storyflow_production_projects")
+          .select("id,project_id")
+          .in("project_id", projectIds);
+        if (productionError) throw productionError;
+
+        const productionIds = (productionProjects || []).map((row) => row.id);
+        const projectByProduction = new Map((productionProjects || []).map((row) => [row.id, String(row.project_id || "")]));
+        if (productionIds.length) {
+          const { data: shots, error: shotsError } = await supabase
+            .from("storyflow_production_shots")
+            .select("production_project_id,scene_title,character_refs,scene_refs,image_url,index")
+            .in("production_project_id", productionIds)
+            .order("index", { ascending: true });
+          if (shotsError) throw shotsError;
+          for (const shot of shots || []) {
+            const projectId = projectByProduction.get(shot.production_project_id);
+            const work = projectId ? base[projectId] : null;
+            if (!work) continue;
+            work.shotCount += 1;
+            mergeNames(work.characters, shot.character_refs);
+            mergeNames(work.scenes, shot.scene_refs);
+            mergeNames(work.scenes, [shot.scene_title]);
+            if (!work.coverUrl && typeof shot.image_url === "string") work.coverUrl = shot.image_url;
+          }
+        }
+
+        const { data: artProjects, error: artProjectError } = await supabase
+          .from("storyflow_art_projects")
+          .select("id,source_project_id")
+          .in("source_project_id", projectIds);
+        if (artProjectError) throw artProjectError;
+        const artIds = (artProjects || []).map((row) => row.id);
+        const projectByArt = new Map((artProjects || []).map((row) => [row.id, String(row.source_project_id || "")]));
+        if (artIds.length) {
+          const { data: assets, error: assetsError } = await supabase
+            .from("storyflow_art_assets")
+            .select("project_id,kind,name")
+            .in("project_id", artIds);
+          if (assetsError) throw assetsError;
+          for (const asset of assets || []) {
+            const projectId = projectByArt.get(asset.project_id);
+            const work = projectId ? base[projectId] : null;
+            if (!work || !asset.name) continue;
+            if (asset.kind === "prop") mergeNames(work.props, [asset.name]);
+            if (asset.kind === "character") mergeNames(work.characters, [asset.name]);
+            if (asset.kind === "scene") mergeNames(work.scenes, [asset.name]);
+          }
+        }
+      } catch (workError) {
+        console.error("[universe] linked work assets failed to load; showing project cards only.", workError);
+      } finally {
+        if (!cancelled) {
+          setWorks({ ...base });
+          setWorksLoading(false);
+        }
+      }
+    }
+
+    void loadWorks();
+    return () => {
+      cancelled = true;
+    };
+  }, [bundle?.links, projectsById, session?.access_token]);
+
+  function reportWriteSync(result: UniverseSyncResult, successMessage: string) {
+    if (result.synced) {
+      setSyncWarning("");
+      setStatus(successMessage);
+      return;
+    }
+    setSyncWarning(
+      isZh
+        ? `已保存在本机，但云端未同步：${result.error || "未知错误"}`
+        : `Saved locally, but cloud sync failed: ${result.error || "unknown error"}`,
+    );
+  }
+
   async function refresh(nextSession: Session | null = session) {
     setLoading(true);
     const accessToken = nextSession?.access_token || null;
@@ -158,8 +277,8 @@ export default function UniverseDetailPage() {
   }
 
   async function acceptItem(item: UniverseInboxItem, editedPayload?: Record<string, unknown>) {
-    await acceptInboxItem(item, editedPayload, { accessToken: session?.access_token });
-    setStatus("Inbox item accepted into canon.");
+    const result = await acceptInboxItem(item, editedPayload, { accessToken: session?.access_token });
+    reportWriteSync(result.sync, "Inbox item accepted into canon.");
     await refresh();
   }
 
@@ -206,8 +325,8 @@ export default function UniverseDetailPage() {
       return;
     }
     const nextSnapshot = updateSnapshotAsset(snapshot, editingAsset, parsed.value);
-    await upsertCanonStateSnapshot(nextSnapshot, { accessToken: session?.access_token });
-    setStatus("Asset updated.");
+    const sync = await upsertCanonStateSnapshot(nextSnapshot, { accessToken: session?.access_token });
+    reportWriteSync(sync, "Asset updated.");
     setEditingAsset(null);
     setAssetDraft("");
     setAssetDraftError("");
@@ -215,8 +334,8 @@ export default function UniverseDetailPage() {
   }
 
   async function rejectItem(item: UniverseInboxItem) {
-    await rejectInboxItem(item, { accessToken: session?.access_token });
-    setStatus("Inbox item rejected.");
+    const result = await rejectInboxItem(item, { accessToken: session?.access_token });
+    reportWriteSync(result.sync, "Inbox item rejected.");
     await refresh();
   }
 
@@ -237,9 +356,9 @@ export default function UniverseDetailPage() {
       });
       if (!res.ok) throw new Error(await res.text().catch(() => ""));
       const data = await res.json().catch(() => ({}));
-      await saveInboxItems(data.items || [], { accessToken: session?.access_token });
+      const sync = await saveInboxItems(data.items || [], { accessToken: session?.access_token });
+      reportWriteSync(sync, "Inbox updated with extracted candidates.");
       await refresh();
-      setStatus("Inbox updated with extracted candidates.");
     } catch {
       setError("Extract failed. Please try again.");
     }
@@ -305,10 +424,15 @@ export default function UniverseDetailPage() {
     });
 
     upsertProject(project);
-    await Promise.allSettled([
-      upsertProjectToSupabase(project, { accessToken: session?.access_token }),
-      upsertUniverseProjectLink(link, { accessToken: session?.access_token }),
-    ]);
+    try {
+      await upsertProjectToSupabase(project, { accessToken: session?.access_token });
+      const linkSync = await upsertUniverseProjectLink(link, { accessToken: session?.access_token });
+      reportWriteSync(linkSync, "Project linked to Universe.");
+    } catch (linkError) {
+      const message = linkError instanceof Error ? linkError.message : String(linkError);
+      setError(isZh ? `项目已保存在本机，但宇宙关联失败：${message}` : `Project saved locally, but Universe linking failed: ${message}`);
+      return;
+    }
 
     router.push(routeForCreatedProject(project));
   }
@@ -327,9 +451,10 @@ export default function UniverseDetailPage() {
     { key: "facts", label: "Canon Facts", count: bundle?.canonFacts.length },
     { key: "assets", label: "Assets", count: bundle ? getAcceptedAssets(bundle).length : 0 },
     { key: "inbox", label: "Inbox", count: bundle?.inbox.filter((item) => item.status === "pending").length },
+    { key: "works", label: isZh ? "作品" : "Works", count: bundle?.links.length },
     { key: "projects", label: "Linked Projects", count: bundle?.links.length },
     { key: "checks", label: "Canon Checks", count: bundle?.reports.length },
-  ], [bundle]);
+  ], [bundle, isZh]);
 
   if (loading) {
     return (
@@ -385,6 +510,7 @@ export default function UniverseDetailPage() {
 
       {status ? <div className="notice success"><CheckCircle2 size={16} /> {status}</div> : null}
       {error ? <div className="notice error">{error}</div> : null}
+      {syncWarning ? <div className="notice error"><XCircle size={16} /> {syncWarning}</div> : null}
 
       <nav className="universe-tabs">
         {tabs.map((tab) => (
@@ -425,12 +551,23 @@ export default function UniverseDetailPage() {
         </section>
       ) : null}
 
-      {activeTab === "characters" ? <CharacterAssetSection characters={characters} /> : null}
+      {activeTab === "characters" ? <CharacterAssetSection characters={characters} isZh={isZh} /> : null}
       {activeTab === "relationships" ? <ListSection items={bundle.relationships} render={(item) => ({ title: item.relationship_type, body: item.summary, meta: item.status })} /> : null}
       {activeTab === "timeline" ? <ListSection items={bundle.timeline} render={(item) => ({ title: item.title, body: item.description, meta: item.date_label || item.status })} /> : null}
       {activeTab === "facts" ? <ListSection items={bundle.canonFacts} render={(item) => ({ title: item.fact_text, body: item.source_location_text || "", meta: `${item.importance}${item.is_locked ? " / locked" : ""}` })} /> : null}
       {activeTab === "assets" ? (
         <AssetEditorSection assets={acceptedAssets} canEdit={entitlement.canUse} onEdit={openAssetEditor} />
+      ) : null}
+
+      {activeTab === "works" ? (
+        <WorksSection
+          links={bundle.links}
+          works={works}
+          loading={worksLoading}
+          expandedId={expandedWorkId}
+          onToggle={(projectId) => setExpandedWorkId((current) => current === projectId ? null : projectId)}
+          isZh={isZh}
+        />
       ) : null}
 
       {activeTab === "projects" ? (
@@ -547,18 +684,7 @@ export default function UniverseDetailPage() {
       ) : null}
 
       {locations.length > 0 && activeTab === "overview" ? (
-        <section className="universe-list">
-          <h2>Locations</h2>
-          {locations.slice(0, 6).map((item) => (
-            <article className="universe-row" key={item.id}>
-              <div>
-                <span>{item.status}</span>
-                <h2>{item.name}</h2>
-                <p>{item.summary}</p>
-              </div>
-            </article>
-          ))}
-        </section>
+        <LocationAssetSection locations={locations} isZh={isZh} />
       ) : null}
 
       {createOpen ? (
@@ -658,18 +784,25 @@ function ListSection<T>({ items, render }: { items: T[]; render: (item: T) => { 
   );
 }
 
-function CharacterAssetSection({ characters }: { characters: UniverseEntity[] }) {
+function CharacterAssetSection({ characters, isZh }: { characters: UniverseEntity[]; isZh: boolean }) {
   return (
     <section className="universe-list">
       {characters.length === 0 ? <div className="empty-state"><h2>No characters yet</h2></div> : null}
       {characters.map((character) => {
         const variants = getCharacterVariants(character.details_json);
+        const thumbnail = getUniverseEntityThumbnail(character);
         return (
           <article className="universe-row universe-character-card" key={character.id}>
             <div>
-              <span>{character.status} · {variants.length} appearance versions</span>
-              <h2>{character.name}</h2>
-              <p>{character.summary}</p>
+              <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                <EntityThumbnail name={character.name} imageUrl={thumbnail} size={72} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span>{character.status} · {variants.length} appearance versions</span>
+                  <h2>{character.name}</h2>
+                  <p>{character.summary}</p>
+                </div>
+              </div>
+              {!thumbnail ? <GenerateAppearanceButton isZh={isZh} /> : null}
               <div className="universe-character-meta">
                 {stringValue(character.details_json.actor_name) ? <span>Actor: {stringValue(character.details_json.actor_name)}</span> : null}
                 {stringValue(character.details_json.actor_id) ? <span>Actor ID: {stringValue(character.details_json.actor_id)}</span> : null}
@@ -697,6 +830,115 @@ function CharacterAssetSection({ characters }: { characters: UniverseEntity[] })
       })}
     </section>
   );
+}
+
+function LocationAssetSection({ locations, isZh }: { locations: UniverseEntity[]; isZh: boolean }) {
+  return (
+    <section className="universe-list">
+      <h2>{isZh ? "场景资产" : "Locations"}</h2>
+      {locations.map((location) => {
+        const thumbnail = getUniverseEntityThumbnail(location);
+        return (
+          <article className="universe-row" key={location.id}>
+            <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+              <EntityThumbnail name={location.name} imageUrl={thumbnail} size={64} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span>{location.status}</span>
+                <h2>{location.name}</h2>
+                <p>{location.summary}</p>
+                {!thumbnail ? <GenerateAppearanceButton isZh={isZh} /> : null}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+function WorksSection({
+  links,
+  works,
+  loading,
+  expandedId,
+  onToggle,
+  isZh,
+}: {
+  links: UniverseProjectLink[];
+  works: Record<string, ProjectWorkSummary>;
+  loading: boolean;
+  expandedId: string | null;
+  onToggle: (projectId: string) => void;
+  isZh: boolean;
+}) {
+  if (!links.length) {
+    return <section className="empty-state"><h2>{isZh ? "还没有关联作品" : "No linked works yet"}</h2></section>;
+  }
+
+  return (
+    <section className="universe-list">
+      {loading ? <p className="field-note">{isZh ? "正在读取作品资产…" : "Loading work assets…"}</p> : null}
+      {links.map((link) => {
+        const work = works[link.project_id] || emptyWork(link);
+        const expanded = expandedId === link.project_id;
+        return (
+          <article className="universe-row" key={link.id}>
+            <div style={{ display: "flex", gap: 16, alignItems: "flex-start", width: "100%" }}>
+              <EntityThumbnail name={work.title} imageUrl={work.coverUrl} size={72} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span>{link.project_role}{link.season_number ? ` · S${link.season_number}` : ""}</span>
+                <h2>{work.title}</h2>
+                <p>{isZh ? `${work.shotCount} 个镜头 · ${work.characters.length} 个角色 · ${work.scenes.length} 个场景 · ${work.props.length} 个关键道具` : `${work.shotCount} shots · ${work.characters.length} characters · ${work.scenes.length} scenes · ${work.props.length} props`}</p>
+                <button className="secondary-button" type="button" onClick={() => onToggle(link.project_id)}>
+                  {expanded ? (isZh ? "收起作品资产" : "Hide assets") : (isZh ? "查看角色、场景与道具" : "View cast, scenes and props")}
+                </button>
+                {expanded ? (
+                  <div className="universe-character-meta" style={{ marginTop: 16 }}>
+                    <WorkAssetGroup title={isZh ? "角色" : "Characters"} values={work.characters} empty={isZh ? "暂无角色资产" : "No character assets"} />
+                    <WorkAssetGroup title={isZh ? "场景" : "Scenes"} values={work.scenes} empty={isZh ? "暂无场景资产" : "No scene assets"} />
+                    <WorkAssetGroup title={isZh ? "关键道具" : "Key props"} values={work.props} empty={isZh ? "暂无道具资产" : "No prop assets"} />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+function WorkAssetGroup({ title, values, empty }: { title: string; values: string[]; empty: string }) {
+  return (
+    <div style={{ minWidth: 180 }}>
+      <strong>{title}</strong>
+      <p>{values.length ? values.join(" · ") : empty}</p>
+    </div>
+  );
+}
+
+function emptyWork(link: UniverseProjectLink, project?: DramaProject): ProjectWorkSummary {
+  return {
+    projectId: link.project_id,
+    title: project?.title || link.project_id,
+    coverUrl: "",
+    characters: [],
+    scenes: [],
+    props: [],
+    shotCount: 0,
+  };
+}
+
+function mergeNames(target: string[], value: unknown) {
+  const values = Array.isArray(value) ? value : [];
+  for (const item of values) {
+    const label = typeof item === "string"
+      ? item.trim()
+      : item && typeof item === "object"
+        ? stringValue((item as Record<string, unknown>).name).trim()
+        : "";
+    if (label && !target.includes(label)) target.push(label);
+  }
 }
 
 function AssetEditorSection({ assets, canEdit, onEdit }: { assets: UniverseAssetRow[]; canEdit: boolean; onEdit: (asset: UniverseAssetRow) => void }) {

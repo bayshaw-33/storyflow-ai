@@ -8,6 +8,7 @@ import type { GraphNode, UniverseGraph as UniverseGraphData } from "@/lib/univer
 
 type UniverseGraphProps = {
   graph: UniverseGraphData;
+  height?: number;
 };
 
 const MAX_VISIBLE_NODES = 48;
@@ -53,7 +54,7 @@ const UniverseNodeButton = memo(function UniverseNodeButton({
   );
 });
 
-export const UniverseGraph = memo(function UniverseGraph({ graph }: UniverseGraphProps) {
+export const UniverseGraph = memo(function UniverseGraph({ graph, height }: UniverseGraphProps) {
   const router = useRouter();
   const [activeId, setActiveId] = useState<string | null>(null);
   const hoverFrame = useRef<number | null>(null);
@@ -111,7 +112,12 @@ export const UniverseGraph = memo(function UniverseGraph({ graph }: UniverseGrap
   );
 
   return (
-    <div className="universe-graph" role="application" aria-label="Universe story graph">
+    <div
+      className="universe-graph"
+      style={height ? { height } : undefined}
+      role="application"
+      aria-label="Universe story graph"
+    >
       <svg className="universe-edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         {visibleEdges.map((edge) => {
           const from = byId.get(edge.from);

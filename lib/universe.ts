@@ -1,6 +1,6 @@
 import type { DramaProject, StoryBible } from "@/lib/projects";
 // 相对路径导入：保证 node:test 的 .mjs 测试可以直接 import 本模块（Node 不解析 "@/" 别名）。
-import { getPlanEntitlement } from "./billing/plans";
+import { getPlanEntitlement } from "./billing/plans.ts";
 
 export type UniverseAccessLevel = "studio_annual" | "enterprise";
 export type UniverseStatus = "active" | "archived";
@@ -553,10 +553,15 @@ export async function getProjectUniverseLink(projectId: string, options: Supabas
   return readLocalList<UniverseProjectLink>(UNIVERSE_LINK_STORAGE_KEY).find((link) => link.project_id === projectId) || null;
 }
 
-export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: Record<string, unknown>, options: SupabaseOptions = {}) {
+export async function acceptInboxItem(
+  item: UniverseInboxItem,
+  editedPayload?: Record<string, unknown>,
+  options: SupabaseOptions = {},
+): Promise<UniverseInboxWriteResult> {
   const payload = editedPayload || item.proposed_payload || {};
   const now = new Date().toISOString();
   const userId = item.user_id || getUserIdFromAccessToken(options.accessToken) || null;
+  const syncResults: UniverseSyncResult[] = [];
 
   if (item.item_type === "character" || item.item_type === "location" || item.item_type === "rule") {
     const entityName = stringValue(payload.name) || item.title;
@@ -582,7 +587,7 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
       updated_at: now,
     };
     upsertLocalItem(UNIVERSE_ENTITY_STORAGE_KEY, entity);
-    await supabaseUpsert(TABLES.entities, entity, "id", options).catch(() => null);
+    syncResults.push(await attemptSync("acceptInboxItem:entity", () => supabaseUpsert(TABLES.entities, entity, "id", options)));
   } else if (item.item_type === "relationship") {
     const relationship: UniverseRelationship = {
       id: createId(),
@@ -600,7 +605,7 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
       updated_at: now,
     };
     upsertLocalItem(UNIVERSE_RELATION_STORAGE_KEY, relationship);
-    await supabaseUpsert(TABLES.relationships, relationship, "id", options).catch(() => null);
+    syncResults.push(await attemptSync("acceptInboxItem:relationship", () => supabaseUpsert(TABLES.relationships, relationship, "id", options)));
   } else if (item.item_type === "event") {
     const event: UniverseTimelineEvent = {
       id: createId(),
@@ -620,7 +625,7 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
       updated_at: now,
     };
     upsertLocalItem(UNIVERSE_TIMELINE_STORAGE_KEY, event);
-    await supabaseUpsert(TABLES.timeline, event, "id", options).catch(() => null);
+    syncResults.push(await attemptSync("acceptInboxItem:event", () => supabaseUpsert(TABLES.timeline, event, "id", options)));
   } else if (item.item_type === "canon_fact") {
     const fact: CanonFact = {
       id: createId(),
@@ -640,7 +645,7 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
       updated_at: now,
     };
     upsertLocalItem(CANON_FACT_STORAGE_KEY, fact);
-    await supabaseUpsert(TABLES.canonFacts, fact, "id", options).catch(() => null);
+    syncResults.push(await attemptSync("acceptInboxItem:canonFact", () => supabaseUpsert(TABLES.canonFacts, fact, "id", options)));
   } else if (item.item_type === "state_change") {
     const snapshot: CanonStateSnapshot = {
       id: createId(),
@@ -655,7 +660,7 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
       updated_at: now,
     };
     upsertLocalItem(CANON_STATE_STORAGE_KEY, snapshot);
-    await supabaseUpsert(TABLES.snapshots, snapshot, "id", options).catch(() => null);
+    syncResults.push(await attemptSync("acceptInboxItem:snapshot", () => supabaseUpsert(TABLES.snapshots, snapshot, "id", options)));
   }
 
   const reviewed: UniverseInboxItem = {
@@ -666,11 +671,14 @@ export async function acceptInboxItem(item: UniverseInboxItem, editedPayload?: R
     updated_at: now,
   };
   upsertLocalItem(UNIVERSE_INBOX_STORAGE_KEY, reviewed);
-  await supabasePatch(TABLES.inbox, item.id, reviewed, options).catch(() => null);
-  return reviewed;
+  syncResults.push(await attemptSync("acceptInboxItem:review", () => supabasePatch(TABLES.inbox, item.id, reviewed, options)));
+  return { item: reviewed, sync: combineSyncResults(syncResults) };
 }
 
-export async function rejectInboxItem(item: UniverseInboxItem, options: SupabaseOptions = {}) {
+export async function rejectInboxItem(
+  item: UniverseInboxItem,
+  options: SupabaseOptions = {},
+): Promise<UniverseInboxWriteResult> {
   const reviewed: UniverseInboxItem = {
     ...item,
     status: "rejected",
@@ -678,8 +686,8 @@ export async function rejectInboxItem(item: UniverseInboxItem, options: Supabase
     updated_at: new Date().toISOString(),
   };
   upsertLocalItem(UNIVERSE_INBOX_STORAGE_KEY, reviewed);
-  await supabasePatch(TABLES.inbox, item.id, reviewed, options).catch(() => null);
-  return reviewed;
+  const sync = await attemptSync("rejectInboxItem", () => supabasePatch(TABLES.inbox, item.id, reviewed, options));
+  return { item: reviewed, sync };
 }
 
 export function buildProjectLink(params: {
@@ -715,6 +723,38 @@ function dedupeUniverseProjectLinks(links: UniverseProjectLink[]) {
   return Array.from(byProject.values()).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
+/** Resolve the best available preview stored on an entity or appearance variant. */
+export function getUniverseEntityThumbnail(entity: Pick<UniverseEntity, "details_json">): string {
+  const details = entity.details_json || {};
+  const direct =
+    stringValue(details.thumbnail) ||
+    stringValue(details.preview_url) ||
+    stringValue(details.image_url) ||
+    stringValue(details.cover) ||
+    stringValue(details.art_preview_url) ||
+    stringValue(details.previewUrl);
+  if (direct) return direct;
+
+  for (const variant of arrayRecordValue(details.appearance_variants)) {
+    const url = firstVisualAssetUrl(arrayRecordValue(variant.visual_assets));
+    if (url) return url;
+  }
+
+  return firstVisualAssetUrl(arrayRecordValue(details.visual_assets));
+}
+
+function firstVisualAssetUrl(assets: Array<Record<string, unknown>>): string {
+  for (const asset of assets) {
+    const url =
+      stringValue(asset.url) ||
+      stringValue(asset.public_url) ||
+      stringValue(asset.imageUrl) ||
+      stringValue(asset.previewUrl);
+    if (url) return url;
+  }
+  return "";
+}
+
 function stableIdSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
@@ -732,12 +772,16 @@ async function findExistingCharacterEntity(universeId: string, name: string, opt
   if (localMatch) return localMatch;
 
   if (isSupabaseConfigured() && options.accessToken) {
-    const rows = await supabaseFetch<UniverseEntity[]>(
-      `${tableUrl(TABLES.entities)}?universe_id=eq.${encodeURIComponent(universeId)}&type=eq.character&name=eq.${encodeURIComponent(name)}&select=*&limit=1`,
-      {},
-      options,
-    ).catch(() => null);
-    if (rows?.[0]) return rows[0];
+    try {
+      const rows = await supabaseFetch<UniverseEntity[]>(
+        `${tableUrl(TABLES.entities)}?universe_id=eq.${encodeURIComponent(universeId)}&type=eq.character&name=eq.${encodeURIComponent(name)}&select=*&limit=1`,
+        {},
+        options,
+      );
+      if (rows?.[0]) return rows[0];
+    } catch (error) {
+      reportUniverseSyncFailure("findExistingCharacterEntity", error);
+    }
   }
 
   return null;
@@ -883,14 +927,18 @@ async function listByUniverse<T extends { id: string; universe_id: string }>(
   options: SupabaseOptions,
 ): Promise<T[]> {
   if (isSupabaseConfigured() && options.accessToken) {
-    const rows = await supabaseFetch<T[]>(
-      `${tableUrl(table)}?universe_id=eq.${encodeURIComponent(universeId)}&select=*&order=created_at.desc`,
-      {},
-      options,
-    ).catch(() => null);
-    if (rows) {
-      mergeLocalList(storageKey, rows);
-      return rows;
+    try {
+      const rows = await supabaseFetch<T[]>(
+        `${tableUrl(table)}?universe_id=eq.${encodeURIComponent(universeId)}&select=*&order=created_at.desc`,
+        {},
+        options,
+      );
+      if (rows) {
+        mergeLocalList(storageKey, rows);
+        return rows;
+      }
+    } catch (error) {
+      reportUniverseSyncFailure(`listByUniverse:${table}`, error);
     }
   }
 
