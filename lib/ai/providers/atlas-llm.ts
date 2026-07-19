@@ -29,25 +29,27 @@ export type AtlasLLMOptions = {
 
 /**
  * Atlas Cloud 支持的常用 LLM 模型列表（用户在 settings 页面下拉选择）。
- * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
+ * 模型 ID 格式为 {org}/{model}（Hugging Face 格式），已通过 API 逐一验证可用。
+ * 详见 https://www.atlascloud.ai/docs/models/llm
  */
 export const ATLAS_LLM_MODEL_OPTIONS = [
-  "deepseek-v3",
-  "deepseek-r1",
-  "qwen-turbo",
-  "kimi-k2",
-  "glm-4",
-  "doubao-pro",
+  { value: "deepseek-ai/DeepSeek-V3.1", label: "DeepSeek V3.1（推荐·经济快速）" },
+  { value: "deepseek-ai/deepseek-v4-pro", label: "DeepSeek V4 Pro（高质量）" },
+  { value: "qwen/qwen3.6-plus", label: "通义千问 Qwen 3.6 Plus" },
+  { value: "qwen/qwen3.5-flash", label: "通义千问 Qwen 3.5 Flash（极速）" },
+  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
+  { value: "anthropic/claude-haiku-4.5-20251001", label: "Claude Haiku 4.5（快速）" },
+  { value: "xai/grok-4.5", label: "Grok 4.5" },
+  { value: "bytedance/doubao-seed-1.6-251015", label: "豆包 Seed 1.6" },
 ] as const;
 
 /**
  * ATLASCLOUD_LLM_MODEL 未配置时的默认模型。
- * 用 deepseek-v3（Atlas Cloud 文档明确示例过的 model id，性价比高且稳定）。
- * 注意：Atlas Cloud 是中国厂商模型聚合平台，不支持 Gemini/GPT/Claude/Grok。
- * 支持的 LLM 厂商：DeepSeek / Qwen / Kimi / GLM / MiniMax / Doubao。
+ * deepseek-ai/DeepSeek-V3.1：已通过 API 验证可用，性价比高且稳定。
+ * Atlas Cloud 支持 DeepSeek / Qwen / Claude / Grok / Doubao 等多厂商模型（Hugging Face 格式）。
  * 详见 https://www.atlascloud.ai/docs/models/llm
  */
-const DEFAULT_ATLAS_LLM_MODEL = "deepseek-v3";
+const DEFAULT_ATLAS_LLM_MODEL = "deepseek-ai/DeepSeek-V3.1";
 
 /**
  * 调用 Atlas Cloud LLM（OpenAI-compatible）。
@@ -67,7 +69,7 @@ export async function callAtlasLLM({
 }: AtlasLLMOptions): Promise<AIProviderResult> {
   const apiKey = process.env.ATLASCLOUD_API_KEY;
   const baseUrl = (process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1").trim().replace(/\/+$/, "");
-  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 deepseek-v3
+  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 deepseek-ai/DeepSeek-V3.1
   // 这样即使用户没在 Vercel 配 ATLASCLOUD_LLM_MODEL，Atlas 也能自动启用
   const model = (modelOverride?.trim() || process.env.ATLASCLOUD_LLM_MODEL || DEFAULT_ATLAS_LLM_MODEL).trim();
 

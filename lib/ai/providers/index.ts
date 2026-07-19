@@ -18,22 +18,30 @@ const storyboardScriptTasks = new Set<TaskType>(["storyboard_script"]);
 function isStoryboardFallbackTrigger(error: unknown): boolean {
   const message = error instanceof Error ? error.message : "";
   if (!message) return true;
-  // Atlas 错误 → 触发 fallback 到 DeepSeek
-  if (message === "MISSING_ATLAS_LLM_CONFIG") return true;
-  if (message === "ATLAS_LLM_TIMEOUT" || message === "ATLAS_LLM_NETWORK_ERROR") return true;
-  if (message === "EMPTY_ATLAS_LLM_OUTPUT") return true;
-  if (message.startsWith("ATLAS_LLM_API_ERROR:429")) return true;
-  if (message.startsWith("ATLAS_LLM_API_ERROR:5")) return true;
+  // Atlas 错误 → 不触发 fallback（Atlas 已经是 fallback 了）
+  if (message === "MISSING_ATLAS_LLM_CONFIG") return false;
+  if (message.startsWith("ATLAS_LLM_API_ERROR:429")) return false;
+  if (message.startsWith("ATLAS_LLM_API_ERROR:5")) return false;
+  if (message.startsWith("ATLAS_LLM_API_ERROR:401") || message.startsWith("ATLAS_LLM_API_ERROR:403")) return false;
   if (message.startsWith("ATLAS_LLM_API_ERROR:4")) return false;
-  // DeepSeek 错误 → 触发 fallback 到 Atlas
+  if (message === "ATLAS_LLM_TIMEOUT" || message === "ATLAS_LLM_NETWORK_ERROR") return false;
+  if (message === "EMPTY_ATLAS_LLM_OUTPUT") return false;
+  // DeepSeek 配置/认证/限流/服务端错误 → 触发 fallback 到 Atlas
   if (message === "MISSING_DEEPSEEK_API_KEY") return true;
   if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return true;
   if (message === "EMPTY_DEEPSEEK_OUTPUT") return true;
-  // 429 限流 / 5xx 服务端错误 → 触发 fallback
   if (message.startsWith("DEEPSEEK_API_ERROR:429")) return true;
   if (message.startsWith("DEEPSEEK_API_ERROR:5")) return true;
-  // 4xx 输入错误（400/401/403）、未认证、跨作用域不得触发 fallback
-  // （401/403 由路由层鉴权处理，不会走到这里；400 是输入错误，fallback 无意义）
+  // 401/403 = API key 问题；404 = 模型不存在 → 这些是配置错误，fallback 到 Atlas 有意义
+  if (message.startsWith("DEEPSEEK_API_ERROR:401") || message.startsWith("DEEPSEEK_API_ERROR:403")) return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:404")) return true;
+  // 400 错误中，模型相关错误（model）→ fallback；请求格式错误 → 不 fallback
+  if (message.startsWith("DEEPSEEK_API_ERROR:400")) {
+    const lower = message.toLowerCase();
+    if (lower.includes("model") || lower.includes("not found") || lower.includes("not exist")) return true;
+    return false;
+  }
+  // 其他未知 4xx 错误保守不触发 fallback
   if (message.startsWith("DEEPSEEK_API_ERROR:4")) return false;
   // 其他未知错误保守触发 fallback
   return true;
@@ -100,7 +108,7 @@ export function getProviderStatus() {
 }
 
 export async function callRoutedProvider(options: ProviderCallOptions): Promise<AIProviderResult> {
-  // PRD §5: storyboard_script 走 DeepSeek primary → Atlas Gemini fallback 窄链。
+  // PRD §5: storyboard_script 走 DeepSeek primary → Atlas fallback 窄链。
   // 任何情况下不得回落到 MiniMax。
   if (storyboardScriptTasks.has(options.taskType)) {
     return callStoryboardProviderChain(options);
@@ -111,11 +119,44 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
   try {
     return await callProvider(provider, options);
   } catch (error) {
+    // 情况 1：key 缺失 → 按原逻辑 fallback（deepseek↔minimax）
     const fallbackProvider = getFallbackProvider(provider);
-    if (!fallbackProvider || !isMissingProviderKey(error)) throw error;
-
-    return callProvider(fallbackProvider, options);
+    if (fallbackProvider && isMissingProviderKey(error)) {
+      return callProvider(fallbackProvider, options);
+    }
+    // 情况 2：DeepSeek 出现可重试错误（5xx/429/401/403/404/超时/网络/空输出）→ 尝试 Atlas
+    if (provider === "deepseek" && shouldTryAtlasAfterDeepSeek(error) && isAtlasLLMConfigured()) {
+      try {
+        return await callAtlasLLM({
+          messages: options.messages,
+          temperature: options.temperature,
+          modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
+        });
+      } catch {
+        throw error;
+      }
+    }
+    throw error;
   }
+}
+
+/** 判断 DeepSeek 的错误是否值得尝试 Atlas fallback。 */
+function shouldTryAtlasAfterDeepSeek(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  if (!message) return true;
+  if (message === "MISSING_DEEPSEEK_API_KEY") return false;
+  if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return true;
+  if (message === "EMPTY_DEEPSEEK_OUTPUT") return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:429")) return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:5")) return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:401") || message.startsWith("DEEPSEEK_API_ERROR:403")) return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:404")) return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:400")) {
+    const lower = message.toLowerCase();
+    if (lower.includes("model") || lower.includes("not found") || lower.includes("not exist")) return true;
+    return false;
+  }
+  return false;
 }
 
 /**

@@ -85,12 +85,14 @@ const EMPTY_BYO_API: ByoApiSettings = {
  * 这些是 Atlas Cloud 平台公开支持的主流模型，用户可自由切换。
  * 不需要 API key（用服务端 ATLASCLOUD_API_KEY）。 */
 const ATLAS_LLM_MODEL_OPTIONS = [
-  { value: "deepseek-v3", label: "DeepSeek V3 (默认，性价比高)" },
-  { value: "deepseek-r1", label: "DeepSeek R1 (推理强)" },
-  { value: "qwen-turbo", label: "Qwen Turbo (阿里通义)" },
-  { value: "kimi-k2", label: "Kimi K2 (月之暗面，长上下文)" },
-  { value: "glm-4", label: "GLM-4 (智谱清言)" },
-  { value: "doubao-pro", label: "Doubao Pro (字节豆包)" },
+  { value: "deepseek-ai/DeepSeek-V3.1", label: "DeepSeek V3.1（推荐·经济快速）" },
+  { value: "deepseek-ai/deepseek-v4-pro", label: "DeepSeek V4 Pro（高质量）" },
+  { value: "qwen/qwen3.6-plus", label: "通义千问 Qwen 3.6 Plus" },
+  { value: "qwen/qwen3.5-flash", label: "通义千问 Qwen 3.5 Flash（极速）" },
+  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
+  { value: "anthropic/claude-haiku-4.5-20251001", label: "Claude Haiku 4.5（快速）" },
+  { value: "xai/grok-4.5", label: "Grok 4.5" },
+  { value: "bytedance/doubao-seed-1.6-251015", label: "豆包 Seed 1.6" },
 ];
 
 const copy = {
@@ -801,7 +803,7 @@ export default function SettingsPage() {
               disabled={!canUseByoApi}
               onChange={(event) => setByoApi((current) => ({ ...current, atlasModel: event.target.value }))}
             >
-              <option value="">使用默认（deepseek-v3）</option>
+              <option value="">使用默认（DeepSeek V3.1）</option>
               {ATLAS_LLM_MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}

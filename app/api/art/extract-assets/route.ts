@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { callDeepSeek } from "@/lib/ai/providers/deepseek";
+import { callAtlasLLM, isAtlasLLMConfigured } from "@/lib/ai/providers/atlas-llm";
 import { resolveSavedApiConfig } from "@/lib/supabase/api-connections";
 import { authenticateRequest } from "@/lib/supabase/server";
 import { fallbackExtractArtAssets, type ArtCharacterPriority, type ExtractedArtAssets } from "@/lib/art-workbench";
@@ -24,48 +25,89 @@ export async function POST(request: Request) {
   const sourceText = String(body.sourceText || "").trim();
   if (!sourceText) return failure("请先上传或粘贴剧本、项目背景、角色圣经等资料。", 400);
 
+  let user;
   try {
-    const user = await authenticateRequest(request);
-    const savedConfig = await resolveSavedApiConfig(user.id, "deepseek").catch(() => null);
-    const result = await callDeepSeek({
-      apiKeyOverride: savedConfig?.deepseekApiKey,
-      modelOverride: savedConfig?.deepseekModel,
-      temperature: 0.3,
-      maxTokens: 6000,
-      messages: [
-        {
-          role: "system",
-          content:
-            "你是 Kiikis 的影视美术统筹。只输出 JSON，不要输出解释。你要根据剧本、项目背景、角色圣经自动拆解项目中的角色、场景和关键道具，并为每个资产生成可编辑的图片提示词。",
-        },
-        {
-          role: "user",
-          content: buildExtractionPrompt(body.title || "Kiikis 美术项目", body.visualStyle || "", sourceText),
-        },
-      ],
-    });
-    const parsed = parseExtraction(result.output);
-    return NextResponse.json({ success: true, ...parsed, provider: result.provider, model: result.model, degraded: false, error: null });
+    user = await authenticateRequest(request);
   } catch (error) {
     if (isAuthError(error)) return failure("请先登录后再使用美术资产自动拆解。", 401);
-    // DeepSeek 失败时仍提供 fallback（基于 sourceText 提取），但明确标注 degraded
-    // 并把原始错误信息也返回给前端，让用户知道为什么 AI 失败
-    const fallback = fallbackExtractArtAssets(sourceText);
-    const rawError = error instanceof Error ? error.message : String(error);
-    console.error("[art/extract-assets] DeepSeek failed, using fallback", {
-      code: rawError.split(":", 1)[0],
-      detail: rawError.slice(0, 200),
-    });
-    return NextResponse.json({
-      success: true,
-      ...fallback,
-      provider: "local",
-      model: "fallback-extractor",
-      degraded: true,
-      warning: `AI 自动拆解失败，已根据剧本资料生成基础初稿。失败原因：${toFriendlyError(error)}`,
-      error: rawError.slice(0, 200),
+    return failure("认证失败，请重新登录。", 401);
+  }
+
+  const savedConfig = await resolveSavedApiConfig(user.id, "deepseek").catch(() => null);
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    {
+      role: "system",
+      content:
+        "你是 Kiikis 的影视美术统筹。只输出 JSON，不要输出解释。你要根据剧本、项目背景、角色圣经自动拆解项目中的角色、场景和关键道具，并为每个资产生成可编辑的图片提示词。",
+    },
+    {
+      role: "user",
+      content: buildExtractionPrompt(body.title || "Kiikis 美术项目", body.visualStyle || "", sourceText),
+    },
+  ];
+
+  // 尝试顺序：DeepSeek（用户 BYO key 或环境变量）→ Atlas Cloud → 本地规则 fallback
+  let lastError: Error | null = null;
+  const attempts: Array<{ provider: () => Promise<{ output: string; provider: string; model: string }>; name: string }> = [];
+
+  // 1. DeepSeek（始终尝试，因为有默认模型保护）
+  attempts.push({
+    name: "DeepSeek",
+    provider: () =>
+      callDeepSeek({
+        apiKeyOverride: savedConfig?.deepseekApiKey,
+        modelOverride: savedConfig?.deepseekModel,
+        temperature: 0.3,
+        maxTokens: 6000,
+        messages,
+      }),
+  });
+
+  // 2. Atlas Cloud fallback（配置了 ATLASCLOUD_API_KEY 时启用）
+  if (isAtlasLLMConfigured()) {
+    attempts.push({
+      name: "Atlas",
+      provider: () =>
+        callAtlasLLM({
+          modelOverride: savedConfig?.atlasModel,
+          temperature: 0.3,
+          maxTokens: 6000,
+          messages,
+        }),
     });
   }
+
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt.provider();
+      const parsed = parseExtraction(result.output);
+      return NextResponse.json({
+        success: true,
+        ...parsed,
+        provider: result.provider,
+        model: result.model,
+        degraded: false,
+        error: null,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`[art/extract-assets] ${attempt.name} failed:`, lastError.message.slice(0, 200));
+    }
+  }
+
+  // 3. 所有 AI 都失败，使用本地规则 fallback
+  const fallback = fallbackExtractArtAssets(sourceText);
+  const rawError = lastError ? lastError.message : "UNKNOWN_AI_ERROR";
+  console.error("[art/extract-assets] All AI providers failed, using local fallback", { detail: rawError.slice(0, 200) });
+  return NextResponse.json({
+    success: true,
+    ...fallback,
+    provider: "local",
+    model: "fallback-extractor",
+    degraded: true,
+    warning: `AI 自动拆解失败，已根据剧本资料生成基础初稿。失败原因：${toFriendlyError(lastError)}`,
+    error: rawError.slice(0, 200),
+  });
 }
 
 function buildExtractionPrompt(title: string, visualStyle: string, sourceText: string) {
@@ -110,6 +152,7 @@ function buildExtractionPrompt(title: string, visualStyle: string, sourceText: s
     "2. 角色、场景、道具数量根据资料完整提取，不要只给示例。",
     "3. prompt 必须适合影视美术设定图、角色参考表、三视图后续生成。",
     "4. 不要输出 markdown，不要包裹代码块。",
+    "5. 角色名、场景名、道具名必须使用中文（如果剧本是中文的话）。",
     "",
     "资料：",
     sourceText.slice(0, 28000),
@@ -180,9 +223,8 @@ function isAuthError(error: unknown) {
 
 function toFriendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message === "MISSING_DEEPSEEK_API_KEY") return "DeepSeek 暂未配置，已使用本地规则生成初稿。";
-  if (message.includes("DEEPSEEK_API_ERROR")) return "DeepSeek 拆解失败，已使用本地规则生成初稿。";
-  if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return "DeepSeek 连接失败，已使用本地规则生成初稿。";
-  if (message === "ART_EXTRACTION_JSON_PARSE_FAILED" || message.includes("JSON")) return "AI 返回格式无法解析，已使用本地规则生成初稿。";
+  if (message.includes("ATLAS_LLM") || message.includes("DEEPSEEK")) return "AI 服务暂时不可用，已使用本地规则生成初稿。";
+  if (message.includes("TIMEOUT") || message.includes("NETWORK")) return "AI 连接超时，已使用本地规则生成初稿。";
+  if (message.includes("JSON_PARSE")) return "AI 返回格式无法解析，已使用本地规则生成初稿。";
   return "AI 拆解失败，已使用本地规则生成初稿。";
 }
