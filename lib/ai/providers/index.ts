@@ -14,35 +14,19 @@ export type { AIMessage, AIProviderName, AIProviderResult, AIUsage };
  */
 const storyboardScriptTasks = new Set<TaskType>(["storyboard_script"]);
 
-/** storyboard 任务的 fallback 触发条件（PRD §5.2 §7）。 */
+/** storyboard 任务的 fallback 触发条件（PRD §5.2 §7）。
+ * 保守策略：DeepSeek 几乎所有错误都触发 Atlas fallback。 */
 function isStoryboardFallbackTrigger(error: unknown): boolean {
   const message = error instanceof Error ? error.message : "";
   if (!message) return true;
-  // Atlas 错误 → 不触发 fallback（Atlas 已经是 fallback 了）
+  // Atlas 错误 → 不触发 fallback（Atlas 已经是 fallback 了，不能再回退）
   if (message === "MISSING_ATLAS_LLM_CONFIG") return false;
-  if (message.startsWith("ATLAS_LLM_API_ERROR:429")) return false;
-  if (message.startsWith("ATLAS_LLM_API_ERROR:5")) return false;
-  if (message.startsWith("ATLAS_LLM_API_ERROR:401") || message.startsWith("ATLAS_LLM_API_ERROR:403")) return false;
-  if (message.startsWith("ATLAS_LLM_API_ERROR:4")) return false;
-  if (message === "ATLAS_LLM_TIMEOUT" || message === "ATLAS_LLM_NETWORK_ERROR") return false;
-  if (message === "EMPTY_ATLAS_LLM_OUTPUT") return false;
-  // DeepSeek 配置/认证/限流/服务端错误 → 触发 fallback 到 Atlas
+  if (message.startsWith("ATLAS_LLM_")) return false;
+  // DeepSeek 任何错误（除 MISSING_DEEPSEEK_API_KEY）都尝试 Atlas
   if (message === "MISSING_DEEPSEEK_API_KEY") return true;
   if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return true;
   if (message === "EMPTY_DEEPSEEK_OUTPUT") return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:429")) return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:5")) return true;
-  // 401/403 = API key 问题；404 = 模型不存在 → 这些是配置错误，fallback 到 Atlas 有意义
-  if (message.startsWith("DEEPSEEK_API_ERROR:401") || message.startsWith("DEEPSEEK_API_ERROR:403")) return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:404")) return true;
-  // 400 错误中，模型相关错误（model）→ fallback；请求格式错误 → 不 fallback
-  if (message.startsWith("DEEPSEEK_API_ERROR:400")) {
-    const lower = message.toLowerCase();
-    if (lower.includes("model") || lower.includes("not found") || lower.includes("not exist")) return true;
-    return false;
-  }
-  // 其他未知 4xx 错误保守不触发 fallback
-  if (message.startsWith("DEEPSEEK_API_ERROR:4")) return false;
+  if (message.startsWith("DEEPSEEK_API_ERROR:")) return true; // 400/401/402/403/404/429/5xx 全部 fallback
   // 其他未知错误保守触发 fallback
   return true;
 }
@@ -140,23 +124,17 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
   }
 }
 
-/** 判断 DeepSeek 的错误是否值得尝试 Atlas fallback。 */
+/** 判断 DeepSeek 的错误是否值得尝试 Atlas fallback。
+ * 保守策略：除 MISSING_DEEPSEEK_API_KEY 外，几乎所有错误都尝试 Atlas。
+ * 因为 DeepSeek 常见问题：模型名错误(400)、余额不足(402)、key 无效(401)、限流(429)、
+ * 服务端错误(5xx)、超时、网络、空输出——这些 Atlas 都能顶上。 */
 function shouldTryAtlasAfterDeepSeek(error: unknown): boolean {
   const message = error instanceof Error ? error.message : "";
   if (!message) return true;
+  // 只有"完全没配 key"才不尝试 Atlas（因为可能用户故意只用 DeepSeek）
   if (message === "MISSING_DEEPSEEK_API_KEY") return false;
-  if (message === "DEEPSEEK_TIMEOUT" || message === "DEEPSEEK_NETWORK_ERROR") return true;
-  if (message === "EMPTY_DEEPSEEK_OUTPUT") return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:429")) return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:5")) return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:401") || message.startsWith("DEEPSEEK_API_ERROR:403")) return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:404")) return true;
-  if (message.startsWith("DEEPSEEK_API_ERROR:400")) {
-    const lower = message.toLowerCase();
-    if (lower.includes("model") || lower.includes("not found") || lower.includes("not exist")) return true;
-    return false;
-  }
-  return false;
+  // 其他所有错误都尝试 Atlas：超时、网络、空输出、4xx、5xx 全覆盖
+  return true;
 }
 
 /**

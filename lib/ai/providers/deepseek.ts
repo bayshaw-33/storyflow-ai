@@ -27,11 +27,16 @@ export async function callDeepSeek({
   const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
   const KNOWN_VALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-pro", "deepseek-v4-flash"]);
   let rawModel = (modelOverride?.trim() || process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL).trim();
-  // 兜底：model 看起来像 API key（sk- 开头）或为空 → 用默认模型
+  // 兜底 1：model 看起来像 API key（sk- 开头）或为空或过长 → 用默认模型
   if (!rawModel || rawModel.startsWith("sk-") || rawModel.length > 60) {
     rawModel = DEFAULT_DEEPSEEK_MODEL;
   }
-  // 已知合法模型名直接用，其他值也放行（让 API 自己校验，避免误判）
+  // 兜底 2：model 不在已知合法列表里（如 deepseek-chat、deepseek-coder 等旧名）→ 用默认模型
+  // DeepSeek API 现在只支持 deepseek-v4-pro / deepseek-v4-flash，其他模型名会 400
+  if (!KNOWN_VALID_DEEPSEEK_MODELS.has(rawModel)) {
+    console.warn(`[deepseek] Invalid DEEPSEEK_MODEL "${rawModel}", falling back to ${DEFAULT_DEEPSEEK_MODEL}`);
+    rawModel = DEFAULT_DEEPSEEK_MODEL;
+  }
   const model = rawModel;
 
   if (!apiKey) {

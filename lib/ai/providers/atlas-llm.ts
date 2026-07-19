@@ -71,7 +71,13 @@ export async function callAtlasLLM({
   const baseUrl = (process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1").trim().replace(/\/+$/, "");
   // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 deepseek-ai/DeepSeek-V3.1
   // 这样即使用户没在 Vercel 配 ATLASCLOUD_LLM_MODEL，Atlas 也能自动启用
-  const model = (modelOverride?.trim() || process.env.ATLASCLOUD_LLM_MODEL || DEFAULT_ATLAS_LLM_MODEL).trim();
+  let model = (modelOverride?.trim() || process.env.ATLASCLOUD_LLM_MODEL || DEFAULT_ATLAS_LLM_MODEL).trim();
+  // 兜底：Atlas Cloud 模型 ID 必须是 {org}/{model} 格式（Hugging Face 格式）。
+  // 如果 env 配了旧短名（如 deepseek-v3、qwen-turbo）或无效值，回退到默认模型，避免 400 not found。
+  if (!model || model.startsWith("sk-") || !model.includes("/")) {
+    console.warn(`[atlas-llm] Invalid ATLASCLOUD_LLM_MODEL "${model}", falling back to ${DEFAULT_ATLAS_LLM_MODEL}`);
+    model = DEFAULT_ATLAS_LLM_MODEL;
+  }
 
   if (!apiKey || !baseUrl || !model) {
     throw new Error("MISSING_ATLAS_LLM_CONFIG");
