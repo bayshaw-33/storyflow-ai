@@ -1,4 +1,5 @@
-import type { DramaProject, StoryboardEpisode, WorkflowType } from "@/lib/projects";
+import type { DramaProject, StoryboardEpisode, WorkflowType } from "@/lib/projects"
+import { getSelectedFinalScript } from "@/lib/projects";;
 import { defaultProductionProviders, parseShotDurationSeconds } from "./providers";
 import type {
   KeyframeCandidate,
@@ -129,7 +130,7 @@ export function productionStateFromProject(project: DramaProject, mode: Producti
   const videoShots = videoPayloadToShots(deliveryPayload, aspectRatio);
   const storyboardShots = storyboardPayloadToShots(parseJson(project.storyboardScript), aspectRatio);
   const episodeShots = storyboardEpisodesToShots(project.storyboardEpisodes || [], aspectRatio);
-  const fallbackText = project.importedScript || project.finalScript || project.chineseScript || project.idea || project.storyboardScript || "";
+  const fallbackText = getSelectedFinalScript(project) || project.importedScript || project.finalScriptForeign || project.finalScriptChinese || project.finalScriptBilingual || project.finalScript || project.chineseScript || project.idea || project.storyboardScript || "";
   const shots =
     videoShots.length > 0
       ? videoShots

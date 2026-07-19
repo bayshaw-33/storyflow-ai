@@ -1,4 +1,5 @@
 import type { DramaProject } from "@/lib/projects";
+import { getSelectedFinalScript } from "@/lib/projects";
 
 /**
  * 美术工作台本地草稿的 localStorage key 工具。
@@ -150,9 +151,20 @@ export function artStateFromProject(project: DramaProject): Partial<ArtWorkbench
       project.storyBible ? `【故事圣经】\n${JSON.stringify(project.storyBible, null, 2)}` : "",
       project.characters ? `【角色资料】\n${project.characters}` : "",
       project.characterCards?.length ? `【角色卡】\n${JSON.stringify(project.characterCards, null, 2)}` : "",
-      project.finalScript || project.chineseScript || project.importedScript
-        ? `【剧本】\n${project.finalScript || project.chineseScript || project.importedScript}`
-        : "",
+      // 剧本正文：优先用 getSelectedFinalScript（根据 finalScriptVersion 选 chinese/foreign/bilingual），
+      // 兜底用 chineseScript / importedScript / finalScriptForeign / finalScriptChinese / finalScriptBilingual。
+      // 修复"美术台解析与剧本无关"问题：之前只读 finalScript（已废弃字段），西语剧本存在 finalScriptForeign 里读不到。
+      (() => {
+        const finalScript = getSelectedFinalScript(project)
+          || project.chineseScript
+          || project.importedScript
+          || project.finalScriptForeign
+          || project.finalScriptChinese
+          || project.finalScriptBilingual
+          || project.finalScript
+          || "";
+        return finalScript ? `【剧本】\n${finalScript}` : "";
+      })(),
     ].filter(Boolean).join("\n\n"),
   };
 }

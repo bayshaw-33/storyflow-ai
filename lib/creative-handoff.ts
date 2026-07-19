@@ -1,6 +1,7 @@
 import type { DramaProject } from "./projects.ts";
 import { assembleNovel, assembleScreenplay } from "./creation/assembly.ts";
 import { buildTranslationSource } from "./creation/screenplay.ts";
+import { getSelectedFinalScript } from "./projects.ts";
 
 export const CREATIVE_HANDOFF_STORAGE_KEY = "kiikis_creative_handoff_v1";
 
@@ -42,7 +43,8 @@ export function buildCreativeHandoffPackage(
     : project.novelChapters?.map((chapter) => chapter.draft).filter(Boolean).join("\n\n") || project.novelChapterDraft || "";
   const scriptManuscript = workspace?.screenplay.units.length
     ? assembleScreenplay(workspace, "original", workspace.settings.screenplayFormat, project.title).markdown
-    : project.finalScript || project.chineseScript || project.existingScript || project.importedScript || "";
+    : getSelectedFinalScript(project) || project.chineseScript || project.existingScript || project.importedScript
+      || project.finalScriptForeign || project.finalScriptChinese || project.finalScriptBilingual || project.finalScript || "";
   const scopedManuscript = activeUnit && workspace
     ? buildTranslationSource(workspace, contentType === "script" ? "screenplay" : "novel", activeUnit)
     : "";
