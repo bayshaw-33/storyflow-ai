@@ -88,6 +88,8 @@ export async function POST(request: Request) {
         model: result.model,
         degraded: false,
         error: null,
+        sourceTextPreview: sourceText.slice(0, 150),
+        sourceTextLength: sourceText.length,
       });
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
@@ -96,6 +98,15 @@ export async function POST(request: Request) {
   }
 
   // 3. 所有 AI 都失败，使用本地规则 fallback
+  // 安全检查：如果 sourceText 没有剧本正文（没有【剧本】标记且字符数少），直接报错而不是瞎编
+  const hasScript = sourceText.includes("【剧本】") || sourceText.includes("【角色资料】") || sourceText.length > 500;
+  if (!hasScript) {
+    return NextResponse.json({
+      success: false,
+      error: "项目资料中没有找到剧本正文。请确认在创作工作台已生成「最终剧本」，或已导入剧本。当前资料：" + sourceText.slice(0, 100),
+    }, { status: 400 });
+  }
+
   const fallback = fallbackExtractArtAssets(sourceText);
   const rawError = lastError ? lastError.message : "UNKNOWN_AI_ERROR";
   console.error("[art/extract-assets] All AI providers failed, using local fallback", { detail: rawError.slice(0, 200) });
@@ -107,6 +118,8 @@ export async function POST(request: Request) {
     degraded: true,
     warning: `AI 自动拆解失败，已根据剧本资料生成基础初稿。失败原因：${toFriendlyError(lastError)}`,
     error: rawError.slice(0, 200),
+    sourceTextPreview: sourceText.slice(0, 150),
+    sourceTextLength: sourceText.length,
   });
 }
 

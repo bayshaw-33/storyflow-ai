@@ -219,22 +219,24 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     setState((current) => ({ ...current, ...patch, updatedAt: new Date().toISOString() }));
   }
 
-  // 自动同步项目资料：当 projects 加载完成且 state.sourceText 为空但 state.projectId 存在时，
-  // 自动从 projects 查找对应项目并填充 sourceText（含 idea/brief/storyBible/characters/script）。
-  // 修复"关联项目后自动拆解按钮灰色"问题：嵌入模式下 hydration 不主动加载项目数据，
-  // 需要这里在 projects 异步加载完成后补填 sourceText。
+  // 自动同步项目资料：projects 加载完成或 projectId 变化时，强制用最新项目数据同步 sourceText。
+  // 修复"美术台解析与剧本无关"问题：之前只在 sourceText 为空时同步，导致 localStorage 缓存的
+  // 旧 sourceText（可能因为字段读取 bug 而缺失剧本正文）不会被刷新。
+  const lastSyncedProjectIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isHydrated) return;
-    if (state.sourceText.trim()) return; // 已有资料不覆盖
-    if (!state.projectId) return; // 无关联项目
+    if (!state.projectId) return;
+    // 只在 projectId 变化或首次同步时执行，避免无限循环
+    if (lastSyncedProjectIdRef.current === state.projectId) return;
     const project = projects.find((item) => item.id === state.projectId);
     if (!project) return;
     const patch = artStateFromProject(project);
-    if (!patch.sourceText?.trim()) return; // 项目本身无资料
-    patchState(patch);
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已自动同步《${project.title}》的资料（共 ${(patch.sourceText || "").length.toLocaleString()} 字），现在可以点击「自动拆解」了。` }]);
+    if (!patch.sourceText?.trim()) return;
+    lastSyncedProjectIdRef.current = state.projectId;
+    patchState({ ...patch, projectId: state.projectId });
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已同步《${project.title}》的最新资料（共 ${(patch.sourceText || "").length.toLocaleString()} 字），现在可以点击「自动拆解」了。` }]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHydrated, projects, state.projectId, state.sourceText]);
+  }, [isHydrated, projects, state.projectId]);
 
   function selectProject(projectId: string) {
     const project = projects.find((item) => item.id === projectId);
@@ -366,19 +368,36 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
 
   async function extractAssets() {
     if (!session?.access_token) return setNotice("请先登录后再让 AI 拆解资产。");
-    if (!state.sourceText.trim()) return setNotice("请先关联项目或上传资料。");
+
+    // 强制用最新项目数据重建 sourceText，避免 localStorage 缓存旧的/缺失剧本正文的 sourceText
+    let effectiveSourceText = state.sourceText;
+    if (state.projectId) {
+      const latestProject = projects.find((item) => item.id === state.projectId);
+      if (latestProject) {
+        const freshPatch = artStateFromProject(latestProject);
+        if (freshPatch.sourceText?.trim()) {
+          effectiveSourceText = freshPatch.sourceText;
+          patchState({ sourceText: effectiveSourceText, projectTitle: latestProject.title, title: freshPatch.title || state.title });
+        }
+      }
+    }
+
+    if (!effectiveSourceText.trim()) return setNotice("请先关联项目或上传资料。");
+    if (effectiveSourceText.length < 100) return setNotice("项目资料太少，无法拆解。请确认项目已关联剧本正文（最终剧本/导入剧本）。");
+
     setBusy("extract");
     try {
-      const response = await fetch("/api/art/extract-assets", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ title: state.title, visualStyle: state.visualStyle, sourceText: state.sourceText }) });
-      const payload = await response.json() as ExtractedArtAssets & { success?: boolean; error?: string; warning?: string; degraded?: boolean };
+      const response = await fetch("/api/art/extract-assets", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ title: state.title, visualStyle: state.visualStyle, sourceText: effectiveSourceText }) });
+      const payload = await response.json() as ExtractedArtAssets & { success?: boolean; error?: string; warning?: string; degraded?: boolean; sourceTextPreview?: string; sourceTextLength?: number };
       if (!response.ok || !payload.success) throw new Error(payload.error || "拆解失败");
       const assets = assetsFromExtraction(payload);
       patchState({ assets, selectedAssetId: assets[0]?.id, title: payload.title || state.title, visualStyle: payload.visualStyle || state.visualStyle });
       // degraded 时在消息正文里明确标注"降级模式"，避免用户忽略 note
       const baseContent = `已完成初步拆解：${assets.filter((item) => item.kind === "character").length} 个角色、${assets.filter((item) => item.kind === "scene").length} 个场景、${assets.filter((item) => item.kind === "prop").length} 个关键道具。`;
+      const debugInfo = payload.sourceTextLength ? `\n\n（资料：${payload.sourceTextLength} 字符）` : "";
       const content = payload.degraded
-        ? `⚠️ 降级模式：AI 调用失败，已根据剧本资料生成基础初稿（建议检查后手动修正）。\n${baseContent}\n失败原因：${payload.error || "未知错误"}`
-        : baseContent;
+        ? `⚠️ 降级模式：AI 调用失败，已根据剧本资料生成基础初稿（建议检查后手动修正）。\n${baseContent}\n失败原因：${payload.error || "未知错误"}${debugInfo}`
+        : `${baseContent}${debugInfo}`;
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content, note: payload.warning }]);
     } catch (error) { setNotice(error instanceof Error ? error.message : "拆解失败"); } finally { setBusy(""); }
   }
