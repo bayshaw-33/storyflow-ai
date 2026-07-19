@@ -149,11 +149,16 @@ function shouldTryAtlasAfterDeepSeek(error: unknown): boolean {
 async function callStoryboardProviderChain(options: ProviderCallOptions): Promise<AIProviderResult> {
   // Primary: DeepSeek（用户重新注册了 DeepSeek API key 并已更新到 Vercel）
   // Fallback: Atlas Cloud（仅一次，Atlas 已配置时才触发）
+  // storyboard 任务输出长（完整分镜 JSON），需要更大的 maxTokens 和更长的 timeout
+  const STORYBOARD_MAX_TOKENS = 12000;
+  const STORYBOARD_TIMEOUT_MS = 180000; // 3 分钟，长剧本分析需要时间
   let deepSeekError: unknown = null;
   try {
     const result = await callDeepSeek({
       messages: options.messages,
       temperature: options.temperature,
+      maxTokens: STORYBOARD_MAX_TOKENS,
+      timeoutMs: STORYBOARD_TIMEOUT_MS,
     });
     options.validateOutput?.(result.output);
     return { ...result, fallbackUsed: false };
@@ -167,17 +172,22 @@ async function callStoryboardProviderChain(options: ProviderCallOptions): Promis
       const atlasResult = await callAtlasLLM({
         messages: options.messages,
         temperature: options.temperature,
+        maxTokens: STORYBOARD_MAX_TOKENS,
+        timeoutMs: STORYBOARD_TIMEOUT_MS,
         modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
       });
       options.validateOutput?.(atlasResult.output);
       return { ...atlasResult, fallbackUsed: true };
     } catch (atlasError) {
-      // Atlas 也失败：如果 DeepSeek 错误更有诊断价值（如 400 模型名错误），
-      // 优先抛 DeepSeek 的错误；否则抛 Atlas 的错误。
+      // Atlas 也失败：合并两个 provider 的错误信息，方便诊断
       const dsMsg = deepSeekError instanceof Error ? deepSeekError.message : "";
       const atlasMsg = atlasError instanceof Error ? atlasError.message : "";
       // DeepSeek 4xx 输入错误比 Atlas 4xx 更有诊断价值（用户能据此修 Vercel env）
       if (dsMsg.startsWith("DEEPSEEK_API_ERROR:4")) throw deepSeekError;
+      // 两个都超时/网络错误：抛合并错误，说明是长剧本导致超时
+      if (dsMsg.includes("TIMEOUT") && atlasMsg.includes("TIMEOUT")) {
+        throw new Error(`AI 分析超时（DeepSeek + Atlas 都超时）。剧本可能过长，建议在创作工作台按集拆分后再分析。DeepSeek: ${dsMsg} | Atlas: ${atlasMsg}`);
+      }
       // DeepSeek 内容校验失败 → Atlas 也失败 → 抛 Atlas 错误（说明两个 provider 都搞不定）
       throw atlasError;
     }
