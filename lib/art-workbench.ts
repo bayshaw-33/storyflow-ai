@@ -218,6 +218,10 @@ export function fallbackExtractArtAssets(source: string): ExtractedArtAssets {
   const firstSentence = source.split(/[。！？.!?\n]/).map((item) => item.trim()).find(Boolean) || "根据项目资料生成的视觉资产。";
   const projectTitle = source.match(/《([^》]{2,40})》/)?.[1] || "美术资产拆解";
 
+  // 从 sourceText 提取场景关键词（避免固定字符串与剧本无关）
+  const sceneKeywords = extractSceneKeywords(source);
+  const propKeywords = extractPropKeywords(source);
+
   return {
     title: `${projectTitle} 美术资产拆解`,
     visualStyle: "cinematic short drama, consistent production design, realistic streaming series quality",
@@ -229,21 +233,79 @@ export function fallbackExtractArtAssets(source: string): ExtractedArtAssets {
       prompt: `Character design for ${name}, ${characterCandidates.find((item) => item.name === name)?.description || firstSentence}, cinematic short drama, consistent face, full body, production-ready costume`,
       negativePrompt: "low quality, blurry, inconsistent face, extra limbs, watermark, logo, text",
     })),
-    scenes: ["核心室内场景", "关键冲突场景"].map((name) => ({
+    scenes: (sceneKeywords.length ? sceneKeywords : ["主场景"]).map((name, index) => ({
       name,
-      role: "主要拍摄空间",
-      description: firstSentence,
+      role: index === 0 ? "主要拍摄空间" : "次要场景",
+      description: extractSceneDescription(source, name) || firstSentence,
       prompt: `${name}, cinematic environment concept, clear spatial layout, dramatic lighting, production-ready short drama scene`,
       negativePrompt: "low quality, blurry, watermark, logo, text, cluttered composition",
     })),
-    props: ["关键道具"].map((name) => ({
+    props: (propKeywords.length ? propKeywords : ["关键道具"]).map((name) => ({
       name,
       role: "剧情推动道具",
-      description: firstSentence,
+      description: extractSceneDescription(source, name) || firstSentence,
       prompt: `${name}, key prop concept art, clear material, readable silhouette, cinematic product-style lighting`,
       negativePrompt: "low quality, blurry, watermark, logo, text",
     })),
   };
+}
+
+/**
+ * 从 sourceText 提取场景关键词。
+ * 匹配"场景：xxx"、"地点：xxx"、"在xxx"、"xxx里/中/内"等中文场景表达。
+ */
+function extractSceneKeywords(source: string): string[] {
+  const keywords: string[] = [];
+  // 匹配 "场景：xxx"、"地点：xxx"、"场景-xxx"
+  const explicit = source.match(/(?:场景|地点|空间|环境)[：:\-——]\s*([^，,。.\n]{2,20})/g);
+  if (explicit) {
+    for (const m of explicit) {
+      const k = m.replace(/(?:场景|地点|空间|环境)[：:\-——]\s*/, "").trim();
+      if (k && !keywords.includes(k)) keywords.push(k);
+    }
+  }
+  // 匹配 "在xxx里/中/内/前/后" 等
+  const location = source.match(/在([\u4e00-\u9fa5]{2,8})(?:里|中|内|前|后|上|下)/g);
+  if (location) {
+    for (const m of location) {
+      const k = m.replace(/在/, "").replace(/(?:里|中|内|前|后|上|下)$/, "").trim();
+      if (k && k.length >= 2 && !keywords.includes(k)) keywords.push(k);
+    }
+  }
+  return keywords.slice(0, 4);
+}
+
+/**
+ * 从 sourceText 提取道具关键词。
+ * 匹配"道具：xxx"、"xxx（道具）"、常见道具名词（信、戒指、刀、车等）。
+ */
+function extractPropKeywords(source: string): string[] {
+  const keywords: string[] = [];
+  // 匹配 "道具：xxx"
+  const explicit = source.match(/(?:道具|物品|物件)[：:\-——]\s*([^，,。.\n]{2,20})/g);
+  if (explicit) {
+    for (const m of explicit) {
+      const k = m.replace(/(?:道具|物品|物件)[：:\-——]\s*/, "").trim();
+      if (k && !keywords.includes(k)) keywords.push(k);
+    }
+  }
+  // 常见道具名词
+  const commonProps = ["信", "信件", "戒指", "项链", "刀", "剑", "枪", "车", "钥匙", "手机", "日记本", "照片", "合同", "遗嘱", "地图", "宝箱"];
+  for (const prop of commonProps) {
+    if (source.includes(prop) && !keywords.includes(prop)) {
+      keywords.push(prop);
+    }
+  }
+  return keywords.slice(0, 3);
+}
+
+/**
+ * 从 sourceText 提取包含关键词的句子作为描述。
+ */
+function extractSceneDescription(source: string, keyword: string): string {
+  const sentences = source.split(/[。！？.!?\n]/).map((s) => s.trim()).filter(Boolean);
+  const match = sentences.find((s) => s.includes(keyword));
+  return match || "";
 }
 
 function extractCharacterCandidates(source: string) {

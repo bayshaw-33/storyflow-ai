@@ -370,11 +370,16 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     setBusy("extract");
     try {
       const response = await fetch("/api/art/extract-assets", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ title: state.title, visualStyle: state.visualStyle, sourceText: state.sourceText }) });
-      const payload = await response.json() as ExtractedArtAssets & { success?: boolean; error?: string; warning?: string };
+      const payload = await response.json() as ExtractedArtAssets & { success?: boolean; error?: string; warning?: string; degraded?: boolean };
       if (!response.ok || !payload.success) throw new Error(payload.error || "拆解失败");
       const assets = assetsFromExtraction(payload);
       patchState({ assets, selectedAssetId: assets[0]?.id, title: payload.title || state.title, visualStyle: payload.visualStyle || state.visualStyle });
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已完成初步拆解：${assets.filter((item) => item.kind === "character").length} 个角色、${assets.filter((item) => item.kind === "scene").length} 个场景、${assets.filter((item) => item.kind === "prop").length} 个关键道具。`, note: payload.warning }]);
+      // degraded 时在消息正文里明确标注"降级模式"，避免用户忽略 note
+      const baseContent = `已完成初步拆解：${assets.filter((item) => item.kind === "character").length} 个角色、${assets.filter((item) => item.kind === "scene").length} 个场景、${assets.filter((item) => item.kind === "prop").length} 个关键道具。`;
+      const content = payload.degraded
+        ? `⚠️ 降级模式：AI 调用失败，已根据剧本资料生成基础初稿（建议检查后手动修正）。\n${baseContent}\n失败原因：${payload.error || "未知错误"}`
+        : baseContent;
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content, note: payload.warning }]);
     } catch (error) { setNotice(error instanceof Error ? error.message : "拆解失败"); } finally { setBusy(""); }
   }
 

@@ -48,15 +48,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, ...parsed, provider: result.provider, model: result.model, degraded: false, error: null });
   } catch (error) {
     if (isAuthError(error)) return failure("请先登录后再使用美术资产自动拆解。", 401);
+    // DeepSeek 失败时仍提供 fallback（基于 sourceText 提取），但明确标注 degraded
+    // 并把原始错误信息也返回给前端，让用户知道为什么 AI 失败
     const fallback = fallbackExtractArtAssets(sourceText);
+    const rawError = error instanceof Error ? error.message : String(error);
+    console.error("[art/extract-assets] DeepSeek failed, using fallback", {
+      code: rawError.split(":", 1)[0],
+      detail: rawError.slice(0, 200),
+    });
     return NextResponse.json({
       success: true,
       ...fallback,
       provider: "local",
       model: "fallback-extractor",
       degraded: true,
-      warning: toFriendlyError(error),
-      error: null,
+      warning: `AI 自动拆解失败，已根据剧本资料生成基础初稿。失败原因：${toFriendlyError(error)}`,
+      error: rawError.slice(0, 200),
     });
   }
 }

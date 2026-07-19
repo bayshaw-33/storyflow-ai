@@ -105,9 +105,10 @@ export async function callAtlasLLM({
   }
 
   if (!response.ok) {
-    // Provider bodies may contain request IDs, account details or echoed
-    // input. Keep the public error stable and non-sensitive.
-    throw new Error(`ATLAS_LLM_API_ERROR:${response.status}`);
+    // 读取 Provider 返回的原始错误正文，脱敏后加入错误消息方便诊断
+    // （模型名错误、max_tokens 超限、账户欠费等 400/403 都需要正文才能定位）
+    const rawDetail = await readAtlasErrorDetail(response);
+    throw new Error(`ATLAS_LLM_API_ERROR:${response.status}:${rawDetail}`);
   }
 
   const data = await response.json();
@@ -136,4 +137,21 @@ function normalizeChatCompletionsUrl(value: string) {
  * 这样用户在 Vercel 只需配置 ATLASCLOUD_API_KEY 即可启用 Atlas。 */
 export function isAtlasLLMConfigured(): boolean {
   return Boolean(process.env.ATLASCLOUD_API_KEY);
+}
+
+
+async function readAtlasErrorDetail(response: Response) {
+  try {
+    const data = await response.json();
+    // 常见 OpenAI-compatible 错误结构：{ error: { message, type, code } }
+    const msg = data?.error?.message || data?.message || data?.detail || JSON.stringify(data);
+    return String(msg).slice(0, 300);
+  } catch {
+    try {
+      const text = await response.text();
+      return text.slice(0, 300);
+    } catch {
+      return "";
+    }
+  }
 }

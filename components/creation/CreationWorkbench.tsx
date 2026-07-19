@@ -157,7 +157,16 @@ function syncLegacy(project: DramaProject, workspace: CreationWorkspaceV2): Dram
 }
 
 function parseLocalization(output: string) {
-  const pick = (key: string) => output.match(new RegExp(`---${key}---\\s*([\\s\\S]*?)(?=\\n---[A-Z_]+---|$)`, "i"))?.[1]?.trim() || "";
+  // 容错正则：允许标记前后有空白/markdown 装饰（###、**、空格等）
+  // 匹配模式：(可选装饰) ---KEY--- (可选空格) 捕获内容 (直到下一个标记或结尾)
+  const pick = (key: string) => {
+    // 先尝试严格格式 ---KEY---
+    let match = output.match(new RegExp(`---${key}---\\s*([\\s\\S]*?)(?=\\n---[A-Z_]+---|$)`, "i"));
+    if (match) return match[1].trim();
+    // 回退：允许 markdown 装饰（### ---KEY---、**---KEY---**、--- KEY --- 等）
+    match = output.match(new RegExp(`(?:^|\\n)[#*>\\s]*---\\s*${key}\\s*---[#*>\\s]*\\n([\\s\\S]*?)(?=\\n[#*>\\s]*---[\\s]*[A-Z_]+[\\s]*---|$)`, "i"));
+    return match?.[1]?.trim() || "";
+  };
   return {
     localizedContent: pick("LOCALIZED_CONTENT"),
     localizationChanges: pick("LOCALIZATION_CHANGES"),

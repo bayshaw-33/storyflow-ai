@@ -130,6 +130,7 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
 async function callStoryboardProviderChain(options: ProviderCallOptions): Promise<AIProviderResult> {
   // Primary: DeepSeek（用户重新注册了 DeepSeek API key 并已更新到 Vercel）
   // Fallback: Atlas Cloud（仅一次，Atlas 已配置时才触发）
+  let deepSeekError: unknown = null;
   try {
     const result = await callDeepSeek({
       messages: options.messages,
@@ -140,15 +141,27 @@ async function callStoryboardProviderChain(options: ProviderCallOptions): Promis
   } catch (error) {
     if (!isStoryboardFallbackTrigger(error)) throw error;
     if (!isAtlasLLMConfigured()) throw error; // Atlas 未配置则直接抛 DeepSeek 错误
+    deepSeekError = error; // 保留 DeepSeek 原始错误，Atlas 也失败时优先返回它
 
     // Fallback: Atlas Cloud (仅一次)
-    const atlasResult = await callAtlasLLM({
-      messages: options.messages,
-      temperature: options.temperature,
-      modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
-    });
-    options.validateOutput?.(atlasResult.output);
-    return { ...atlasResult, fallbackUsed: true };
+    try {
+      const atlasResult = await callAtlasLLM({
+        messages: options.messages,
+        temperature: options.temperature,
+        modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
+      });
+      options.validateOutput?.(atlasResult.output);
+      return { ...atlasResult, fallbackUsed: true };
+    } catch (atlasError) {
+      // Atlas 也失败：如果 DeepSeek 错误更有诊断价值（如 400 模型名错误），
+      // 优先抛 DeepSeek 的错误；否则抛 Atlas 的错误。
+      const dsMsg = deepSeekError instanceof Error ? deepSeekError.message : "";
+      const atlasMsg = atlasError instanceof Error ? atlasError.message : "";
+      // DeepSeek 4xx 输入错误比 Atlas 4xx 更有诊断价值（用户能据此修 Vercel env）
+      if (dsMsg.startsWith("DEEPSEEK_API_ERROR:4")) throw deepSeekError;
+      // DeepSeek 内容校验失败 → Atlas 也失败 → 抛 Atlas 错误（说明两个 provider 都搞不定）
+      throw atlasError;
+    }
   }
 }
 
