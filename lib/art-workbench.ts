@@ -1,6 +1,6 @@
-import type { DramaProject } from "@/lib/projects";
-import { getSelectedFinalScript } from "@/lib/projects";
-import { assembleScreenplay, assembleNovel } from "@/lib/creation/assembly";
+import type { DramaProject } from "./projects.ts";
+import { getSelectedFinalScript } from "./projects.ts";
+import { assembleScreenplay, assembleNovel } from "./creation/assembly.ts";
 
 /**
  * 美术工作台本地草稿的 localStorage key 工具。
@@ -37,6 +37,9 @@ export type ArtAsset = {
   prompt: string;
   negativePrompt: string;
   identityAnchor?: string;
+  // Casting Assignment：关联到演员库中的 Actor（第一层虚拟演员）
+  actorId?: string;
+  actorName?: string;
   variants?: ArtAssetVariant[];
   versions?: ArtAssetVersion[];
   approvedVersionId?: string;

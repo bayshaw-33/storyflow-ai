@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload, Users, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getArtWorkbenchStorageKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
+import type { ActorProfile } from "@/lib/actors";
 import { ART_MODEL_CATALOG, findDefaultArtModel } from "@/lib/art/providers/catalog";
 import styles from "./ArtAssetDetail.module.css";
 
@@ -36,6 +37,10 @@ export default function ArtAssetDetail() {
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const uploadInput = useRef<HTMLInputElement>(null);
+  // 演员库导入（Casting Assignment：把 Actor 关联到 Character）
+  const [actorModalOpen, setActorModalOpen] = useState(false);
+  const [actorList, setActorList] = useState<ActorProfile[]>([]);
+  const [actorLoading, setActorLoading] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -185,6 +190,85 @@ export default function ArtAssetDetail() {
     setNotice("已生成 Universe 发布记录。正式同步将在 Supabase migration 执行后写入云端。 ");
   }
 
+  async function openActorModal() {
+    if (!session?.access_token) {
+      setNotice("请先登录后再从演员库导入。");
+      return;
+    }
+    setActorModalOpen(true);
+    if (actorList.length) return;
+    setActorLoading(true);
+    try {
+      const response = await fetch("/api/actors", { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const payload = await response.json() as { actors?: ActorProfile[]; error?: string };
+      if (!response.ok || !payload.actors) throw new Error(payload.error || "读取演员库失败");
+      setActorList(payload.actors);
+      if (!payload.actors.length) setNotice("演员库还没有任何演员，先到「演员库」页面创建。");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "读取演员库失败");
+      setActorModalOpen(false);
+    } finally {
+      setActorLoading(false);
+    }
+  }
+
+  function importFromActor(actor: ActorProfile) {
+    if (!asset) return;
+    // 优先使用 reference_sheet_url（4:3 横版参考表），回退到 avatar_url
+    const imageUrl = actor.reference_sheet_url || actor.avatar_url || "";
+    if (!imageUrl) {
+      setNotice(`演员「${actor.name}」还没有头像或参考图，请先在演员库上传。`);
+      return;
+    }
+    // 构造身份锚点：identity_core_prompt + face_description + 关键体征
+    const identityParts: string[] = [];
+    if (actor.metadata?.identity_passport?.identity_core_prompt) {
+      identityParts.push(`【身份核心】\n${actor.metadata.identity_passport.identity_core_prompt}`);
+    }
+    if (actor.face_description) identityParts.push(`【面部特征】${actor.face_description}`);
+    if (actor.hair_description) identityParts.push(`【发型发色】${actor.hair_description}`);
+    if (actor.body_description) identityParts.push(`【身形比例】${actor.body_description}`);
+    if (actor.age_range) identityParts.push(`【年龄区间】${actor.age_range}`);
+    if (actor.gender_expression) identityParts.push(`【性别气质】${actor.gender_expression}`);
+    if (actor.ethnicity_style) identityParts.push(`【族群风格】${actor.ethnicity_style}`);
+    const identityAnchor = identityParts.join("\n");
+
+    // 把演员图片作为新版本加到 master variant
+    const newVersion: ArtAssetVersion = {
+      id: crypto.randomUUID(),
+      imageUrl,
+      source: "uploaded",
+      prompt: actor.base_prompt || selectedVariant?.prompt || asset.prompt,
+      createdAt: new Date().toISOString(),
+    };
+
+    // 同步 master variant 的 prompt，并加入新版本
+    const variants = (asset.variants || []).map((v) => v.type === "master"
+      ? { ...v, prompt: actor.base_prompt || v.prompt, versions: [newVersion, ...v.versions] }
+      : v);
+
+    const nextAsset: ArtAsset = {
+      ...asset,
+      actorId: actor.id,
+      actorName: actor.name,
+      identityAnchor,
+      negativePrompt: actor.negative_prompt || asset.negativePrompt,
+      prompt: actor.base_prompt || asset.prompt,
+      variants,
+      status: "ready",
+      approvedVersionId: newVersion.id,
+      referenceSheetUrl: asset.kind === "character" ? imageUrl : asset.referenceSheetUrl,
+      updatedAt: new Date().toISOString(),
+    };
+    persist(nextAsset);
+    if (selectedVariantId) {
+      // 保持当前选中的 variant
+    }
+    setSelectedVersionId(newVersion.id);
+    setActorModalOpen(false);
+    setNotice(`已从演员库导入「${actor.name}」作为角色母版。`);
+  }
+
   if (!asset) return <main className={styles.missing}><p>{notice || "没有找到这个美术资产。"}</p><Link href={backToArtHref}>返回美术仓库</Link></main>;
 
   return <main className={styles.page}>
@@ -203,9 +287,60 @@ export default function ArtAssetDetail() {
         <label className={styles.prompt}><span>生成提示词</span><textarea value={selectedVariant?.prompt || ""} onChange={(event) => patchVariant({ prompt: event.target.value })} /></label>
         <div className={styles.settings}><label><span>供应商</span><div className={styles.select}><select value={selection} onChange={(event) => { setSelection(event.target.value as typeof selection); setModelId(""); }}><option value="smart">智能选择</option><option value="atlas">Atlas Cloud</option><option value="flux">FLUX</option></select><ChevronDown size={14} /></div></label><label><span>模型</span><div className={styles.select}><select value={modelId} onChange={(event) => setModelId(event.target.value)}><option value="">自动模型</option>{availableModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><ChevronDown size={14} /></div></label><label><span>候选数量</span><div className={styles.select}><select value={count} onChange={(event) => setCount(Number(event.target.value) as 1 | 2 | 4)}><option value={1}>1 张</option><option value={2}>2 张</option><option value={4}>4 张</option></select><ChevronDown size={14} /></div></label><label><span>画幅</span><input value={asset.kind === "character" && selectedVariant?.type === "master" ? "4:3 · 横版" : "16:9"} readOnly /></label></div>
         <div className={styles.generateActions}><button className={styles.generate} type="button" onClick={() => generate()} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className={styles.spin} size={17} /> : <Sparkles size={17} />}生成新版本</button>{asset.kind === "character" ? <button className={styles.threeViewBtn} type="button" onClick={() => generate("three_view")} disabled={busy === "generate"} title="基于角色母版生成三视图">三视图</button> : null}</div>
+        {asset.kind === "character" ? (
+          <div className={styles.actorImportActions}>
+            {asset.actorId ? (
+              <div className={styles.actorLinked}>
+                <Users size={14} />
+                <span>已关联演员：<strong>{asset.actorName}</strong></span>
+                <button type="button" onClick={openActorModal}>更换演员</button>
+              </div>
+            ) : (
+              <button type="button" className={styles.actorImportBtn} onClick={openActorModal}>
+                <Users size={16} />从演员库导入
+              </button>
+            )}
+          </div>
+        ) : null}
         <div className={styles.finalActions}><button type="button" onClick={approve} disabled={!selectedVersion}><LockKeyhole size={16} />设为终稿</button><button type="button" onClick={publish} disabled={!asset.approvedVersionId}><Send size={16} />发布到 Universe</button></div>
       </aside>
     </div>
+    {actorModalOpen ? (
+      <div className={styles.actorModalOverlay} onClick={() => setActorModalOpen(false)}>
+        <div className={styles.actorModal} onClick={(event) => event.stopPropagation()}>
+          <header>
+            <strong>从演员库导入角色母版</strong>
+            <button type="button" onClick={() => setActorModalOpen(false)}><X size={16} /></button>
+          </header>
+          <div className={styles.actorModalBody}>
+            {actorLoading ? (
+              <div className={styles.actorLoading}><LoaderCircle className={styles.spin} size={28} /><span>正在加载演员库…</span></div>
+            ) : actorList.length === 0 ? (
+              <div className={styles.actorEmpty}>
+                <strong>演员库还没有演员</strong>
+                <span>请先到「演员库」页面创建虚拟演员，并上传头像或参考表。</span>
+              </div>
+            ) : (
+              <div className={styles.actorGrid}>
+                {actorList.map((actor) => (
+                  <button key={actor.id} type="button" className={styles.actorCard} onClick={() => importFromActor(actor)}>
+                    <div className={styles.actorCardImage}>
+                      {actor.reference_sheet_url || actor.avatar_url
+                        ? <img src={actor.reference_sheet_url || actor.avatar_url || ""} alt={actor.name} />
+                        : <ImagePlus size={28} />}
+                    </div>
+                    <div className={styles.actorCardInfo}>
+                      <strong>{actor.name}</strong>
+                      <span>{[actor.age_range, actor.gender_expression, actor.ethnicity_style].filter(Boolean).join(" · ") || actor.bio || "暂无描述"}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    ) : null}
   </main>;
 }
 
