@@ -63,6 +63,8 @@ export type ArtAssetVersion = {
   model?: string;
   prompt: string;
   createdAt: string;
+  // 用户可重命名的版本显示名（上传图片可自定义名称；未设置则回退到 source/model 标签）
+  name?: string;
 };
 
 export type ArtAssetVariant = {

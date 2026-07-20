@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Plus, Send, Sparkles, Upload, Users, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Pencil, Plus, Send, Sparkles, Upload, Users, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getArtWorkbenchStorageKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
 import type { ActorProfile } from "@/lib/actors";
@@ -34,9 +34,13 @@ export default function ArtAssetDetail() {
   const [selection, setSelection] = useState<"smart" | "atlas" | "flux">("smart");
   const [modelId, setModelId] = useState("");
   const [count, setCount] = useState<1 | 2 | 4>(1);
+  const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:3" | "3:4" | "16:9" | "9:16">("16:9");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const uploadInput = useRef<HTMLInputElement>(null);
+  // 提示词 @mention：在 prompt textarea 中输入 @ 触发对象浮层
+  const [mention, setMention] = useState<{ open: boolean; query: string; start: number; rect: DOMRect | null }>({ open: false, query: "", start: -1, rect: null });
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   // 演员库导入（Casting Assignment：把 Actor 关联到 Character）
   const [actorModalOpen, setActorModalOpen] = useState(false);
   const [actorList, setActorList] = useState<ActorProfile[]>([]);
@@ -79,6 +83,13 @@ export default function ArtAssetDetail() {
     const currentIsValid = availableModels.some((model) => model.id === modelId);
     if (!currentIsValid) setModelId(findDefaultArtModel(selection, requiredCapability)?.id || availableModels[0]?.id || "");
   }, [availableModels, modelId, requiredCapability, selection]);
+
+  // 画幅默认值：角色母版 4:3，其他 16:9（与原硬编码逻辑一致，用户可手动改）
+  useEffect(() => {
+    if (!asset) return;
+    const isCharacterMaster = asset.kind === "character" && selectedVariant?.type === "master";
+    setAspectRatio(isCharacterMaster ? "4:3" : "16:9");
+  }, [asset?.id, selectedVariantId]); // 仅在 asset/variant 切换时重置，用户手动改不被覆盖
 
   function persist(next: ArtAsset) {
     setAsset(next);
@@ -123,25 +134,58 @@ export default function ArtAssetDetail() {
   }
 
   async function uploadVersion(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file || !asset || !selectedVariant) return;
+    const files = event.target.files;
+    const fileList = files ? Array.from(files) : [];
+    if (!fileList.length || !asset || !selectedVariant) return;
     if (!session?.access_token) return setNotice("请先登录后再上传图片版本。");
     setBusy("upload");
+    setNotice("");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch("/api/art/upload-reference", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
-      const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
-      if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "图片版本上传失败");
-      const version: ArtAssetVersion = { id: crypto.randomUUID(), imageUrl: payload.previewUrl, storagePath: payload.storagePath, source: "uploaded", prompt: selectedVariant.prompt, createdAt: new Date().toISOString() };
-      patchVariant({ versions: [version, ...selectedVariant.versions] });
-      setSelectedVersionId(version.id);
+      // 支持一次选择多张：逐个上传，全部成功后一次性合并到 versions 前面（保持选择顺序）
+      const uploaded: ArtAssetVersion[] = [];
+      const errors: string[] = [];
+      for (const file of fileList) {
+        try {
+          const form = new FormData();
+          form.append("file", file);
+          const response = await fetch("/api/art/upload-reference", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
+          const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
+          if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "图片版本上传失败");
+          // 默认显示名用文件名（去扩展名），用户可后续重命名
+          const baseName = file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "上传图片";
+          uploaded.push({ id: crypto.randomUUID(), imageUrl: payload.previewUrl, storagePath: payload.storagePath, source: "uploaded", prompt: selectedVariant.prompt, createdAt: new Date().toISOString(), name: baseName });
+        } catch (err) {
+          errors.push(`${file.name}: ${err instanceof Error ? err.message : "上传失败"}`);
+        }
+      }
+      if (uploaded.length) {
+        patchVariant({ versions: [...uploaded, ...selectedVariant.versions] });
+        setSelectedVersionId(uploaded[0].id);
+      }
+      if (errors.length) {
+        setNotice(`部分图片上传失败：\n${errors.join("\n")}`);
+      } else if (uploaded.length > 1) {
+        setNotice(`已上传 ${uploaded.length} 张图片。`);
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "图片版本上传失败");
     } finally {
       setBusy("");
       event.target.value = "";
     }
+  }
+
+  // 重命名版本显示名
+  function renameVersion(versionId: string) {
+    if (!asset || !selectedVariant) return;
+    const version = selectedVariant.versions.find((v) => v.id === versionId);
+    if (!version) return;
+    const current = version.name || (version.source === "uploaded" ? "上传图片" : version.model || "AI");
+    const next = window.prompt("给这个版本起个名字：", current);
+    if (next === null) return; // 用户取消
+    const trimmed = next.trim();
+    const newVersions = selectedVariant.versions.map((v) => v.id === versionId ? { ...v, name: trimmed || undefined } : v);
+    patchVariant({ versions: newVersions });
   }
 
   async function generate(taskOverride?: string) {
@@ -163,7 +207,7 @@ export default function ArtAssetDetail() {
           prompt: selectedVariant.prompt,
           negativePrompt: asset.negativePrompt,
           referenceUrls,
-          aspectRatio: asset.kind === "character" && selectedVariant.type === "master" ? "4:3" : "16:9",
+          aspectRatio,
           count,
           selection,
           modelId: modelId || undefined,
@@ -189,6 +233,62 @@ export default function ArtAssetDetail() {
     patchAsset({ publishedVersionId: asset.approvedVersionId });
     setNotice("已生成 Universe 发布记录。正式同步将在 Supabase migration 执行后写入云端。 ");
   }
+
+  // 提示词 @mention 候选：同项目的其他角色 / 关联演员 / 场景 / 道具
+  const mentionCandidates = useMemo(() => {
+    if (!state || !asset) return [];
+    const items: Array<{ label: string; kind: string }> = [];
+    for (const a of state.assets) {
+      if (a.id === asset.id) continue;
+      const kindLabel = a.kind === "character" ? "角色" : a.kind === "scene" ? "场景" : "道具";
+      items.push({ label: a.name, kind: kindLabel });
+    }
+    if (asset.actorName) items.push({ label: asset.actorName, kind: "演员" });
+    // 去重（同名只保留一个）
+    const seen = new Set<string>();
+    return items.filter((item) => { const k = `${item.kind}:${item.label}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  }, [state, asset]);
+
+  function handlePromptChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    const textarea = event.target;
+    const value = textarea.value;
+    const caret = textarea.selectionStart ?? value.length;
+    patchVariant({ prompt: value });
+    // 检测 @ 触发：从光标向前找最近的 @，且 @ 后没有空格
+    const before = value.slice(0, caret);
+    const atIdx = before.lastIndexOf("@");
+    if (atIdx === -1) { setMention({ open: false, query: "", start: -1, rect: null }); return; }
+    // @ 必须在行首或前面是空白
+    const charBefore = atIdx > 0 ? before[atIdx - 1] : " ";
+    if (!/\s/.test(charBefore)) { setMention({ open: false, query: "", start: -1, rect: null }); return; }
+    const query = before.slice(atIdx + 1);
+    // 如果 @ 后已经有空格或换行，关闭浮层
+    if (/\s/.test(query)) { setMention({ open: false, query: "", start: -1, rect: null }); return; }
+    // 计算浮层位置（textarea 光标附近的视口坐标）
+    const rect = textarea.getBoundingClientRect();
+    setMention({ open: true, query, start: atIdx, rect });
+  }
+
+  function insertMention(label: string) {
+    if (!selectedVariant || mention.start < 0 || !promptRef.current) { setMention({ open: false, query: "", start: -1, rect: null }); return; }
+    const prompt = selectedVariant.prompt || "";
+    const before = prompt.slice(0, mention.start);
+    const after = prompt.slice(promptRef.current.selectionStart ?? mention.start + 1);
+    const next = `${before}@${label} ${after}`;
+    patchVariant({ prompt: next });
+    setMention({ open: false, query: "", start: -1, rect: null });
+    // 光标移到插入的 @label 后面
+    requestAnimationFrame(() => {
+      if (!promptRef.current) return;
+      const pos = (before + `@${label} `).length;
+      promptRef.current.focus();
+      promptRef.current.setSelectionRange(pos, pos);
+    });
+  }
+
+  const filteredMentions = mention.open
+    ? mentionCandidates.filter((item) => !mention.query || item.label.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 8)
+    : [];
 
   async function openActorModal() {
     if (!session?.access_token) {
@@ -311,14 +411,14 @@ export default function ArtAssetDetail() {
       <section className={styles.mediaPanel}>
         <div className={styles.variantTabs}>{asset.variants?.map((variant) => <div key={variant.id} className={selectedVariant?.id === variant.id ? `${styles.variantTab} ${styles.active}` : styles.variantTab}><button type="button" onClick={() => { setSelectedVariantId(variant.id); setSelectedVersionId(variant.approvedVersionId || variant.versions[0]?.id || ""); }}>{variant.name}</button>{variant.type !== "master" ? <button type="button" className={styles.variantDelete} title="删除变体" onClick={() => deleteVariant(variant.id)}><X size={11} /></button> : null}</div>)}<button type="button" onClick={addVariant}><Plus size={14} />新增变体</button></div>
         <div className={styles.stage}>{selectedVersion ? <img src={selectedVersion.imageUrl} alt={asset.name} /> : <div><ImagePlus size={42} /><strong>暂无图片版本</strong><span>上传外部版本，或使用右侧设置生成</span></div>}</div>
-        <div className={styles.versionStrip}>{selectedVariant?.versions.map((version, index) => <button key={version.id} type="button" className={selectedVersion?.id === version.id ? styles.selectedVersion : ""} onClick={() => setSelectedVersionId(version.id)}><img src={version.imageUrl} alt={`版本 ${index + 1}`} /><span>{version.source === "uploaded" ? "上传" : version.model || "AI"}</span>{selectedVariant.approvedVersionId === version.id ? <i><Check size={11} /></i> : null}</button>)}<button className={styles.uploadTile} type="button" onClick={() => uploadInput.current?.click()}><Upload size={18} />上传版本</button><input ref={uploadInput} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadVersion} /></div>
+        <div className={styles.versionStrip}>{selectedVariant?.versions.map((version, index) => <div key={version.id} className={selectedVersion?.id === version.id ? `${styles.versionTile} ${styles.selectedVersion}` : styles.versionTile}><button type="button" className={styles.versionTileBtn} onClick={() => setSelectedVersionId(version.id)}><img src={version.imageUrl} alt={`版本 ${index + 1}`} /><span>{version.name || (version.source === "uploaded" ? "上传" : version.model || "AI")}</span></button>{selectedVariant.approvedVersionId === version.id ? <i><Check size={11} /></i> : null}<button type="button" className={styles.versionRename} title="重命名" onClick={() => renameVersion(version.id)}><Pencil size={11} /></button></div>)}<button className={styles.uploadTile} type="button" onClick={() => uploadInput.current?.click()}><Upload size={18} />上传版本</button><input ref={uploadInput} hidden type="file" multiple accept="image/png,image/jpeg,image/webp" onChange={uploadVersion} /></div>
       </section>
       <aside className={styles.editor}>
         <div className={styles.editorTitle}><div><small>资产编辑器</small><h1>{asset.name}</h1></div>{selectedVersion?.imageUrl ? <a href={selectedVersion.imageUrl} download><Download size={16} /></a> : null}</div>
         <label><span>名称</span><input value={asset.name} onChange={(event) => patchAsset({ name: event.target.value })} /></label>
         <label><span>{asset.kind === "character" ? "身份锚点" : "母版锚点"}</span><textarea value={asset.identityAnchor || ""} onChange={(event) => patchAsset({ identityAnchor: event.target.value })} placeholder="固定身份、结构、比例、材质和不可变化的识别特征" /></label>
-        <label className={styles.prompt}><span>生成提示词</span><textarea value={selectedVariant?.prompt || ""} onChange={(event) => patchVariant({ prompt: event.target.value })} /></label>
-        <div className={styles.settings}><label><span>供应商</span><div className={styles.select}><select value={selection} onChange={(event) => { setSelection(event.target.value as typeof selection); setModelId(""); }}><option value="smart">智能选择</option><option value="atlas">Atlas Cloud</option><option value="flux">FLUX</option></select><ChevronDown size={14} /></div></label><label><span>模型</span><div className={styles.select}><select value={modelId} onChange={(event) => setModelId(event.target.value)}><option value="">自动模型</option>{availableModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><ChevronDown size={14} /></div></label><label><span>候选数量</span><div className={styles.select}><select value={count} onChange={(event) => setCount(Number(event.target.value) as 1 | 2 | 4)}><option value={1}>1 张</option><option value={2}>2 张</option><option value={4}>4 张</option></select><ChevronDown size={14} /></div></label><label><span>画幅</span><input value={asset.kind === "character" && selectedVariant?.type === "master" ? "4:3 · 横版" : "16:9"} readOnly /></label></div>
+        <label className={styles.prompt}><span>生成提示词</span><textarea ref={promptRef} value={selectedVariant?.prompt || ""} onChange={handlePromptChange} placeholder="输入提示词，@ 可提及同项目其他角色/场景/道具/演员" />{mention.open && filteredMentions.length ? <div className={styles.mentionList} style={mention.rect ? { top: mention.rect.bottom + 4, left: mention.rect.left } : undefined}>{filteredMentions.map((item) => <button key={`${item.kind}:${item.label}`} type="button" className={styles.mentionItem} onClick={() => insertMention(item.label)}><strong>{item.label}</strong><span>{item.kind}</span></button>)}</div> : null}</label>
+        <div className={styles.settings}><label><span>供应商</span><div className={styles.select}><select value={selection} onChange={(event) => { setSelection(event.target.value as typeof selection); setModelId(""); }}><option value="smart">智能选择</option><option value="atlas">Atlas Cloud</option><option value="flux">FLUX</option></select><ChevronDown size={14} /></div></label><label><span>模型</span><div className={styles.select}><select value={modelId} onChange={(event) => setModelId(event.target.value)}><option value="">自动模型</option>{availableModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><ChevronDown size={14} /></div></label><label><span>候选数量</span><div className={styles.select}><select value={count} onChange={(event) => setCount(Number(event.target.value) as 1 | 2 | 4)}><option value={1}>1 张</option><option value={2}>2 张</option><option value={4}>4 张</option></select><ChevronDown size={14} /></div></label><label><span>画幅</span><div className={styles.select}><select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as typeof aspectRatio)}><option value="1:1">1:1 · 方形</option><option value="4:3">4:3 · 横版</option><option value="3:4">3:4 · 竖版</option><option value="16:9">16:9 · 宽屏</option><option value="9:16">9:16 · 竖屏</option></select><ChevronDown size={14} /></div></label></div>
         <div className={styles.generateActions}><button className={styles.generate} type="button" onClick={() => generate()} disabled={busy === "generate"}>{busy === "generate" ? <LoaderCircle className={styles.spin} size={17} /> : <Sparkles size={17} />}生成新版本</button>{asset.kind === "character" ? <button className={styles.threeViewBtn} type="button" onClick={() => generate("three_view")} disabled={busy === "generate"} title="基于角色母版生成三视图">三视图</button> : null}</div>
         {asset.kind === "character" ? (
           <div className={styles.actorImportActions}>
