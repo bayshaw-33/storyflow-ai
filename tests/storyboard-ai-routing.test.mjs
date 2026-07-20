@@ -379,12 +379,12 @@ test("fallback 仅执行一次（Atlas 失败不二次回 DeepSeek）", async ()
 
 // ============================================================================
 // KIIKIS-TR-ACTOR-P0-011: Vercel 环境变量 DEEPSEEK_MODEL 被误填成 API key
-// （以 sk- 开头）时，代码层应自动回退到 deepseek-v4-flash，避免 400
+// （以 sk- 开头）时，代码层应自动回退到 deepseek-v4-pro，避免 400
 // 直接测试 callDeepSeek，绕过 router，纯粹验证模型名回退逻辑
 // ============================================================================
 import { callDeepSeek } from "../lib/ai/providers/deepseek.ts";
 
-test("DEEPSEEK_MODEL 被误填成 API key (sk-xxx) 时自动回退到 deepseek-v4-flash", async () => {
+test("DEEPSEEK_MODEL 被误填成 API key (sk-xxx) 时自动回退到 deepseek-v4-pro", async () => {
   setupEnv();
   // 模拟 Vercel 误填场景：DEEPSEEK_MODEL 被设成了 API key
   process.env.DEEPSEEK_MODEL = "sk-fake-test-key-not-real";
@@ -400,8 +400,8 @@ test("DEEPSEEK_MODEL 被误填成 API key (sk-xxx) 时自动回退到 deepseek-v
 
   const result = await callDeepSeek({ messages: MESSAGES });
 
-  // 验证：实际发给 DeepSeek 的 model 是 deepseek-v4-flash（不是 sk-xxx）
-  assert.equal(capturedModel, "deepseek-v4-flash");
+  // 验证：实际发给 DeepSeek 的 model 是 deepseek-v4-pro（不是 sk-xxx）
+  assert.equal(capturedModel, "deepseek-v4-pro");
   assert.equal(result.output, "deepseek-output");
 });
 

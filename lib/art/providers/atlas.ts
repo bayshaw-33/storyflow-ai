@@ -143,13 +143,14 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
 export async function generateAtlasImages(request: ArtImageRequest, model: ArtModelDescriptor, apiKeyOverride?: string): Promise<ArtImageProviderResult[]> {
   const apiKey = apiKeyOverride?.trim() || process.env.ATLASCLOUD_API_KEY?.trim();
   if (!apiKey) throw new Error("MISSING_ATLASCLOUD_API_KEY");
-  const supportsBatch = model.atlasProfile === "flux-text" || model.atlasProfile === "grok-edit" || model.atlasProfile === "grok-text" || model.atlasProfile === "wan-text";
-  const runs = supportsBatch ? 1 : request.count;
+  // 不再依赖 Atlas API 的 num_images 批量参数（部分 profile 会忽略该参数只返回 1 张）
+  // 统一用循环单独生成 request.count 次，确保返回数量正确
+  const runs = request.count;
   const tasks = await Promise.all(Array.from({ length: runs }, async (_, index) => {
     const response = await fetch(`${ATLAS_BASE_URL}/model/generateImage`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildAtlasRequestBody({ ...request, count: supportsBatch ? request.count : 1, seed: request.seed === undefined ? undefined : request.seed + index }, model)),
+      body: JSON.stringify(buildAtlasRequestBody({ ...request, count: 1, seed: request.seed === undefined ? undefined : request.seed + index }, model)),
     });
     if (!response.ok) throw new Error(`ATLAS_API_ERROR:${response.status}`);
     const body = await response.json() as { data?: { id?: string }; id?: string };

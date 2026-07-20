@@ -76,7 +76,7 @@ export function getProviderStatus() {
     mode: getProviderMode(),
     deepseek: {
       configured: Boolean(process.env.DEEPSEEK_API_KEY),
-      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-pro",
     },
     atlas: {
       configured: isAtlasLLMConfigured(),

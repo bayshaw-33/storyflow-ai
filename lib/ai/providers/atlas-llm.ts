@@ -45,11 +45,11 @@ export const ATLAS_LLM_MODEL_OPTIONS = [
 
 /**
  * ATLASCLOUD_LLM_MODEL 未配置时的默认模型。
- * deepseek-ai/DeepSeek-V3.1：已通过 API 验证可用，性价比高且稳定。
+ * anthropic/claude-sonnet-4.6：Claude 长文本结构化输出能力更强，适合作为 DeepSeek 失败时的 fallback。
  * Atlas Cloud 支持 DeepSeek / Qwen / Claude / Grok / Doubao 等多厂商模型（Hugging Face 格式）。
  * 详见 https://www.atlascloud.ai/docs/models/llm
  */
-const DEFAULT_ATLAS_LLM_MODEL = "deepseek-ai/DeepSeek-V3.1";
+const DEFAULT_ATLAS_LLM_MODEL = "anthropic/claude-sonnet-4.6";
 
 /**
  * 调用 Atlas Cloud LLM（OpenAI-compatible）。
@@ -69,7 +69,7 @@ export async function callAtlasLLM({
 }: AtlasLLMOptions): Promise<AIProviderResult> {
   const apiKey = process.env.ATLASCLOUD_API_KEY;
   const baseUrl = (process.env.ATLASCLOUD_LLM_BASE_URL || "https://api.atlascloud.ai/v1").trim().replace(/\/+$/, "");
-  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 deepseek-ai/DeepSeek-V3.1
+  // 模型优先级：调用方传入 > env ATLASCLOUD_LLM_MODEL > 默认 anthropic/claude-sonnet-4.6
   // 这样即使用户没在 Vercel 配 ATLASCLOUD_LLM_MODEL，Atlas 也能自动启用
   let model = (modelOverride?.trim() || process.env.ATLASCLOUD_LLM_MODEL || DEFAULT_ATLAS_LLM_MODEL).trim();
   // 兜底：Atlas Cloud 模型 ID 必须是 {org}/{model} 格式（Hugging Face 格式）。

@@ -212,61 +212,94 @@ export default function ArtAssetDetail() {
     }
   }
 
-  function importFromActor(actor: ActorProfile) {
+  async function importFromActor(actor: ActorProfile) {
     if (!asset) return;
-    // 优先使用 reference_sheet_url（4:3 横版参考表），回退到 avatar_url
-    const imageUrl = actor.reference_sheet_url || actor.avatar_url || "";
-    if (!imageUrl) {
-      setNotice(`演员「${actor.name}」还没有头像或参考图，请先在演员库上传。`);
+    if (!session?.access_token) {
+      setNotice("请先登录后再从演员库导入。");
       return;
     }
-    // 构造身份锚点：identity_core_prompt + face_description + 关键体征
-    const identityParts: string[] = [];
-    if (actor.metadata?.identity_passport?.identity_core_prompt) {
-      identityParts.push(`【身份核心】\n${actor.metadata.identity_passport.identity_core_prompt}`);
-    }
-    if (actor.face_description) identityParts.push(`【面部特征】${actor.face_description}`);
-    if (actor.hair_description) identityParts.push(`【发型发色】${actor.hair_description}`);
-    if (actor.body_description) identityParts.push(`【身形比例】${actor.body_description}`);
-    if (actor.age_range) identityParts.push(`【年龄区间】${actor.age_range}`);
-    if (actor.gender_expression) identityParts.push(`【性别气质】${actor.gender_expression}`);
-    if (actor.ethnicity_style) identityParts.push(`【族群风格】${actor.ethnicity_style}`);
-    const identityAnchor = identityParts.join("\n");
-
-    // 把演员图片作为新版本加到 master variant
-    const newVersion: ArtAssetVersion = {
-      id: crypto.randomUUID(),
-      imageUrl,
-      source: "uploaded",
-      prompt: actor.base_prompt || selectedVariant?.prompt || asset.prompt,
-      createdAt: new Date().toISOString(),
-    };
-
-    // 同步 master variant 的 prompt，并加入新版本
-    const variants = (asset.variants || []).map((v) => v.type === "master"
-      ? { ...v, prompt: actor.base_prompt || v.prompt, versions: [newVersion, ...v.versions] }
-      : v);
-
-    const nextAsset: ArtAsset = {
-      ...asset,
-      actorId: actor.id,
-      actorName: actor.name,
-      identityAnchor,
-      negativePrompt: actor.negative_prompt || asset.negativePrompt,
-      prompt: actor.base_prompt || asset.prompt,
-      variants,
-      status: "ready",
-      approvedVersionId: newVersion.id,
-      referenceSheetUrl: asset.kind === "character" ? imageUrl : asset.referenceSheetUrl,
-      updatedAt: new Date().toISOString(),
-    };
-    persist(nextAsset);
-    if (selectedVariantId) {
-      // 保持当前选中的 variant
-    }
-    setSelectedVersionId(newVersion.id);
+    setBusy("import");
     setActorModalOpen(false);
-    setNotice(`已从演员库导入「${actor.name}」作为角色母版。`);
+    try {
+      // 1. 优先从演员图组获取白T+牛仔裤三视图（pack = "three-view-casual"）
+      let threeViewUrl = "";
+      let usedSource = "";
+      try {
+        const viewsResp = await fetch(
+          `/api/actors/generate-views?actorId=${encodeURIComponent(actor.id)}`,
+          { headers: { Authorization: `Bearer ${session.access_token}` } },
+        );
+        if (viewsResp.ok) {
+          const viewsPayload = await viewsResp.json() as {
+            versions?: Array<{ pack?: string; previewUrl?: string; isPrimary?: boolean }>;
+          };
+          const casual = (viewsPayload.versions || [])
+            .filter((v) => v.pack === "three-view-casual" && v.previewUrl)
+            .sort((a, b) => Number(b.isPrimary || false) - Number(a.isPrimary || false));
+          if (casual[0]?.previewUrl) {
+            threeViewUrl = casual[0].previewUrl;
+            usedSource = "白T牛仔三视图";
+          }
+        }
+      } catch { /* 图组获取失败，降级到 reference_sheet / avatar */ }
+
+      // 2. 回退顺序：白T三视图 → reference_sheet_url → avatar_url
+      const imageUrl = threeViewUrl || actor.reference_sheet_url || actor.avatar_url || "";
+      if (!imageUrl) {
+        setNotice(`演员「${actor.name}」还没有白T三视图、参考表或头像，请先在演员库生成。`);
+        return;
+      }
+      if (!usedSource) {
+        usedSource = actor.reference_sheet_url ? "角色参考表" : "头像";
+      }
+
+      // 3. 构造身份锚点：identity_core_prompt + face_description + 关键体征
+      const identityParts: string[] = [];
+      if (actor.metadata?.identity_passport?.identity_core_prompt) {
+        identityParts.push(`【身份核心】\n${actor.metadata.identity_passport.identity_core_prompt}`);
+      }
+      if (actor.face_description) identityParts.push(`【面部特征】${actor.face_description}`);
+      if (actor.hair_description) identityParts.push(`【发型发色】${actor.hair_description}`);
+      if (actor.body_description) identityParts.push(`【身形比例】${actor.body_description}`);
+      if (actor.age_range) identityParts.push(`【年龄区间】${actor.age_range}`);
+      if (actor.gender_expression) identityParts.push(`【性别气质】${actor.gender_expression}`);
+      if (actor.ethnicity_style) identityParts.push(`【族群风格】${actor.ethnicity_style}`);
+      const identityAnchor = identityParts.join("\n");
+
+      // 4. 把演员图片作为新版本加到 master variant
+      const newVersion: ArtAssetVersion = {
+        id: crypto.randomUUID(),
+        imageUrl,
+        source: "uploaded",
+        prompt: actor.base_prompt || selectedVariant?.prompt || asset.prompt,
+        createdAt: new Date().toISOString(),
+      };
+
+      const variants = (asset.variants || []).map((v) => v.type === "master"
+        ? { ...v, prompt: actor.base_prompt || v.prompt, versions: [newVersion, ...v.versions] }
+        : v);
+
+      const nextAsset: ArtAsset = {
+        ...asset,
+        actorId: actor.id,
+        actorName: actor.name,
+        identityAnchor,
+        negativePrompt: actor.negative_prompt || asset.negativePrompt,
+        prompt: actor.base_prompt || asset.prompt,
+        variants,
+        status: "ready",
+        approvedVersionId: newVersion.id,
+        referenceSheetUrl: asset.kind === "character" ? imageUrl : asset.referenceSheetUrl,
+        updatedAt: new Date().toISOString(),
+      };
+      persist(nextAsset);
+      setSelectedVersionId(newVersion.id);
+      setNotice(`已从演员库导入「${actor.name}」的${usedSource}作为角色母版。`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "从演员库导入失败");
+    } finally {
+      setBusy("");
+    }
   }
 
   if (!asset) return <main className={styles.missing}><p>{notice || "没有找到这个美术资产。"}</p><Link href={backToArtHref}>返回美术仓库</Link></main>;
@@ -296,8 +329,8 @@ export default function ArtAssetDetail() {
                 <button type="button" onClick={openActorModal}>更换演员</button>
               </div>
             ) : (
-              <button type="button" className={styles.actorImportBtn} onClick={openActorModal}>
-                <Users size={16} />从演员库导入
+              <button type="button" className={styles.actorImportBtn} onClick={openActorModal} disabled={busy === "import"}>
+                {busy === "import" ? <LoaderCircle className={styles.spin} size={16} /> : <Users size={16} />}{busy === "import" ? "导入中…" : "从演员库导入"}
               </button>
             )}
           </div>
@@ -323,7 +356,7 @@ export default function ArtAssetDetail() {
             ) : (
               <div className={styles.actorGrid}>
                 {actorList.map((actor) => (
-                  <button key={actor.id} type="button" className={styles.actorCard} onClick={() => importFromActor(actor)}>
+                  <button key={actor.id} type="button" className={styles.actorCard} disabled={busy === "import"} onClick={() => void importFromActor(actor)}>
                     <div className={styles.actorCardImage}>
                       {actor.reference_sheet_url || actor.avatar_url
                         ? <img src={actor.reference_sheet_url || actor.avatar_url || ""} alt={actor.name} />

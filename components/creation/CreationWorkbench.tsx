@@ -806,7 +806,7 @@ export function CreationWorkbench() {
             {deliveryItems.map((item) => <article className="creation-export-row" key={item.id}><div><FileText size={18} /><span><strong>{item.label}</strong><small>{item.baseFilename}</small></span></div><div><button className="secondary-button" type="button" onClick={() => downloadMarkdown(item.document, item.baseFilename)}>MD</button><button className="secondary-button" type="button" onClick={() => void downloadDocx(item.document, item.baseFilename)}>DOCX</button></div></article>)}
           </div>}
 
-          <details className="novel-tool-section creation-universe-tool">
+          <details className="novel-tool-section creation-universe-tool" open>
             <summary>Continuity & Universe</summary>
             <p>{activeUnit?.continuityNotes || (isZh ? "暂无连续性备注。" : "No continuity notes yet.")}</p>
             <textarea value={activeUnit?.continuityNotes || ""} onChange={(event) => updateUnit({ continuityNotes: event.target.value })} placeholder={isZh ? "当前章/集连续性备注" : "Current unit continuity notes"} />
