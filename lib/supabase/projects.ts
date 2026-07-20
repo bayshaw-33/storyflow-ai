@@ -324,7 +324,11 @@ async function supabaseFetch<T = unknown>(
   }
 
   if (response.status === 204) return null as T;
-  return response.json() as Promise<T>;
+  // PostgREST POST 默认返回 201 + 空 body（无 Prefer: return=representation），
+  // 直接 response.json() 在 Safari/WebKit 下会抛 SyntaxError "The string did not match the expected pattern."
+  // 先读 text，空则返回 null，避免空 body JSON 解析失败。
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : (null as T);
 }
 
 function tableUrl(table: string) {
