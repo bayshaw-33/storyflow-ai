@@ -203,7 +203,8 @@ function chooseProvider(taskType: TaskType, byoApi?: ByoApiConfig): AIProviderNa
   const mode = getProviderMode();
   if (mode === "deepseek") return "deepseek";
   if (mode === "minimax") return "minimax";
-  return deepSeekPreferredTasks.has(taskType) ? "deepseek" : "minimax";
+  // 用户 2026-07-22 确认移除所有 MiniMax：hybrid 模式统一走 DeepSeek（失败由 callRoutedProvider fallback 到 Atlas）
+  return "deepseek";
 }
 
 function isNovelTask(taskType: TaskType) {
@@ -218,7 +219,8 @@ function getProviderMode(): ProviderMode {
 
 function getFallbackProvider(provider: AIProviderName): AIProviderName {
   if (provider === "custom") return "deepseek";
-  return provider === "deepseek" ? "minimax" : "deepseek";
+  // 用户 2026-07-22：不再 fallback 到 MiniMax，deepseek key 缺失直接抛错由 callRoutedProvider 走 Atlas
+  return provider === "deepseek" ? "deepseek" : "deepseek";
 }
 
 async function callProvider(provider: AIProviderName, options: ProviderCallOptions) {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, FileText, RefreshCw, Save, Send, Sparkles, Upload } from "lucide-react";
+import { Copy, FileText, Languages, Loader2, RefreshCw, Save, Send, Sparkles, Upload } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -28,7 +28,7 @@ type SongProjectType =
 type OutputLanguage = "English" | "Chinese" | "Bilingual" | "Japanese" | "Korean" | "Spanish" | "French" | "Cantonese" | "Custom";
 type LyricsMode = "enhanced_lyrics" | "plain_lyrics" | "no_tags";
 type AuditStatus = "pass" | "low_risk" | "medium_risk" | "high_risk";
-type SongModelProvider = "auto" | "deepseek" | "minimax";
+type SongModelProvider = "auto" | "deepseek";
 
 type SongChatMessage = {
   id: string;
@@ -930,6 +930,25 @@ export default function SongWorkbenchPage() {
     }
   }
 
+  // 手动翻译：用户点击"翻译"按钮触发，使用独立的 AbortController（不依赖自动翻译的 useEffect）
+  const manualTranslateAbort = useRef<AbortController | null>(null);
+  async function handleManualTranslate() {
+    const trimmed = lyrics.trim();
+    if (!trimmed) {
+      setTranslationError(isZh ? "请先生成或输入歌词。" : "Please generate or enter lyrics first.");
+      return;
+    }
+    if (!session?.access_token) {
+      setTranslationError(isZh ? "登录后可翻译歌词。" : "Sign in to translate lyrics.");
+      return;
+    }
+    // 取消正在进行的自动翻译
+    manualTranslateAbort.current?.abort();
+    const controller = new AbortController();
+    manualTranslateAbort.current = controller;
+    await translateLyrics(trimmed, translationLanguage, controller.signal);
+  }
+
   async function handleReferenceFileUpload(file: File | null) {
     if (!file || uploadingReference) return;
     const lowerName = file.name.toLowerCase();
@@ -1392,7 +1411,6 @@ export default function SongWorkbenchPage() {
               <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
                 <option value="auto">{isZh ? "自动路由" : "Auto route"}</option>
                 <option value="deepseek">DeepSeek</option>
-                <option value="minimax">MiniMax</option>
               </select>
             </label>
           </div>
@@ -1527,8 +1545,11 @@ export default function SongWorkbenchPage() {
                 <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as LyricsTranslationLanguage)}>
                   {translationLanguages.map((language) => <option key={language}>{language}</option>)}
                 </select>
+                <button type="button" className="icon-button song-translate-btn" title={isZh ? "翻译歌词" : "Translate lyrics"} disabled={translationGenerating || !lyrics.trim()} onClick={() => void handleManualTranslate()}>
+                  {translationGenerating ? <Loader2 className="spin" size={15} /> : <Languages size={15} />}
+                </button>
               </span>
-              <textarea className="song-lyrics-textarea" value={translatedLyrics} readOnly placeholder={isZh ? "默认翻译成中文；如果原歌词为中文，则不翻译。" : "Defaults to Chinese; Chinese lyrics are not translated."} />
+              <textarea className="song-lyrics-textarea" value={translatedLyrics} readOnly placeholder={isZh ? "点击翻译按钮或自动翻译；中文歌词不翻译。" : "Click translate button or auto-translate; Chinese lyrics are not translated."} />
             </label>
           </div>
           {translationGenerating ? <small className="field-note">{isZh ? "正在翻译歌词…" : "Translating lyrics..."}</small> : null}
