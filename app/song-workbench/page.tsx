@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, ExternalLink, Globe, History, Languages, Loader2, MoreHorizontal, Package, Save, Send, Sparkles, X } from "lucide-react";
+import { Copy, ExternalLink, Globe, Languages, Loader2, MoreHorizontal, Package, Send, Sparkles, X } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -1856,10 +1856,6 @@ export default function SongWorkbenchPage() {
             <Globe size={15} />
             {isZh ? `Universe${universeBundle ? " · 已关联" : ""}` : `Universe${universeBundle ? " · linked" : ""}`}
           </button>
-          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("history")}>
-            <History size={15} />
-            {isZh ? "版本" : "Versions"}
-          </button>
           {/* 自动保存状态：纯文字状态，非按钮。失败时提供重试链接 */}
           <span className="song-autosave-status" data-state={autoSaveState}>
             {autoSaveState === "saving" ? (
@@ -1872,7 +1868,7 @@ export default function SongWorkbenchPage() {
           </span>
           <button className="secondary-button song-tool-btn" type="button" onClick={() => void exportDeliveryPackage()} disabled={exportingPackage}>
             <Package size={15} />
-            {exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "交付工作包" : "Deliver")}
+            {exportingPackage ? (isZh ? "打包" : "Pack") : (isZh ? "交付工作包" : "Deliver")}
           </button>
           <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("more")}>
             <MoreHorizontal size={15} />
@@ -2056,10 +2052,8 @@ export default function SongWorkbenchPage() {
           <div className="song-drawer" onClick={(event) => event.stopPropagation()}>
             <header className="song-drawer-head">
               <h2>
-                {drawerType === "more" ? (isZh ? "更多设置" : "More")
-                  : drawerType === "material" ? (isZh ? "创作留痕" : "Creation trace")
-                  : drawerType === "universe" ? "Universe"
-                  : (isZh ? "版本历史" : "History")}
+                {drawerType === "more" ? (isZh ? "更多" : "More")
+                  : "Universe"}
               </h2>
               <button className="icon-button" type="button" onClick={() => setDrawerType(null)} aria-label={isZh ? "关闭" : "Close"}>
                 <X size={18} />
@@ -2067,75 +2061,77 @@ export default function SongWorkbenchPage() {
             </header>
             <div className="song-drawer-body">
               {drawerType === "more" ? (
-                <div className="song-field-stack">
-                  <label>
-                    {isZh ? "输出模型" : "Output model"}
-                    <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
-                      <option value="auto">{isZh ? "自动路由" : "Auto route"}</option>
-                      <option value="deepseek">DeepSeek</option>
-                    </select>
-                  </label>
-                  {selectedSourceProject ? (
-                    <div className="song-source-panel">
-                      <span>{locale === "zh-CN" ? "OST 来源" : "OST source"}</span>
-                      <strong>{selectedSourceProject.title}</strong>
-                      <p>
-                        {selectedSourceProject.universeId
-                          ? locale === "zh-CN"
-                            ? "该歌曲会继承来源项目的 Universe，可作为同一 IP 的 OST/主题曲沉淀。"
-                            : "This song inherits the source project's Universe and can be saved as an OST/theme asset for the same IP."
-                          : locale === "zh-CN"
-                            ? "保存后会记录来源项目摘要；来源项目升级为 Universe 后，可继续用于 IP 资产联动。"
-                            : "The source project summary will be saved; once the source is upgraded to a Universe, it can continue as linked IP material."}
-                      </p>
+                <div className="song-more-stack">
+                  {/* 创作留痕 */}
+                  <div className="song-more-section">
+                    <h3 className="song-step-title">{isZh ? "创作留痕" : "Creation trace"}</h3>
+                    <p className="subtle">{isZh ? "系统持续记录你在 Kiikis 上的创作过程。需要时可一键下载，证明这首歌是你在什么时间在 kiikis.com 上创作的。" : "Kiikis records your creation process. Download anytime as proof of when and where you created this song."}</p>
+                    <div className="song-trace-timeline">
+                      {chatMessages.length === 0 && versions.length === 0 ? (
+                        <p className="subtle">{isZh ? "暂无创作记录。开始对话或生成后，这里会记录每一步。" : "No activity yet."}</p>
+                      ) : (
+                        <>
+                          {chatMessages.slice(-8).map((msg) => (
+                            <div key={msg.id} className="song-trace-item">
+                              <span className="song-trace-time">{new Date(msg.createdAt).toLocaleString()}</span>
+                              <span className={`song-trace-tag song-trace-tag-${msg.role}`}>{msg.role === "user" ? (isZh ? "我的想法" : "My idea") : "AI"}</span>
+                              <p className="song-trace-content">{msg.content.slice(0, 100)}{msg.content.length > 100 ? "…" : ""}</p>
+                            </div>
+                          ))}
+                          {versions.slice(0, 5).map((v) => (
+                            <div key={v.id} className="song-trace-item">
+                              <span className="song-trace-time">{new Date(v.createdAt).toLocaleString()}</span>
+                              <span className="song-trace-tag song-trace-tag-version">{isZh ? `版本 ${v.versionNumber}` : `v${v.versionNumber}`}</span>
+                              <p className="song-trace-content">{v.summary || v.changeType}</p>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
+                    <button className="primary-button" type="button" onClick={() => void exportDeliveryPackage()} disabled={exportingPackage || (chatMessages.length === 0 && versions.length === 0)}>
+                      <Package size={15} />
+                      {exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "一键下载留痕" : "Download trace")}
+                    </button>
+                  </div>
 
-              {drawerType === "material" ? (
-                <div className="song-creation-trace-panel">
-                  <p className="subtle">
-                    {isZh ? "系统持续记录你在 Kiikis 上的创作过程：与 AI 的对话、每次生成的时间和内容、版本变化。需要时可一键下载，证明这首歌是你在什么时间在 kiikis.com 上创作的。" : "Kiikis records your creation process: AI conversations, generation timestamps, and version changes. Download anytime as proof of when and where you created this song."}
-                  </p>
-
-                  <h3 className="song-step-title">{isZh ? "创作时间线" : "Creation timeline"}</h3>
-                  <div className="song-trace-timeline">
-                    {chatMessages.length === 0 && versions.length === 0 ? (
-                      <p className="subtle">{isZh ? "暂无创作记录。开始对话或生成后，这里会记录每一步。" : "No activity yet. Start chatting or generating to build your trace."}</p>
+                  {/* 版本历史 */}
+                  <div className="song-more-section">
+                    <div className="song-tool-head">
+                      <h3 className="song-step-title">{isZh ? "版本历史" : "Version history"}</h3>
+                      <button className="secondary-button" type="button" onClick={() => void saveVersion()}>{text.saveVersion}</button>
+                    </div>
+                    {versions.length === 0 ? (
+                      <p className="subtle">{text.noVersions}</p>
                     ) : (
-                      <>
-                        {chatMessages.map((msg) => (
-                          <div key={msg.id} className="song-trace-item">
-                            <span className="song-trace-time">{new Date(msg.createdAt).toLocaleString()}</span>
-                            <span className={`song-trace-tag song-trace-tag-${msg.role}`}>{msg.role === "user" ? (isZh ? "我的想法" : "My idea") : "AI"}</span>
-                            <p className="song-trace-content">{msg.content.slice(0, 120)}{msg.content.length > 120 ? "…" : ""}</p>
-                          </div>
+                      <div className="settings-list song-history-list">
+                        {versions.map((version) => (
+                          <button className="settings-card song-version-card" type="button" key={version.id} onClick={() => previewVersion(version)}>
+                            <span>v{version.versionNumber} / {version.auditStatus}</span>
+                            <h3>{version.changeType}</h3>
+                            <p>{version.summary}</p>
+                            <p>{new Date(version.createdAt).toLocaleString()}</p>
+                          </button>
                         ))}
-                        {versions.map((v) => (
-                          <div key={v.id} className="song-trace-item">
-                            <span className="song-trace-time">{new Date(v.createdAt).toLocaleString()}</span>
-                            <span className="song-trace-tag song-trace-tag-version">{isZh ? `版本 ${v.versionNumber}` : `Version ${v.versionNumber}`}</span>
-                            <p className="song-trace-content">{v.summary || v.changeType}</p>
-                          </div>
-                        ))}
-                      </>
+                      </div>
                     )}
                   </div>
 
-                  <h3 className="song-step-title">{isZh ? "下载创作留痕" : "Download creation trace"}</h3>
-                  <p className="subtle">
-                    {isZh ? "导出包含对话记录、生成时间线、版本历史的文件包，用于证明创作时间与来源。" : "Export a package with conversations, timeline, and version history as proof of creation."}
-                  </p>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void exportDeliveryPackage()}
-                    disabled={exportingPackage || (chatMessages.length === 0 && versions.length === 0)}
-                  >
-                    <Package size={15} />
-                    {exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "一键下载留痕" : "Download trace")}
-                  </button>
+                  {/* 输出模型 */}
+                  <div className="song-more-section">
+                    <h3 className="song-step-title">{isZh ? "输出模型" : "Output model"}</h3>
+                    <label>
+                      <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
+                        <option value="auto">{isZh ? "自动路由" : "Auto route"}</option>
+                        <option value="deepseek">DeepSeek</option>
+                      </select>
+                    </label>
+                    {selectedSourceProject ? (
+                      <div className="song-source-panel">
+                        <span>{isZh ? "OST 来源" : "OST source"}</span>
+                        <strong>{selectedSourceProject.title}</strong>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -2364,25 +2360,6 @@ export default function SongWorkbenchPage() {
                 </div>
               ) : null}
 
-              {drawerType === "history" ? (
-                <div className="song-tool-section">
-                  <div className="song-tool-head">
-                    <span>{text.history}</span>
-                    <button className="secondary-button" type="button" onClick={() => void saveVersion()}>{text.saveVersion}</button>
-                  </div>
-                  <div className="settings-list song-history-list">
-                    {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
-                    {versions.map((version) => (
-                      <button className="settings-card song-version-card" type="button" key={version.id} onClick={() => previewVersion(version)}>
-                        <span>v{version.versionNumber} / {version.auditStatus}</span>
-                        <h3>{version.changeType}</h3>
-                        <p>{version.summary}</p>
-                        <p>{new Date(version.createdAt).toLocaleString()}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
         </div>
