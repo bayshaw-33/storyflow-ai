@@ -557,6 +557,10 @@ export default function SongWorkbenchPage() {
   const [mobileTab, setMobileTab] = useState<"lyrics" | "translation">("lyrics");
   // 歌词手动编辑后的"待更新"标记
   const [lyricsDirty, setLyricsDirty] = useState(false);
+  // 生成失败专用错误（显示在右侧创作区，不伪造成功结果）
+  const [generationError, setGenerationError] = useState("");
+  // 生成进度状态文案（明确进度，禁用重复提交）
+  const [generationProgress, setGenerationProgress] = useState("");
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -1012,6 +1016,8 @@ export default function SongWorkbenchPage() {
   async function generateAll(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     setError("");
+    setGenerationError("");
+    setGenerationProgress("");
     setSaveStatus("");
     setSaveWarning("");
     setAuditOpen(false);
@@ -1029,6 +1035,7 @@ export default function SongWorkbenchPage() {
     setCompositionPrompt("");
     setAudit(null);
     setGenerating(true);
+    setGenerationProgress(isZh ? "正在生成歌曲…" : "Generating song...");
     try {
       const response = await fetch("/api/ai/generate", {
         method: "POST",
@@ -1055,6 +1062,7 @@ export default function SongWorkbenchPage() {
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI generation failed.");
 
+      setGenerationProgress(isZh ? "正在解析结果…" : "Parsing result...");
       const parsed = parseSongGeneration(payload.output || "");
       const fallbackLyrics = buildLyrics(form, selectedSingers);
       const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers);
@@ -1069,9 +1077,10 @@ export default function SongWorkbenchPage() {
       setLyricsDirty(false);
       void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
     } catch (generationError) {
-      setError(generationError instanceof Error ? generationError.message : "AI generation failed.");
+      setGenerationError(generationError instanceof Error ? generationError.message : "AI generation failed.");
     } finally {
       setGenerating(false);
+      setGenerationProgress("");
     }
   }
 
@@ -1460,6 +1469,19 @@ export default function SongWorkbenchPage() {
 
         {/* 右侧 62%：创作结果（上下分割，可拖动） */}
         <section className="song-workbench-right" ref={rightContainerRef}>
+          {/* 生成进度状态（明确进度，禁用重复提交） */}
+          {generationProgress ? (
+            <div className="song-right-status song-right-progress" role="status" aria-live="polite">
+              <Loader2 className="spin" size={14} />
+              <span>{generationProgress}</span>
+            </div>
+          ) : null}
+          {/* 生成失败错误（在右侧创作区显示，不伪造成功结果） */}
+          {generationError ? (
+            <div className="song-right-status song-right-error" role="alert">
+              <span>{generationError}</span>
+            </div>
+          ) : null}
           <div className="song-right-upper">
             {/* 移动端歌词/翻译标签页 */}
             <div className="song-mobile-tabs" role="tablist">
