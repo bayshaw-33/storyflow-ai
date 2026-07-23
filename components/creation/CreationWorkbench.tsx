@@ -62,7 +62,7 @@ type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 type SourceFile = { id: string; name: string; text: string };
 type LocalizationView = "content" | "changes" | "similarity";
 
-const AI_TIMEOUT = 75_000;
+const AI_TIMEOUT = 120_000;
 const LANGUAGE_OPTIONS = ["中文", "English", "Español", "Français", "Italiano", "日本語", "한국어"];
 const STAGES: Array<{ key: StageKey; zh: string; en: string; task?: TaskType }> = [
   { key: "background", zh: "背景及世界观", en: "Background & World", task: "creation_background_world" },
@@ -434,6 +434,13 @@ export function CreationWorkbench() {
       const payload = await response.json();
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI generation failed");
       return String(payload.output || "");
+    } catch (error) {
+      // 超时触发 controller.abort() 时，fetch 抛 AbortError（Safari message = "Signal is aborted without reason"）
+      // 捕获后转为友好提示，避免原始 abort message 直接显示给用户
+      if (controller.signal.aborted) {
+        throw new Error(isZh ? "AI 请求超时，请稍后重试或精简输入内容。" : "AI request timed out. Please retry or shorten your input.");
+      }
+      throw error;
     } finally {
       window.clearTimeout(timeout);
     }
