@@ -4173,7 +4173,10 @@ input:focus, textarea:focus, select:focus {
 /* ===== Song Workbench v2 两栏布局 ===== */
 .song-workbench-page.song-workbench-v2 {
   background: #080B0C;
-  min-height: 100dvh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .song-copyright-stack {
   margin-top: 16px;
@@ -4246,7 +4249,85 @@ input:focus, textarea:focus, select:focus {
   white-space: nowrap;
 }
 .song-autosave-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #8E999B;
+  font-size: 12px;
+  padding: 0 8px;
+  white-space: nowrap;
+  min-height: 36px;
+}
+.song-autosave-status[data-state="saving"] { color: #8E999B; }
+.song-autosave-status[data-state="saved"] { color: #6b7280; }
+.song-autosave-status[data-state="failed"] { color: #ef4444; }
+.song-autosave-retry {
+  background: none;
+  border: none;
+  color: #14b8a6;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  text-decoration: underline;
+  min-height: auto;
+}
+.song-autosave-retry:hover { color: #0d9488; }
+
+/* 创作留痕面板 */
+.song-creation-trace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.song-creation-trace-panel .subtle {
+  color: #8E999B;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+.song-trace-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.song-trace-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 8px;
+  border-left: 2px solid rgba(20, 184, 166, 0.3);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 0 4px 4px 0;
+}
+.song-trace-time {
+  font-size: 11px;
+  color: #667274;
+  font-variant-numeric: tabular-nums;
+}
+.song-trace-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+.song-trace-tag-user { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+.song-trace-tag-assistant { background: rgba(20, 184, 166, 0.15); color: #14b8a6; }
+.song-trace-tag-version { background: rgba(234, 179, 8, 0.15); color: #facc15; }
+.song-trace-content {
+  flex: 1 1 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #D3DAD9;
+  line-height: 1.5;
+  word-break: break-word;
 }
 .song-suno-link {
   text-decoration: none;
@@ -4274,8 +4355,11 @@ input:focus, textarea:focus, select:focus {
   gap: 16px;
   max-width: none;
   margin: 0 auto;
-  padding: var(--space-3) clamp(16px, 2vw, 24px) var(--space-12);
+  padding: var(--space-3) clamp(16px, 2vw, 24px) var(--space-3);
   align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .song-shell-v2 > .notice {
   grid-column: 1 / -1;
@@ -4286,9 +4370,8 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: calc(100dvh - 180px);
-  position: sticky;
-  top: 84px;
+  height: 100%;
+  min-height: 0;
   max-height: calc(100dvh - 104px);
 }
 .song-chat-panel .song-chat-thread {
@@ -4319,7 +4402,8 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: calc(100dvh - 180px);
+  height: 100%;
+  min-height: 0;
   gap: 0;
 }
 .song-right-status {
@@ -4344,7 +4428,7 @@ input:focus, textarea:focus, select:focus {
   border-color: rgba(255, 138, 128, 0.3);
 }
 .song-right-upper {
-  flex: var(--upper-pct, 70%) 0 0;
+  flex: var(--upper-pct, 70) 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -4604,7 +4688,8 @@ input:focus, textarea:focus, select:focus {
   .song-chat-panel {
     position: static;
     max-height: none;
-    min-height: 480px;
+    height: 100%;
+    min-height: 0;
   }
 }
 
@@ -4625,7 +4710,8 @@ input:focus, textarea:focus, select:focus {
   .song-chat-panel {
     position: static;
     max-height: none;
-    min-height: calc(100dvh - 160px);
+    height: auto;
+    min-height: calc(100dvh - 120px);
   }
   .song-workbench-right {
     min-height: calc(100dvh - 160px);

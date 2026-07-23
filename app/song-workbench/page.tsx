@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, ExternalLink, FileText, Globe, History, Languages, Loader2, MoreHorizontal, Package, Save, Send, Sparkles, Upload, X } from "lucide-react";
+import { Copy, ExternalLink, Globe, History, Languages, Loader2, MoreHorizontal, Package, Save, Send, Sparkles, X } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -1844,17 +1844,13 @@ export default function SongWorkbenchPage() {
           )}
         </div>
         <div className="song-toolbar">
-          {/* 移动端视图切换（手机/平板竖屏双页面流程） */}
+          {/* 移动端视图切换（仅手机/平板竖屏显示，桌面端隐藏） */}
           <button
             className="secondary-button song-tool-btn song-mobile-toggle"
             type="button"
             onClick={() => setMobileView(mobileView === "chat" ? "results" : "chat")}
           >
-            {mobileView === "chat" ? (isZh ? "查看结果" : "Results") : (isZh ? "返回对话" : "Chat")}
-          </button>
-          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("material")}>
-            <FileText size={15} />
-            {isZh ? "素材与版权" : "Material"}
+            {mobileView === "chat" ? (isZh ? "结果" : "Results") : (isZh ? "对话" : "Chat")}
           </button>
           <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("universe")}>
             <Globe size={15} />
@@ -1864,42 +1860,35 @@ export default function SongWorkbenchPage() {
             <History size={15} />
             {isZh ? "版本" : "Versions"}
           </button>
-          {/* 自动保存状态：替代手动"保存到工作台"按钮 */}
-          <button
-            className="secondary-button song-tool-btn song-autosave-status"
-            type="button"
-            onClick={() => { if (autoSaveState === "failed") void saveSongProjectToList({ silent: true }).then(() => { setAutoSaveState("saved"); setAutoSaveTime(new Date().toLocaleTimeString()); }).catch(() => setAutoSaveState("failed")); }}
-            title={autoSaveState === "saved" && autoSaveTime ? (isZh ? `已自动保存 ${autoSaveTime}` : `Auto-saved ${autoSaveTime}`) : ""}
-          >
+          {/* 自动保存状态：纯文字状态，非按钮。失败时提供重试链接 */}
+          <span className="song-autosave-status" data-state={autoSaveState}>
             {autoSaveState === "saving" ? (
-              <><Loader2 className="spin" size={14} />{isZh ? "保存中" : "Saving"}</>
+              <><Loader2 className="spin" size={13} />{isZh ? "保存中" : "Saving"}</>
             ) : autoSaveState === "saved" ? (
-              <>{isZh ? "已自动保存" : "Auto-saved"}</>
+              <>{isZh ? `已保存${autoSaveTime ? ` ${autoSaveTime}` : ""}` : `Saved${autoSaveTime ? ` ${autoSaveTime}` : ""}`}</>
             ) : autoSaveState === "failed" ? (
-              <>{isZh ? "保存失败 · 重试" : "Save failed · retry"}</>
-            ) : (
-              <>{isZh ? "自动保存" : "Auto-save"}</>
-            )}
-          </button>
+              <>{isZh ? "保存失败" : "Save failed"} <button type="button" className="song-autosave-retry" onClick={() => { void saveSongProjectToList({ silent: true }).then(() => { setAutoSaveState("saved"); setAutoSaveTime(new Date().toLocaleTimeString()); }).catch(() => setAutoSaveState("failed")); }}>{isZh ? "重试" : "Retry"}</button></>
+            ) : null}
+          </span>
           <button className="secondary-button song-tool-btn" type="button" onClick={() => void exportDeliveryPackage()} disabled={exportingPackage}>
             <Package size={15} />
             {exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "交付工作包" : "Deliver")}
+          </button>
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("more")}>
+            <MoreHorizontal size={15} />
+            {isZh ? "更多" : "More"}
           </button>
           {/* Suno：纯超链接，不复制不填充 */}
           <a className="secondary-button song-tool-btn song-suno-link" href="https://suno.com" target="_blank" rel="noopener noreferrer">
             Suno <ExternalLink size={14} />
           </a>
-          <button className="secondary-button song-tool-btn song-more-btn" type="button" onClick={() => setDrawerType("more")}>
-            <MoreHorizontal size={15} />
-            {isZh ? "更多" : "More"}
-          </button>
         </div>
       </section>
 
       {error ? <div className="notice error song-shell-notice">{error}</div> : null}
       {saveWarning ? <div className="notice warning song-shell-notice">{saveWarning}</div> : null}
 
-      <section className="song-workbench-shell song-shell-v2" style={{ "--upper-pct": `${upperHeightPct}%` } as React.CSSProperties}>
+      <section className="song-workbench-shell song-shell-v2" style={{ "--upper-pct": upperHeightPct } as React.CSSProperties}>
         {/* 左侧 38%：AI 创作对话（只负责对话，不触发作品生成） */}
         <form
           className={`dashboard-panel song-chat-panel ${mobileView === "chat" ? "song-mobile-active" : "song-mobile-hidden"}`}
@@ -1908,7 +1897,6 @@ export default function SongWorkbenchPage() {
           <div className="dashboard-panel-head">
             <div>
               <span>{isZh ? "AI 创作对话" : "AI Creation Chat"}</span>
-              <h2>{isZh ? "先聊感觉，再生成歌曲" : "Talk first, generate after"}</h2>
             </div>
           </div>
 
@@ -2069,7 +2057,7 @@ export default function SongWorkbenchPage() {
             <header className="song-drawer-head">
               <h2>
                 {drawerType === "more" ? (isZh ? "更多设置" : "More")
-                  : drawerType === "material" ? (isZh ? "素材与版权" : "Material & Rights")
+                  : drawerType === "material" ? (isZh ? "创作留痕" : "Creation trace")
                   : drawerType === "universe" ? "Universe"
                   : (isZh ? "版本历史" : "History")}
               </h2>
@@ -2102,57 +2090,52 @@ export default function SongWorkbenchPage() {
                       </p>
                     </div>
                   ) : null}
-                  <p className="subtle">{isZh ? "Universe 关联请在 Universe 入口管理，歌曲标题可直接点击顶部标题编辑。" : "Manage Universe links from the Universe entry; edit the song title by clicking the top title."}</p>
                 </div>
               ) : null}
 
               {drawerType === "material" ? (
-                <div className="song-reference-panel">
-                  <div className="song-tool-head">
-                    <span>{isZh ? "参考素材" : "Reference material"}</span>
-                    <label className="secondary-button">
-                      <Upload size={15} />
-                      {uploadingReference ? (isZh ? "上传中" : "Uploading") : (isZh ? "上传文件" : "Upload file")}
-                      <input
-                        type="file"
-                        accept=".mp3,.wav,.doc,.docx,.txt"
-                        onChange={(event) => void handleReferenceFileUpload(event.target.files?.[0] || null)}
-                        hidden
-                      />
-                    </label>
+                <div className="song-creation-trace-panel">
+                  <p className="subtle">
+                    {isZh ? "系统持续记录你在 Kiikis 上的创作过程：与 AI 的对话、每次生成的时间和内容、版本变化。需要时可一键下载，证明这首歌是你在什么时间在 kiikis.com 上创作的。" : "Kiikis records your creation process: AI conversations, generation timestamps, and version changes. Download anytime as proof of when and where you created this song."}
+                  </p>
+
+                  <h3 className="song-step-title">{isZh ? "创作时间线" : "Creation timeline"}</h3>
+                  <div className="song-trace-timeline">
+                    {chatMessages.length === 0 && versions.length === 0 ? (
+                      <p className="subtle">{isZh ? "暂无创作记录。开始对话或生成后，这里会记录每一步。" : "No activity yet. Start chatting or generating to build your trace."}</p>
+                    ) : (
+                      <>
+                        {chatMessages.map((msg) => (
+                          <div key={msg.id} className="song-trace-item">
+                            <span className="song-trace-time">{new Date(msg.createdAt).toLocaleString()}</span>
+                            <span className={`song-trace-tag song-trace-tag-${msg.role}`}>{msg.role === "user" ? (isZh ? "我的想法" : "My idea") : "AI"}</span>
+                            <p className="song-trace-content">{msg.content.slice(0, 120)}{msg.content.length > 120 ? "…" : ""}</p>
+                          </div>
+                        ))}
+                        {versions.map((v) => (
+                          <div key={v.id} className="song-trace-item">
+                            <span className="song-trace-time">{new Date(v.createdAt).toLocaleString()}</span>
+                            <span className="song-trace-tag song-trace-tag-version">{isZh ? `版本 ${v.versionNumber}` : `Version ${v.versionNumber}`}</span>
+                            <p className="song-trace-content">{v.summary || v.changeType}</p>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
-                  <select value={referenceMode} onChange={(event) => setReferenceMode(event.target.value as UploadedReference["mode"])}>
-                    <option value="similar_style">{isZh ? "音频/文本参考：做类似风格" : "Reference: make a similar style"}</option>
-                    <option value="rewrite_lyrics">{isZh ? "歌词改编：保留结构和字数，换新歌词" : "Lyric rewrite: keep structure and length"}</option>
-                  </select>
-                  {uploadedReference ? (
-                    <p>
-                      <FileText size={14} />
-                      {uploadedReference.name}
-                    </p>
-                  ) : (
-                    <p>{isZh ? "支持 mp3、wav、doc、docx、txt。" : "Supports mp3, wav, doc, docx, and txt."}</p>
-                  )}
-                  <div className="song-field-stack song-copyright-stack">
-                    <h3>{isZh ? "版权与来源信息" : "Rights & source info"}</h3>
-                    <label>
-                      {isZh ? "素材作者" : "Material author"}
-                      <input value={materialAuthor} onChange={(event) => setMaterialAuthor(event.target.value)} placeholder={isZh ? "原作者 / 表演者" : "Original author / performer"} />
-                    </label>
-                    <label>
-                      {isZh ? "素材来源" : "Material source"}
-                      <input value={materialSource} onChange={(event) => setMaterialSource(event.target.value)} placeholder={isZh ? "专辑 / 链接 / 出版物" : "Album / URL / publication"} />
-                    </label>
-                    <label>
-                      {isZh ? "授权类型" : "License type"}
-                      <input value={materialLicense} onChange={(event) => setMaterialLicense(event.target.value)} placeholder={isZh ? "如：原创 / CC-BY / 商业授权" : "e.g. Original / CC-BY / Commercial"} />
-                    </label>
-                    <label>
-                      {isZh ? "使用限制" : "Usage limits"}
-                      <input value={materialUsage} onChange={(event) => setMaterialUsage(event.target.value)} placeholder={isZh ? "如：仅限非商业 / 无限制" : "e.g. Non-commercial only / unrestricted"} />
-                    </label>
-                    <p className="subtle">{isZh ? "缺失信息会在交付工作包的风险检查中标记。" : "Missing info is flagged in the delivery package risk check."}</p>
-                  </div>
+
+                  <h3 className="song-step-title">{isZh ? "下载创作留痕" : "Download creation trace"}</h3>
+                  <p className="subtle">
+                    {isZh ? "导出包含对话记录、生成时间线、版本历史的文件包，用于证明创作时间与来源。" : "Export a package with conversations, timeline, and version history as proof of creation."}
+                  </p>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void exportDeliveryPackage()}
+                    disabled={exportingPackage || (chatMessages.length === 0 && versions.length === 0)}
+                  >
+                    <Package size={15} />
+                    {exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "一键下载留痕" : "Download trace")}
+                  </button>
                 </div>
               ) : null}
 
