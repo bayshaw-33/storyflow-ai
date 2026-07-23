@@ -4052,15 +4052,64 @@ input:focus, textarea:focus, select:focus {
   }
 }
 /* ===== Song Workbench v2 两栏布局 ===== */
+.song-workbench-page.song-workbench-v2 {
+  background: #080B0C;
+  min-height: 100dvh;
+}
+.song-copyright-stack {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.song-copyright-stack h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #E8EDEC;
+}
 .song-workbench-v2 .song-title-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
+  min-height: 54px;
+  padding: 10px clamp(16px, 2vw, 24px);
+  background: #111718;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.song-workbench-v2 .song-title-bar h1 {
+.song-title-wrap {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.song-workbench-v2 .song-title-bar h1,
+.song-title-editable {
   margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #F1F4F3;
+  cursor: pointer;
+  line-height: 1.3;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+.song-title-editable:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.song-title-input {
+  font-size: 24px;
+  font-weight: 700;
+  color: #F1F4F3;
+  background: #0B1011;
+  border: 1px solid var(--accent, #2dd4bf);
+  border-radius: 6px;
+  padding: 2px 6px;
+  max-width: 40vw;
 }
 .song-toolbar {
   display: flex;
@@ -4073,10 +4122,24 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
+  min-height: 36px;
   font-size: 12px;
+  white-space: nowrap;
+}
+.song-autosave-status {
+  color: #8E999B;
+}
+.song-suno-link {
+  text-decoration: none;
+}
+.song-suno-link:hover {
+  text-decoration: none;
+}
+.song-mobile-toggle,
+.song-mobile-goto-results {
+  display: none;
 }
 .song-shell-notice {
-  max-width: 1720px;
   margin: 0 auto;
   padding: 8px 14px;
   font-size: 13px;
@@ -4085,12 +4148,12 @@ input:focus, textarea:focus, select:focus {
   color: var(--danger);
 }
 
-/* 两栏 shell：38% / 62% */
+/* 两栏 shell：38% / 62%，满屏不限制窄宽 */
 .song-shell-v2 {
   display: grid;
   grid-template-columns: 38fr 62fr;
-  gap: var(--space-4);
-  max-width: 1720px;
+  gap: 16px;
+  max-width: none;
   margin: 0 auto;
   padding: var(--space-3) clamp(16px, 2vw, 24px) var(--space-12);
   align-items: stretch;
@@ -4402,10 +4465,22 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* ===== 响应式 ===== */
-/* 中等宽度：保持两栏，左侧最小宽度 */
-@media (max-width: 1200px) {
+/* 笔记本（1024–1439px）：压缩边距/间距，保持两栏 */
+@media (max-width: 1439px) and (min-width: 1200px) {
   .song-shell-v2 {
-    grid-template-columns: minmax(340px, 38fr) minmax(0, 62fr);
+    gap: 12px;
+    padding: 10px clamp(12px, 1.5vw, 18px) var(--space-10);
+  }
+  .song-workbench-v2 .song-title-bar {
+    padding: 8px clamp(12px, 1.5vw, 18px);
+    min-height: 50px;
+  }
+}
+
+/* 中等宽度（1200px 以下）：保持两栏，左侧最小宽度 */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .song-shell-v2 {
+    grid-template-columns: minmax(340px, 40fr) minmax(0, 60fr);
   }
   .song-chat-panel {
     position: static;
@@ -4414,18 +4489,27 @@ input:focus, textarea:focus, select:focus {
   }
 }
 
-/* 小屏幕：单列，AI 对话在上，创作结果在下；歌词/翻译改 tabs */
-@media (max-width: 860px) {
+/* 小屏幕（<768px）：手机 / 平板竖屏，单列 + 双页面流程 */
+@media (max-width: 767px) {
   .song-shell-v2 {
     grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0 clamp(12px, 3vw, 16px) var(--space-10);
+  }
+  /* 双页面流程：仅显示当前视图 */
+  .song-mobile-active {
+    display: flex;
+  }
+  .song-mobile-hidden {
+    display: none !important;
   }
   .song-chat-panel {
     position: static;
     max-height: none;
-    min-height: 400px;
+    min-height: calc(100dvh - 160px);
   }
   .song-workbench-right {
-    min-height: 600px;
+    min-height: calc(100dvh - 160px);
   }
   .song-right-upper {
     flex: 1 1 auto;
@@ -4437,9 +4521,13 @@ input:focus, textarea:focus, select:focus {
   .song-splitter {
     display: none;
   }
-  /* 移动端显示 tabs，隐藏非当前 tab */
+  /* 移动端显示 tabs 与视图切换 */
   .song-mobile-tabs {
     display: flex;
+  }
+  .song-mobile-toggle,
+  .song-mobile-goto-results {
+    display: inline-flex;
   }
   .song-upper-grid {
     grid-template-columns: 1fr;
@@ -4455,8 +4543,14 @@ input:focus, textarea:focus, select:focus {
     justify-content: flex-start;
   }
   .song-tool-btn {
-    padding: 5px 10px;
+    padding: 6px 10px;
     font-size: 11px;
+    min-height: 40px;
+  }
+  .song-title-editable,
+  .song-title-input {
+    max-width: 70vw;
+    font-size: 20px;
   }
 }
 

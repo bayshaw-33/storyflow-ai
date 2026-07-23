@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, FileText, Globe, History, Languages, Loader2, RefreshCw, Save, Send, Settings, Sparkles, Upload, X } from "lucide-react";
+import { Copy, ExternalLink, FileText, Globe, History, Languages, Loader2, MoreHorizontal, Package, Save, Send, Sparkles, Upload, X } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -13,6 +13,7 @@ import type { CreativePackage } from "@/lib/universe/creative-package";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { byteLength, trimPromptBytes } from "@/lib/song/prompt";
 import { requestLyricsTranslation, type LyricsTranslationLanguage } from "@/lib/song/translation";
+import JSZip from "jszip";
 
 type SongProjectType =
   | "original_song"
@@ -552,7 +553,7 @@ export default function SongWorkbenchPage() {
   const splitterDragging = useRef(false);
   const rightContainerRef = useRef<HTMLDivElement | null>(null);
   // 抽屉：setup / reference / universe / history / null
-  const [drawerType, setDrawerType] = useState<null | "setup" | "reference" | "universe" | "history">(null);
+  const [drawerType, setDrawerType] = useState<null | "more" | "material" | "universe" | "history">(null);
   // 移动端歌词/翻译标签页
   const [mobileTab, setMobileTab] = useState<"lyrics" | "translation">("lyrics");
   // 歌词手动编辑后的"待更新"标记
@@ -561,6 +562,21 @@ export default function SongWorkbenchPage() {
   const [generationError, setGenerationError] = useState("");
   // 生成进度状态文案（明确进度，禁用重复提交）
   const [generationProgress, setGenerationProgress] = useState("");
+  // 自动保存状态："idle" | "saving" | "saved" | "failed"
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [autoSaveTime, setAutoSaveTime] = useState<string>("");
+  // 顶部标题内联编辑
+  const [editingTitle, setEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  // 素材与版权：作者 / 来源 / 授权类型 / 使用限制
+  const [materialAuthor, setMaterialAuthor] = useState("");
+  const [materialSource, setMaterialSource] = useState("");
+  const [materialLicense, setMaterialLicense] = useState("");
+  const [materialUsage, setMaterialUsage] = useState("");
+  // 移动端视图切换：chat | results（手机/平板竖屏双页面流程）
+  const [mobileView, setMobileView] = useState<"chat" | "results">("chat");
+  // 交付工作包导出状态
+  const [exportingPackage, setExportingPackage] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -1144,6 +1160,150 @@ export default function SongWorkbenchPage() {
     }
   }
 
+  // 自动保存草稿（debounced 4s）：替代手动"保存到工作台"按钮，状态显示在顶部
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveSkip = useRef(true);
+  useEffect(() => {
+    // 首次挂载 / 加载已有项目时跳过，避免覆盖刚读取的内容
+    if (autoSaveSkip.current) {
+      autoSaveSkip.current = false;
+      return;
+    }
+    // 空草稿不自动保存，避免创建无意义空项目
+    if (!form.title.trim() && !lyrics.trim() && !stylePrompt.trim()) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setAutoSaveState("saving");
+    autoSaveTimer.current = setTimeout(() => {
+      void (async () => {
+        try {
+          await saveSongProjectToList({ silent: true });
+          setAutoSaveState("saved");
+          setAutoSaveTime(new Date().toLocaleTimeString());
+        } catch {
+          setAutoSaveState("failed");
+        }
+      })();
+    }, 4000);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lyrics, stylePrompt, compositionPrompt, form.title, form.concept, form.genres.join(",")]);
+
+  // 交付工作包导出：客户端 JSZip 打包作品成果 / 创作留痕 / 来源与继承 / 权利证据 + manifest + checksums
+  async function exportDeliveryPackage() {
+    setExportingPackage(true);
+    try {
+      const title = form.title.trim() || (isZh ? "未命名歌曲" : "Untitled Song");
+      const now = new Date();
+      const stamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const zip = new JSZip();
+      const entries: Array<{ path: string; bytes: Uint8Array }> = [];
+      const encoder = new TextEncoder();
+      const addText = (path: string, content: string) => {
+        const bytes = encoder.encode(content);
+        zip.file(path, bytes);
+        entries.push({ path, bytes });
+      };
+
+      // 01-作品成果
+      addText("01-作品成果/歌词.txt", lyrics || (isZh ? "（暂无歌词）" : "(no lyrics)"));
+      addText("01-作品成果/翻译.txt", translatedLyrics || (isZh ? "（暂无翻译）" : "(no translation)"));
+      addText("01-作品成果/曲风提示词.txt", stylePrompt || (isZh ? "（暂无曲风提示词）" : "(no style prompt)"));
+
+      // 02-创作留痕
+      addText("02-创作留痕/AI对话记录.txt", chatMessages.map((m) => `[${m.role === "user" ? (isZh ? "我" : "Me") : "Kiikis AI"} ${m.createdAt}]\n${m.content}`).join("\n\n---\n\n") || (isZh ? "（暂无对话记录）" : "(no chat)"));
+      const timeline = versions.map((v) => `v${v.versionNumber} · ${v.changeType} · ${v.auditStatus} · ${new Date(v.createdAt).toISOString()}`).join("\n");
+      addText("02-创作留痕/版本历史.txt", timeline || (isZh ? "（暂无版本）" : "(no versions)"));
+      const report = [
+        isZh ? "创作过程报告" : "Creation Process Report",
+        `${isZh ? "标题" : "Title"}: ${title}`,
+        `${isZh ? "生成时间" : "Generated at"}: ${now.toISOString()}`,
+        `${isZh ? "歌词字数" : "Lyrics chars"}: ${lyrics.length}`,
+        `${isZh ? "曲风提示词字节" : "Style prompt bytes"}: ${byteLength(stylePrompt)}`,
+        `${isZh ? "审核状态" : "Audit status"}: ${audit?.status || (isZh ? "未审核" : "not reviewed")}`,
+      ].join("\n");
+      addText("02-创作留痕/创作过程报告.txt", report);
+
+      // 03-来源与继承
+      addText("03-来源与继承/Universe快照.txt", universeBundle ? `${universeBundle.universe.name}\n${summarizeUniverseBundle(universeBundle)}` : (isZh ? "未关联 Universe" : "No Universe linked"));
+      addText("03-来源与继承/来源项目摘要.txt", selectedSourceProject ? summarizeSourceProject(selectedSourceProject) : (isZh ? "无来源项目" : "No source project"));
+      const refList = uploadedReference
+        ? `${uploadedReference.name} (${uploadedReference.type}, ${uploadedReference.mode})`
+        : (isZh ? "无参考素材" : "No reference material");
+      addText("03-来源与继承/参考素材清单.txt", refList);
+
+      // 04-权利证据
+      addText("04-权利证据/创作者声明.txt", [
+        isZh ? "创作者声明" : "Creator Statement",
+        `${isZh ? "作品标题" : "Work title"}: ${title}`,
+        `${isZh ? "声明人" : "Declarant"}: ${session?.user?.email || (isZh ? "未登录用户" : "anonymous")}`,
+        `${isZh ? "声明时间" : "Declared at"}: ${now.toISOString()}`,
+        isZh ? "本声明记录创作过程与素材来源，不构成法律意义上的自动确权。" : "This statement records the creation process and material sources; it does not constitute automatic legal rights confirmation.",
+      ].join("\n"));
+      addText("04-权利证据/AI生成信息.txt", [
+        isZh ? "AI 生成信息" : "AI Generation Info",
+        `${isZh ? "输出模型" : "Output model"}: ${selectedModelProvider}`,
+        `${isZh ? "生成次数" : "Generations"}: ${versions.length}`,
+      ].join("\n"));
+      addText("04-权利证据/素材授权信息.txt", [
+        isZh ? "素材授权信息" : "Material License Info",
+        `${isZh ? "作者" : "Author"}: ${materialAuthor || (isZh ? "未填写" : "not provided")}`,
+        `${isZh ? "来源" : "Source"}: ${materialSource || (isZh ? "未填写" : "not provided")}`,
+        `${isZh ? "授权类型" : "License"}: ${materialLicense || (isZh ? "未填写" : "not provided")}`,
+        `${isZh ? "使用限制" : "Usage limits"}: ${materialUsage || (isZh ? "未填写" : "not provided")}`,
+      ].join("\n"));
+      const missing: string[] = [];
+      if (!lyrics.trim()) missing.push(isZh ? "歌词为空" : "lyrics empty");
+      if (!materialAuthor.trim()) missing.push(isZh ? "素材作者未填写" : "material author missing");
+      if (!materialLicense.trim()) missing.push(isZh ? "授权类型未填写" : "license missing");
+      if (!universeBundle) missing.push(isZh ? "未关联 Universe" : "no Universe linked");
+      const complete = missing.length === 0;
+      addText("04-权利证据/风险检查报告.txt", [
+        isZh ? "风险检查报告" : "Risk Check Report",
+        `${isZh ? "完整性" : "Completeness"}: ${complete ? (isZh ? "完整" : "complete") : (isZh ? "信息未完整" : "incomplete")}`,
+        ...(missing.length ? [`${isZh ? "缺失项" : "Missing"}: ${missing.join("; ")}`] : []),
+      ].join("\n"));
+      addText("04-权利证据/缺失权利信息清单.txt", missing.length ? missing.join("\n") : (isZh ? "无缺失" : "none"));
+
+      // manifest.json + checksums.sha256
+      const sha256 = async (bytes: Uint8Array) => {
+        const hash = await crypto.subtle.digest("SHA-256", bytes.buffer as ArrayBuffer);
+        return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      };
+      const checksums: string[] = [];
+      for (const entry of entries) {
+        checksums.push(`${await sha256(entry.bytes)}  ${entry.path}`);
+      }
+      addText("checksums.sha256", checksums.join("\n"));
+      const manifest = {
+        schemaVersion: "kiikis.song-delivery/1",
+        title,
+        exportedAt: now.toISOString(),
+        completeness: complete ? "complete" : "incomplete",
+        fileCount: entries.length,
+        exportedBy: session?.user?.email || "anonymous",
+        universeId: selectedUniverseId || null,
+        note: isZh ? "本工作包记录创作过程与来源，不构成法律意义上的自动确权。" : "This package records the creation process and sources; it does not constitute automatic legal rights confirmation.",
+      };
+      addText("manifest.json", JSON.stringify(manifest, null, 2));
+
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title}_${stamp}_交付工作包.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : (isZh ? "导出失败" : "Export failed"));
+    } finally {
+      setExportingPackage(false);
+    }
+  }
+
   function importUniverseBackground() {
     if (!universeBundle) {
       setUniverseStatus(locale === "zh-CN" ? "请先选择可用的 Universe。" : "Select an available Universe first.");
@@ -1391,31 +1551,78 @@ export default function SongWorkbenchPage() {
   return (
     <main className="cosmic-page song-workbench-page song-workbench-v2">
       <section className="cosmic-title-band song-title-bar">
-        <h1>{text.title}</h1>
+        {/* 歌曲标题：左上角，可直接点击编辑 */}
+        <div className="song-title-wrap">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              className="song-title-input"
+              value={form.title}
+              onChange={(event) => updateForm("title", event.target.value)}
+              onBlur={() => setEditingTitle(false)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === "Escape") setEditingTitle(false); }}
+              placeholder={isZh ? "歌曲标题" : "Song title"}
+              autoFocus
+            />
+          ) : (
+            <h1
+              className="song-title-editable"
+              onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0); }}
+              title={isZh ? "点击编辑标题" : "Click to edit title"}
+            >
+              {form.title.trim() || (isZh ? "未命名歌曲" : "Untitled Song")}
+            </h1>
+          )}
+        </div>
         <div className="song-toolbar">
-          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("setup")}>
-            <Settings size={15} />
-            {isZh ? "设置" : "Setup"}
+          {/* 移动端视图切换（手机/平板竖屏双页面流程） */}
+          <button
+            className="secondary-button song-tool-btn song-mobile-toggle"
+            type="button"
+            onClick={() => setMobileView(mobileView === "chat" ? "results" : "chat")}
+          >
+            {mobileView === "chat" ? (isZh ? "查看结果" : "Results") : (isZh ? "返回对话" : "Chat")}
           </button>
-          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("reference")}>
-            <Upload size={15} />
-            {isZh ? "参考素材" : "Reference"}
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("material")}>
+            <FileText size={15} />
+            {isZh ? "素材与版权" : "Material"}
           </button>
           <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("universe")}>
             <Globe size={15} />
-            Universe
+            {isZh ? `Universe${universeBundle ? " · 已关联" : ""}` : `Universe${universeBundle ? " · linked" : ""}`}
           </button>
           <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("history")}>
             <History size={15} />
-            {isZh ? "版本历史" : "History"}
+            {isZh ? "版本" : "Versions"}
           </button>
-          <button className="secondary-button song-tool-btn" type="button" onClick={() => void refreshSongWorkbench()} disabled={refreshing || generating || savingProject}>
-            <RefreshCw size={15} className={refreshing ? "spin" : ""} />
-            {locale === "zh-CN" ? "刷新" : "Refresh"}
+          {/* 自动保存状态：替代手动"保存到工作台"按钮 */}
+          <button
+            className="secondary-button song-tool-btn song-autosave-status"
+            type="button"
+            onClick={() => { if (autoSaveState === "failed") void saveSongProjectToList({ silent: true }).then(() => { setAutoSaveState("saved"); setAutoSaveTime(new Date().toLocaleTimeString()); }).catch(() => setAutoSaveState("failed")); }}
+            title={autoSaveState === "saved" && autoSaveTime ? (isZh ? `已自动保存 ${autoSaveTime}` : `Auto-saved ${autoSaveTime}`) : ""}
+          >
+            {autoSaveState === "saving" ? (
+              <><Loader2 className="spin" size={14} />{isZh ? "保存中" : "Saving"}</>
+            ) : autoSaveState === "saved" ? (
+              <>{isZh ? "已自动保存" : "Auto-saved"}</>
+            ) : autoSaveState === "failed" ? (
+              <>{isZh ? "保存失败 · 重试" : "Save failed · retry"}</>
+            ) : (
+              <>{isZh ? "自动保存" : "Auto-save"}</>
+            )}
           </button>
-          <button className="secondary-button song-tool-btn" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
-            <Save size={15} />
-            {savingProject ? text.saving : text.saveToProjects}
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => void exportDeliveryPackage()} disabled={exportingPackage}>
+            <Package size={15} />
+            {exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "交付工作包" : "Deliver")}
+          </button>
+          {/* Suno：纯超链接，不复制不填充 */}
+          <a className="secondary-button song-tool-btn song-suno-link" href="https://suno.com" target="_blank" rel="noopener noreferrer">
+            Suno <ExternalLink size={14} />
+          </a>
+          <button className="secondary-button song-tool-btn song-more-btn" type="button" onClick={() => setDrawerType("more")}>
+            <MoreHorizontal size={15} />
+            {isZh ? "更多" : "More"}
           </button>
         </div>
       </section>
@@ -1426,7 +1633,7 @@ export default function SongWorkbenchPage() {
       <section className="song-workbench-shell song-shell-v2" style={{ "--upper-pct": `${upperHeightPct}%` } as React.CSSProperties}>
         {/* 左侧 38%：AI 创作对话（只负责对话，不触发作品生成） */}
         <form
-          className="dashboard-panel song-chat-panel"
+          className={`dashboard-panel song-chat-panel ${mobileView === "chat" ? "song-mobile-active" : "song-mobile-hidden"}`}
           onSubmit={(event) => { event.preventDefault(); void sendChatMessage(); }}
         >
           <div className="dashboard-panel-head">
@@ -1463,12 +1670,16 @@ export default function SongWorkbenchPage() {
                 <Send size={15} />
                 {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
               </button>
+              {/* 移动端：AI 对话页提供"前往生成"进入结果页 */}
+              <button className="secondary-button song-mobile-goto-results" type="button" onClick={() => setMobileView("results")}>
+                {isZh ? "前往生成" : "Go to results"}
+              </button>
             </div>
           </div>
         </form>
 
         {/* 右侧 62%：创作结果（上下分割，可拖动） */}
-        <section className="song-workbench-right" ref={rightContainerRef}>
+        <section className={`song-workbench-right ${mobileView === "results" ? "song-mobile-active" : "song-mobile-hidden"}`} ref={rightContainerRef}>
           {/* 生成进度状态（明确进度，禁用重复提交） */}
           {generationProgress ? (
             <div className="song-right-status song-right-progress" role="status" aria-live="polite">
@@ -1582,14 +1793,14 @@ export default function SongWorkbenchPage() {
         </section>
       </section>
 
-      {/* 抽屉：低频功能（设置 / 参考素材 / Universe / 版本历史） */}
+      {/* 抽屉：低频功能（更多 / 素材与版权 / Universe / 版本） */}
       {drawerType ? (
         <div className="song-drawer-backdrop" onClick={() => setDrawerType(null)}>
           <div className="song-drawer" onClick={(event) => event.stopPropagation()}>
             <header className="song-drawer-head">
               <h2>
-                {drawerType === "setup" ? (isZh ? "设置" : "Setup")
-                  : drawerType === "reference" ? (isZh ? "参考素材" : "Reference")
+                {drawerType === "more" ? (isZh ? "更多设置" : "More")
+                  : drawerType === "material" ? (isZh ? "素材与版权" : "Material & Rights")
                   : drawerType === "universe" ? "Universe"
                   : (isZh ? "版本历史" : "History")}
               </h2>
@@ -1598,27 +1809,8 @@ export default function SongWorkbenchPage() {
               </button>
             </header>
             <div className="song-drawer-body">
-              {drawerType === "setup" ? (
+              {drawerType === "more" ? (
                 <div className="song-field-stack">
-                  <label>
-                    {text.titleField}
-                    <input
-                      value={form.title}
-                      onChange={(event) => updateForm("title", event.target.value)}
-                      placeholder="Monday Snooze / Midnight Confession / 夏天没有说再见"
-                    />
-                  </label>
-                  <label>
-                    {locale === "zh-CN" ? "关联故事 / 宇宙来源" : "Story / Universe source"}
-                    <select value={form.sourceProjectId} onChange={(event) => updateSourceProject(event.target.value)}>
-                      <option value="">{locale === "zh-CN" ? "不关联，创建独立歌曲" : "No source, standalone song"}</option>
-                      {sourceProjects.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.title || project.id}{project.universeId ? " · Universe" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <label>
                     {isZh ? "输出模型" : "Output model"}
                     <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
@@ -1641,10 +1833,11 @@ export default function SongWorkbenchPage() {
                       </p>
                     </div>
                   ) : null}
+                  <p className="subtle">{isZh ? "Universe 关联请在 Universe 入口管理，歌曲标题可直接点击顶部标题编辑。" : "Manage Universe links from the Universe entry; edit the song title by clicking the top title."}</p>
                 </div>
               ) : null}
 
-              {drawerType === "reference" ? (
+              {drawerType === "material" ? (
                 <div className="song-reference-panel">
                   <div className="song-tool-head">
                     <span>{isZh ? "参考素材" : "Reference material"}</span>
@@ -1671,6 +1864,26 @@ export default function SongWorkbenchPage() {
                   ) : (
                     <p>{isZh ? "支持 mp3、wav、doc、docx、txt。" : "Supports mp3, wav, doc, docx, and txt."}</p>
                   )}
+                  <div className="song-field-stack song-copyright-stack">
+                    <h3>{isZh ? "版权与来源信息" : "Rights & source info"}</h3>
+                    <label>
+                      {isZh ? "素材作者" : "Material author"}
+                      <input value={materialAuthor} onChange={(event) => setMaterialAuthor(event.target.value)} placeholder={isZh ? "原作者 / 表演者" : "Original author / performer"} />
+                    </label>
+                    <label>
+                      {isZh ? "素材来源" : "Material source"}
+                      <input value={materialSource} onChange={(event) => setMaterialSource(event.target.value)} placeholder={isZh ? "专辑 / 链接 / 出版物" : "Album / URL / publication"} />
+                    </label>
+                    <label>
+                      {isZh ? "授权类型" : "License type"}
+                      <input value={materialLicense} onChange={(event) => setMaterialLicense(event.target.value)} placeholder={isZh ? "如：原创 / CC-BY / 商业授权" : "e.g. Original / CC-BY / Commercial"} />
+                    </label>
+                    <label>
+                      {isZh ? "使用限制" : "Usage limits"}
+                      <input value={materialUsage} onChange={(event) => setMaterialUsage(event.target.value)} placeholder={isZh ? "如：仅限非商业 / 无限制" : "e.g. Non-commercial only / unrestricted"} />
+                    </label>
+                    <p className="subtle">{isZh ? "缺失信息会在交付工作包的风险检查中标记。" : "Missing info is flagged in the delivery package risk check."}</p>
+                  </div>
                 </div>
               ) : null}
 
