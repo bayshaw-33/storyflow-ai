@@ -34,6 +34,7 @@ export type TaskType =
   | "creation_plot_outline"
   | "creation_novel_unit"
   | "creation_screenplay_unit"
+  | "creation_episode_plan"
   | "creation_translate_unit"
   | "creation_localize_unit"
   | "viral_video_analysis"
@@ -145,6 +146,7 @@ export const taskNames: Record<TaskType, string> = {
   creation_plot_outline: "剧情及大纲",
   creation_novel_unit: "正文",
   creation_screenplay_unit: "正文",
+  creation_episode_plan: "分集规划",
   creation_translate_unit: "翻译",
   creation_localize_unit: "本土化及雷同查验",
   viral_video_analysis: "爆款结构分析",
@@ -711,6 +713,13 @@ const promptByTask: Record<TaskType, string> = {
     "The same mother model will later render as international_production, hollywood_spec, or asian_production; screenplayFormat selects preview only.",
     "Return only <CREATION_OUTPUT> JSON </CREATION_OUTPUT>. Fields: number, title, outline, content, screenplay.",
     "screenplay fields: id, episodeNo, title, logline, scenes[]. Each scene has id, sceneNo, interiorExterior (INT/EXT/INT/EXT), location, timeOfDay, characters[], blocks[]. Each block has id, type, character, text, translation.",
+  ].join("\n"),
+
+  creation_episode_plan: [
+    "任务：在《剧情及大纲》定稿后，生成本项目完整的分集规划，作为逐集生成剧本的前置依据。",
+    "依据已定稿的大纲结构拆分为若干集（options.unitNo 为目标集数，0 表示由你按大纲规模决定）。",
+    "每集必须包含：episodeNo、title、coreEvent（核心事件）、mainGoal（主角目标）、conflict（冲突）、sceneCount（场次估算）、sceneOutlines（本场梗概字符串数组，长度≈sceneCount）。",
+    "只输出 <CREATION_OUTPUT> JSON </CREATION_OUTPUT>，外层为对象：{ totalEpisodes, items: [...] }，不得输出解释文字。",
   ].join("\n"),
 
   creation_translate_unit: [

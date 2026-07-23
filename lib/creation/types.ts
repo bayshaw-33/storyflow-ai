@@ -1,10 +1,18 @@
 export type CreationMode = "novel" | "screenplay";
-export type CreationUnitStatus = "draft" | "reviewed" | "locked";
+
+/** PRD V1.0：所有创作内容只有草稿和定稿两种状态 */
+export type CreationStatus = "draft" | "finalized";
+
+/** 旧状态值兼容映射用 */
+export type CreationUnitStatus = "draft" | "reviewed" | "locked" | "finalized";
+
 export type ScreenplayFormat = "international_production" | "hollywood_spec" | "asian_production";
 
 export type CreationDocument = {
   content: string;
   updatedAt: string;
+  /** PRD V1.0：草稿 / 定稿 */
+  status?: CreationStatus;
 };
 
 export type CreationVersion = {
@@ -33,6 +41,8 @@ export type ScreenplayScene = {
   timeOfDay: string;
   characters: string[];
   blocks: ScreenplayBlock[];
+  /** PRD V1.0：场次草稿 / 定稿 */
+  status?: CreationStatus;
 };
 
 export type ScreenplayEpisode = {
@@ -41,6 +51,24 @@ export type ScreenplayEpisode = {
   title: string;
   logline: string;
   scenes: ScreenplayScene[];
+};
+
+/** PRD V1.0 §7.6：分集规划 */
+export type EpisodePlanItem = {
+  episodeNo: number;
+  title: string;
+  coreEvent: string;
+  mainGoal: string;
+  conflict: string;
+  sceneCount: number;
+  sceneOutlines: string[];
+};
+
+export type EpisodePlan = {
+  totalEpisodes: number;
+  items: EpisodePlanItem[];
+  status: CreationStatus;
+  updatedAt: string;
 };
 
 export type CreationUnit = {
@@ -72,6 +100,8 @@ export type CreationArc = {
 export type CreationTrack = {
   arcs: CreationArc[];
   units: CreationUnit[];
+  /** PRD V1.0 §7.6：剧本版分集规划 */
+  episodePlan?: EpisodePlan | null;
 };
 
 export type CreationWorkspaceV2 = {

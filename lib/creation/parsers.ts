@@ -4,6 +4,8 @@ import type {
   CreationUnit,
   CreationVersion,
   CreationWorkspaceV2,
+  EpisodePlan,
+  EpisodePlanItem,
   ScreenplayEpisode,
 } from "./types.ts";
 
@@ -108,6 +110,37 @@ export function parseBatchUnitOutput(output: string, mode: CreationMode): Parsed
     throw new Error("Malformed creation output: batch must contain at least one unit.");
   }
   return value.map((unit) => parseUnit(unit, mode));
+}
+
+/** PRD V1.0 §7.6：解析分集规划 AI 输出为 EpisodePlan */
+export function parseEpisodePlanOutput(output: string): EpisodePlan {
+  const value = parseMarkedJson(output);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Malformed episode plan output: expected an object.");
+  }
+  const source = value as Record<string, unknown>;
+  const rawItems = Array.isArray(source.items) ? source.items : [];
+  if (!rawItems.length) throw new Error("Malformed episode plan output: items is empty.");
+  const items: EpisodePlanItem[] = rawItems.map((raw, index) => {
+    const it = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    return {
+      episodeNo: Number(it.episodeNo) || index + 1,
+      title: typeof it.title === "string" ? it.title.trim() : `第 ${index + 1} 集`,
+      coreEvent: typeof it.coreEvent === "string" ? it.coreEvent.trim() : "",
+      mainGoal: typeof it.mainGoal === "string" ? it.mainGoal.trim() : "",
+      conflict: typeof it.conflict === "string" ? it.conflict.trim() : "",
+      sceneCount: Number(it.sceneCount) || 0,
+      sceneOutlines: Array.isArray(it.sceneOutlines)
+        ? it.sceneOutlines.filter((s): s is string => typeof s === "string")
+        : [],
+    };
+  });
+  return {
+    totalEpisodes: Number(source.totalEpisodes) || items.length,
+    items,
+    status: "draft",
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function applyUnitGeneration(

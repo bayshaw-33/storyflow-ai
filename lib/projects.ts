@@ -286,6 +286,7 @@ export const taskFieldMap: Record<TaskType, keyof DramaProject> = {
   creation_plot_outline: "novelBible",
   creation_novel_unit: "novelChapterDraft",
   creation_screenplay_unit: "chineseScript",
+  creation_episode_plan: "novelBible",
   creation_translate_unit: "translation",
   creation_localize_unit: "localization",
   viral_video_analysis: "idea",
@@ -1547,6 +1548,7 @@ const demoStepContent: Record<TaskType, string> = {
   creation_plot_outline: "# 剧情及大纲\n\n待生成。",
   creation_novel_unit: "# 第 1 章\n\n待生成。",
   creation_screenplay_unit: "# EP01\n\n待生成。",
+  creation_episode_plan: "# 分集规划\n\n待生成。",
   creation_translate_unit: "待翻译。",
   creation_localize_unit:
     "---LOCALIZED_CONTENT---\n待生成。\n---LOCALIZATION_CHANGES---\n待生成。\n---SIMILARITY_REPORT---\n待生成。",

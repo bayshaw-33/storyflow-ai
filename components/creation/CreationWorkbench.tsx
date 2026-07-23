@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import {
   ArrowLeft,
-  BookOpen,
   Check,
   Clapperboard,
   Download,
@@ -15,25 +14,38 @@ import {
   Lock,
   Palette,
   Plus,
-  Save,
   Send,
   Sparkles,
   Upload,
+  X,
+  PanelRight,
 } from "lucide-react";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import type { TaskType } from "@/lib/ai/prompts";
 import { buildDeliveryManifest } from "@/lib/creation/assembly";
 import { downloadDeliveryZip, downloadDocx, downloadMarkdown } from "@/lib/creation/downloads";
-import { applyUnitGeneration, parseArcStructure, parseBatchUnitOutput } from "@/lib/creation/parsers";
-import { buildTranslationSource, renderScreenplayEpisode } from "@/lib/creation/screenplay";
-import { applyUnitTranslation, createCreationWorkspace, normalizeCreationWorkspace } from "@/lib/creation/state";
+import { applyUnitGeneration, parseArcStructure, parseBatchUnitOutput, parseEpisodePlanOutput } from "@/lib/creation/parsers";
+import { buildTranslationSource } from "@/lib/creation/screenplay";
+import {
+  applyUnitTranslation,
+  canGenerateEpisodePlan,
+  createCreationWorkspace,
+  draftScene,
+  finalizeDocument,
+  finalizeEpisodePlan,
+  finalizeScene,
+  normalizeCreationWorkspace,
+  setEpisodePlan,
+  updateDocument,
+} from "@/lib/creation/state";
 import type {
-  CreationArc,
   CreationMode,
+  CreationStatus,
   CreationUnit,
   CreationWorkspaceV2,
   ScreenplayFormat,
+  ScreenplayScene,
 } from "@/lib/creation/types";
 import { buildCreativeHandoffPackage, writeCreativeHandoff } from "@/lib/creative-handoff";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -57,6 +69,8 @@ import {
 } from "@/lib/universe";
 
 type StageKey = "background" | "characters" | "outline" | "manuscript" | "translation" | "localization" | "export";
+/** PRD V1.0 §8：左侧目录主导航，决定中央编辑器展示内容 */
+type ViewKey = "background" | "characters" | "outline" | "episodePlan" | "unit" | "export";
 type MobilePanel = "chat" | "content";
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 type SourceFile = { id: string; name: string; text: string };
@@ -139,7 +153,7 @@ function syncLegacy(project: DramaProject, workspace: CreationWorkspaceV2): Dram
     pov: "",
     wordCount: unit.content.trim().split(/\s+/).filter(Boolean).length,
     continuityNotes: unit.continuityNotes,
-    status: unit.status,
+    status: unit.status === "finalized" ? "locked" : unit.status,
     createdAt: unit.createdAt,
     updatedAt: unit.updatedAt,
   }));
@@ -188,7 +202,6 @@ export function CreationWorkbench() {
   const isZh = locale === "zh-CN";
   const [project, setProject] = useState<DramaProject>(() => freshProject());
   const [session, setSession] = useState<Session | null>(null);
-  const [stage, setStage] = useState<StageKey>("background");
   const [activeUnitId, setActiveUnitId] = useState("");
   const [activeArcId, setActiveArcId] = useState("");
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("chat");
@@ -207,6 +220,13 @@ export function CreationWorkbench() {
   const sourceInput = useRef<HTMLInputElement>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollMemory = useRef<Record<string, number>>({});
+
+  // PRD V1.0 §8：左侧目录主导航 + AI 面板默认收起
+  const [view, setView] = useState<ViewKey>("background");
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [unitSubMode, setUnitSubMode] = useState<"manuscript" | "translation" | "localization">("manuscript");
 
   const workspace = project.creationWorkspace || createCreationWorkspace(project);
   const mode = workspace.settings.activeMode;
@@ -214,6 +234,12 @@ export function CreationWorkbench() {
   const activeUnit = track.units.find((unit) => unit.id === activeUnitId) || track.units[0] || null;
   const activeArc = track.arcs.find((arc) => arc.id === activeArcId) || track.arcs[0] || null;
   const deliveryItems = useMemo(() => buildDeliveryManifest({ title: project.title }, workspace), [project.title, workspace]);
+
+  // PRD V1.0 §7.3：创作基座严格顺序 — 每步定稿后才能进入下一步
+  const bgFinalized = workspace.documents.backgroundWorld.status === "finalized";
+  const charFinalized = workspace.documents.characterBible.status === "finalized";
+  const outlineFinalized = workspace.documents.plotOutline.status === "finalized";
+  const planFinalized = track.episodePlan?.status === "finalized";
 
   useEffect(() => {
     setMessages((current) => current.map((item) => item.id === "welcome" ? message("assistant", welcome(isZh), "welcome") : item));
@@ -286,6 +312,26 @@ export function CreationWorkbench() {
   useEffect(() => {
     if (track.arcs.length && !track.arcs.some((arc) => arc.id === activeArcId)) setActiveArcId(track.arcs[0].id);
   }, [activeArcId, track.arcs]);
+
+  // PRD V1.0 §8.7：按集自动保存（debounced 1.2s），切换集恢复滚动位置
+  const skipAutoSave = useRef(true);
+  useEffect(() => {
+    if (skipAutoSave.current) { skipAutoSave.current = false; return; }
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      void saveProject(projectRef.current).catch(() => undefined);
+    }, 1200);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
+  // 切换集时恢复滚动位置
+  useEffect(() => {
+    const key = `unit-${activeUnitId}`;
+    const center = document.querySelector(".creation-center-scroll");
+    if (center && scrollMemory.current[key] != null) center.scrollTop = scrollMemory.current[key];
+    return () => { if (center) scrollMemory.current[key] = center.scrollTop; };
+  }, [activeUnitId, view]);
 
   function commitWorkspace(updater: (current: CreationWorkspaceV2) => CreationWorkspaceV2) {
     const currentProject = projectRef.current;
@@ -365,25 +411,111 @@ export function CreationWorkbench() {
     setStatus(isZh ? "已同步大章与章/集结构。" : "Arc and unit structure synchronized.");
   }
 
+  // PRD V1.0 §7.3：创作基座定稿
+  function finalizeDoc(docKey: keyof CreationWorkspaceV2["documents"]) {
+    const next = commitWorkspace((current) => finalizeDocument(current, docKey));
+    void saveProject(next);
+    setStatus(isZh ? "已定稿。" : "Finalized.");
+  }
+
+  // PRD V1.0 §7.4：修改创作文档（含上游修改降级）
+  function editDoc(docKey: keyof CreationWorkspaceV2["documents"], content: string) {
+    updateWorkspace((current) => updateDocument(current, docKey, content));
+  }
+
+  // PRD V1.0 §7.6：生成分集规划
+  async function generateEpisodePlan() {
+    if (busy || !canGenerateEpisodePlan(workspace)) return;
+    setBusy(true);
+    setError("");
+    setStatus(isZh ? "正在生成分集规划…" : "Generating episode plan…");
+    try {
+      const output = await callAI("creation_episode_plan", chatInput.trim() || contextText());
+      if (!output.trim()) throw new Error(isZh ? "AI 没有返回分集规划。" : "AI returned no episode plan.");
+      const plan = parseEpisodePlanOutput(output);
+      const next = commitWorkspace((current) => setEpisodePlan(current, mode, plan));
+      await saveProject(next);
+      setMessages((current) => [...current, message("assistant", isZh ? `已生成分集规划，共 ${plan.items.length} 集。确认后请定稿。` : `Generated episode plan with ${plan.items.length} episodes.`)]);
+      setStatus(isZh ? "分集规划已生成。" : "Episode plan generated.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Episode plan generation failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // PRD V1.0 §7.6：定稿分集规划
+  function finalizePlan() {
+    if (!track.episodePlan) return;
+    const next = commitWorkspace((current) => finalizeEpisodePlan(current, mode));
+    void saveProject(next);
+    setStatus(isZh ? "分集规划已定稿，可逐集生成剧本。" : "Episode plan finalized.");
+  }
+
+  // PRD V1.0 §7.8：逐场定稿 / 降级
+  function toggleSceneFinalized(sceneId: string) {
+    if (!activeUnit?.screenplay) return;
+    const scene = activeUnit.screenplay.scenes.find((sc) => sc.id === sceneId);
+    if (!scene) return;
+    const next = commitWorkspace((current) =>
+      scene.status === "finalized"
+        ? draftScene(current, mode, activeUnit.id, sceneId)
+        : finalizeScene(current, mode, activeUnit.id, sceneId),
+    );
+    void saveProject(next);
+  }
+
+  // PRD V1.0 §9：修改场次头信息（触发降级）
+  function updateSceneHeader(sceneId: string, patch: Partial<ScreenplayScene>) {
+    if (!activeUnit?.screenplay) return;
+    commitWorkspace((current) => {
+      const tr = current[mode];
+      const units = tr.units.map((unit) => {
+        if (unit.id !== activeUnit.id || !unit.screenplay) return unit;
+        const wasFinalized = unit.screenplay.scenes.find((sc) => sc.id === sceneId)?.status === "finalized";
+        const scenes = unit.screenplay.scenes.map((sc) =>
+          sc.id === sceneId ? { ...sc, ...patch, status: (wasFinalized ? "draft" : sc.status) as CreationStatus } : sc,
+        );
+        return { ...unit, status: "draft" as const, screenplay: { ...unit.screenplay, scenes }, updatedAt: new Date().toISOString() };
+      });
+      return { ...current, [mode]: { ...tr, units }, updatedAt: new Date().toISOString() };
+    });
+  }
+
   function stageTask(): TaskType | null {
-    if (stage === "manuscript") return mode === "novel" ? "creation_novel_unit" : "creation_screenplay_unit";
-    return STAGES.find((item) => item.key === stage)?.task || null;
+    if (view === "background") return "creation_background_world";
+    if (view === "characters") return "creation_character_bible";
+    if (view === "outline") return "creation_plot_outline";
+    if (view === "episodePlan") return "creation_episode_plan";
+    if (view === "unit") {
+      if (unitSubMode === "translation") return "creation_translate_unit";
+      if (unitSubMode === "localization") return "creation_localize_unit";
+      return mode === "novel" ? "creation_novel_unit" : "creation_screenplay_unit";
+    }
+    return null;
   }
 
   function contextText() {
     const previous = track.units
-      .filter((unit) => unit.status === "locked" && (!activeUnit || unit.number < activeUnit.number))
+      .filter((unit) => unit.status === "finalized" && (!activeUnit || unit.number < activeUnit.number))
       .map((unit) => `#${unit.number} ${unit.title}\n${unit.continuityNotes || unit.outline}`)
       .join("\n\n");
+    const stageLabel = view === "background" ? "背景及世界观"
+      : view === "characters" ? "角色圣经"
+      : view === "outline" ? "剧情及大纲"
+      : view === "episodePlan" ? "分集规划"
+      : view === "unit" ? (unitSubMode === "translation" ? "翻译" : unitSubMode === "localization" ? "本土化及雷同查验" : "正文")
+      : "导出";
     return [
-      `当前阶段：${STAGES.find((item) => item.key === stage)?.zh}`,
+      `当前阶段：${stageLabel}`,
       `当前模式：${mode}`,
       `背景及世界观：\n${workspace.documents.backgroundWorld.content}`,
       `角色圣经：\n${workspace.documents.characterBible.content}`,
       `剧情及大纲：\n${workspace.documents.plotOutline.content}`,
+      track.episodePlan ? `分集规划：\n${track.episodePlan.items.map((it) => `第${it.episodeNo}集 ${it.title}：${it.coreEvent}`).join("\n")}` : "",
       activeArc ? `当前大章：${activeArc.title}\n${activeArc.outline}` : "",
       activeUnit ? `当前章/集：${activeUnit.number} ${activeUnit.title}\n${activeUnit.outline}\n${activeUnit.continuityNotes}` : "",
-      previous ? `前序锁定单元：\n${previous}` : "",
+      previous ? `前序定稿单元：\n${previous}` : "",
       project.novelDevelopmentNotes ? `创作沟通记录：\n${project.novelDevelopmentNotes}` : "",
       sourceFiles.map((file) => `资料 ${file.name}：\n${file.text}`).join("\n\n"),
     ].filter(Boolean).join("\n\n");
@@ -480,13 +612,16 @@ export function CreationWorkbench() {
 
   async function generateStage() {
     const taskType = stageTask();
-    if (!taskType || stage === "export" || busy) return;
-    if (stage === "manuscript" && activeUnit?.status === "locked") {
-      setError(isZh ? "当前章/集已锁定，解锁后才能更新。" : "The current unit is locked.");
-      return;
+    if (!taskType || view === "export" || busy) return;
+    if (view === "episodePlan") return generateEpisodePlan();
+    const isUnitManuscript = view === "unit" && unitSubMode === "manuscript";
+    const isUnitTranslation = view === "unit" && unitSubMode === "translation";
+    const isUnitLocalization = view === "unit" && unitSubMode === "localization";
+    if (isUnitManuscript && activeUnit?.status === "finalized") {
+      setError(isZh ? "当前章/集已定稿，修改后会自动降级为草稿。" : "The current unit is finalized.");
     }
     const translationSource = activeUnit ? buildTranslationSource(workspace, mode, activeUnit) : "";
-    if (stage === "translation") {
+    if (isUnitTranslation) {
       const sourceLanguage = mode === "screenplay" ? workspace.settings.screenplayLanguage : workspace.settings.sourceLanguage;
       if (!workspace.settings.translationLanguage) {
         setError(isZh ? "请先选择翻译语言；如不需要翻译，可直接跳过本阶段。" : "Select a translation language, or skip this optional stage.");
@@ -505,22 +640,22 @@ export function CreationWorkbench() {
     setError("");
     setStatus(isZh ? "正在生成当前阶段…" : "Generating the current stage…");
     try {
-      const input = stage === "translation"
+      const input = isUnitTranslation
         ? translationSource
-        : stage === "localization"
+        : isUnitLocalization
           ? activeUnit?.translation || translationSource
           : chatInput.trim() || project.idea || contextText();
       const output = await callAI(taskType, input);
       if (!output.trim()) throw new Error(isZh ? "AI 没有返回可保存的内容，当前版本未覆盖。" : "AI returned no savable content; the current version was preserved.");
       const nextProject = commitWorkspace((currentWorkspace) => {
-        if (stage === "background" || stage === "characters" || stage === "outline") {
-          const key = stage === "background" ? "backgroundWorld" : stage === "characters" ? "characterBible" : "plotOutline";
+        if (view === "background" || view === "characters" || view === "outline") {
+          const key = view === "background" ? "backgroundWorld" : view === "characters" ? "characterBible" : "plotOutline";
           return {
             ...currentWorkspace,
-            documents: { ...currentWorkspace.documents, [key]: { content: output, updatedAt: new Date().toISOString() } },
+            documents: { ...currentWorkspace.documents, [key]: { content: output, updatedAt: new Date().toISOString(), status: "draft" as CreationStatus } },
           };
         }
-        if (stage === "manuscript" && activeUnit) {
+        if (isUnitManuscript && activeUnit) {
           if (workspace.settings.generationScope === "arc" && activeArc) {
             const parsed = parseBatchUnitOutput(output, mode);
             return parsed.reduce((batchWorkspace, unit, index) => {
@@ -535,10 +670,10 @@ export function CreationWorkbench() {
             model: "routed", instruction: chatInput, scope: "unit",
           });
         }
-        if (stage === "translation" && activeUnit) {
+        if (isUnitTranslation && activeUnit) {
           return applyUnitTranslation(currentWorkspace, mode, activeUnit.id, output);
         }
-        if (stage === "localization" && activeUnit) {
+        if (isUnitLocalization && activeUnit) {
           const localized = parseLocalization(output);
           if (!localized.localizedContent || !localized.localizationChanges || !localized.similarityReport) throw new Error(isZh ? "AI 返回缺少本土化三段内容，当前版本未覆盖。" : "Localization output is incomplete; the current version was preserved.");
           const currentTrack = currentWorkspace[mode];
@@ -555,7 +690,7 @@ export function CreationWorkbench() {
         return currentWorkspace;
       });
       await saveProject(nextProject);
-      setMessages((current) => [...current, message("assistant", isZh ? `已更新：${STAGES.find((item) => item.key === stage)?.zh}${activeUnit ? `，第 ${activeUnit.number} ${mode === "novel" ? "章" : "集"}` : ""}。` : `Updated ${STAGES.find((item) => item.key === stage)?.en}${activeUnit ? `, unit ${activeUnit.number}` : ""}.`)]);
+      setMessages((current) => [...current, message("assistant", isZh ? `已更新${activeUnit ? `，第 ${activeUnit.number} ${mode === "novel" ? "章" : "集"}` : ""}。` : `Updated${activeUnit ? `, unit ${activeUnit.number}` : ""}.`)]);
       setStatus(isZh ? "生成完成并已保存。" : "Generated and saved.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Generation failed");
@@ -677,33 +812,27 @@ export function CreationWorkbench() {
   }
 
   function editorValue() {
-    if (stage === "background") return workspace.documents.backgroundWorld.content;
-    if (stage === "characters") return workspace.documents.characterBible.content;
-    if (stage === "outline") return workspace.documents.plotOutline.content;
+    if (view === "background") return workspace.documents.backgroundWorld.content;
+    if (view === "characters") return workspace.documents.characterBible.content;
+    if (view === "outline") return workspace.documents.plotOutline.content;
     if (!activeUnit) return "";
-    if (stage === "translation") return activeUnit.translation;
-    if (stage === "localization") {
+    if (unitSubMode === "translation") return activeUnit.translation;
+    if (unitSubMode === "localization") {
       if (localizationView === "changes") return activeUnit.localizationChanges;
       if (localizationView === "similarity") return activeUnit.similarityReport;
       return activeUnit.localizedContent;
-    }
-    if (mode === "screenplay" && activeUnit.screenplay) {
-      return renderScreenplayEpisode(activeUnit.screenplay, workspace.settings.screenplayFormat, {
-        screenplayLanguage: workspace.settings.screenplayLanguage,
-        dialogueLanguage: workspace.settings.dialogueLanguage,
-      });
     }
     return activeUnit.content;
   }
 
   function editValue(value: string) {
-    if (stage === "background" || stage === "characters" || stage === "outline") {
-      const key = stage === "background" ? "backgroundWorld" : stage === "characters" ? "characterBible" : "plotOutline";
-      updateWorkspace((current) => ({ ...current, documents: { ...current.documents, [key]: { content: value, updatedAt: new Date().toISOString() } } }));
+    if (view === "background" || view === "characters" || view === "outline") {
+      const key = view === "background" ? "backgroundWorld" : view === "characters" ? "characterBible" : "plotOutline";
+      editDoc(key, value);
       return;
     }
-    if (stage === "translation") return updateUnit({ translation: value });
-    if (stage === "localization") {
+    if (unitSubMode === "translation") return updateUnit({ translation: value });
+    if (unitSubMode === "localization") {
       if (localizationView === "changes") return updateUnit({ localizationChanges: value });
       if (localizationView === "similarity") return updateUnit({ similarityReport: value });
       return updateUnit({ localizedContent: value });
@@ -711,8 +840,28 @@ export function CreationWorkbench() {
     updateUnit({ content: value });
   }
 
+  /** PRD V1.0 §9：单场渲染（连续编辑器内只读预览） */
+  function renderSceneBlocks(scene: ScreenplayScene): string {
+    return scene.blocks.map((block) => {
+      if (block.type === "action" || block.type === "note") return block.text;
+      if (block.type === "transition") return block.text.toUpperCase();
+      if (block.type === "parenthetical") return `(${block.text})`;
+      if (block.type === "dialogue") {
+        const paren = block.character ? `${block.character}${block.translation ? ` / ${block.translation}` : ""}` : "";
+        return paren ? `${paren}\n${block.text}` : block.text;
+      }
+      return block.text;
+    }).filter(Boolean).join("\n\n");
+  }
+
+  const docView = view === "background" || view === "characters" || view === "outline";
+  const docMeta = view === "background" ? { key: "backgroundWorld" as const, zh: "背景及世界观", finalized: bgFinalized }
+    : view === "characters" ? { key: "characterBible" as const, zh: "角色圣经", finalized: charFinalized }
+    : view === "outline" ? { key: "plotOutline" as const, zh: "剧情及大纲", finalized: outlineFinalized }
+    : null;
+
   return (
-    <main className="cosmic-page novel-workbench-page creation-v2-page">
+    <main className="cosmic-page novel-workbench-page creation-v2-page creation-v3-page">
       <header className="novel-topbar">
         <div className="novel-topbar-left">
           <button className="icon-button" type="button" onClick={() => router.push("/dashboard")} title={isZh ? "返回工作台" : "Back"}><ArrowLeft size={18} /></button>
@@ -722,7 +871,11 @@ export function CreationWorkbench() {
           </div>
         </div>
         <div className="novel-topbar-actions">
-          <button className="secondary-button" type="button" onClick={() => void saveProject()}><Save size={16} />{isZh ? "保存" : "Save"}</button>
+          <div className="creation-segmented" aria-label={isZh ? "正文类型" : "Content mode"}>
+            <button className={mode === "novel" ? "active" : ""} type="button" onClick={() => setMode("novel")}>{isZh ? "小说" : "Novel"}</button>
+            <button className={mode === "screenplay" ? "active" : ""} type="button" onClick={() => setMode("screenplay")}>{isZh ? "剧本" : "Screenplay"}</button>
+          </div>
+          <button className={`icon-button ${aiPanelOpen ? "active" : ""}`} type="button" onClick={() => setAiPanelOpen((v) => !v)} title={isZh ? "AI 面板" : "AI panel"}><PanelRight size={18} /></button>
           {!session ? <button className="primary-button" type="button" onClick={() => setAuthOpen(true)}>{isZh ? "登录使用 AI" : "Sign in for AI"}</button> : null}
         </div>
       </header>
@@ -732,96 +885,263 @@ export function CreationWorkbench() {
         <button className={mobilePanel === "content" ? "active" : ""} type="button" onClick={() => setMobilePanel("content")}>{isZh ? "文档" : "Document"}</button>
       </nav>
 
-      <section className="novel-workbench-shell creation-v2-shell">
-        {error || status || busy ? <div className={error ? "notice error" : busy ? "notice warning" : "notice success"}>{error || (busy ? (isZh ? "处理中，请勿关闭页面…" : "Working…") : status)}</div> : null}
+      {error || status || busy ? <div className={`creation-notice ${error ? "error" : busy ? "warning" : "success"}`}>{error || (busy ? (isZh ? "处理中，请勿关闭页面…" : "Working…") : status)}</div> : null}
 
-        <section className={`dashboard-panel novel-editor-panel novel-chat-panel creation-chat-panel ${mobilePanel === "chat" ? "is-mobile-active" : ""}`}>
-          <div className="dashboard-panel-head">
-            <div><span>KIiKIS AI</span><h2>{isZh ? "和 KK 一起创作" : "Create with KK"}</h2></div>
-            <span className="novel-chat-stage-pill">{String(STAGES.findIndex((item) => item.key === stage) + 1).padStart(2, "0")} · {isZh ? STAGES.find((item) => item.key === stage)?.zh : STAGES.find((item) => item.key === stage)?.en}</span>
+      <section className="creation-workbench-body">
+        {/* 左侧集场目录 */}
+        <aside className={`creation-sidebar ${mobilePanel === "content" ? "is-mobile-active" : ""}`}>
+          <div className="creation-sidebar-group">
+            <h3>{isZh ? "创作基座" : "Foundation"}</h3>
+            <button className={`creation-sidebar-item ${view === "background" ? "active" : ""}`} type="button" onClick={() => setView("background")}>
+              <span className="creation-sidebar-label">{isZh ? "背景及世界观" : "Background & World"}</span>
+              <span className={`creation-status-dot ${bgFinalized ? "finalized" : "draft"}`} title={bgFinalized ? (isZh ? "已定稿" : "Finalized") : (isZh ? "草稿" : "Draft")} />
+            </button>
+            <button className={`creation-sidebar-item ${view === "characters" ? "active" : ""} ${!bgFinalized ? "disabled" : ""}`} type="button" disabled={!bgFinalized} onClick={() => bgFinalized && setView("characters")}>
+              <span className="creation-sidebar-label">{isZh ? "角色圣经" : "Character Bible"}</span>
+              <span className={`creation-status-dot ${charFinalized ? "finalized" : "draft"}`} />
+            </button>
+            <button className={`creation-sidebar-item ${view === "outline" ? "active" : ""} ${!charFinalized ? "disabled" : ""}`} type="button" disabled={!charFinalized} onClick={() => charFinalized && setView("outline")}>
+              <span className="creation-sidebar-label">{isZh ? "剧情及大纲" : "Plot & Outline"}</span>
+              <span className={`creation-status-dot ${outlineFinalized ? "finalized" : "draft"}`} />
+            </button>
+            {mode === "screenplay" ? (
+              <button className={`creation-sidebar-item ${view === "episodePlan" ? "active" : ""} ${!outlineFinalized ? "disabled" : ""}`} type="button" disabled={!outlineFinalized} onClick={() => outlineFinalized && setView("episodePlan")}>
+                <span className="creation-sidebar-label">{isZh ? "分集规划" : "Episode Plan"}</span>
+                <span className={`creation-status-dot ${planFinalized ? "finalized" : track.episodePlan ? "draft" : "empty"}`} />
+              </button>
+            ) : null}
+            {view === "outline" && track.arcs.length ? (
+              <div className="creation-sidebar-sub">
+                <button className="secondary-button creation-sidebar-sync" type="button" onClick={syncOutlineStructure}><Check size={14} />{isZh ? "同步结构到正文" : "Sync structure"}</button>
+              </div>
+            ) : null}
           </div>
 
-          <details className="creation-project-settings">
-            <summary>{isZh ? "项目与语言设定" : "Project & language settings"}</summary>
-            <label>{isZh ? "故事想法" : "Story idea"}<textarea value={project.idea} onChange={(event) => setProject((current) => ({ ...current, idea: event.target.value }))} /></label>
-            <label>{isZh ? "目标市场（待确认可留空）" : "Target market (optional)"}<input value={workspace.settings.targetMarket} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, targetMarket: event.target.value } }))} /></label>
-            <label>{isZh ? "题材（待确认可留空）" : "Genre (optional)"}<input value={workspace.settings.genre} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, genre: event.target.value } }))} /></label>
-            <label>{isZh ? "作品主要语言" : "Primary work language"}<select value={workspace.settings.sourceLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, sourceLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label>
-          </details>
-
-          <div className="novel-chat-thread" aria-live="polite">
-            {messages.map((item) => <article className={`novel-chat-message ${item.role}`} key={item.id}><span>{item.role === "assistant" ? "Kiikis AI" : (isZh ? "我" : "Me")}</span><p>{item.content}</p></article>)}
+          <div className="creation-sidebar-group creation-sidebar-units">
+            <h3>
+              <span>{isZh ? "正文" : "Manuscript"}</span>
+              <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? "新增章/集" : "Add unit"} disabled={mode === "screenplay" && !planFinalized}><Plus size={14} /></button>
+            </h3>
+            {mode === "screenplay" && !planFinalized ? <p className="creation-sidebar-hint">{isZh ? "分集规划定稿后可逐集生成剧本。" : "Finalize episode plan first."}</p> : null}
+            {track.units.map((unit) => (
+              <button key={unit.id} className={`creation-sidebar-item ${view === "unit" && activeUnitId === unit.id ? "active" : ""}`} type="button" onClick={() => { setActiveUnitId(unit.id); setView("unit"); setUnitSubMode("manuscript"); }}>
+                <span className="creation-sidebar-label">{mode === "novel" ? (isZh ? `第 ${unit.number} 章` : `Ch.${unit.number}`) : (isZh ? `第 ${unit.number} 集` : `Ep.${unit.number}`)} · {unit.title}</span>
+                <span className={`creation-status-dot ${unit.status === "finalized" ? "finalized" : "draft"}`} />
+              </button>
+            ))}
           </div>
 
-          <div className="novel-source-bar">
-            <button className="secondary-button" type="button" disabled={uploading} onClick={() => sourceInput.current?.click()}><Upload size={16} />{uploading ? (isZh ? "读取中" : "Reading") : (isZh ? "上传创作资料" : "Upload sources")}</button>
-            <div className="novel-source-files">{sourceFiles.map((file) => <span key={file.id}><FileText size={13} />{file.name}</span>)}</div>
-            <input hidden multiple ref={sourceInput} type="file" accept=".txt,.md,.doc,.docx,.html,.csv" onChange={uploadSources} />
+          <div className="creation-sidebar-group creation-sidebar-foot">
+            <button className={`creation-sidebar-item ${view === "export" ? "active" : ""}`} type="button" onClick={() => setView("export")}>
+              <FileArchive size={15} /><span className="creation-sidebar-label">{isZh ? "导出交付" : "Export"}</span>
+            </button>
           </div>
+        </aside>
 
-          <div className="novel-chat-composer">
-            <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void sendChat(); } }} placeholder={isZh ? "输入想法、修改意见或继续追问。⌘/Ctrl + Enter 发送。" : "Share ideas, revisions, or questions. Cmd/Ctrl + Enter to send."} />
-            <div className="novel-chat-actions">
-              <button className="secondary-button" type="button" disabled={!chatInput.trim() || busy} onClick={() => void sendChat()}><Send size={16} />{isZh ? "发送" : "Send"}</button>
-              {stage !== "export" ? <button className="primary-button" type="button" disabled={busy} onClick={() => void generateStage()}><Sparkles size={16} />{isZh ? "生成/更新当前阶段" : "Generate active stage"}</button> : null}
+        {/* 中央整集连续编辑器 */}
+        <section className={`creation-center ${mobilePanel === "content" ? "is-mobile-active" : ""}`}>
+          <header className="creation-center-head">
+            <div className="creation-center-title">
+              {docView && docMeta ? (
+                <>
+                  <h2>{docMeta.zh}</h2>
+                  <span className={`creation-status-pill ${docMeta.finalized ? "finalized" : "draft"}`}>{docMeta.finalized ? (isZh ? "已定稿" : "Finalized") : (isZh ? "草稿" : "Draft")}</span>
+                </>
+              ) : view === "episodePlan" ? (
+                <>
+                  <h2>{isZh ? "分集规划" : "Episode Plan"}</h2>
+                  <span className={`creation-status-pill ${planFinalized ? "finalized" : track.episodePlan ? "draft" : "empty"}`}>{planFinalized ? (isZh ? "已定稿" : "Finalized") : track.episodePlan ? (isZh ? "草稿" : "Draft") : (isZh ? "未生成" : "Not generated")}</span>
+                </>
+              ) : view === "unit" && activeUnit ? (
+                <>
+                  <h2>{mode === "novel" ? (isZh ? `第 ${activeUnit.number} 章` : `Chapter ${activeUnit.number}`) : (isZh ? `第 ${activeUnit.number} 集` : `Episode ${activeUnit.number}`)} · {activeUnit.title}</h2>
+                  <span className={`creation-status-pill ${activeUnit.status === "finalized" ? "finalized" : "draft"}`}>{activeUnit.status === "finalized" ? (isZh ? "已定稿" : "Finalized") : (isZh ? "草稿" : "Draft")}</span>
+                </>
+              ) : view === "export" ? (
+                <h2>{isZh ? "导出交付" : "Export"}</h2>
+              ) : <h2>{isZh ? "正文" : "Manuscript"}</h2>}
             </div>
+            <div className="creation-center-actions">
+              {docView && docMeta ? (
+                <button className="primary-button" type="button" onClick={() => finalizeDoc(docMeta.key)} disabled={docMeta.finalized}>
+                  <Check size={15} />{docMeta.finalized ? (isZh ? "已定稿" : "Finalized") : (isZh ? "定稿" : "Finalize")}
+                </button>
+              ) : null}
+              {view === "episodePlan" && track.episodePlan && !planFinalized ? (
+                <button className="primary-button" type="button" onClick={finalizePlan}><Check size={15} />{isZh ? "定稿分集规划" : "Finalize plan"}</button>
+              ) : null}
+              {view === "unit" && activeUnit ? (
+                <button className="secondary-button" type="button" onClick={() => void openDownstream("production")} title={isZh ? "进入分镜制作" : "Storyboard"}><Clapperboard size={15} />{isZh ? "进入制作" : "Produce"}</button>
+              ) : null}
+              <button className="secondary-button" type="button" disabled={busy || view === "export"} onClick={() => { setAiPanelOpen(true); }}><Sparkles size={15} />{isZh ? "AI 生成" : "Generate"}</button>
+            </div>
+          </header>
+
+          <div className="creation-center-scroll">
+            {/* 创作基座文档编辑器 */}
+            {docView ? (
+              <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={editorValue()} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "在此编辑 Markdown 内容。定稿后下游将锁定，修改会自动降级。" : "Edit Markdown here. Finalizing locks downstream; edits downgrade automatically."} />
+            ) : null}
+
+            {/* 分集规划 */}
+            {view === "episodePlan" ? (
+              <div className="creation-plan-panel">
+                {!track.episodePlan ? (
+                  <div className="creation-plan-empty">
+                    <p>{isZh ? "大纲定稿后，点击右侧 AI 生成生成分集规划。" : "Finalize the outline, then use AI Generate to create the episode plan."}</p>
+                    <button className="primary-button" type="button" disabled={busy || !canGenerateEpisodePlan(workspace)} onClick={() => void generateEpisodePlan()}><Sparkles size={15} />{isZh ? "生成分集规划" : "Generate episode plan"}</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="creation-plan-meta">{isZh ? `共 ${track.episodePlan.totalEpisodes} 集 · ${track.episodePlan.items.length} 条规划` : `${track.episodePlan.totalEpisodes} episodes · ${track.episodePlan.items.length} items`}</div>
+                    {track.episodePlan.items.map((item) => (
+                      <article className="creation-plan-item" key={item.episodeNo}>
+                        <header><strong>{isZh ? `第 ${item.episodeNo} 集` : `Episode ${item.episodeNo}`}</strong> · {item.title}</header>
+                        <dl>
+                          <dt>{isZh ? "核心事件" : "Core event"}</dt><dd>{item.coreEvent || "—"}</dd>
+                          <dt>{isZh ? "主角目标" : "Main goal"}</dt><dd>{item.mainGoal || "—"}</dd>
+                          <dt>{isZh ? "冲突" : "Conflict"}</dt><dd>{item.conflict || "—"}</dd>
+                          <dt>{isZh ? "场次" : "Scenes"}</dt><dd>{item.sceneCount}</dd>
+                        </dl>
+                        {item.sceneOutlines.length ? (
+                          <ol className="creation-plan-scenes">{item.sceneOutlines.map((outline, idx) => <li key={idx}>{outline}</li>)}</ol>
+                        ) : null}
+                      </article>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {/* 单元编辑器 */}
+            {view === "unit" && activeUnit ? (
+              <>
+                <div className="creation-unit-subtabs">
+                  <button className={unitSubMode === "manuscript" ? "active" : ""} type="button" onClick={() => setUnitSubMode("manuscript")}>{isZh ? "正文" : "Manuscript"}</button>
+                  <button className={unitSubMode === "translation" ? "active" : ""} type="button" onClick={() => setUnitSubMode("translation")}>{isZh ? "翻译" : "Translation"}</button>
+                  <button className={unitSubMode === "localization" ? "active" : ""} type="button" onClick={() => setUnitSubMode("localization")}>{isZh ? "本土化" : "Localization"}</button>
+                </div>
+
+                {unitSubMode === "manuscript" ? (
+                  mode === "screenplay" && activeUnit.screenplay && activeUnit.screenplay.scenes.length ? (
+                    <div className="creation-scene-editor">
+                      {activeUnit.screenplay.scenes.map((scene) => (
+                        <article className={`creation-scene-card ${scene.status === "finalized" ? "finalized" : "draft"}`} key={scene.id}>
+                          <header className="creation-scene-head">
+                            <span className="creation-scene-no">{isZh ? "场" : "S"}{scene.sceneNo}</span>
+                            <select className="creation-scene-ie" value={scene.interiorExterior} onChange={(event) => updateSceneHeader(scene.id, { interiorExterior: event.target.value as ScreenplayScene["interiorExterior"] })}>
+                              <option value="INT">INT</option><option value="EXT">EXT</option><option value="INT/EXT">INT/EXT</option>
+                            </select>
+                            <input className="creation-scene-loc" value={scene.location} onChange={(event) => updateSceneHeader(scene.id, { location: event.target.value })} placeholder={isZh ? "地点" : "Location"} />
+                            <input className="creation-scene-time" value={scene.timeOfDay} onChange={(event) => updateSceneHeader(scene.id, { timeOfDay: event.target.value })} placeholder={isZh ? "时间" : "Time"} />
+                            <button className={`creation-scene-finalize ${scene.status === "finalized" ? "finalized" : ""}`} type="button" onClick={() => toggleSceneFinalized(scene.id)} title={scene.status === "finalized" ? (isZh ? "取消定稿" : "Unfinalize") : (isZh ? "定稿本场" : "Finalize scene")}>
+                              {scene.status === "finalized" ? <Lock size={13} /> : <Check size={13} />}
+                            </button>
+                          </header>
+                          <div className="creation-scene-chars">{scene.characters.map((c) => <span key={c} className="creation-char-chip">{c}</span>)}</div>
+                          <pre className="creation-scene-body">{renderSceneBlocks(scene)}</pre>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={activeUnit.content} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "当前章/集正文。定稿后修改会自动降级为草稿。" : "Manuscript for this unit. Edits after finalizing downgrade to draft."} />
+                  )
+                ) : null}
+
+                {unitSubMode === "translation" ? (
+                  <div className="creation-translation-editors">
+                    <section>
+                      <header><strong>{isZh ? "原文" : "Source"}</strong><span>{mode === "screenplay" ? workspace.settings.screenplayLanguage : workspace.settings.sourceLanguage}</span></header>
+                      <textarea className="novel-main-editor creation-markdown-editor" value={buildTranslationSource(workspace, mode, activeUnit)} readOnly aria-label={isZh ? "翻译原文" : "Translation source"} />
+                    </section>
+                    <section>
+                      <header><strong>{isZh ? "译文" : "Translation"}</strong><span>{workspace.settings.translationLanguage || (isZh ? "未选择语言" : "No language")}</span></header>
+                      <textarea className="novel-main-editor creation-markdown-editor" value={activeUnit.translation} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "选择翻译语言后生成，或直接编辑译文。" : "Select a language to generate, or edit directly."} />
+                    </section>
+                  </div>
+                ) : null}
+
+                {unitSubMode === "localization" ? (
+                  <>
+                    <div className="creation-segmented creation-localization-tabs">
+                      <button className={localizationView === "content" ? "active" : ""} type="button" onClick={() => setLocalizationView("content")}>{isZh ? "本土化后内容" : "Localized"}</button>
+                      <button className={localizationView === "changes" ? "active" : ""} type="button" onClick={() => setLocalizationView("changes")}>{isZh ? "修改留痕" : "Changes"}</button>
+                      <button className={localizationView === "similarity" ? "active" : ""} type="button" onClick={() => setLocalizationView("similarity")}>{isZh ? "雷同查验" : "Similarity"}</button>
+                    </div>
+                    <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={editorValue()} onChange={(event) => editValue(event.target.value)} />
+                  </>
+                ) : null}
+
+                <details className="creation-unit-meta">
+                  <summary>{isZh ? "连续性备注 / 语言设定" : "Continuity & language"}</summary>
+                  <label>{isZh ? "连续性备注" : "Continuity notes"}<textarea value={activeUnit.continuityNotes || ""} onChange={(event) => updateUnit({ continuityNotes: event.target.value })} /></label>
+                  {mode === "screenplay" ? (
+                    <div className="creation-lang-row">
+                      <label>{isZh ? "剧本语言" : "Screenplay language"}<select value={workspace.settings.screenplayLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, screenplayLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((l) => <option key={l}>{l}</option>)}</select></label>
+                      <label>{isZh ? "对话语言" : "Dialogue language"}<select value={workspace.settings.dialogueLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, dialogueLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((l) => <option key={l}>{l}</option>)}</select></label>
+                      <label>{isZh ? "剧本格式" : "Format"}<select value={workspace.settings.screenplayFormat} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, screenplayFormat: event.target.value as ScreenplayFormat } }))}><option value="international_production">International</option><option value="hollywood_spec">Hollywood</option><option value="asian_production">Asian</option></select></label>
+                    </div>
+                  ) : (
+                    <div className="creation-lang-row">
+                      <label>{isZh ? "正文语言" : "Manuscript language"}<select value={workspace.settings.sourceLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, sourceLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((l) => <option key={l}>{l}</option>)}</select></label>
+                      <label>{isZh ? "翻译语言（可选）" : "Translation (optional)"}<select value={workspace.settings.translationLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, translationLanguage: event.target.value, translationEnabled: Boolean(event.target.value) } }))}><option value="">{isZh ? "不翻译" : "None"}</option>{LANGUAGE_OPTIONS.map((l) => <option key={l}>{l}</option>)}</select></label>
+                    </div>
+                  )}
+                  <div className="creation-universe-actions">
+                    <button className="secondary-button" type="button" disabled={universeBusy} onClick={() => void createAndLinkUniverse()}><Plus size={14} />{isZh ? "创建 Universe" : "Create Universe"}</button>
+                    {universes.length ? <><select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>{universes.map((u) => <option value={u.id} key={u.id}>{u.name}</option>)}</select><button className="secondary-button" type="button" onClick={() => void linkUniverse()}><Link2 size={14} />{isZh ? "关联" : "Link"}</button></> : null}
+                    <button className="secondary-button" type="button" disabled={!project.universeId} onClick={() => void sendUniverseInbox()}><Send size={14} />Inbox</button>
+                    <button className="secondary-button" type="button" onClick={() => void openDownstream("art")}><Palette size={14} />{isZh ? "美术台" : "Art"}</button>
+                  </div>
+                </details>
+              </>
+            ) : null}
+
+            {/* 导出 */}
+            {view === "export" ? (
+              <div className="creation-export-panel">
+                <div className="creation-export-head"><div><FileArchive size={20} /><h2>{isZh ? "交付文件" : "Delivery files"}</h2></div><button className="primary-button" type="button" onClick={() => void downloadDeliveryZip(deliveryItems, `${project.title}-complete-delivery`)}><Download size={16} />{isZh ? "完整交付包 ZIP" : "Complete ZIP"}</button></div>
+                {deliveryItems.map((item) => <article className="creation-export-row" key={item.id}><div><FileText size={18} /><span><strong>{item.label}</strong><small>{item.baseFilename}</small></span></div><div><button className="secondary-button" type="button" onClick={() => downloadMarkdown(item.document, item.baseFilename)}>MD</button><button className="secondary-button" type="button" onClick={() => void downloadDocx(item.document, item.baseFilename)}>DOCX</button></div></article>)}
+              </div>
+            ) : null}
           </div>
         </section>
 
-        <section className={`dashboard-panel novel-ai-panel creation-document-panel ${mobilePanel === "content" ? "is-mobile-active" : ""}`}>
-          <nav className="creation-stage-navigation" aria-label={isZh ? "创作阶段" : "Creation stages"}>
-            {STAGES.map((item, index) => <button className={stage === item.key ? "active" : ""} type="button" key={item.key} onClick={() => setStage(item.key)}><span>{index + 1}</span>{isZh ? item.zh : item.en}</button>)}
-          </nav>
+        {/* 按需 AI 面板（默认收起） */}
+        {aiPanelOpen ? (
+          <aside className={`creation-ai-panel ${mobilePanel === "chat" ? "is-mobile-active" : ""}`}>
+            <header className="creation-ai-head">
+              <div><span>KIiKIS AI</span><h2>{isZh ? "和 KK 一起创作" : "Create with KK"}</h2></div>
+              <button className="icon-button" type="button" onClick={() => setAiPanelOpen(false)} title={isZh ? "收起" : "Collapse"}><X size={16} /></button>
+            </header>
 
-          <div className="creation-document-toolbar">
-            <div className="creation-segmented" aria-label={isZh ? "正文类型" : "Content mode"}>
-              <button className={mode === "novel" ? "active" : ""} type="button" onClick={() => setMode("novel")}>{isZh ? "小说" : "Novel"}</button>
-              <button className={mode === "screenplay" ? "active" : ""} type="button" onClick={() => setMode("screenplay")}>{isZh ? "剧本" : "Screenplay"}</button>
+            <details className="creation-project-settings">
+              <summary>{isZh ? "项目与语言设定" : "Project & language settings"}</summary>
+              <label>{isZh ? "故事想法" : "Story idea"}<textarea value={project.idea} onChange={(event) => setProject((current) => ({ ...current, idea: event.target.value }))} /></label>
+              <label>{isZh ? "目标市场（待确认可留空）" : "Target market (optional)"}<input value={workspace.settings.targetMarket} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, targetMarket: event.target.value } }))} /></label>
+              <label>{isZh ? "题材（待确认可留空）" : "Genre (optional)"}<input value={workspace.settings.genre} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, genre: event.target.value } }))} /></label>
+              <label>{isZh ? "作品主要语言" : "Primary work language"}<select value={workspace.settings.sourceLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, sourceLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label>
+            </details>
+
+            <div className="novel-chat-thread" aria-live="polite">
+              {messages.map((item) => <article className={`novel-chat-message ${item.role}`} key={item.id}><span>{item.role === "assistant" ? "Kiikis AI" : (isZh ? "我" : "Me")}</span><p>{item.content}</p></article>)}
             </div>
-            {(stage === "manuscript" || stage === "translation" || stage === "localization") ? <>
-              <select aria-label={isZh ? "当前章/集" : "Current unit"} value={activeUnit?.id || ""} onChange={(event) => setActiveUnitId(event.target.value)}>{track.units.map((unit) => <option value={unit.id} key={unit.id}>{mode === "novel" ? (isZh ? `第 ${unit.number} 章` : `Chapter ${unit.number}`) : (isZh ? `第 ${unit.number} 集` : `Episode ${unit.number}`)} · {unit.title}</option>)}</select>
-              <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? "新增章/集" : "Add unit"}><Plus size={16} /><span>{isZh ? "新增" : "Add"}</span></button>
-              <select aria-label={isZh ? "状态" : "Status"} value={activeUnit?.status || "draft"} onChange={(event) => updateUnit({ status: event.target.value as CreationUnit["status"] })}><option value="draft">{isZh ? "草稿" : "Draft"}</option><option value="reviewed">{isZh ? "已审阅" : "Reviewed"}</option><option value="locked">{isZh ? "已锁定" : "Locked"}</option></select>
-              {activeUnit?.status === "locked" ? <Lock size={16} /> : null}
-            </> : null}
-          </div>
 
-          {stage === "outline" ? <div className="creation-structure-toolbar"><select aria-label={isZh ? "当前大章" : "Current arc"} value={activeArc?.id || ""} onChange={(event) => setActiveArcId(event.target.value)}><option value="">{isZh ? "当前大章" : "Current arc"}</option>{track.arcs.map((arc) => <option value={arc.id} key={arc.id}>{arc.number}. {arc.title}</option>)}</select><button className="secondary-button" type="button" onClick={syncOutlineStructure}><Check size={16} />{isZh ? "同步结构" : "Sync structure"}</button></div> : null}
+            <div className="novel-source-bar">
+              <button className="secondary-button" type="button" disabled={uploading} onClick={() => sourceInput.current?.click()}><Upload size={15} />{uploading ? (isZh ? "读取中" : "Reading") : (isZh ? "上传资料" : "Upload")}</button>
+              <div className="novel-source-files">{sourceFiles.map((file) => <span key={file.id}><FileText size={13} />{file.name}</span>)}</div>
+              <input hidden multiple ref={sourceInput} type="file" accept=".txt,.md,.doc,.docx,.html,.csv" onChange={uploadSources} />
+            </div>
 
-          {stage === "manuscript" ? <div className="creation-language-toolbar">
-            <label>{mode === "novel" ? (isZh ? "正文语言" : "Manuscript language") : (isZh ? "剧本语言" : "Screenplay language")}<select value={mode === "novel" ? workspace.settings.sourceLanguage : workspace.settings.screenplayLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, [mode === "novel" ? "sourceLanguage" : "screenplayLanguage"]: event.target.value } }))}>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label>
-            {mode === "screenplay" ? <label>{isZh ? "对话语言（附剧本语言翻译）" : "Dialogue language (+ screenplay translation)"}<select value={workspace.settings.dialogueLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, dialogueLanguage: event.target.value } }))}>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label> : <label>{isZh ? "全文翻译语言（可选）" : "Full translation language (optional)"}<select value={workspace.settings.translationLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, translationLanguage: event.target.value, translationEnabled: Boolean(event.target.value) } }))}><option value="">{isZh ? "不翻译" : "No translation"}</option>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label>}
-            <label>{isZh ? "生成范围" : "Generation scope"}<select value={workspace.settings.generationScope} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, generationScope: event.target.value as "unit" | "arc" } }))}><option value="unit">current-unit · {isZh ? "当前章/集" : "Current unit"}</option><option value="arc">current-arc · {isZh ? "当前大章" : "Current arc"}</option></select></label>
-            {mode === "screenplay" ? <label>{isZh ? "剧本格式" : "Screenplay format"}<select value={workspace.settings.screenplayFormat} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, screenplayFormat: event.target.value as ScreenplayFormat } }))}><option value="international_production">International Production</option><option value="hollywood_spec">Hollywood Spec</option><option value="asian_production">Asian Production</option></select></label> : null}
-          </div> : null}
-
-          {stage === "translation" ? <div className="creation-language-toolbar"><label>{isZh ? "翻译语言（本阶段可跳过）" : "Translation language (optional stage)"}<select value={workspace.settings.translationLanguage} onChange={(event) => updateWorkspace((current) => ({ ...current, settings: { ...current.settings, translationLanguage: event.target.value, translationEnabled: Boolean(event.target.value) } }))}><option value="">{isZh ? "跳过翻译" : "Skip translation"}</option>{LANGUAGE_OPTIONS.map((language) => <option key={language}>{language}</option>)}</select></label></div> : null}
-
-          {stage === "localization" ? <div className="creation-segmented creation-localization-tabs"><button className={localizationView === "content" ? "active" : ""} type="button" onClick={() => setLocalizationView("content")}>{isZh ? "本土化后内容" : "Localized content"}</button><button className={localizationView === "changes" ? "active" : ""} type="button" onClick={() => setLocalizationView("changes")}>{isZh ? "本土化修改" : "Changes"}</button><button className={localizationView === "similarity" ? "active" : ""} type="button" onClick={() => setLocalizationView("similarity")}>{isZh ? "雷同查验" : "Similarity report"}</button></div> : null}
-
-          {stage === "translation" && activeUnit ? <div className="creation-translation-editors">
-            <section>
-              <header><strong>{isZh ? "原文" : "Source"}</strong><span>{mode === "screenplay" ? workspace.settings.screenplayLanguage : workspace.settings.sourceLanguage}</span></header>
-              <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={buildTranslationSource(workspace, mode, activeUnit)} readOnly aria-label={isZh ? "翻译原文" : "Translation source"} />
-            </section>
-            <section>
-              <header><strong>{isZh ? "译文" : "Translation"}</strong><span>{workspace.settings.translationLanguage || (isZh ? "未选择语言" : "No language selected")}</span></header>
-              <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={activeUnit.translation} onChange={(event) => editValue(event.target.value)} aria-label={isZh ? "译文编辑器" : "Translation editor"} placeholder={isZh ? "选择翻译语言后生成，或直接编辑译文。" : "Select a language to generate, or edit the translation directly."} />
-            </section>
-          </div> : stage !== "export" ? <textarea className="novel-main-editor novel-stage-preview creation-markdown-editor" value={editorValue()} disabled={activeUnit?.status === "locked" && stage === "manuscript"} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "当前阶段的 Markdown 内容会显示在这里，可直接编辑。" : "The active Markdown document appears here and can be edited directly."} /> : <div className="creation-export-panel">
-            <div className="creation-export-head"><div><FileArchive size={20} /><h2>{isZh ? "交付文件" : "Delivery files"}</h2></div><button className="primary-button" type="button" onClick={() => void downloadDeliveryZip(deliveryItems, `${project.title}-complete-delivery`)}><Download size={16} />{isZh ? "完整交付包 ZIP" : "Complete delivery ZIP"}</button></div>
-            {deliveryItems.map((item) => <article className="creation-export-row" key={item.id}><div><FileText size={18} /><span><strong>{item.label}</strong><small>{item.baseFilename}</small></span></div><div><button className="secondary-button" type="button" onClick={() => downloadMarkdown(item.document, item.baseFilename)}>MD</button><button className="secondary-button" type="button" onClick={() => void downloadDocx(item.document, item.baseFilename)}>DOCX</button></div></article>)}
-          </div>}
-
-          <details className="novel-tool-section creation-universe-tool" open>
-            <summary>Continuity & Universe</summary>
-            <p>{activeUnit?.continuityNotes || (isZh ? "暂无连续性备注。" : "No continuity notes yet.")}</p>
-            <textarea value={activeUnit?.continuityNotes || ""} onChange={(event) => updateUnit({ continuityNotes: event.target.value })} placeholder={isZh ? "当前章/集连续性备注" : "Current unit continuity notes"} />
-            <div className="creation-universe-actions"><button className="secondary-button" type="button" disabled={universeBusy} onClick={() => void createAndLinkUniverse()}><Plus size={16} />{isZh ? "创建 Universe" : "Create Universe"}</button>{universes.length ? <><select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>{universes.map((universe) => <option value={universe.id} key={universe.id}>{universe.name}</option>)}</select><button className="secondary-button" type="button" onClick={() => void linkUniverse()}><Link2 size={16} />{isZh ? "关联" : "Link"}</button></> : null}<button className="secondary-button" type="button" disabled={!project.universeId} onClick={() => void sendUniverseInbox()}><Send size={16} />Universe Inbox</button></div>
-          </details>
-
-          <footer className="novel-handoff-bar creation-handoff-bar"><div><strong>{isZh ? "进入制作" : "Continue production"}</strong><span>{isZh ? "前三件套、当前正文和 Universe 会随项目传递。" : "The three shared documents, active manuscript, and Universe travel with the project."}</span></div><button className="secondary-button" type="button" onClick={() => void openDownstream("art")}><Palette size={16} />{isZh ? "美术工作台" : "Art workbench"}</button><button className="primary-button" type="button" onClick={() => void openDownstream("production")}><Clapperboard size={16} />{isZh ? "分镜/视频" : "Storyboard / video"}</button></footer>
-        </section>
+            <div className="novel-chat-composer">
+              <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void sendChat(); } }} placeholder={isZh ? "输入想法、修改意见。⌘/Ctrl+Enter 发送。" : "Share ideas. Cmd/Ctrl+Enter to send."} />
+              <div className="novel-chat-actions">
+                <button className="secondary-button" type="button" disabled={!chatInput.trim() || busy} onClick={() => void sendChat()}><Send size={15} />{isZh ? "发送" : "Send"}</button>
+                {view !== "export" ? <button className="primary-button" type="button" disabled={busy} onClick={() => void generateStage()}><Sparkles size={15} />{isZh ? "生成/更新当前阶段" : "Generate"}</button> : null}
+              </div>
+            </div>
+          </aside>
+        ) : null}
       </section>
       <AuthModal open={authOpen} mode="signin" onClose={() => setAuthOpen(false)} />
     </main>
