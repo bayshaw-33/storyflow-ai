@@ -4051,6 +4051,394 @@ input:focus, textarea:focus, select:focus {
     flex-direction: column;
   }
 }
+/* ===== Song Workbench v2 两栏布局 ===== */
+.song-workbench-v2 .song-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.song-workbench-v2 .song-title-bar h1 {
+  margin: 0;
+}
+.song-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.song-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.song-shell-notice {
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.song-shell-notice.warning {
+  color: var(--danger);
+}
+
+/* 两栏 shell：38% / 62% */
+.song-shell-v2 {
+  display: grid;
+  grid-template-columns: 38fr 62fr;
+  gap: var(--space-4);
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: var(--space-3) clamp(16px, 2vw, 24px) var(--space-12);
+  align-items: stretch;
+}
+.song-shell-v2 > .notice {
+  grid-column: 1 / -1;
+}
+
+/* 左侧 AI 对话面板 */
+.song-chat-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: calc(100dvh - 180px);
+  position: sticky;
+  top: 84px;
+  max-height: calc(100dvh - 104px);
+}
+.song-chat-panel .song-chat-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-bottom: var(--space-3);
+}
+.song-chat-panel .song-chat-composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--glass-border);
+  padding-top: var(--space-3);
+}
+.song-chat-panel .song-chat-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.song-chat-panel .song-concept-textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+/* 右侧创作区：上下分割 */
+.song-workbench-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: calc(100dvh - 180px);
+  gap: 0;
+}
+.song-right-upper {
+  flex: var(--upper-pct, 70%) 0 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.song-right-lower {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 上方左右均分：歌词 + 翻译 */
+.song-upper-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.song-upper-grid .song-output-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.song-upper-grid .song-lyrics-textarea,
+.song-upper-grid .song-prompt-textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  line-height: 1.7;
+  font-family: var(--font-body);
+}
+.song-right-lower .song-prompt-textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  line-height: 1.7;
+  font-family: var(--font-body);
+}
+
+/* 卡片标题栏 */
+.song-output-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+.song-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.song-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.song-card-actions select {
+  max-width: 120px;
+  min-height: 30px;
+  font-size: 12px;
+}
+.song-generate-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.song-dirty-badge {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 177, 60, 0.18);
+  color: #ffb13c;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.song-readonly-badge {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-fill-strong);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.song-byte-count {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 翻译卡：略低对比度区分只读状态 */
+.song-translation-card .song-lyrics-textarea {
+  opacity: 0.88;
+}
+
+/* 可拖动分隔线 */
+.song-splitter {
+  flex: 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: row-resize;
+  position: relative;
+  z-index: 2;
+}
+.song-splitter::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 3px;
+  bottom: 3px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.song-splitter:hover::before,
+.song-splitter:active::before {
+  background: var(--glass-border);
+}
+.song-splitter-handle {
+  width: 48px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--glass-border);
+  transition: background 0.15s ease;
+}
+.song-splitter:hover .song-splitter-handle,
+.song-splitter:active .song-splitter-handle {
+  background: var(--accent, #2dd4bf);
+}
+
+/* 移动端 tabs（默认隐藏，小屏显示） */
+.song-mobile-tabs {
+  display: none;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--glass-border);
+  padding: 0 var(--space-2);
+  gap: var(--space-1);
+}
+.song-mobile-tabs button {
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.song-mobile-tabs button.active {
+  color: var(--ink-primary);
+  border-bottom-color: var(--accent, #2dd4bf);
+}
+
+/* 抽屉 */
+.song-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: flex-end;
+  animation: song-drawer-fade 0.18s ease;
+}
+@keyframes song-drawer-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.song-drawer {
+  width: min(440px, 92vw);
+  height: 100%;
+  background: var(--bg-elevated, #14161a);
+  border-left: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.3);
+  animation: song-drawer-slide 0.22s ease;
+}
+@keyframes song-drawer-slide {
+  from { transform: translateX(40px); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.song-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+.song-drawer-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+.song-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.song-drawer-body .song-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.song-drawer-body .song-field-stack label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.song-drawer-body .song-field-stack input,
+.song-drawer-body .song-field-stack select {
+  min-height: 36px;
+}
+
+/* 暗色主题适配 */
+:root[data-theme="dark"] .song-drawer {
+  background: #1a1d22;
+}
+:root[data-theme="dark"] .song-dirty-badge {
+  background: rgba(255, 177, 60, 0.22);
+}
+
+/* ===== 响应式 ===== */
+/* 中等宽度：保持两栏，左侧最小宽度 */
+@media (max-width: 1200px) {
+  .song-shell-v2 {
+    grid-template-columns: minmax(340px, 38fr) minmax(0, 62fr);
+  }
+  .song-chat-panel {
+    position: static;
+    max-height: none;
+    min-height: 480px;
+  }
+}
+
+/* 小屏幕：单列，AI 对话在上，创作结果在下；歌词/翻译改 tabs */
+@media (max-width: 860px) {
+  .song-shell-v2 {
+    grid-template-columns: 1fr;
+  }
+  .song-chat-panel {
+    position: static;
+    max-height: none;
+    min-height: 400px;
+  }
+  .song-workbench-right {
+    min-height: 600px;
+  }
+  .song-right-upper {
+    flex: 1 1 auto;
+  }
+  .song-right-lower {
+    flex: 0 0 auto;
+    min-height: 180px;
+  }
+  .song-splitter {
+    display: none;
+  }
+  /* 移动端显示 tabs，隐藏非当前 tab */
+  .song-mobile-tabs {
+    display: flex;
+  }
+  .song-upper-grid {
+    grid-template-columns: 1fr;
+  }
+  .song-upper-grid .mobile-hidden {
+    display: none;
+  }
+  .song-upper-grid .song-output-card {
+    min-height: 320px;
+  }
+  .song-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .song-tool-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
+
 .app-header {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-4); margin-bottom: var(--space-4);

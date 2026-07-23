@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, FileText, Languages, Loader2, RefreshCw, Save, Send, Sparkles, Upload } from "lucide-react";
+import { Copy, FileText, Globe, History, Languages, Loader2, RefreshCw, Save, Send, Settings, Sparkles, Upload, X } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -546,6 +546,17 @@ export default function SongWorkbenchPage() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [singerDraft, setSingerDraft] = useState<SingerProfile | null>(null);
   const loadedEntryRef = useRef("");
+  // 两栏布局：右侧上下分隔比例（上方占百分比，默认 70）
+  const [upperHeightPct, setUpperHeightPct] = useState(70);
+  // 拖动分隔线状态
+  const splitterDragging = useRef(false);
+  const rightContainerRef = useRef<HTMLDivElement | null>(null);
+  // 抽屉：setup / reference / universe / history / null
+  const [drawerType, setDrawerType] = useState<null | "setup" | "reference" | "universe" | "history">(null);
+  // 移动端歌词/翻译标签页
+  const [mobileTab, setMobileTab] = useState<"lyrics" | "translation">("lyrics");
+  // 歌词手动编辑后的"待更新"标记
+  const [lyricsDirty, setLyricsDirty] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -600,7 +611,7 @@ export default function SongWorkbenchPage() {
       const data = JSON.parse(stored);
       if (data.form) setForm(normalizeStoredForm(data.form));
       if (data.singers) setSingers(data.singers);
-      if (data.lyrics) setLyrics(data.lyrics);
+      if (data.lyrics) { setLyrics(data.lyrics); setLyricsDirty(false); }
       if (data.stylePrompt || data.compositionPrompt) setStylePrompt(mergeMusicPrompt(data.stylePrompt || "", data.compositionPrompt || ""));
       if (data.compositionPrompt) setCompositionPrompt("");
       if (data.audit) setAudit(data.audit);
@@ -1055,6 +1066,7 @@ export default function SongWorkbenchPage() {
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
+      setLyricsDirty(false);
       void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "AI generation failed.");
@@ -1307,6 +1319,7 @@ export default function SongWorkbenchPage() {
     setLyrics(version.lyrics);
     setStylePrompt(trimPromptBytes(version.stylePrompt, MUSIC_PROMPT_MAX_BYTES));
     setCompositionPrompt(version.compositionPrompt);
+    setLyricsDirty(false);
     setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers, form));
   }
 
@@ -1340,107 +1353,78 @@ export default function SongWorkbenchPage() {
     setSingerDraft(null);
   }
 
+  // 拖动分隔线：根据鼠标位置更新右侧上方占比（20%~85%）
+  function onSplitterMouseDown(event: React.MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    splitterDragging.current = true;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onSplitterMouseMove);
+    window.addEventListener("mouseup", onSplitterMouseUp);
+  }
+  function onSplitterMouseMove(event: MouseEvent) {
+    if (!splitterDragging.current || !rightContainerRef.current) return;
+    const rect = rightContainerRef.current.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    const offset = event.clientY - rect.top;
+    let pct = (offset / rect.height) * 100;
+    pct = Math.max(20, Math.min(85, pct));
+    setUpperHeightPct(pct);
+  }
+  function onSplitterMouseUp() {
+    splitterDragging.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    window.removeEventListener("mousemove", onSplitterMouseMove);
+    window.removeEventListener("mouseup", onSplitterMouseUp);
+  }
+
   return (
-    <main className="cosmic-page song-workbench-page">
-      <section className="cosmic-title-band">
+    <main className="cosmic-page song-workbench-page song-workbench-v2">
+      <section className="cosmic-title-band song-title-bar">
         <h1>{text.title}</h1>
+        <div className="song-toolbar">
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("setup")}>
+            <Settings size={15} />
+            {isZh ? "设置" : "Setup"}
+          </button>
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("reference")}>
+            <Upload size={15} />
+            {isZh ? "参考素材" : "Reference"}
+          </button>
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("universe")}>
+            <Globe size={15} />
+            Universe
+          </button>
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => setDrawerType("history")}>
+            <History size={15} />
+            {isZh ? "版本历史" : "History"}
+          </button>
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => void refreshSongWorkbench()} disabled={refreshing || generating || savingProject}>
+            <RefreshCw size={15} className={refreshing ? "spin" : ""} />
+            {locale === "zh-CN" ? "刷新" : "Refresh"}
+          </button>
+          <button className="secondary-button song-tool-btn" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
+            <Save size={15} />
+            {savingProject ? text.saving : text.saveToProjects}
+          </button>
+        </div>
       </section>
 
-      <section className="song-workbench-shell">
-        {error ? <div className="notice error">{error}</div> : null}
+      {error ? <div className="notice error song-shell-notice">{error}</div> : null}
+      {saveWarning ? <div className="notice warning song-shell-notice">{saveWarning}</div> : null}
 
-        <div className="dashboard-panel song-action-bar">
-          <div>
-            <span>{text.outputs}</span>
-            <h2>{form.title || text.titleField}</h2>
-            {saveWarning ? (
-              <small className="field-note song-save-warning">{saveWarning}</small>
-            ) : (
-              <small className="field-note">{saveStatus || text.saveToProjectsHint}</small>
-            )}
-          </div>
-          <div className="header-actions">
-            <Link className="secondary-button" href="/universes">
-              Universe
-            </Link>
-            <button className="secondary-button" type="button" onClick={() => void refreshSongWorkbench()} disabled={refreshing || generating || savingProject}>
-              <RefreshCw size={15} className={refreshing ? "spin" : ""} />
-              {locale === "zh-CN" ? "刷新" : "Refresh"}
-            </button>
-            <button className="secondary-button" type="button" onClick={() => void saveSongProjectToList()} disabled={savingProject}>
-              <Save size={15} />
-              {savingProject ? text.saving : text.saveToProjects}
-            </button>
-            <button className="primary-button" type="button" onClick={() => void generateAll()} disabled={generating}>
-              <Sparkles size={15} />
-              {generating ? text.generating : text.generate}
-            </button>
-          </div>
-        </div>
-
-        <form id="song-workbench-form" className="dashboard-panel song-setup-panel" onSubmit={generateAll}>
+      <section className="song-workbench-shell song-shell-v2" style={{ "--upper-pct": `${upperHeightPct}%` } as React.CSSProperties}>
+        {/* 左侧 38%：AI 创作对话（只负责对话，不触发作品生成） */}
+        <form
+          className="dashboard-panel song-chat-panel"
+          onSubmit={(event) => { event.preventDefault(); void sendChatMessage(); }}
+        >
           <div className="dashboard-panel-head">
             <div>
               <span>{isZh ? "AI 创作对话" : "AI Creation Chat"}</span>
               <h2>{isZh ? "先聊感觉，再生成歌曲" : "Talk first, generate after"}</h2>
             </div>
-          </div>
-
-          <div className="song-field-stack">
-            <label>
-              {text.titleField}
-              <input
-                value={form.title}
-                onChange={(event) => updateForm("title", event.target.value)}
-                placeholder="Monday Snooze / Midnight Confession / 夏天没有说再见"
-              />
-            </label>
-            <label>
-              {locale === "zh-CN" ? "关联故事 / 宇宙来源" : "Story / Universe source"}
-              <select value={form.sourceProjectId} onChange={(event) => updateSourceProject(event.target.value)}>
-                <option value="">{locale === "zh-CN" ? "不关联，创建独立歌曲" : "No source, standalone song"}</option>
-                {sourceProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.title || project.id}{project.universeId ? " · Universe" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {isZh ? "输出模型" : "Output model"}
-              <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
-                <option value="auto">{isZh ? "自动路由" : "Auto route"}</option>
-                <option value="deepseek">DeepSeek</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="song-reference-panel">
-            <div className="song-tool-head">
-              <span>{isZh ? "参考素材" : "Reference material"}</span>
-              <label className="secondary-button">
-                <Upload size={15} />
-                {uploadingReference ? (isZh ? "上传中" : "Uploading") : (isZh ? "上传文件" : "Upload file")}
-                <input
-                  type="file"
-                  accept=".mp3,.wav,.doc,.docx,.txt"
-                  onChange={(event) => void handleReferenceFileUpload(event.target.files?.[0] || null)}
-                  hidden
-                />
-              </label>
-            </div>
-            <select value={referenceMode} onChange={(event) => setReferenceMode(event.target.value as UploadedReference["mode"])}>
-              <option value="similar_style">{isZh ? "音频/文本参考：做类似风格" : "Reference: make a similar style"}</option>
-              <option value="rewrite_lyrics">{isZh ? "歌词改编：保留结构和字数，换新歌词" : "Lyric rewrite: keep structure and length"}</option>
-            </select>
-            {uploadedReference ? (
-              <p>
-                <FileText size={14} />
-                {uploadedReference.name}
-              </p>
-            ) : (
-              <p>{isZh ? "支持 mp3、wav、doc、docx、txt。" : "Supports mp3, wav, doc, docx, and txt."}</p>
-            )}
           </div>
 
           <div className="song-chat-thread" aria-live="polite">
@@ -1466,137 +1450,261 @@ export default function SongWorkbenchPage() {
               placeholder={isZh ? "像聊天一样描述：用途、情绪、画面、歌词语言、参考感觉、想修改的地方。⌘/Ctrl + Enter 发送。" : "Describe the use, emotion, scene, lyric language, reference feeling, or revision notes. Cmd/Ctrl + Enter to send."}
             />
             <div className="song-chat-actions">
-              <button className="secondary-button" type="button" onClick={() => void sendChatMessage()} disabled={!chatInput.trim() || chatGenerating}>
+              <button className="primary-button" type="submit" disabled={!chatInput.trim() || chatGenerating}>
                 <Send size={15} />
                 {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
               </button>
-              <button className="primary-button" type="submit" disabled={generating}>
-                <Sparkles size={15} />
-                {generating ? text.generating : (isZh ? "生成/更新歌曲" : "Generate / Update")}
-              </button>
             </div>
-          </div>
-
-          {selectedSourceProject ? (
-            <div className="song-source-panel">
-              <span>{locale === "zh-CN" ? "OST 来源" : "OST source"}</span>
-              <strong>{selectedSourceProject.title}</strong>
-              <p>
-                {selectedSourceProject.universeId
-                  ? locale === "zh-CN"
-                    ? "该歌曲会继承来源项目的 Universe，可作为同一 IP 的 OST/主题曲沉淀。"
-                    : "This song inherits the source project's Universe and can be saved as an OST/theme asset for the same IP."
-                  : locale === "zh-CN"
-                    ? "保存后会记录来源项目摘要；来源项目升级为 Universe 后，可继续用于 IP 资产联动。"
-                    : "The source project summary will be saved; once the source is upgraded to a Universe, it can continue as linked IP material."}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="song-source-panel">
-            <span>Universe</span>
-            <strong>{universeBundle?.universe.name || (locale === "zh-CN" ? "未选择 Universe" : "No Universe selected")}</strong>
-            {universes.length ? (
-              <label>
-                {locale === "zh-CN" ? "选择 Universe" : "Select Universe"}
-                <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>
-                  <option value="">{locale === "zh-CN" ? "不关联 Universe" : "No Universe"}</option>
-                  {universes.map((universe) => (
-                    <option key={universe.id} value={universe.id}>{universe.name}</option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <p>{locale === "zh-CN" ? "暂无可用 Universe。可先从小说、剧本或分镜创建。" : "No Universe yet. Create one from novel, script, or storyboard first."}</p>
-            )}
-            <div className="simple-action-row">
-              <button className="secondary-button" type="button" onClick={importUniverseBackground} disabled={!universeBundle}>
-                {locale === "zh-CN" ? "导入背景" : "Import background"}
-              </button>
-              <button className="primary-button" type="button" onClick={() => void sendSongToUniverse()} disabled={universeBusy || !session || !selectedUniverseId}>
-                <Send size={15} />
-                {locale === "zh-CN" ? "发送 Inbox" : "Send Inbox"}
-              </button>
-            </div>
-            {universeStatus ? <small className="field-note">{universeStatus}</small> : null}
           </div>
         </form>
 
-        <section className="dashboard-panel song-output-panel">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{text.outputs}</span>
-              <small className="field-note">{isZh ? "歌词与翻译预览" : "Lyrics and translation preview"}</small>
-            </div>
-          </div>
-          <div className="song-output-grid">
-            <label className="song-output-card">
-              <span className="song-output-card-head">
+        {/* 右侧 62%：创作结果（上下分割，可拖动） */}
+        <section className="song-workbench-right" ref={rightContainerRef}>
+          <div className="song-right-upper">
+            {/* 移动端歌词/翻译标签页 */}
+            <div className="song-mobile-tabs" role="tablist">
+              <button className={mobileTab === "lyrics" ? "active" : ""} role="tab" aria-selected={mobileTab === "lyrics"} onClick={() => setMobileTab("lyrics")}>
                 {text.lyrics}
-                <button className="icon-button" type="button" title={text.copy} disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>
-                  <Copy size={15} />
-                </button>
-              </span>
-              <textarea className="song-lyrics-textarea" value={lyrics} onChange={(event) => setLyrics(event.target.value)} placeholder="[Intro - 3 seconds]..." />
-            </label>
-            <label className="song-output-card">
-              <span className="song-output-card-head">
+              </button>
+              <button className={mobileTab === "translation" ? "active" : ""} role="tab" aria-selected={mobileTab === "translation"} onClick={() => setMobileTab("translation")}>
                 {isZh ? "翻译" : "Translation"}
-                <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as LyricsTranslationLanguage)}>
-                  {translationLanguages.map((language) => <option key={language}>{language}</option>)}
-                </select>
-                <button type="button" className="icon-button song-translate-btn" title={isZh ? "翻译歌词" : "Translate lyrics"} disabled={translationGenerating || !lyrics.trim()} onClick={() => void handleManualTranslate()}>
-                  {translationGenerating ? <Loader2 className="spin" size={15} /> : <Languages size={15} />}
-                </button>
-              </span>
-              <textarea className="song-lyrics-textarea" value={translatedLyrics} readOnly placeholder={isZh ? "点击翻译按钮或自动翻译；中文歌词不翻译。" : "Click translate button or auto-translate; Chinese lyrics are not translated."} />
-            </label>
+              </button>
+            </div>
+
+            <div className="song-upper-grid">
+              {/* 歌词（可编辑） */}
+              <div className={`dashboard-panel song-output-card song-lyrics-card ${mobileTab === "lyrics" ? "" : "mobile-hidden"}`}>
+                <div className="song-output-card-head">
+                  <span className="song-card-title">
+                    {text.lyrics}
+                    {lyricsDirty ? <small className="song-dirty-badge">{isZh ? "待更新" : "Unsaved"}</small> : null}
+                  </span>
+                  <div className="song-card-actions">
+                    <button className="icon-button" type="button" title={text.copy} disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>
+                      <Copy size={15} />
+                    </button>
+                    <button className="primary-button song-generate-btn" type="button" onClick={() => void generateAll()} disabled={generating}>
+                      <Sparkles size={15} />
+                      {generating ? text.generating : (isZh ? "生成/更新" : "Generate / Update")}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="song-lyrics-textarea"
+                  value={lyrics}
+                  onChange={(event) => { setLyrics(event.target.value); setLyricsDirty(true); }}
+                  placeholder="[Intro - 3 seconds]..."
+                />
+              </div>
+
+              {/* 翻译（只读） */}
+              <div className={`dashboard-panel song-output-card song-translation-card ${mobileTab === "translation" ? "" : "mobile-hidden"}`}>
+                <div className="song-output-card-head">
+                  <span className="song-card-title">
+                    {isZh ? "翻译" : "Translation"}
+                    <small className="song-readonly-badge">{isZh ? "只读" : "Read-only"}</small>
+                  </span>
+                  <div className="song-card-actions">
+                    <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as LyricsTranslationLanguage)}>
+                      {translationLanguages.map((language) => <option key={language}>{language}</option>)}
+                    </select>
+                    <button type="button" className="icon-button" title={isZh ? "翻译歌词" : "Translate lyrics"} disabled={translationGenerating || !lyrics.trim()} onClick={() => void handleManualTranslate()}>
+                      {translationGenerating ? <Loader2 className="spin" size={15} /> : <Languages size={15} />}
+                    </button>
+                    <button className="icon-button" type="button" title={text.copy} disabled={!translatedLyrics} onClick={() => copyText(translatedLyrics)}>
+                      <Copy size={15} />
+                    </button>
+                  </div>
+                </div>
+                {translationGenerating ? <small className="field-note">{isZh ? "正在翻译歌词…" : "Translating lyrics..."}</small> : null}
+                {translationError ? <small className="field-note song-save-warning">{translationError}</small> : null}
+                <textarea
+                  className="song-lyrics-textarea"
+                  value={translatedLyrics}
+                  readOnly
+                  placeholder={isZh ? "点击翻译按钮或自动翻译；中文歌词不翻译。" : "Click translate button or auto-translate; Chinese lyrics are not translated."}
+                />
+              </div>
+            </div>
           </div>
-          {translationGenerating ? <small className="field-note">{isZh ? "正在翻译歌词…" : "Translating lyrics..."}</small> : null}
-          {translationError ? <small className="field-note song-save-warning">{translationError}</small> : null}
+
+          {/* 可拖动水平分隔线 */}
+          <div className="song-splitter" onMouseDown={onSplitterMouseDown} role="separator" aria-orientation="horizontal">
+            <div className="song-splitter-handle" />
+          </div>
+
+          {/* 下方：曲风提示词 */}
+          <div className="song-right-lower">
+            <div className="dashboard-panel song-output-card song-style-card">
+              <div className="song-output-card-head">
+                <span className="song-card-title">
+                  {isZh ? "曲风提示词" : "Style Prompt"}
+                </span>
+                <div className="song-card-actions">
+                  <small className={musicPromptBytes > MUSIC_PROMPT_MAX_BYTES ? "field-note song-save-warning" : "field-note song-byte-count"}>
+                    {musicPromptBytes}/{MUSIC_PROMPT_MAX_BYTES} bytes
+                  </small>
+                  <button className="icon-button" type="button" title={text.copy} disabled={!stylePrompt} onClick={() => copyText(stylePrompt)}>
+                    <Copy size={15} />
+                  </button>
+                </div>
+              </div>
+              <textarea
+                className="song-prompt-textarea"
+                value={stylePrompt}
+                onChange={(event) => setStylePrompt(trimPromptBytes(event.target.value, MUSIC_PROMPT_MAX_BYTES))}
+                placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
+              />
+            </div>
+          </div>
         </section>
-
-        <aside className="dashboard-panel song-ai-panel">
-          <div className="dashboard-panel-head">
-            <div>
-              <span>Suno</span>
-              <h2>{isZh ? "音乐生成提示词" : "Music Prompt"}</h2>
-              <small className={musicPromptBytes > MUSIC_PROMPT_MAX_BYTES ? "field-note song-save-warning" : "field-note"}>
-                {musicPromptBytes}/{MUSIC_PROMPT_MAX_BYTES} bytes
-              </small>
-            </div>
-          </div>
-
-          <div className="song-tool-section">
-            <div className="song-tool-head">
-              <span>{isZh ? "Suno style 输入框" : "Suno style input"}</span>
-              <button className="icon-button" type="button" title={text.copy} disabled={!stylePrompt} onClick={() => copyText(stylePrompt)}>
-                  <Copy size={15} />
-                </button>
-            </div>
-            <textarea className="song-prompt-textarea" value={stylePrompt} onChange={(event) => setStylePrompt(trimPromptBytes(event.target.value, MUSIC_PROMPT_MAX_BYTES))} placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."} />
-          </div>
-
-          <div className="song-tool-section">
-            <div className="song-tool-head">
-              <span>{text.history}</span>
-              <button className="secondary-button" type="button" onClick={() => void saveVersion()}>{text.saveVersion}</button>
-            </div>
-            <div className="settings-list song-history-list">
-              {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
-              {versions.map((version) => (
-                <button className="settings-card song-version-card" type="button" key={version.id} onClick={() => previewVersion(version)}>
-                  <span>v{version.versionNumber} / {version.auditStatus}</span>
-                  <h3>{version.changeType}</h3>
-                  <p>{version.summary}</p>
-                  <p>{new Date(version.createdAt).toLocaleString()}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        </aside>
       </section>
 
+      {/* 抽屉：低频功能（设置 / 参考素材 / Universe / 版本历史） */}
+      {drawerType ? (
+        <div className="song-drawer-backdrop" onClick={() => setDrawerType(null)}>
+          <div className="song-drawer" onClick={(event) => event.stopPropagation()}>
+            <header className="song-drawer-head">
+              <h2>
+                {drawerType === "setup" ? (isZh ? "设置" : "Setup")
+                  : drawerType === "reference" ? (isZh ? "参考素材" : "Reference")
+                  : drawerType === "universe" ? "Universe"
+                  : (isZh ? "版本历史" : "History")}
+              </h2>
+              <button className="icon-button" type="button" onClick={() => setDrawerType(null)} aria-label={isZh ? "关闭" : "Close"}>
+                <X size={18} />
+              </button>
+            </header>
+            <div className="song-drawer-body">
+              {drawerType === "setup" ? (
+                <div className="song-field-stack">
+                  <label>
+                    {text.titleField}
+                    <input
+                      value={form.title}
+                      onChange={(event) => updateForm("title", event.target.value)}
+                      placeholder="Monday Snooze / Midnight Confession / 夏天没有说再见"
+                    />
+                  </label>
+                  <label>
+                    {locale === "zh-CN" ? "关联故事 / 宇宙来源" : "Story / Universe source"}
+                    <select value={form.sourceProjectId} onChange={(event) => updateSourceProject(event.target.value)}>
+                      <option value="">{locale === "zh-CN" ? "不关联，创建独立歌曲" : "No source, standalone song"}</option>
+                      {sourceProjects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.title || project.id}{project.universeId ? " · Universe" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {isZh ? "输出模型" : "Output model"}
+                    <select value={selectedModelProvider} onChange={(event) => setSelectedModelProvider(event.target.value as SongModelProvider)}>
+                      <option value="auto">{isZh ? "自动路由" : "Auto route"}</option>
+                      <option value="deepseek">DeepSeek</option>
+                    </select>
+                  </label>
+                  {selectedSourceProject ? (
+                    <div className="song-source-panel">
+                      <span>{locale === "zh-CN" ? "OST 来源" : "OST source"}</span>
+                      <strong>{selectedSourceProject.title}</strong>
+                      <p>
+                        {selectedSourceProject.universeId
+                          ? locale === "zh-CN"
+                            ? "该歌曲会继承来源项目的 Universe，可作为同一 IP 的 OST/主题曲沉淀。"
+                            : "This song inherits the source project's Universe and can be saved as an OST/theme asset for the same IP."
+                          : locale === "zh-CN"
+                            ? "保存后会记录来源项目摘要；来源项目升级为 Universe 后，可继续用于 IP 资产联动。"
+                            : "The source project summary will be saved; once the source is upgraded to a Universe, it can continue as linked IP material."}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {drawerType === "reference" ? (
+                <div className="song-reference-panel">
+                  <div className="song-tool-head">
+                    <span>{isZh ? "参考素材" : "Reference material"}</span>
+                    <label className="secondary-button">
+                      <Upload size={15} />
+                      {uploadingReference ? (isZh ? "上传中" : "Uploading") : (isZh ? "上传文件" : "Upload file")}
+                      <input
+                        type="file"
+                        accept=".mp3,.wav,.doc,.docx,.txt"
+                        onChange={(event) => void handleReferenceFileUpload(event.target.files?.[0] || null)}
+                        hidden
+                      />
+                    </label>
+                  </div>
+                  <select value={referenceMode} onChange={(event) => setReferenceMode(event.target.value as UploadedReference["mode"])}>
+                    <option value="similar_style">{isZh ? "音频/文本参考：做类似风格" : "Reference: make a similar style"}</option>
+                    <option value="rewrite_lyrics">{isZh ? "歌词改编：保留结构和字数，换新歌词" : "Lyric rewrite: keep structure and length"}</option>
+                  </select>
+                  {uploadedReference ? (
+                    <p>
+                      <FileText size={14} />
+                      {uploadedReference.name}
+                    </p>
+                  ) : (
+                    <p>{isZh ? "支持 mp3、wav、doc、docx、txt。" : "Supports mp3, wav, doc, docx, and txt."}</p>
+                  )}
+                </div>
+              ) : null}
+
+              {drawerType === "universe" ? (
+                <div className="song-source-panel">
+                  <span>Universe</span>
+                  <strong>{universeBundle?.universe.name || (locale === "zh-CN" ? "未选择 Universe" : "No Universe selected")}</strong>
+                  {universes.length ? (
+                    <label>
+                      {locale === "zh-CN" ? "选择 Universe" : "Select Universe"}
+                      <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>
+                        <option value="">{locale === "zh-CN" ? "不关联 Universe" : "No Universe"}</option>
+                        {universes.map((universe) => (
+                          <option key={universe.id} value={universe.id}>{universe.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <p>{locale === "zh-CN" ? "暂无可用 Universe。可先从小说、剧本或分镜创建。" : "No Universe yet. Create one from novel, script, or storyboard first."}</p>
+                  )}
+                  <div className="simple-action-row">
+                    <button className="secondary-button" type="button" onClick={importUniverseBackground} disabled={!universeBundle}>
+                      {locale === "zh-CN" ? "导入背景" : "Import background"}
+                    </button>
+                    <button className="primary-button" type="button" onClick={() => void sendSongToUniverse()} disabled={universeBusy || !session || !selectedUniverseId}>
+                      <Send size={15} />
+                      {locale === "zh-CN" ? "发送 Inbox" : "Send Inbox"}
+                    </button>
+                  </div>
+                  {universeStatus ? <small className="field-note">{universeStatus}</small> : null}
+                </div>
+              ) : null}
+
+              {drawerType === "history" ? (
+                <div className="song-tool-section">
+                  <div className="song-tool-head">
+                    <span>{text.history}</span>
+                    <button className="secondary-button" type="button" onClick={() => void saveVersion()}>{text.saveVersion}</button>
+                  </div>
+                  <div className="settings-list song-history-list">
+                    {versions.length === 0 ? <p className="subtle">{text.noVersions}</p> : null}
+                    {versions.map((version) => (
+                      <button className="settings-card song-version-card" type="button" key={version.id} onClick={() => previewVersion(version)}>
+                        <span>v{version.versionNumber} / {version.auditStatus}</span>
+                        <h3>{version.changeType}</h3>
+                        <p>{version.summary}</p>
+                        <p>{new Date(version.createdAt).toLocaleString()}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {auditOpen ? (
         <div className="modal-backdrop">
           <div className="modal song-audit-modal">
