@@ -44,6 +44,7 @@ import {
   type UniverseProjectRole,
   type UniverseSyncResult,
 } from "@/lib/universe";
+import { createSongUniverseLink, type SongUniverseRole } from "@/lib/song/universe-links";
 import { UniverseOverview } from "@/components/universe/UniverseOverview";
 import { UniverseAssets } from "@/components/universe/UniverseAssets";
 import { UniverseWorks } from "@/components/universe/UniverseWorks";
@@ -97,6 +98,8 @@ export default function UniverseDetailPage() {
     language: "English",
     episodeCount: 24,
     episodeDuration: "2 minutes",
+    // §7.2 歌曲角色：仅在 workflowType === "song" 时使用
+    songRole: "theme_song" as SongUniverseRole,
   });
 
   // Local projects (for extract / canon-check project selector)
@@ -330,6 +333,27 @@ export default function UniverseDetailPage() {
       await upsertProjectToSupabase(project, { accessToken: session?.access_token });
       const linkSync = await upsertUniverseProjectLink(link, { accessToken: session?.access_token });
       reportWriteSync(linkSync, isZh ? "项目已关联到宇宙。" : "Project linked to Universe.");
+
+      // §7.2 路径一：从 Universe 创建歌曲时，额外建立 song_universe_links 草稿关联
+      // 记录歌曲角色（主题曲/片尾曲/角色歌/插曲/BGM/宣传曲），与项目-Universe 通用关联互补
+      if (createForm.workflowType === "song") {
+        try {
+          await createSongUniverseLink(
+            {
+              universe_id: bundle.universe.id,
+              song_project_id: project.id,
+              song_role: createForm.songRole,
+              source_project_id: null,
+              inheritance_scope: {},
+              notes: isZh ? `从 Universe 创建：${title}` : `Created from Universe: ${title}`,
+            },
+            { accessToken: session?.access_token },
+          );
+        } catch (songLinkError) {
+          // song_universe_links 创建失败不阻塞主流程（通用 project_link 已建立）
+          console.warn("[universe] create song link failed", songLinkError);
+        }
+      }
     } catch (linkError) {
       const message = linkError instanceof Error ? linkError.message : String(linkError);
       setError(
@@ -591,6 +615,24 @@ export default function UniverseDetailPage() {
                   <option value="other">{isZh ? "其他" : "Other"}</option>
                 </select>
               </label>
+              {createForm.workflowType === "song" && (
+                <label>
+                  {isZh ? "歌曲角色" : "Song Role"}
+                  <select
+                    value={createForm.songRole}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, songRole: event.target.value as SongUniverseRole }))
+                    }
+                  >
+                    <option value="theme_song">{isZh ? "主题曲" : "Theme song"}</option>
+                    <option value="ending_song">{isZh ? "片尾曲" : "Ending song"}</option>
+                    <option value="character_song">{isZh ? "角色歌" : "Character song"}</option>
+                    <option value="insert_song">{isZh ? "插曲" : "Insert song"}</option>
+                    <option value="bgm">BGM</option>
+                    <option value="promo_song">{isZh ? "宣传曲" : "Promo song"}</option>
+                  </select>
+                </label>
+              )}
               <label>
                 {isZh ? "季" : "Season"}
                 <input

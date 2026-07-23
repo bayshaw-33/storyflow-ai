@@ -3637,6 +3637,125 @@ input:focus, textarea:focus, select:focus {
   font-size: 12px;
   line-height: 1.55;
 }
+
+/* §7 歌曲-Universe 关联状态徽章 */
+.song-universe-status-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  margin-bottom: 4px;
+}
+.song-universe-status-badge[data-status="published"] {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.song-universe-status-badge[data-status="draft"] {
+  background: rgba(234, 179, 8, 0.06);
+  border-color: rgba(234, 179, 8, 0.25);
+}
+.song-universe-status-badge[data-status="deprecated"] {
+  background: rgba(107, 114, 128, 0.06);
+  border-color: rgba(107, 114, 128, 0.25);
+  opacity: 0.7;
+}
+.song-universe-status-badge[data-status="unlinked"] {
+  background: rgba(148, 163, 184, 0.05);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+.song-universe-status-badge small {
+  color: var(--ink-secondary);
+  font-size: 11px;
+}
+.song-status-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.song-status-published {
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+}
+.song-status-draft {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+}
+.song-status-deprecated {
+  background: rgba(107, 114, 128, 0.18);
+  color: #9ca3af;
+}
+.song-status-unlinked {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--ink-muted);
+}
+
+/* §7 步骤标题 */
+.song-step-title {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-primary);
+  letter-spacing: 0.03em;
+}
+
+/* §7 继承范围网格 */
+.song-inheritance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 12px;
+  padding: 8px 0;
+}
+.song-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.song-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.song-checkbox-row input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* §7 Canon 快照 */
+.song-canon-snapshot {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.song-canon-snapshot summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.song-canon-snapshot pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--ink-secondary);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .song-reference-panel {
   display: flex;
   flex-direction: column;

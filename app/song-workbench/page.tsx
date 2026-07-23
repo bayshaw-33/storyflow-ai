@@ -13,6 +13,15 @@ import type { CreativePackage } from "@/lib/universe/creative-package";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { byteLength, trimPromptBytes } from "@/lib/song/prompt";
 import { requestLyricsTranslation, type LyricsTranslationLanguage } from "@/lib/song/translation";
+import {
+  createSongUniverseLink,
+  getSongUniverseLink,
+  publishSongToUniverse,
+  unpublishSongFromUniverse,
+  updateSongUniverseLink,
+  type SongUniverseLink,
+  type SongUniverseRole,
+} from "@/lib/song/universe-links";
 import JSZip from "jszip";
 
 type SongProjectType =
@@ -480,6 +489,28 @@ function createSongAssistantMessage(content: string) {
   return createSongChatMessage("assistant", content);
 }
 
+/** §7 歌曲角色标签本地化 */
+function songRoleLabel(role: SongUniverseRole, isZh: boolean): string {
+  const map: Record<SongUniverseRole, string> = isZh
+    ? {
+        theme_song: "主题曲",
+        ending_song: "片尾曲",
+        character_song: "角色歌",
+        insert_song: "插曲",
+        bgm: "BGM",
+        promo_song: "宣传曲",
+      }
+    : {
+        theme_song: "Theme song",
+        ending_song: "Ending song",
+        character_song: "Character song",
+        insert_song: "Insert song",
+        bgm: "BGM",
+        promo_song: "Promo song",
+      };
+  return map[role] || role;
+}
+
 function getSongOpeningMessage(isZh: boolean) {
   if (!isZh) {
     return [
@@ -577,6 +608,33 @@ export default function SongWorkbenchPage() {
   const [mobileView, setMobileView] = useState<"chat" | "results">("chat");
   // 交付工作包导出状态
   const [exportingPackage, setExportingPackage] = useState(false);
+  // §7 歌曲-Universe 关联（draft / published / deprecated）
+  const [songUniverseLink, setSongUniverseLink] = useState<SongUniverseLink | null>(null);
+  const [songUniverseBusy, setSongUniverseBusy] = useState(false);
+  // 路径二/三：关联表单（歌曲角色、来源项目、继承范围）
+  const [linkForm, setLinkForm] = useState<{
+    songRole: SongUniverseRole;
+    sourceProjectId: string;
+    inheritanceScope: {
+      characters: boolean;
+      locations: boolean;
+      canonFacts: boolean;
+      timeline: boolean;
+      relationships: boolean;
+      styleGuide: boolean;
+    };
+  }>({
+    songRole: "theme_song",
+    sourceProjectId: "",
+    inheritanceScope: {
+      characters: true,
+      locations: true,
+      canonFacts: true,
+      timeline: false,
+      relationships: false,
+      styleGuide: true,
+    },
+  });
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -777,12 +835,48 @@ export default function SongWorkbenchPage() {
     setVersions([]);
     setSongProjectId(project.id);
     setSelectedUniverseId(project.universeId || "");
+    setSongUniverseLink(null);
     setError("");
     setSaveStatus("");
     setSaveWarning("");
     setRevisionInstruction("");
     setAuditOpen(false);
   }
+
+  // §7 加载歌曲-Universe 关联记录（基于 songProjectId）
+  useEffect(() => {
+    if (!songProjectId || !session?.access_token) {
+      setSongUniverseLink(null);
+      return;
+    }
+    let cancelled = false;
+    void getSongUniverseLink(songProjectId, { accessToken: session.access_token })
+      .then((link) => {
+        if (cancelled) return;
+        setSongUniverseLink(link);
+        if (link) {
+          setLinkForm((current) => ({
+            ...current,
+            songRole: link.song_role,
+            sourceProjectId: link.source_project_id || "",
+            inheritanceScope: {
+              characters: Boolean(link.inheritance_scope.characters),
+              locations: Boolean(link.inheritance_scope.locations),
+              canonFacts: Boolean(link.inheritance_scope.canon_facts),
+              timeline: Boolean(link.inheritance_scope.timeline),
+              relationships: Boolean(link.inheritance_scope.relationships),
+              styleGuide: Boolean(link.inheritance_scope.style_guide),
+            },
+          }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSongUniverseLink(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [songProjectId, session?.access_token]);
 
   async function refreshSongWorkbench() {
     setRefreshing(true);
@@ -1286,7 +1380,55 @@ export default function SongWorkbenchPage() {
         universeId: selectedUniverseId || null,
         note: isZh ? "本工作包记录创作过程与来源，不构成法律意义上的自动确权。" : "This package records the creation process and sources; it does not constitute automatic legal rights confirmation.",
       };
-      addText("manifest.json", JSON.stringify(manifest, null, 2));
+
+      // §8.3 服务端条件允许时，对 manifest 增加服务端签名。
+      // 密钥未配置时降级为"未签名"工作包（不阻塞导出）。
+      let finalManifest: Record<string, unknown> = manifest;
+      let signatureInfo: { signature: string; signedAt: string; signerKeyId: string } | null = null;
+      try {
+        const signResp = await fetch("/api/song/delivery-package/sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            manifest,
+            title,
+            exportedAt: now.toISOString(),
+            completeness: complete ? "complete" : "incomplete",
+            fileCount: entries.length,
+            universeId: selectedUniverseId || null,
+          }),
+        });
+        if (signResp.ok) {
+          const signData = await signResp.json() as {
+            success: boolean;
+            signature: string;
+            signedAt: string;
+            signerKeyId: string;
+            signedManifest: Record<string, unknown>;
+          };
+          if (signData.success && signData.signature) {
+            finalManifest = signData.signedManifest;
+            signatureInfo = {
+              signature: signData.signature,
+              signedAt: signData.signedAt,
+              signerKeyId: signData.signerKeyId,
+            };
+          }
+        }
+        // 503 SIGNING_NOT_CONFIGURED 或其他失败：静默降级，继续导出未签名工作包
+      } catch {
+        // 网络错误等：静默降级
+      }
+
+      addText("manifest.json", JSON.stringify(finalManifest, null, 2));
+      if (signatureInfo) {
+        addText("manifest.sig", [
+          signatureInfo.signature,
+          `algorithm: HMAC-SHA256`,
+          `signedAt: ${signatureInfo.signedAt}`,
+          `signerKeyId: ${signatureInfo.signerKeyId}`,
+        ].join("\n"));
+      }
 
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
       const url = URL.createObjectURL(blob);
@@ -1321,6 +1463,133 @@ export default function SongWorkbenchPage() {
       instruments: current.instruments.length ? current.instruments : ["piano", "strings", "cinematic percussion"],
     }));
     setUniverseStatus(locale === "zh-CN" ? "已导入 Universe 背景到歌曲创意。" : "Universe background imported into the song concept.");
+  }
+
+  // §7.2 路径二/三：建立或更新歌曲-Universe 关联（草稿状态）
+  async function saveSongUniverseLink() {
+    if (!songProjectId) {
+      setUniverseStatus(isZh ? "请先保存歌曲项目。" : "Save the song project first.");
+      return;
+    }
+    if (!selectedUniverseId) {
+      setUniverseStatus(isZh ? "请先选择 Universe。" : "Select a Universe first.");
+      return;
+    }
+    if (!session?.access_token) {
+      setUniverseStatus(isZh ? "请先登录。" : "Sign in first.");
+      return;
+    }
+    setSongUniverseBusy(true);
+    setUniverseStatus("");
+    try {
+      const inheritanceScope = {
+        characters: linkForm.inheritanceScope.characters ? ["*"] : [],
+        locations: linkForm.inheritanceScope.locations ? ["*"] : [],
+        canon_facts: linkForm.inheritanceScope.canonFacts ? ["*"] : [],
+        timeline: linkForm.inheritanceScope.timeline,
+        relationships: linkForm.inheritanceScope.relationships,
+        style_guide: linkForm.inheritanceScope.styleGuide,
+      };
+
+      if (songUniverseLink) {
+        // 已有关联：更新（仅 draft 状态可更新）
+        if (songUniverseLink.status === "published") {
+          setUniverseStatus(isZh ? "已发布的关联不能修改，请先取消发布。" : "Published link cannot be modified. Unpublish first.");
+          return;
+        }
+        const updated = await updateSongUniverseLink(
+          songUniverseLink.id,
+          {
+            song_role: linkForm.songRole,
+            source_project_id: linkForm.sourceProjectId || null,
+            inheritance_scope: inheritanceScope,
+          },
+          { accessToken: session.access_token },
+        );
+        setSongUniverseLink(updated);
+        setUniverseStatus(isZh ? "关联已更新。" : "Link updated.");
+      } else {
+        // 无关联：新建（路径二/三）
+        const created = await createSongUniverseLink(
+          {
+            universe_id: selectedUniverseId,
+            song_project_id: songProjectId,
+            song_role: linkForm.songRole,
+            source_project_id: linkForm.sourceProjectId || null,
+            inheritance_scope: inheritanceScope,
+            notes: isZh ? "从歌曲工作台建立关联" : "Linked from song workbench",
+          },
+          { accessToken: session.access_token },
+        );
+        setSongUniverseLink(created);
+        setUniverseStatus(isZh ? "已关联到 Universe（草稿）。" : "Linked to Universe (draft).");
+      }
+    } catch (linkError) {
+      setUniverseStatus(linkError instanceof Error ? linkError.message : (isZh ? "关联失败。" : "Link failed."));
+    } finally {
+      setSongUniverseBusy(false);
+    }
+  }
+
+  // §7.3 发布到 Universe：冻结当前正式版本
+  async function publishSongToUniverseAction() {
+    if (!songUniverseLink) return;
+    if (!session?.access_token) {
+      setUniverseStatus(isZh ? "请先登录。" : "Sign in first.");
+      return;
+    }
+    if (songUniverseLink.status === "published") {
+      setUniverseStatus(isZh ? "该关联已发布。" : "Already published.");
+      return;
+    }
+    // 冻结版本：使用最新 version id，若无版本则用当前 songProjectId + 时间戳
+    const frozenVersionId = versions[0]?.id || `${songProjectId}-snapshot-${Date.now()}`;
+    setSongUniverseBusy(true);
+    setUniverseStatus("");
+    try {
+      const canonSnapshot = universeBundle
+        ? {
+            universeName: universeBundle.universe.name,
+            entityCount: universeBundle.entities.length,
+            canonFactCount: universeBundle.canonFacts.length,
+            snapshotAt: new Date().toISOString(),
+          }
+        : null;
+      const published = await publishSongToUniverse(
+        {
+          linkId: songUniverseLink.id,
+          frozenVersionId,
+          canonSnapshot,
+        },
+        { accessToken: session.access_token },
+      );
+      setSongUniverseLink(published);
+      setUniverseStatus(isZh ? "已发布到 Universe，正式版本已冻结。" : "Published to Universe. Official version frozen.");
+    } catch (publishError) {
+      setUniverseStatus(publishError instanceof Error ? publishError.message : (isZh ? "发布失败。" : "Publish failed."));
+    } finally {
+      setSongUniverseBusy(false);
+    }
+  }
+
+  // §7.3 取消发布：把 published 改回 draft（解冻）
+  async function unpublishSongFromUniverseAction() {
+    if (!songUniverseLink || songUniverseLink.status !== "published") return;
+    if (!session?.access_token) {
+      setUniverseStatus(isZh ? "请先登录。" : "Sign in first.");
+      return;
+    }
+    setSongUniverseBusy(true);
+    setUniverseStatus("");
+    try {
+      const updated = await unpublishSongFromUniverse(songUniverseLink.id, { accessToken: session.access_token });
+      setSongUniverseLink(updated);
+      setUniverseStatus(isZh ? "已取消发布，恢复为草稿。" : "Unpublished, reverted to draft.");
+    } catch (unpublishError) {
+      setUniverseStatus(unpublishError instanceof Error ? unpublishError.message : (isZh ? "取消发布失败。" : "Unpublish failed."));
+    } finally {
+      setSongUniverseBusy(false);
+    }
   }
 
   function buildSongCreativePackage(universeId = selectedUniverseId || selectedSourceProject?.universeId || null): CreativePackage {
@@ -1890,30 +2159,225 @@ export default function SongWorkbenchPage() {
               {drawerType === "universe" ? (
                 <div className="song-source-panel">
                   <span>Universe</span>
-                  <strong>{universeBundle?.universe.name || (locale === "zh-CN" ? "未选择 Universe" : "No Universe selected")}</strong>
+                  <strong>{universeBundle?.universe.name || (isZh ? "未选择 Universe" : "No Universe selected")}</strong>
+
+                  {/* §7 关联状态显示 */}
+                  {songUniverseLink ? (
+                    <div className="song-universe-status-badge" data-status={songUniverseLink.status}>
+                      {songUniverseLink.status === "published" && (
+                        <span className="song-status-tag song-status-published">
+                          {isZh ? "已发布" : "Published"}
+                        </span>
+                      )}
+                      {songUniverseLink.status === "draft" && (
+                        <span className="song-status-tag song-status-draft">
+                          {isZh ? "草稿关联" : "Draft link"}
+                        </span>
+                      )}
+                      {songUniverseLink.status === "deprecated" && (
+                        <span className="song-status-tag song-status-deprecated">
+                          {isZh ? "已废弃" : "Deprecated"}
+                        </span>
+                      )}
+                      <small>
+                        {isZh ? "歌曲角色" : "Role"}: {songRoleLabel(songUniverseLink.song_role, isZh)}
+                      </small>
+                      {songUniverseLink.frozen_version_id && (
+                        <small>
+                          {isZh ? "冻结版本" : "Frozen"}: {songUniverseLink.frozen_version_id.slice(0, 12)}
+                        </small>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="song-universe-status-badge" data-status="unlinked">
+                      <span className="song-status-tag song-status-unlinked">
+                        {isZh ? "未关联 Universe" : "No Universe linked"}
+                      </span>
+                      <small>{isZh ? "Universe 是歌曲归属与继承的唯一入口" : "Universe is the single source for song ownership"}</small>
+                    </div>
+                  )}
+
+                  {/* §7.2 步骤 1：选择目标 Universe */}
+                  <h3 className="song-step-title">{isZh ? "1. 选择目标 Universe" : "1. Select Universe"}</h3>
                   {universes.length ? (
                     <label>
-                      {locale === "zh-CN" ? "选择 Universe" : "Select Universe"}
+                      {isZh ? "目标 Universe" : "Target Universe"}
                       <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(event.target.value)}>
-                        <option value="">{locale === "zh-CN" ? "不关联 Universe" : "No Universe"}</option>
+                        <option value="">{isZh ? "不关联 Universe" : "No Universe"}</option>
                         {universes.map((universe) => (
                           <option key={universe.id} value={universe.id}>{universe.name}</option>
                         ))}
                       </select>
                     </label>
                   ) : (
-                    <p>{locale === "zh-CN" ? "暂无可用 Universe。可先从小说、剧本或分镜创建。" : "No Universe yet. Create one from novel, script, or storyboard first."}</p>
+                    <p className="subtle">{isZh ? "暂无可用 Universe。可先从小说、剧本或分镜创建。" : "No Universe yet. Create one from novel, script, or storyboard first."}</p>
                   )}
+
+                  {/* §7.2 步骤 2：选择歌曲角色 */}
+                  <h3 className="song-step-title">{isZh ? "2. 选择歌曲角色" : "2. Song Role"}</h3>
+                  <label>
+                    {isZh ? "歌曲角色" : "Song Role"}
+                    <select
+                      value={linkForm.songRole}
+                      onChange={(event) => setLinkForm((current) => ({ ...current, songRole: event.target.value as SongUniverseRole }))}
+                      disabled={songUniverseLink?.status === "published"}
+                    >
+                      <option value="theme_song">{isZh ? "主题曲" : "Theme song"}</option>
+                      <option value="ending_song">{isZh ? "片尾曲" : "Ending song"}</option>
+                      <option value="character_song">{isZh ? "角色歌" : "Character song"}</option>
+                      <option value="insert_song">{isZh ? "插曲" : "Insert song"}</option>
+                      <option value="bgm">BGM</option>
+                      <option value="promo_song">{isZh ? "宣传曲" : "Promo song"}</option>
+                    </select>
+                  </label>
+
+                  {/* §7.2 步骤 3：选择来源项目 */}
+                  <h3 className="song-step-title">{isZh ? "3. 来源项目（可选）" : "3. Source Project (optional)"}</h3>
+                  <label>
+                    {isZh ? "来源项目" : "Source Project"}
+                    <select
+                      value={linkForm.sourceProjectId}
+                      onChange={(event) => setLinkForm((current) => ({ ...current, sourceProjectId: event.target.value }))}
+                      disabled={songUniverseLink?.status === "published"}
+                    >
+                      <option value="">{isZh ? "无来源项目" : "No source project"}</option>
+                      {sourceProjects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.title}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {/* §7.2 步骤 4：选择继承范围 */}
+                  <h3 className="song-step-title">{isZh ? "4. 继承范围" : "4. Inheritance Scope"}</h3>
+                  <div className="song-inheritance-grid">
+                    <label className="song-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={linkForm.inheritanceScope.characters}
+                        onChange={(event) => setLinkForm((current) => ({ ...current, inheritanceScope: { ...current.inheritanceScope, characters: event.target.checked } }))}
+                        disabled={songUniverseLink?.status === "published"}
+                      />
+                      <span>{isZh ? "角色" : "Characters"}</span>
+                    </label>
+                    <label className="song-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={linkForm.inheritanceScope.locations}
+                        onChange={(event) => setLinkForm((current) => ({ ...current, inheritanceScope: { ...current.inheritanceScope, locations: event.target.checked } }))}
+                        disabled={songUniverseLink?.status === "published"}
+                      />
+                      <span>{isZh ? "地点" : "Locations"}</span>
+                    </label>
+                    <label className="song-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={linkForm.inheritanceScope.canonFacts}
+                        onChange={(event) => setLinkForm((current) => ({ ...current, inheritanceScope: { ...current.inheritanceScope, canonFacts: event.target.checked } }))}
+                        disabled={songUniverseLink?.status === "published"}
+                      />
+                      <span>{isZh ? "Canon 事实" : "Canon facts"}</span>
+                    </label>
+                    <label className="song-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={linkForm.inheritanceScope.timeline}
+                        onChange={(event) => setLinkForm((current) => ({ ...current, inheritanceScope: { ...current.inheritanceScope, timeline: event.target.checked } }))}
+                        disabled={songUniverseLink?.status === "published"}
+                      />
+                      <span>{isZh ? "时间线" : "Timeline"}</span>
+                    </label>
+                    <label className="song-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={linkForm.inheritanceScope.relationships}
+                        onChange={(event) => setLinkForm((current) => ({ ...current, inheritanceScope: { ...current.inheritanceScope, relationships: event.target.checked } }))}
+                        disabled={songUniverseLink?.status === "published"}
+                      />
+                      <span>{isZh ? "关系" : "Relationships"}</span>
+                    </label>
+                    <label className="song-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={linkForm.inheritanceScope.styleGuide}
+                        onChange={(event) => setLinkForm((current) => ({ ...current, inheritanceScope: { ...current.inheritanceScope, styleGuide: event.target.checked } }))}
+                        disabled={songUniverseLink?.status === "published"}
+                      />
+                      <span>{isZh ? "风格指南" : "Style guide"}</span>
+                    </label>
+                  </div>
+
+                  {/* §7.2 步骤 5：确认关联 / §7.3 发布 */}
+                  <h3 className="song-step-title">{isZh ? "5. 确认关联与发布" : "5. Confirm & Publish"}</h3>
                   <div className="simple-action-row">
-                    <button className="secondary-button" type="button" onClick={importUniverseBackground} disabled={!universeBundle}>
-                      {locale === "zh-CN" ? "导入背景" : "Import background"}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void saveSongUniverseLink()}
+                      disabled={songUniverseBusy || !session || !selectedUniverseId || !songProjectId || songUniverseLink?.status === "published"}
+                    >
+                      {songUniverseLink ? (isZh ? "更新关联" : "Update link") : (isZh ? "关联到 Universe" : "Link to Universe")}
                     </button>
-                    <button className="primary-button" type="button" onClick={() => void sendSongToUniverse()} disabled={universeBusy || !session || !selectedUniverseId}>
-                      <Send size={15} />
-                      {locale === "zh-CN" ? "发送 Inbox" : "Send Inbox"}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={importUniverseBackground}
+                      disabled={!universeBundle}
+                    >
+                      {isZh ? "导入背景" : "Import background"}
                     </button>
                   </div>
+
+                  {/* §7.3 发布/取消发布 */}
+                  <div className="simple-action-row">
+                    {(!songUniverseLink || songUniverseLink.status === "draft") && (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={() => void publishSongToUniverseAction()}
+                        disabled={songUniverseBusy || !songUniverseLink}
+                        title={isZh ? "冻结当前正式版本，发布到 Universe" : "Freeze current version and publish to Universe"}
+                      >
+                        {isZh ? "发布到 Universe" : "Publish to Universe"}
+                      </button>
+                    )}
+                    {songUniverseLink?.status === "published" && (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => void unpublishSongFromUniverseAction()}
+                        disabled={songUniverseBusy}
+                      >
+                        {isZh ? "取消发布" : "Unpublish"}
+                      </button>
+                    )}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void sendSongToUniverse()}
+                      disabled={universeBusy || !session || !selectedUniverseId}
+                      title={isZh ? "提议修改 Canon 或提交审核" : "Propose canon changes or submit for review"}
+                    >
+                      <Send size={15} />
+                      {isZh ? "发送 Inbox" : "Send Inbox"}
+                    </button>
+                  </div>
+
+                  {/* §7.3 切换 Universe 警告 */}
+                  {songUniverseLink && songUniverseLink.status === "published" && (
+                    <p className="field-note song-save-warning">
+                      {isZh ? "已发布版本不可直接修改。如需切换 Universe 或修改关联，请先取消发布。" : "Published version is locked. Unpublish before switching Universe or editing."}
+                    </p>
+                  )}
+
                   {universeStatus ? <small className="field-note">{universeStatus}</small> : null}
+
+                  {/* Canon 快照信息（已发布时显示） */}
+                  {songUniverseLink?.canon_snapshot && (
+                    <details className="song-canon-snapshot">
+                      <summary>{isZh ? "Canon 快照" : "Canon snapshot"}</summary>
+                      <pre>{JSON.stringify(songUniverseLink.canon_snapshot, null, 2)}</pre>
+                    </details>
+                  )}
                 </div>
               ) : null}
 
