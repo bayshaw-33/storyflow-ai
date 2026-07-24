@@ -1,137 +1,74 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useI18n } from "@/lib/i18n/useI18n";
+import { zh } from "@/lib/admin/zh";
+import styles from "./admin-shell.module.css";
 
-type AdminUserRow = {
-  userId: string;
-  email: string;
-  createdAt: string | null;
-  displayName: string | null;
-  plan: string | null;
-  balance: number | null;
-  monthlyLimit: number | null;
-};
+type Stats = {
+  totalUsers: number;
+  newUsersToday: number;
+  totalGenerations: number;
+} | null;
 
-type LoadState =
-  | { status: "loading" }
-  | { status: "unauthorized" }
-  | { status: "error"; message: string }
-  | { status: "ready"; rows: AdminUserRow[] };
-
-export default function AdminPage() {
-  const { t } = useI18n();
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+export default function AdminOverviewPage() {
+  const [stats, setStats] = useState<Stats>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-
-    async function load() {
-      const supabase = getSupabaseBrowserClient();
-      if (!supabase) {
-        if (active) setState({ status: "unauthorized" });
-        return;
+    (async () => {
+      try {
+        const client = (await import("@/lib/supabase/client")).getSupabaseBrowserClient();
+        const { data } = await client?.auth.getSession() ?? {};
+        const token = data?.session?.access_token;
+        if (!token) { if (active) setLoading(false); return; }
+        // 概览数据复用 users 列表 meta（Task 6 实现 /admin/api/users 返回 total）
+        const res = await fetch("/admin/api/users?page=1&pageSize=1", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!active) return;
+        if (res.ok) {
+          const payload = await res.json();
+          setStats({
+            totalUsers: payload.total ?? 0,
+            newUsersToday: payload.newToday ?? 0,
+            totalGenerations: payload.totalGenerations ?? 0,
+          });
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (active) setLoading(false);
       }
-
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) {
-        if (active) setState({ status: "unauthorized" });
-        return;
-      }
-
-      const response = await fetch("/admin/users", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-
-      if (response.status === 401 || response.status === 403) {
-        if (active) setState({ status: "unauthorized" });
-        return;
-      }
-      if (!response.ok) {
-        if (active) setState({ status: "error", message: `HTTP ${response.status}` });
-        return;
-      }
-
-      const payload = (await response.json()) as { users: AdminUserRow[] };
-      if (active) setState({ status: "ready", rows: payload.users || [] });
-    }
-
-    void load();
-    return () => {
-      active = false;
-    };
+    })();
+    return () => { active = false; };
   }, []);
 
   return (
-    <main className="kiikis-site">
-      <section className="kiikis-dashboard-shell kiikis-dashboard-single">
-        <div className="dashboard-main">
-          <header className="dashboard-welcome">
-            <div>
-              <span>{t("admin.title")}</span>
-              <h2>{t("admin.users.title")}</h2>
-              <p>{t("admin.users.body")}</p>
-            </div>
-          </header>
-
-          <div className="dashboard-panel">
-            {state.status === "loading" ? (
-              <p className="subtle">{t("admin.loading")}</p>
-            ) : null}
-
-            {state.status === "unauthorized" ? (
-              <div className="notice error">
-                {t("admin.unauthorized")}
-              </div>
-            ) : null}
-
-            {state.status === "error" ? (
-              <div className="notice error">
-                {t("admin.loadFailed") + state.message}
-              </div>
-            ) : null}
-
-            {state.status === "ready" ? (
-              <div style={{ overflowX: "auto" }}>
-                <table className="admin-user-table">
-                  <thead>
-                    <tr>
-                      <th>{t("admin.col.email")}</th>
-                      <th>{t("admin.col.name")}</th>
-                      <th>{t("admin.col.signedUp")}</th>
-                      <th>{t("admin.col.plan")}</th>
-                      <th>{t("admin.col.credits")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {state.rows.map((row) => (
-                      <tr key={row.userId}>
-                        <td>{row.email}</td>
-                        <td>{row.displayName || "—"}</td>
-                        <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : "—"}</td>
-                        <td>{row.plan || "—"}</td>
-                        <td>
-                          {row.balance === null
-                            ? "—"
-                            : `${row.balance}${row.monthlyLimit !== null ? ` / ${row.monthlyLimit}` : ""}`}
-                        </td>
-                      </tr>
-                    ))}
-                    {state.rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="subtle">{t("admin.empty")}</td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
+    <main>
+      <h1 style={{ fontSize: 24, fontWeight: 800, margin: "0 0 8px" }}>{zh.overview.title}</h1>
+      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, margin: "0 0 16px" }}>
+        {zh.overview.comingSoon}
+      </p>
+      {loading ? (
+        <p className="subtle">{zh.common.loading}</p>
+      ) : stats ? (
+        <div className={styles.overviewGrid}>
+          <div className={styles.statCard}>
+            <div className={styles.statLabel}>{zh.overview.totalUsers}</div>
+            <div className={styles.statValue}>{stats.totalUsers}</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statLabel}>{zh.overview.newUsersToday}</div>
+            <div className={styles.statValue}>{stats.newUsersToday}</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statLabel}>{zh.overview.totalGenerations}</div>
+            <div className={styles.statValue}>{stats.totalGenerations}</div>
           </div>
         </div>
-      </section>
+      ) : null}
     </main>
   );
 }
