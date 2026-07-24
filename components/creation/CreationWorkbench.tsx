@@ -1,51 +1,70 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Download,
   FileArchive,
   FileText,
+  GripVertical,
   Link2,
   Lock,
+  Maximize2,
+  Minimize2,
   Palette,
+  PanelRight,
   Plus,
+  Replace,
+  Search,
   Send,
   Sparkles,
+  Type,
   Upload,
   X,
-  PanelRight,
 } from "lucide-react";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import type { TaskType } from "@/lib/ai/prompts";
-import { buildDeliveryManifest } from "@/lib/creation/assembly";
+import { buildDeliveryManifest, type AssembledDocument } from "@/lib/creation/assembly";
 import { downloadDeliveryZip, downloadDocx, downloadMarkdown } from "@/lib/creation/downloads";
-import { applyUnitGeneration, parseArcStructure, parseBatchUnitOutput, parseEpisodePlanOutput } from "@/lib/creation/parsers";
+import { applyUnitGeneration, parseArcStructure, parseBatchUnitOutput, parseEpisodePlanOutput, parseScreenplayUnitOutput } from "@/lib/creation/parsers";
 import { buildTranslationSource } from "@/lib/creation/screenplay";
 import {
+  addScene,
+  addSceneBlock,
+  applyScreenplayToUnit,
   applyUnitTranslation,
+  appendPreviewScene,
   canGenerateEpisodePlan,
   createCreationWorkspace,
+  deleteScene,
+  deleteSceneBlock,
   draftScene,
   finalizeDocument,
   finalizeEpisodePlan,
   finalizeScene,
   normalizeCreationWorkspace,
+  reorderScenes,
   setEpisodePlan,
   updateDocument,
+  updateSceneBlock,
 } from "@/lib/creation/state";
 import type {
   CreationMode,
   CreationStatus,
   CreationUnit,
   CreationWorkspaceV2,
+  ScreenplayBlock,
   ScreenplayFormat,
   ScreenplayScene,
+  ScreenplayEpisode,
 } from "@/lib/creation/types";
 import { buildCreativeHandoffPackage, writeCreativeHandoff } from "@/lib/creative-handoff";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -218,15 +237,73 @@ export function CreationWorkbench() {
   const [selectedUniverseId, setSelectedUniverseId] = useState("");
   const [universeBusy, setUniverseBusy] = useState(false);
   const sourceInput = useRef<HTMLInputElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollMemory = useRef<Record<string, number>>({});
 
   // PRD V1.0 §8：左侧目录主导航 + AI 面板默认收起
   const [view, setView] = useState<ViewKey>("background");
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [unitSubMode, setUnitSubMode] = useState<"manuscript" | "translation" | "localization">("manuscript");
+
+  // PRD V1.0 §8.3：左侧集场目录 — 展开/搜索/收起/当前场高亮
+  const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSceneId, setActiveSceneId] = useState("");
+
+  // PRD V1.0 §8.5：AI 输入作用范围（整集/当前场/选中文字）
+  const [aiScope, setAiScope] = useState<"episode" | "scene" | "selection">("episode");
+
+  // PRD V1.0 §8.5：AI 修改预览后应用
+  const [pendingPreview, setPendingPreview] = useState<null | {
+    kind: "newScene" | "modifyScene";
+    scene?: ScreenplayScene;
+    sceneId?: string;
+    originalText?: string;
+    proposedText?: string;
+  }>(null);
+
+  // PRD V1.0 §7.2：上传资料理解摘要
+  const [sourceComprehension, setSourceComprehension] = useState<null | {
+    summary: string;
+    confirmed: boolean;
+  }>(null);
+
+  // PRD V1.0 §8.2/§11.2：保存状态三态 + 顶部栏状态
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // PRD V1.0 §8.5：专注写作模式（P1 预留，P0 已支持收起侧栏）
+  const [focusMode, setFocusMode] = useState(false);
+
+  // PRD V1.0 §11.3：多集批量导出选择
+  const [exportSelection, setExportSelection] = useState<Record<string, boolean>>({});
+
+  // PRD V1.0 §8.2：创作流程入口下拉
+  const [flowMenuOpen, setFlowMenuOpen] = useState(false);
+
+  // PRD V1.0 §8.5：AI 生成中的预览草稿（不直接覆盖）
+  const [pendingGeneration, setPendingGeneration] = useState<null | {
+    taskType: TaskType;
+    output: string;
+    target: "doc" | "unit" | "scene";
+    docKey?: keyof CreationWorkspaceV2["documents"];
+  }>(null);
+
+  // P1-A：小说版卷（arc）展开
+  const [expandedArcs, setExpandedArcs] = useState<Record<string, boolean>>({});
+  // P1-B：整集搜索与替换
+  const [searchReplaceOpen, setSearchReplaceOpen] = useState(false);
+  const [searchFind, setSearchFind] = useState("");
+  const [searchReplaceText, setSearchReplaceText] = useState("");
+  // P1-D：剧本格式检查结果
+  const [formatIssues, setFormatIssues] = useState<Array<{ sceneId: string; sceneNo: number; level: "error" | "warn" | "muted"; message: string }>>([]);
+  // P1-F：多场批量选择
+  const [selectedScenes, setSelectedScenes] = useState<Record<string, boolean>>({});
 
   const workspace = project.creationWorkspace || createCreationWorkspace(project);
   const mode = workspace.settings.activeMode;
@@ -365,16 +442,21 @@ export function CreationWorkbench() {
 
   async function saveProject(nextProject = project) {
     setError("");
+    setSaveStatus("saving");
     upsertProject(nextProject);
     if (session?.access_token) {
       try {
         await upsertProjectToSupabase(nextProject, { accessToken: session.access_token });
       } catch {
+        setSaveStatus("error");
         setStatus(isZh ? "已保存到本地，云端同步暂时不可用。" : "Saved locally; cloud sync is temporarily unavailable.");
         return;
       }
     }
+    setSaveStatus("saved");
     setStatus(isZh ? "已保存到工作台。" : "Saved to Workspace.");
+    if (saveStatusTimer.current) clearTimeout(saveStatusTimer.current);
+    saveStatusTimer.current = setTimeout(() => setSaveStatus("idle"), 3000);
   }
 
   function setMode(nextMode: CreationMode) {
@@ -480,6 +562,150 @@ export function CreationWorkbench() {
       });
       return { ...current, [mode]: { ...tr, units }, updatedAt: new Date().toISOString() };
     });
+  }
+
+  // PRD V1.0 §9：修改场次 block（触发场次降级）
+  function editSceneBlock(sceneId: string, blockId: string, patch: Partial<{ type: ScreenplayBlock["type"]; character: string; text: string; translation: string }>) {
+    if (!activeUnit?.screenplay) return;
+    commitWorkspace((current) => updateSceneBlock(current, mode, activeUnit.id, sceneId, blockId, patch));
+  }
+
+  // PRD V1.0 §9：新增 block
+  function appendBlock(sceneId: string, block?: Partial<ScreenplayBlock>) {
+    if (!activeUnit?.screenplay) return;
+    commitWorkspace((current) => addSceneBlock(current, mode, activeUnit.id, sceneId, block));
+  }
+
+  // PRD V1.0 §9：删除 block
+  function removeBlock(sceneId: string, blockId: string) {
+    if (!activeUnit?.screenplay) return;
+    commitWorkspace((current) => deleteSceneBlock(current, mode, activeUnit.id, sceneId, blockId));
+  }
+
+  // PRD V1.0 §8.3：新建场（afterSceneId=null 追加到末尾）
+  function createScene(afterSceneId?: string | null) {
+    if (!activeUnit?.screenplay) return;
+    const next = commitWorkspace((current) => addScene(current, mode, activeUnit.id, afterSceneId ?? null));
+    // 展开当前集目录
+    setExpandedUnits((cur) => ({ ...cur, [activeUnit.id]: true }));
+    void saveProject(next);
+  }
+
+  // PRD V1.0 §7.8：删除场
+  function removeScene(sceneId: string) {
+    if (!activeUnit?.screenplay) return;
+    const next = commitWorkspace((current) => deleteScene(current, mode, activeUnit.id, sceneId));
+    void saveProject(next);
+  }
+
+  // PRD V1.0 §7.8：拖拽重排场
+  function dragScene(fromId: string, toId: string) {
+    if (!activeUnit?.screenplay || fromId === toId) return;
+    const next = commitWorkspace((current) => reorderScenes(current, mode, activeUnit.id, fromId, toId));
+    void saveProject(next);
+  }
+
+  // PRD V1.0 §8.3：点击目录场次 → 定位正文
+  function focusScene(sceneId: string) {
+    setActiveSceneId(sceneId);
+    setView("unit");
+    setUnitSubMode("manuscript");
+    // 展开当前集
+    if (activeUnit) setExpandedUnits((cur) => ({ ...cur, [activeUnit.id]: true }));
+    // 滚动到该场
+    queueMicrotask(() => {
+      const el = document.querySelector(`[data-scene-id="${sceneId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  // PRD V1.0 §8.5：AI 修改预览 — 接受
+  function acceptPreview() {
+    if (!pendingPreview || !activeUnit) return;
+    if (pendingPreview.kind === "newScene" && pendingPreview.scene) {
+      const next = commitWorkspace((current) => appendPreviewScene(current, mode, activeUnit.id, pendingPreview.scene!));
+      void saveProject(next);
+    }
+    if (pendingPreview.kind === "modifyScene" && pendingPreview.sceneId) {
+      // 修改现成场：解析 proposedText 为 blocks 并替换
+      const sceneId = pendingPreview.sceneId;
+      const lines = (pendingPreview.proposedText || "").split("\n").filter(Boolean);
+      const blocks: ScreenplayBlock[] = lines.map((line) => ({
+        id: `block-${crypto.randomUUID()}`,
+        type: line.startsWith("(") ? "parenthetical" : line === line.toUpperCase() && line.length < 40 ? "transition" : "action",
+        character: "",
+        text: line.startsWith("(") ? line.slice(1, -1) : line,
+        translation: "",
+      }));
+      const next = commitWorkspace((current) => {
+        const tr = current[mode];
+        const units = tr.units.map((unit) => {
+          if (unit.id !== activeUnit.id || !unit.screenplay) return unit;
+          const scenes = unit.screenplay.scenes.map((sc) => sc.id === sceneId ? { ...sc, status: "draft" as CreationStatus, blocks } : sc);
+          const allFinal = scenes.every((sc) => sc.status === "finalized");
+          return { ...unit, status: (allFinal ? "finalized" : "draft") as CreationStatus, screenplay: { ...unit.screenplay, scenes }, updatedAt: new Date().toISOString() };
+        });
+        return { ...current, [mode]: { ...tr, units }, updatedAt: new Date().toISOString() };
+      });
+      void saveProject(next);
+    }
+    setPendingPreview(null);
+    setStatus(isZh ? "AI 修改已应用。" : "AI edit applied.");
+  }
+
+  // PRD V1.0 §8.5：AI 修改预览 — 拒绝
+  function rejectPreview() {
+    setPendingPreview(null);
+    setStatus(isZh ? "已忽略 AI 修改。" : "AI edit dismissed.");
+  }
+
+  // PRD V1.0 §8.5：AI 改写当前场（先生成预览，确认后应用）
+  async function aiModifyScene(sceneId: string) {
+    if (!activeUnit?.screenplay || busy) return;
+    if (!session?.access_token) { setAuthOpen(true); return; }
+    const scene = activeUnit.screenplay.scenes.find((s) => s.id === sceneId);
+    if (!scene) return;
+    setBusy(true);
+    setError("");
+    setStatus(isZh ? "正在生成场次修改预览…" : "Generating scene edit preview…");
+    try {
+      const originalText = renderSceneBlocks(scene);
+      const instruction = chatInput.trim() || (isZh ? "请优化本场剧本：润色对白、补充动作描写，保持场次头不变。" : "Refine this scene: polish dialogue and add action; keep the scene header unchanged.");
+      const output = await callAI("creation_screenplay_unit", `${isZh ? "修改指令" : "Instruction"}：${instruction}\n\n${isZh ? "当前场次" : "Current scene"}：\n${originalText}`);
+      if (!output.trim()) throw new Error(isZh ? "AI 没有返回内容。" : "AI returned no content.");
+      setPendingPreview({ kind: "modifyScene", sceneId, originalText, proposedText: output });
+      setMessages((cur) => [...cur, message("assistant", isZh ? "已生成场次修改预览，请确认后应用。" : "Scene edit preview ready. Confirm to apply.")]);
+      setStatus(isZh ? "AI 修改预览已生成，请确认。" : "AI edit preview ready.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Scene edit failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // PRD V1.0 §7.2：上传资料后请求 AI 理解摘要
+  async function requestSourceComprehension(filesArg?: SourceFile[]) {
+    const files = filesArg || sourceFiles;
+    if (!files.length || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const input = files.map((f) => `资料 ${f.name}：\n${f.text}`).join("\n\n");
+      const output = await callAI("creation_development_chat", `${isZh ? "请阅读以下资料，输出：1) 理解摘要 2) 已识别的背景/角色/主要剧情 3) 明显缺失的信息 4) 资料内部可能的冲突。用简洁中文输出。" : "Read the following materials and output: 1) summary 2) identified background/characters/plot 3) missing info 4) internal conflicts."}\n\n${input}`);
+      setSourceComprehension({ summary: output, confirmed: false });
+      setMessages((cur) => [...cur, message("assistant", output)]);
+      setStatus(isZh ? "已生成资料理解摘要，请确认后进入背景生成。" : "Source comprehension generated. Confirm to proceed.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Comprehension failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmSourceComprehension() {
+    setSourceComprehension((cur) => cur ? { ...cur, confirmed: true } : null);
+    setView("background");
+    setStatus(isZh ? "已确认理解，开始生成背景及世界观。" : "Confirmed. Start generating background.");
   }
 
   function stageTask(): TaskType | null {
@@ -644,7 +870,9 @@ export function CreationWorkbench() {
         ? translationSource
         : isUnitLocalization
           ? activeUnit?.translation || translationSource
-          : chatInput.trim() || project.idea || contextText();
+          : isUnitManuscript && aiScope !== "episode"
+            ? (() => { const scope = buildScopeContent(); return scope ? `${chatInput.trim() ? chatInput.trim() + "\n\n" : ""}${scope}` : (chatInput.trim() || project.idea || contextText()); })()
+            : chatInput.trim() || project.idea || contextText();
       const output = await callAI(taskType, input);
       if (!output.trim()) throw new Error(isZh ? "AI 没有返回可保存的内容，当前版本未覆盖。" : "AI returned no savable content; the current version was preserved.");
       const nextProject = commitWorkspace((currentWorkspace) => {
@@ -718,6 +946,8 @@ export function CreationWorkbench() {
       const notes = added.map((file) => `【上传资料：${file.name}】\n${file.text}`).join("\n\n");
       setProject((current) => ({ ...current, novelDevelopmentNotes: [current.novelDevelopmentNotes, notes].filter(Boolean).join("\n\n") }));
       setMessages((current) => [...current, message("assistant", isZh ? `已读取 ${added.length} 份资料并加入创作上下文。` : `Read ${added.length} files and added them to the creation context.`)]);
+      // PRD V1.0 §7.2：上传资料后自动触发 AI 理解摘要
+      if (session?.access_token) void requestSourceComprehension([...sourceFiles, ...added]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "File parsing failed");
     } finally {
@@ -854,6 +1084,185 @@ export function CreationWorkbench() {
     }).filter(Boolean).join("\n\n");
   }
 
+  /** PRD V1.0 §11.3：把单元转为可下载文档（剧本场次拼为 markdown） */
+  function unitToDocument(unit: CreationUnit): AssembledDocument {
+    const language = mode === "screenplay" ? workspace.settings.screenplayLanguage : workspace.settings.sourceLanguage;
+    const markdown = unit.screenplay && unit.screenplay.scenes.length
+      ? unit.screenplay.scenes.map((sc) => `## ${sc.interiorExterior}·${sc.location}·${sc.timeOfDay}\n${renderSceneBlocks(sc)}`).join("\n\n")
+      : unit.content;
+    return { title: `${unit.number}. ${unit.title}`, language, markdown, diagnostics: [] };
+  }
+
+  /** PRD V1.0 §8.5：按 aiScope 构造 AI 输入作用范围内容 */
+  function buildScopeContent(): string {
+    if (aiScope === "scene" && activeSceneId && activeUnit?.screenplay) {
+      const scene = activeUnit.screenplay.scenes.find((s) => s.id === activeSceneId);
+      return scene ? `${isZh ? "【作用范围：当前场】" : "[Scope: current scene]"}\n${renderSceneBlocks(scene)}` : "";
+    }
+    if (aiScope === "selection" && chatInputRef.current) {
+      const ta = chatInputRef.current;
+      const sel = ta.value.substring(ta.selectionStart, ta.selectionEnd).trim();
+      return sel ? `${isZh ? "【作用范围：选中文字】" : "[Scope: selection]"}\n${sel}` : "";
+    }
+    return "";
+  }
+
+  // P1-A：小说版卷（arc）操作
+  function createArc() {
+    const number = track.arcs.length + 1;
+    const arc = { id: `arc-${crypto.randomUUID()}`, number, title: isZh ? `第 ${number} 卷` : `Volume ${number}`, outline: "", unitIds: [] };
+    updateWorkspace((current) => ({ ...current, [mode]: { ...current[mode], arcs: [...current[mode].arcs, arc] } }));
+    setActiveArcId(arc.id);
+    setExpandedArcs((cur) => ({ ...cur, [arc.id]: true }));
+  }
+  function renameArc(arcId: string, title: string) {
+    updateWorkspace((current) => ({ ...current, [mode]: { ...current[mode], arcs: current[mode].arcs.map((a) => a.id === arcId ? { ...a, title } : a) } }));
+  }
+  function moveUnitToArc(unitId: string, arcId: string) {
+    updateWorkspace((current) => ({
+      ...current,
+      [mode]: { ...current[mode], arcs: current[mode].arcs.map((a) => {
+        const without = a.unitIds.filter((id) => id !== unitId);
+        return a.id === arcId ? { ...a, unitIds: [...without, unitId] } : { ...a, unitIds: without };
+      }) },
+    }));
+  }
+
+  // P1-B：整集搜索与替换（在当前单元正文/场次 block 上做字符串替换）
+  function replaceInUnit(find: string, replace: string, all: boolean) {
+    if (!activeUnit || !find) return;
+    if (mode === "screenplay" && activeUnit.screenplay) {
+      let count = 0;
+      const sceneIds = activeUnit.screenplay.scenes.map((s) => s.id);
+      const replaced = all ? sceneIds : (activeSceneId ? [activeSceneId] : sceneIds);
+      for (const sceneId of replaced) {
+        const scene = activeUnit.screenplay.scenes.find((s) => s.id === sceneId);
+        if (!scene) continue;
+        for (const block of scene.blocks) {
+          if (block.text.includes(find)) {
+            editSceneBlock(sceneId, block.id, { text: all ? block.text.split(find).join(replace) : block.text.replace(find, replace) });
+            count++;
+            if (!all) break;
+          }
+        }
+        if (!all && count) break;
+      }
+      setStatus(isZh ? `已替换 ${count} 处。` : `Replaced ${count} occurrence(s).`);
+    } else {
+      const content = activeUnit.content;
+      if (!content.includes(find)) { setStatus(isZh ? "未找到匹配。" : "No match found."); return; }
+      const next = all ? content.split(find).join(replace) : content.replace(find, replace);
+      updateUnit({ content: next });
+      setStatus(isZh ? "已替换。" : "Replaced.");
+    }
+  }
+
+  // P1-D：剧本格式检查（纯前端规则）
+  function runFormatCheck() {
+    if (!activeUnit?.screenplay) { setFormatIssues([]); return; }
+    const issues: Array<{ sceneId: string; sceneNo: number; level: "error" | "warn" | "muted"; message: string }> = [];
+    for (const scene of activeUnit.screenplay.scenes) {
+      if (!scene.location.trim() || !scene.timeOfDay.trim()) {
+        issues.push({ sceneId: scene.id, sceneNo: scene.sceneNo, level: "error", message: isZh ? `场 ${scene.sceneNo} 缺少地点或时间` : `Scene ${scene.sceneNo} missing location or time` });
+      }
+      if (!scene.blocks.length) {
+        issues.push({ sceneId: scene.id, sceneNo: scene.sceneNo, level: "muted", message: isZh ? `场 ${scene.sceneNo} 无内容块` : `Scene ${scene.sceneNo} has no blocks` });
+      }
+      for (const block of scene.blocks) {
+        if (block.type === "dialogue" && !block.character.trim()) {
+          issues.push({ sceneId: scene.id, sceneNo: scene.sceneNo, level: "error", message: isZh ? `场 ${scene.sceneNo} 对白缺少角色名` : `Scene ${scene.sceneNo} dialogue missing character` });
+        }
+        if (block.type === "transition" && block.text !== block.text.toUpperCase()) {
+          issues.push({ sceneId: scene.id, sceneNo: scene.sceneNo, level: "warn", message: isZh ? `场 ${scene.sceneNo} 转场未大写` : `Scene ${scene.sceneNo} transition not uppercase` });
+        }
+      }
+    }
+    setFormatIssues(issues);
+    setStatus(issues.length ? (isZh ? `发现 ${issues.length} 个格式问题。` : `Found ${issues.length} issue(s).`) : (isZh ? "格式检查通过。" : "Format check passed."));
+  }
+
+  // P1-F：多场批量操作
+  function batchFinalizeScenes() {
+    if (!activeUnit?.screenplay) return;
+    const ids = Object.keys(selectedScenes).filter((id) => selectedScenes[id]);
+    for (const id of ids) {
+      const scene = activeUnit.screenplay.scenes.find((s) => s.id === id);
+      if (scene && scene.status !== "finalized") toggleSceneFinalized(id);
+    }
+    setSelectedScenes({});
+  }
+  function batchDeleteScenes() {
+    if (!activeUnit?.screenplay) return;
+    const ids = Object.keys(selectedScenes).filter((id) => selectedScenes[id]);
+    if (!ids.length) return;
+    if (!window.confirm(isZh ? `确认删除 ${ids.length} 个场次？` : `Delete ${ids.length} scene(s)?`)) return;
+    for (const id of ids) removeScene(id);
+    setSelectedScenes({});
+  }
+  function batchSetInterior(ie: "INT" | "EXT") {
+    if (!activeUnit?.screenplay) return;
+    const ids = Object.keys(selectedScenes).filter((id) => selectedScenes[id]);
+    for (const id of ids) updateSceneHeader(id, { interiorExterior: ie });
+    setSelectedScenes({});
+  }
+
+  // P1-E：全局快捷键
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === "s") { event.preventDefault(); void saveProject(); return; }
+      if (meta && event.key.toLowerCase() === "e") { event.preventDefault(); setMode(mode === "novel" ? "screenplay" : "novel"); return; }
+      if (meta && event.key.toLowerCase() === "b") { event.preventDefault(); setSidebarCollapsed((v) => !v); return; }
+      if (meta && event.key.toLowerCase() === "k") { event.preventDefault(); searchInputRef.current?.focus(); return; }
+      if (event.key === "Escape") { setPendingPreview(null); setFlowMenuOpen(false); setSearchReplaceOpen(false); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  /** P1-A/P0-B：渲染侧栏单个单元项（扁平列表与卷分组共用） */
+  function renderUnitItem(unit: CreationUnit) {
+    const q = searchQuery.trim().toLowerCase();
+    const titleMatch = !q || unit.title.toLowerCase().includes(q) || String(unit.number).includes(q);
+    const scenes = unit.screenplay?.scenes || [];
+    const sceneMatch = (s: ScreenplayScene) => !q || s.location.toLowerCase().includes(q) || String(s.sceneNo).includes(q);
+    const hasSceneMatch = scenes.some(sceneMatch);
+    if (!titleMatch && !hasSceneMatch && q) return null;
+    const expanded = expandedUnits[unit.id] || Boolean(q);
+    return (
+      <div key={unit.id} className="creation-sidebar-unit" draggable={mode === "novel"} onDragStart={mode === "novel" ? (e) => e.dataTransfer.setData("text/unit-id", unit.id) : undefined}>
+        <div className={`creation-sidebar-item ${view === "unit" && activeUnitId === unit.id ? "active" : ""}`}>
+          {mode === "screenplay" && scenes.length ? (
+            <button className="icon-button subtle creation-sidebar-chevron" type="button" onClick={() => setExpandedUnits((cur) => ({ ...cur, [unit.id]: !cur[unit.id] }))} title={expanded ? (isZh ? "收起" : "Collapse") : (isZh ? "展开" : "Expand")}>
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          ) : null}
+          <button className="creation-sidebar-unit-btn" type="button" onClick={() => { setActiveUnitId(unit.id); setView("unit"); setUnitSubMode("manuscript"); }}>
+            <span className="creation-sidebar-label">{mode === "novel" ? (isZh ? `第 ${unit.number} 章` : `Ch.${unit.number}`) : (isZh ? `第 ${unit.number} 集` : `Ep.${unit.number}`)} · {unit.title}</span>
+            <span className={`creation-status-dot ${unit.status === "finalized" ? "finalized" : "draft"}`} />
+          </button>
+        </div>
+        {/* PRD V1.0 §8.3：场次级目录 */}
+        {mode === "screenplay" && expanded && scenes.length ? (
+          <div className="creation-sidebar-scenes">
+            {scenes.filter(sceneMatch).map((scene) => (
+              <button key={scene.id} className={`creation-sidebar-scene ${activeSceneId === scene.id ? "active" : ""}`} type="button" draggable onDragStart={(e) => e.dataTransfer.setData("text/scene-id", scene.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const from = e.dataTransfer.getData("text/scene-id"); if (from) dragScene(from, scene.id); }} onClick={() => focusScene(scene.id)}>
+                <GripVertical size={11} className="creation-drag-handle" />
+                <span>{isZh ? "场" : "S"}{scene.sceneNo}｜{scene.interiorExterior}·{scene.location || "—"}·{scene.timeOfDay || "—"}</span>
+                <span className={`creation-status-dot ${scene.status === "finalized" ? "finalized" : "draft"}`} />
+              </button>
+            ))}
+            {/* PRD V1.0 §8.3：新建场 */}
+            <button className="creation-sidebar-addscene" type="button" onClick={() => { setActiveUnitId(unit.id); setView("unit"); setUnitSubMode("manuscript"); queueMicrotask(() => createScene(null)); }}>
+              <Plus size={12} />{isZh ? "新建场" : "Add scene"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   const docView = view === "background" || view === "characters" || view === "outline";
   const docMeta = view === "background" ? { key: "backgroundWorld" as const, zh: "背景及世界观", finalized: bgFinalized }
     : view === "characters" ? { key: "characterBible" as const, zh: "角色圣经", finalized: charFinalized }
@@ -861,7 +1270,7 @@ export function CreationWorkbench() {
     : null;
 
   return (
-    <main className="cosmic-page novel-workbench-page creation-v2-page creation-v3-page">
+    <main className={`cosmic-page novel-workbench-page creation-v2-page creation-v3-page ${focusMode ? "focus-mode" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <header className="novel-topbar">
         <div className="novel-topbar-left">
           <button className="icon-button" type="button" onClick={() => router.push("/dashboard")} title={isZh ? "返回工作台" : "Back"}><ArrowLeft size={18} /></button>
@@ -869,12 +1278,43 @@ export function CreationWorkbench() {
             <span>{isZh ? "创作工作台" : "Creation Workbench"}</span>
             <input aria-label={isZh ? "项目名称" : "Project title"} value={project.title} onChange={(event) => setProject((current) => ({ ...current, title: event.target.value }))} />
           </div>
+          {/* PRD V1.0 §8.2：创作流程入口 */}
+          <div className="creation-flow-menu">
+            <button className="secondary-button" type="button" onClick={() => setFlowMenuOpen((v) => !v)} title={isZh ? "创作流程" : "Flow"}>
+              {isZh ? "创作流程" : "Flow"}<ChevronDown size={14} />
+            </button>
+            {flowMenuOpen ? (
+              <div className="creation-flow-dropdown" role="menu">
+                <button type="button" className={view === "background" ? "active" : ""} onClick={() => { setView("background"); setFlowMenuOpen(false); }}>{isZh ? "① 创作基座" : "① Foundation"}</button>
+                <button type="button" className={view === "unit" || view === "episodePlan" ? "active" : ""} onClick={() => { setView(planFinalized ? "unit" : "episodePlan"); setFlowMenuOpen(false); }}>{isZh ? "② 正文创作" : "② Manuscript"}</button>
+                <button type="button" onClick={() => { void openDownstream("production"); setFlowMenuOpen(false); }} disabled={!activeUnit}>{isZh ? "③ 后期处理" : "③ Production"}</button>
+                <button type="button" className={view === "export" ? "active" : ""} onClick={() => { setView("export"); setFlowMenuOpen(false); }}>{isZh ? "④ 导出" : "④ Export"}</button>
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="novel-topbar-actions">
-          <div className="creation-segmented" aria-label={isZh ? "正文类型" : "Content mode"}>
-            <button className={mode === "novel" ? "active" : ""} type="button" onClick={() => setMode("novel")}>{isZh ? "小说" : "Novel"}</button>
-            <button className={mode === "screenplay" ? "active" : ""} type="button" onClick={() => setMode("screenplay")}>{isZh ? "剧本" : "Screenplay"}</button>
+          {/* PRD V1.0 §7.5：成品版本下拉 + 状态指示 */}
+          <div className="creation-version-select">
+            <select value={mode} onChange={(event) => setMode(event.target.value as CreationMode)} title={isZh ? "成品版本" : "Version"}>
+              <option value="screenplay">{isZh ? "剧本版" : "Screenplay"}</option>
+              <option value="novel">{isZh ? "小说版" : "Novel"}</option>
+            </select>
+            <span className="creation-version-count" title={isZh ? "当前版本单元数" : "Units in this version"}>
+              {track.units.length ? (mode === "novel" ? (isZh ? `${track.units.length} 章` : `${track.units.length} ch`) : (isZh ? `${track.units.length} 集` : `${track.units.length} ep`)) : (isZh ? "空" : "Empty")}
+            </span>
+            {!track.units.length ? <span className="creation-version-hint">{isZh ? "请先创建单元" : "Create a unit first"}</span> : null}
           </div>
+          {/* PRD V1.0 §8.2：当前剧集状态 + 选择 */}
+          {view === "unit" && activeUnit ? (
+            <select className="creation-episode-select" value={activeUnitId} onChange={(event) => setActiveUnitId(event.target.value)}>
+              {track.units.map((u) => <option key={u.id} value={u.id}>{mode === "novel" ? (isZh ? `第 ${u.number} 章` : `Ch.${u.number}`) : (isZh ? `第 ${u.number} 集` : `Ep.${u.number}`)} · {u.title}</option>)}
+            </select>
+          ) : null}
+          {/* PRD V1.0 §11.2：保存状态三态 */}
+          <span className={`creation-save-status ${saveStatus}`}>{saveStatus === "saving" ? (isZh ? "正在保存…" : "Saving…") : saveStatus === "saved" ? (isZh ? "已保存" : "Saved") : saveStatus === "error" ? (isZh ? "保存失败" : "Save failed") : ""}</span>
+          {/* PRD V1.0 §8.5：专注写作模式 */}
+          <button className="icon-button" type="button" onClick={() => setFocusMode((v) => !v)} title={isZh ? "专注模式" : "Focus"}>{focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
           <button className={`icon-button ${aiPanelOpen ? "active" : ""}`} type="button" onClick={() => setAiPanelOpen((v) => !v)} title={isZh ? "AI 面板" : "AI panel"}><PanelRight size={18} /></button>
           {!session ? <button className="primary-button" type="button" onClick={() => setAuthOpen(true)}>{isZh ? "登录使用 AI" : "Sign in for AI"}</button> : null}
         </div>
@@ -886,10 +1326,57 @@ export function CreationWorkbench() {
       </nav>
 
       {error || status || busy ? <div className={`creation-notice ${error ? "error" : busy ? "warning" : "success"}`}>{error || (busy ? (isZh ? "处理中，请勿关闭页面…" : "Working…") : status)}</div> : null}
+      {/* PRD V1.0 §8.5：AI 修改预览面板 */}
+      {pendingPreview ? (
+        <div className="creation-preview-bar">
+          <div className="creation-preview-content">
+            <strong>{isZh ? "AI 修改预览" : "AI Edit Preview"}</strong>
+            {pendingPreview.kind === "modifyScene" && pendingPreview.originalText ? (
+              <div className="creation-preview-diff">
+                <div className="creation-preview-diff-col">
+                  <span className="creation-preview-diff-label">{isZh ? "原内容" : "Original"}</span>
+                  <pre className="creation-preview-original">{pendingPreview.originalText}</pre>
+                </div>
+                <div className="creation-preview-diff-col">
+                  <span className="creation-preview-diff-label">{isZh ? "修改后" : "Proposed"}</span>
+                  <pre className="creation-preview-proposed">{pendingPreview.proposedText}</pre>
+                </div>
+              </div>
+            ) : (
+              <pre>{pendingPreview.proposedText || (pendingPreview.scene ? `新场：${pendingPreview.scene.interiorExterior}·${pendingPreview.scene.location}·${pendingPreview.scene.timeOfDay}` : "")}</pre>
+            )}
+          </div>
+          <div className="creation-preview-actions">
+            <button className="primary-button" type="button" onClick={acceptPreview}><Check size={14} />{isZh ? "应用" : "Apply"}</button>
+            <button className="secondary-button" type="button" onClick={rejectPreview}><X size={14} />{isZh ? "忽略" : "Dismiss"}</button>
+          </div>
+        </div>
+      ) : null}
+      {/* PRD V1.0 §7.2：资料理解摘要 */}
+      {sourceComprehension && !sourceComprehension.confirmed ? (
+        <div className="creation-comprehension-bar">
+          <div className="creation-comprehension-content">
+            <strong>{isZh ? "资料理解摘要" : "Source Comprehension"}</strong>
+            <p>{sourceComprehension.summary}</p>
+          </div>
+          <button className="primary-button" type="button" onClick={confirmSourceComprehension}>{isZh ? "确认理解，进入背景生成" : "Confirm & proceed"}</button>
+        </div>
+      ) : null}
 
       <section className="creation-workbench-body">
         {/* 左侧集场目录 */}
-        <aside className={`creation-sidebar ${mobilePanel === "content" ? "is-mobile-active" : ""}`}>
+        {sidebarCollapsed ? (
+          <button className="creation-sidebar-expand" type="button" onClick={() => setSidebarCollapsed(false)} title={isZh ? "展开目录" : "Expand sidebar"}><ChevronRight size={16} /></button>
+        ) : null}
+        <aside className={`creation-sidebar ${mobilePanel === "content" ? "is-mobile-active" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
+          <div className="creation-sidebar-top">
+            {/* PRD V1.0 §8.3：搜索集/场 */}
+            <div className="creation-sidebar-search">
+              <Search size={14} />
+              <input ref={searchInputRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={isZh ? "搜索集或场" : "Search"} />
+            </div>
+            <button className="icon-button subtle" type="button" onClick={() => setSidebarCollapsed((v) => !v)} title={isZh ? "收起目录" : "Collapse"}><ChevronLeft size={16} /></button>
+          </div>
           <div className="creation-sidebar-group">
             <h3>{isZh ? "创作基座" : "Foundation"}</h3>
             <button className={`creation-sidebar-item ${view === "background" ? "active" : ""}`} type="button" onClick={() => setView("background")}>
@@ -920,15 +1407,37 @@ export function CreationWorkbench() {
           <div className="creation-sidebar-group creation-sidebar-units">
             <h3>
               <span>{isZh ? "正文" : "Manuscript"}</span>
+              {mode === "novel" ? <button className="icon-button subtle" type="button" onClick={createArc} title={isZh ? "新建卷" : "Add volume"}><Plus size={14} /></button> : null}
               <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? "新增章/集" : "Add unit"} disabled={mode === "screenplay" && !planFinalized}><Plus size={14} /></button>
             </h3>
             {mode === "screenplay" && !planFinalized ? <p className="creation-sidebar-hint">{isZh ? "分集规划定稿后可逐集生成剧本。" : "Finalize episode plan first."}</p> : null}
-            {track.units.map((unit) => (
-              <button key={unit.id} className={`creation-sidebar-item ${view === "unit" && activeUnitId === unit.id ? "active" : ""}`} type="button" onClick={() => { setActiveUnitId(unit.id); setView("unit"); setUnitSubMode("manuscript"); }}>
-                <span className="creation-sidebar-label">{mode === "novel" ? (isZh ? `第 ${unit.number} 章` : `Ch.${unit.number}`) : (isZh ? `第 ${unit.number} 集` : `Ep.${unit.number}`)} · {unit.title}</span>
-                <span className={`creation-status-dot ${unit.status === "finalized" ? "finalized" : "draft"}`} />
-              </button>
-            ))}
+            {/* P1-A：小说版卷（arc）层级 */}
+            {mode === "novel" && track.arcs.length ? (
+              <>
+                {track.arcs.map((arc) => {
+                  const arcUnits = arc.unitIds.map((id) => track.units.find((u) => u.id === id)).filter(Boolean) as CreationUnit[];
+                  const arcExpanded = expandedArcs[arc.id] !== false;
+                  return (
+                    <div key={arc.id} className="creation-sidebar-arc" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const uid = e.dataTransfer.getData("text/unit-id"); if (uid) moveUnitToArc(uid, arc.id); }}>
+                      <div className="creation-sidebar-arc-head">
+                        <button className="icon-button subtle" type="button" onClick={() => setExpandedArcs((cur) => ({ ...cur, [arc.id]: !arcExpanded }))} title={arcExpanded ? (isZh ? "收起" : "Collapse") : (isZh ? "展开" : "Expand")}>
+                          {arcExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                        <input className="creation-arc-title" value={arc.title} onChange={(e) => renameArc(arc.id, e.target.value)} placeholder={isZh ? "卷标题" : "Volume title"} />
+                      </div>
+                      {arcExpanded ? arcUnits.map((u) => renderUnitItem(u)) : null}
+                    </div>
+                  );
+                })}
+                {(() => {
+                  const inArc = new Set(track.arcs.flatMap((a) => a.unitIds));
+                  const orphans = track.units.filter((u) => !inArc.has(u.id));
+                  return orphans.length ? <div className="creation-sidebar-arc-orphans"><p className="creation-sidebar-hint">{isZh ? "未归入卷" : "Uncategorized"}</p>{orphans.map((u) => renderUnitItem(u))}</div> : null;
+                })()}
+              </>
+            ) : (
+              track.units.map((u) => renderUnitItem(u))
+            )}
           </div>
 
           <div className="creation-sidebar-group creation-sidebar-foot">
@@ -973,11 +1482,40 @@ export function CreationWorkbench() {
               {view === "unit" && activeUnit ? (
                 <button className="secondary-button" type="button" onClick={() => void openDownstream("production")} title={isZh ? "进入分镜制作" : "Storyboard"}><Clapperboard size={15} />{isZh ? "进入制作" : "Produce"}</button>
               ) : null}
+              {view === "unit" && activeUnit ? (
+                <>
+                  <button className="secondary-button" type="button" onClick={() => setSearchReplaceOpen((v) => !v)} title={isZh ? "搜索替换" : "Find & replace"}><Replace size={15} />{isZh ? "替换" : "Replace"}</button>
+                  {mode === "screenplay" && activeUnit.screenplay ? (
+                    <button className="secondary-button" type="button" onClick={runFormatCheck} disabled={busy} title={isZh ? "格式检查" : "Format check"}><Check size={15} />{isZh ? "格式检查" : "Check"}</button>
+                  ) : null}
+                </>
+              ) : null}
               <button className="secondary-button" type="button" disabled={busy || view === "export"} onClick={() => { setAiPanelOpen(true); }}><Sparkles size={15} />{isZh ? "AI 生成" : "Generate"}</button>
             </div>
           </header>
 
           <div className="creation-center-scroll">
+            {/* P1-B：整集搜索与替换 */}
+            {searchReplaceOpen && view === "unit" && activeUnit ? (
+              <div className="creation-search-replace">
+                <div className="creation-search-replace-row">
+                  <input value={searchFind} onChange={(event) => setSearchFind(event.target.value)} placeholder={isZh ? "查找" : "Find"} />
+                  <input value={searchReplaceText} onChange={(event) => setSearchReplaceText(event.target.value)} placeholder={isZh ? "替换为" : "Replace with"} />
+                </div>
+                <div className="creation-search-replace-actions">
+                  <button className="secondary-button" type="button" disabled={!searchFind.trim()} onClick={() => replaceInUnit(searchFind, searchReplaceText, false)}>{isZh ? "替换" : "Replace"}</button>
+                  <button className="primary-button" type="button" disabled={!searchFind.trim()} onClick={() => replaceInUnit(searchFind, searchReplaceText, true)}>{isZh ? "全部替换" : "Replace all"}</button>
+                  <button className="icon-button" type="button" onClick={() => setSearchReplaceOpen(false)} title={isZh ? "关闭" : "Close"}><X size={14} /></button>
+                </div>
+              </div>
+            ) : null}
+            {/* P1-D：剧本格式检查结果 */}
+            {formatIssues.length > 0 && view === "unit" ? (
+              <div className="creation-format-issues">
+                <header><strong>{isZh ? "格式检查结果" : "Format issues"}</strong><button className="icon-button" type="button" onClick={() => setFormatIssues([])} title={isZh ? "关闭" : "Close"}><X size={14} /></button></header>
+                <ul>{formatIssues.map((issue, idx) => <li key={idx} className={`creation-format-issue creation-format-issue-${issue.level}`}><span className="creation-format-issue-icon">{issue.level === "error" ? "✕" : issue.level === "warn" ? "!" : "·"}</span>{issue.message}</li>)}</ul>
+              </div>
+            ) : null}
             {/* 创作基座文档编辑器 */}
             {docView ? (
               <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={editorValue()} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "在此编辑 Markdown 内容。定稿后下游将锁定，修改会自动降级。" : "Edit Markdown here. Finalizing locks downstream; edits downgrade automatically."} />
@@ -1025,9 +1563,21 @@ export function CreationWorkbench() {
                 {unitSubMode === "manuscript" ? (
                   mode === "screenplay" && activeUnit.screenplay && activeUnit.screenplay.scenes.length ? (
                     <div className="creation-scene-editor">
+                      {/* P1-F：多场批量操作工具栏 */}
+                      {Object.values(selectedScenes).some(Boolean) ? (
+                        <div className="creation-batch-bar">
+                          <span className="creation-batch-count">{isZh ? `已选 ${Object.values(selectedScenes).filter(Boolean).length} 场` : `${Object.values(selectedScenes).filter(Boolean).length} selected`}</span>
+                          <button className="secondary-button" type="button" onClick={batchFinalizeScenes}><Check size={13} />{isZh ? "定稿" : "Finalize"}</button>
+                          <button className="secondary-button" type="button" onClick={() => batchSetInterior("INT")}>INT</button>
+                          <button className="secondary-button" type="button" onClick={() => batchSetInterior("EXT")}>EXT</button>
+                          <button className="secondary-button" type="button" onClick={batchDeleteScenes}><X size={13} />{isZh ? "删除" : "Delete"}</button>
+                          <button className="icon-button" type="button" onClick={() => setSelectedScenes({})} title={isZh ? "取消选择" : "Clear"}><X size={14} /></button>
+                        </div>
+                      ) : null}
                       {activeUnit.screenplay.scenes.map((scene) => (
-                        <article className={`creation-scene-card ${scene.status === "finalized" ? "finalized" : "draft"}`} key={scene.id}>
+                        <article className={`creation-scene-card ${scene.status === "finalized" ? "finalized" : "draft"}`} key={scene.id} data-scene-id={scene.id}>
                           <header className="creation-scene-head">
+                            <input type="checkbox" className="creation-scene-select" checked={Boolean(selectedScenes[scene.id])} onChange={(event) => setSelectedScenes((cur) => ({ ...cur, [scene.id]: event.target.checked }))} title={isZh ? "选择本场" : "Select"} />
                             <span className="creation-scene-no">{isZh ? "场" : "S"}{scene.sceneNo}</span>
                             <select className="creation-scene-ie" value={scene.interiorExterior} onChange={(event) => updateSceneHeader(scene.id, { interiorExterior: event.target.value as ScreenplayScene["interiorExterior"] })}>
                               <option value="INT">INT</option><option value="EXT">EXT</option><option value="INT/EXT">INT/EXT</option>
@@ -1037,9 +1587,31 @@ export function CreationWorkbench() {
                             <button className={`creation-scene-finalize ${scene.status === "finalized" ? "finalized" : ""}`} type="button" onClick={() => toggleSceneFinalized(scene.id)} title={scene.status === "finalized" ? (isZh ? "取消定稿" : "Unfinalize") : (isZh ? "定稿本场" : "Finalize scene")}>
                               {scene.status === "finalized" ? <Lock size={13} /> : <Check size={13} />}
                             </button>
+                            <button className="icon-button subtle creation-scene-delete" type="button" onClick={() => { if (window.confirm(isZh ? "确认删除本场？删除后不可撤销。" : "Delete this scene? This cannot be undone.")) removeScene(scene.id); }} title={isZh ? "删除场" : "Delete scene"}><X size={13} /></button>
+                            <button className="icon-button subtle creation-scene-ai" type="button" onClick={() => void aiModifyScene(scene.id)} disabled={busy} title={isZh ? "AI 改写本场" : "AI rewrite scene"}><Sparkles size={13} /></button>
                           </header>
                           <div className="creation-scene-chars">{scene.characters.map((c) => <span key={c} className="creation-char-chip">{c}</span>)}</div>
-                          <pre className="creation-scene-body">{renderSceneBlocks(scene)}</pre>
+                          <div className="creation-block-list">
+                            {scene.blocks.map((block) => (
+                              <div className={`creation-block creation-block-${block.type}`} key={block.id}>
+                                <div className="creation-block-head">
+                                  <select className="creation-block-type" value={block.type} onChange={(event) => editSceneBlock(scene.id, block.id, { type: event.target.value as ScreenplayBlock["type"] })} title={isZh ? "段落类型" : "Block type"}>
+                                    <option value="action">{isZh ? "动作" : "Action"}</option>
+                                    <option value="dialogue">{isZh ? "对白" : "Dialogue"}</option>
+                                    <option value="parenthetical">{isZh ? "括号提示" : "Parenthetical"}</option>
+                                    <option value="transition">{isZh ? "转场" : "Transition"}</option>
+                                    <option value="note">{isZh ? "备注" : "Note"}</option>
+                                  </select>
+                                  {block.type === "dialogue" ? (
+                                    <input className="creation-block-character" value={block.character} onChange={(event) => editSceneBlock(scene.id, block.id, { character: event.target.value })} placeholder={isZh ? "角色名" : "Character"} />
+                                  ) : null}
+                                  <button className="icon-button subtle creation-block-remove" type="button" onClick={() => removeBlock(scene.id, block.id)} title={isZh ? "删除块" : "Remove block"}><X size={12} /></button>
+                                </div>
+                                <textarea className="creation-block-text" value={block.text} onChange={(event) => editSceneBlock(scene.id, block.id, { text: event.target.value })} rows={block.type === "transition" ? 1 : 2} placeholder={block.type === "dialogue" ? (isZh ? "对白内容" : "Dialogue") : block.type === "parenthetical" ? (isZh ? "提示内容（无需括号）" : "Parenthetical (no parens)") : isZh ? "正文" : "Text"} />
+                              </div>
+                            ))}
+                          </div>
+                          <button className="creation-block-add" type="button" onClick={() => appendBlock(scene.id)}><Plus size={12} />{isZh ? "新增内容块" : "Add block"}</button>
                         </article>
                       ))}
                     </div>
@@ -1100,7 +1672,45 @@ export function CreationWorkbench() {
             {/* 导出 */}
             {view === "export" ? (
               <div className="creation-export-panel">
-                <div className="creation-export-head"><div><FileArchive size={20} /><h2>{isZh ? "交付文件" : "Delivery files"}</h2></div><button className="primary-button" type="button" onClick={() => void downloadDeliveryZip(deliveryItems, `${project.title}-complete-delivery`)}><Download size={16} />{isZh ? "完整交付包 ZIP" : "Complete ZIP"}</button></div>
+                {/* ① 当前集导出 */}
+                <section className="creation-export-tier">
+                  <h3>{isZh ? "① 当前集导出" : "① Current unit"}</h3>
+                  <p>{isZh ? "导出当前正在编辑的章/集，文件名含集号。" : "Export the unit currently being edited."}</p>
+                  <div className="creation-export-tier-actions">
+                    <button className="primary-button" type="button" disabled={!activeUnit} onClick={() => { if (activeUnit) downloadMarkdown(unitToDocument(activeUnit), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${activeUnit.number}`); }}><Download size={15} />{isZh ? "当前集 MD" : "MD"}</button>
+                    <button className="secondary-button" type="button" disabled={!activeUnit} onClick={() => { if (activeUnit) void downloadDocx(unitToDocument(activeUnit), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${activeUnit.number}`); }}><Download size={15} />{isZh ? "当前集 DOCX" : "DOCX"}</button>
+                  </div>
+                </section>
+
+                {/* ② 多集批量导出 */}
+                <section className="creation-export-tier">
+                  <h3>{isZh ? "② 多集批量导出" : "② Batch export"}</h3>
+                  <p>{isZh ? "勾选要导出的章/集，批量下载。" : "Select units to export in batch."}</p>
+                  <div className="creation-export-batch">
+                    {track.units.map((u) => (
+                      <label key={u.id} className="creation-export-check">
+                        <input type="checkbox" checked={Boolean(exportSelection[u.id])} onChange={(event) => setExportSelection((cur) => ({ ...cur, [u.id]: event.target.checked }))} />
+                        <span>{mode === "novel" ? (isZh ? `第 ${u.number} 章` : `Ch.${u.number}`) : (isZh ? `第 ${u.number} 集` : `Ep.${u.number}`)} · {u.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="creation-export-tier-actions">
+                    <button className="primary-button" type="button" disabled={!Object.values(exportSelection).some(Boolean)} onClick={() => track.units.filter((u) => exportSelection[u.id]).forEach((u) => downloadMarkdown(unitToDocument(u), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${u.number}`))}><Download size={15} />{isZh ? "批量 MD" : "Batch MD"}</button>
+                    <button className="secondary-button" type="button" disabled={!Object.values(exportSelection).some(Boolean)} onClick={() => void Promise.all(track.units.filter((u) => exportSelection[u.id]).map((u) => downloadDocx(unitToDocument(u), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${u.number}`)))}><Download size={15} />{isZh ? "批量 DOCX" : "Batch DOCX"}</button>
+                  </div>
+                </section>
+
+                {/* ③ 完整交付包 */}
+                <section className="creation-export-tier">
+                  <h3>{isZh ? "③ 完整交付包" : "③ Complete delivery"}</h3>
+                  <p>{isZh ? "导出整个工作包（含背景/角色/大纲/全部正文）。" : "Export the complete work package."}</p>
+                  <div className="creation-export-tier-actions">
+                    <button className="primary-button" type="button" onClick={() => void downloadDeliveryZip(deliveryItems, `${project.title}-complete-delivery`)}><Download size={16} />{isZh ? "完整交付包 ZIP" : "Complete ZIP"}</button>
+                  </div>
+                </section>
+
+                {/* 交付清单明细 */}
+                <div className="creation-export-head"><div><FileArchive size={20} /><h2>{isZh ? "交付文件清单" : "Delivery manifest"}</h2></div></div>
                 {deliveryItems.map((item) => <article className="creation-export-row" key={item.id}><div><FileText size={18} /><span><strong>{item.label}</strong><small>{item.baseFilename}</small></span></div><div><button className="secondary-button" type="button" onClick={() => downloadMarkdown(item.document, item.baseFilename)}>MD</button><button className="secondary-button" type="button" onClick={() => void downloadDocx(item.document, item.baseFilename)}>DOCX</button></div></article>)}
               </div>
             ) : null}
@@ -1134,7 +1744,13 @@ export function CreationWorkbench() {
             </div>
 
             <div className="novel-chat-composer">
-              <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void sendChat(); } }} placeholder={isZh ? "输入想法、修改意见。⌘/Ctrl+Enter 发送。" : "Share ideas. Cmd/Ctrl+Enter to send."} />
+              {/* PRD V1.0 §8.5：AI 输入作用范围 */}
+              <div className="creation-segmented creation-ai-scope" role="group" aria-label={isZh ? "AI 作用范围" : "AI scope"}>
+                <button className={aiScope === "episode" ? "active" : ""} type="button" onClick={() => setAiScope("episode")} title={isZh ? "整集" : "Episode"}>{isZh ? "整集" : "Episode"}</button>
+                <button className={aiScope === "scene" ? "active" : ""} type="button" onClick={() => setAiScope("scene")} title={isZh ? "当前场" : "Scene"}>{isZh ? "当前场" : "Scene"}</button>
+                <button className={aiScope === "selection" ? "active" : ""} type="button" onClick={() => setAiScope("selection")} title={isZh ? "选中文字" : "Selection"}>{isZh ? "选中" : "Selection"}</button>
+              </div>
+              <textarea ref={chatInputRef} value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void sendChat(); } }} placeholder={isZh ? "输入想法、修改意见。⌘/Ctrl+Enter 发送。" : "Share ideas. Cmd/Ctrl+Enter to send."} />
               <div className="novel-chat-actions">
                 <button className="secondary-button" type="button" disabled={!chatInput.trim() || busy} onClick={() => void sendChat()}><Send size={15} />{isZh ? "发送" : "Send"}</button>
                 {view !== "export" ? <button className="primary-button" type="button" disabled={busy} onClick={() => void generateStage()}><Sparkles size={15} />{isZh ? "生成/更新当前阶段" : "Generate"}</button> : null}

@@ -8,8 +8,10 @@ import type {
   CreationUnitStatus,
   CreationWorkspaceV2,
   EpisodePlan,
+  ScreenplayBlock,
   ScreenplayEpisode,
   ScreenplayFormat,
+  ScreenplayScene,
 } from "./types.ts";
 
 type LegacyChapter = {
@@ -481,4 +483,175 @@ export function setEpisodePlan(
     [mode]: { ...track, episodePlan: { ...plan, updatedAt } },
     updatedAt,
   };
+}
+
+// ===== PRD V1.0 §8.3/§9：场次与结构化 block 操作 =====
+
+function mapUnitScenes(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  mapFn: (scenes: ScreenplayScene[], unit: CreationUnit) => { scenes: ScreenplayScene[]; unitPatch?: Partial<CreationUnit> },
+): CreationWorkspaceV2 {
+  const updatedAt = now();
+  const track = workspace[mode];
+  const units = track.units.map((unit) => {
+    if (unit.id !== unitId || !unit.screenplay) return unit;
+    const result = mapFn(unit.screenplay.scenes, unit);
+    const allFinalized = result.scenes.every((sc) => sc.status === "finalized");
+    return {
+      ...unit,
+      ...result.unitPatch,
+      status: (allFinalized ? "finalized" : "draft") as CreationUnitStatus,
+      screenplay: { ...unit.screenplay, scenes: result.scenes },
+      updatedAt,
+    };
+  });
+  return { ...workspace, [mode]: { ...track, units }, updatedAt };
+}
+
+/** 修改场次 block（PRD §9 段落类型可编辑，修改触发场次降级） */
+export function updateSceneBlock(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  sceneId: string,
+  blockId: string,
+  patch: Partial<{ type: ScreenplayBlock["type"]; character: string; text: string; translation: string }>,
+): CreationWorkspaceV2 {
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => ({
+    scenes: scenes.map((sc) => sc.id === sceneId
+      ? {
+        ...sc,
+        status: "draft" as CreationStatus,
+        blocks: sc.blocks.map((b) => b.id === blockId ? { ...b, ...patch } : b),
+      }
+      : sc),
+  }));
+}
+
+/** 新增 block 到场次末尾 */
+export function addSceneBlock(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  sceneId: string,
+  block?: Partial<ScreenplayBlock>,
+): CreationWorkspaceV2 {
+  const newBlock: ScreenplayBlock = {
+    id: `block-${crypto.randomUUID()}`,
+    type: block?.type || "action",
+    character: block?.character || "",
+    text: block?.text || "",
+    translation: block?.translation || "",
+  };
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => ({
+    scenes: scenes.map((sc) => sc.id === sceneId
+      ? { ...sc, status: "draft" as CreationStatus, blocks: [...sc.blocks, newBlock] }
+      : sc),
+  }));
+}
+
+/** 删除 block */
+export function deleteSceneBlock(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  sceneId: string,
+  blockId: string,
+): CreationWorkspaceV2 {
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => ({
+    scenes: scenes.map((sc) => sc.id === sceneId
+      ? { ...sc, status: "draft" as CreationStatus, blocks: sc.blocks.filter((b) => b.id !== blockId) }
+      : sc),
+  }));
+}
+
+/** 新建场（PRD §8.3 新建场，新增时集降级为草稿） */
+export function addScene(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  afterSceneId?: string | null,
+): CreationWorkspaceV2 {
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => {
+    const sceneNo = scenes.length + 1;
+    const newScene: ScreenplayScene = {
+      id: `scene-${crypto.randomUUID()}`,
+      sceneNo,
+      interiorExterior: "INT",
+      location: "",
+      timeOfDay: "",
+      characters: [],
+      blocks: [{ id: `block-${crypto.randomUUID()}`, type: "action", character: "", text: "", translation: "" }],
+      status: "draft",
+    };
+    if (!afterSceneId) return { scenes: [...scenes, newScene] };
+    const idx = scenes.findIndex((sc) => sc.id === afterSceneId);
+    if (idx < 0) return { scenes: [...scenes, newScene] };
+    const next = [...scenes];
+    next.splice(idx + 1, 0, newScene);
+    // 重新编号
+    return { scenes: next.map((sc, i) => ({ ...sc, sceneNo: i + 1 })) };
+  });
+}
+
+/** 删除场（PRD §7.8 删除定稿场次时集降级） */
+export function deleteScene(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  sceneId: string,
+): CreationWorkspaceV2 {
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => {
+    const next = scenes.filter((sc) => sc.id !== sceneId);
+    return { scenes: next.map((sc, i) => ({ ...sc, sceneNo: i + 1 })) };
+  });
+}
+
+/** 拖拽重排场次（PRD §7.8 重排定稿场次时降级） */
+export function reorderScenes(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  fromSceneId: string,
+  toSceneId: string,
+): CreationWorkspaceV2 {
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => {
+    const fromIdx = scenes.findIndex((sc) => sc.id === fromSceneId);
+    const toIdx = scenes.findIndex((sc) => sc.id === toSceneId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return { scenes };
+    const next = [...scenes];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    return { scenes: next.map((sc, i) => ({ ...sc, sceneNo: i + 1, status: "draft" as CreationStatus })) };
+  });
+}
+
+/** 追加预览的新场（PRD §8.5 AI 新场先预览确认后插入） */
+export function appendPreviewScene(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  scene: ScreenplayScene,
+): CreationWorkspaceV2 {
+  return mapUnitScenes(workspace, mode, unitId, (scenes) => {
+    const sceneNo = scenes.length + 1;
+    return { scenes: [...scenes, { ...scene, sceneNo, status: "draft" }] };
+  });
+}
+
+/** 用 AI 生成的 screenplay 整体替换当前集（PRD §7.7 整集生成） */
+export function applyScreenplayToUnit(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+  screenplay: ScreenplayEpisode,
+): CreationWorkspaceV2 {
+  const updatedAt = now();
+  const track = workspace[mode];
+  const units = track.units.map((unit) => unit.id === unitId
+    ? { ...unit, screenplay: { ...screenplay, id: unit.screenplay?.id || screenplay.id }, status: "draft" as CreationUnitStatus, updatedAt }
+    : unit);
+  return { ...workspace, [mode]: { ...track, units }, updatedAt };
 }
