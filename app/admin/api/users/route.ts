@@ -27,7 +27,8 @@ export async function GET(request: Request) {
     // 查 profiles（带筛选）
     let profileQuery = "/rest/v1/storyflow_profiles?select=user_id,email,display_name,plan";
     const filters: string[] = [];
-    if (q) filters.push(`email=ilike.*${encodeURIComponent(q)}*`);
+    const escapedQ = q.replace(/[%_\\]/g, "\\$&");
+    if (q) filters.push(`email=ilike.*${encodeURIComponent(escapedQ)}*`);
     if (plan) filters.push(`plan=eq.${encodeURIComponent(plan)}`);
     if (filters.length) profileQuery += "&" + filters.join("&");
     profileQuery += `&order=created_at.desc&limit=${pageSize}&offset=${rangeStart}`;

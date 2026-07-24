@@ -27,7 +27,7 @@ export async function GET(request: Request, ctx: { params: { userId: string } })
       ),
       serviceFetch<AuthUser | { error: string }>(
         `/auth/v1/admin/users/${encodeURIComponent(userId)}`
-      ).catch(() => null),
+      ).catch((e) => { console.error("[admin] auth user fetch failed:", e); return null; }),
       serviceFetch<TaskRow[]>(
         `/rest/v1/storyflow_generation_tasks?user_id=eq.${encodeURIComponent(userId)}&select=id,step_key,status,created_at,completed_at&order=created_at.desc&limit=20`
       ),
