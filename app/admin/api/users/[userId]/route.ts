@@ -10,13 +10,13 @@ type CreditRow = { user_id: string; balance: number; monthly_limit: number; peri
 type AuthUser = { id: string; email?: string; created_at?: string; last_sign_in_at?: string; banned_until?: string | null };
 type TaskRow = { id: string; step_key: string; status: string; created_at: string; completed_at: string | null };
 
-export async function GET(request: Request, ctx: { params: { userId: string } }) {
+export async function GET(request: Request, ctx: { params: Promise<{ userId: string }> }) {
   try {
     await requireAdminRole(request, "viewer");
     if (!hasServiceRoleConfig()) {
       return Response.json({ error: "MISSING_SERVICE_ROLE_CONFIG" }, { status: 500 });
     }
-    const userId = ctx.params.userId;
+    const userId = (await ctx.params).userId;
 
     const [profiles, credits, authResp, tasks] = await Promise.all([
       serviceFetch<ProfileRow[]>(
@@ -65,13 +65,13 @@ export async function GET(request: Request, ctx: { params: { userId: string } })
   }
 }
 
-export async function PATCH(request: Request, ctx: { params: { userId: string } }) {
+export async function PATCH(request: Request, ctx: { params: Promise<{ userId: string }> }) {
   try {
     const admin = await requireAdminRole(request, "operator");
     if (!hasServiceRoleConfig()) {
       return Response.json({ error: "MISSING_SERVICE_ROLE_CONFIG" }, { status: 500 });
     }
-    const userId = ctx.params.userId;
+    const userId = (await ctx.params).userId;
     const body = await request.json().catch(() => ({}));
     const patch: Record<string, unknown> = {};
     if (typeof body.displayName === "string") patch.display_name = body.displayName;

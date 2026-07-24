@@ -6,13 +6,13 @@ import { serviceFetch, hasServiceRoleConfig } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function PATCH(request: Request, ctx: { params: { id: string } }) {
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdminRole(request, "operator");
     if (!hasServiceRoleConfig()) {
       return Response.json({ error: "MISSING_SERVICE_ROLE_CONFIG" }, { status: 500 });
     }
-    const id = ctx.params.id;
+    const id = (await ctx.params).id;
     const body = await request.json().catch(() => ({}));
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: admin.id };
     if (typeof body.injectionText === "string") patch.injection_text = body.injectionText;
@@ -37,13 +37,13 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
   }
 }
 
-export async function DELETE(request: Request, ctx: { params: { id: string } }) {
+export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdminRole(request, "operator");
     if (!hasServiceRoleConfig()) {
       return Response.json({ error: "MISSING_SERVICE_ROLE_CONFIG" }, { status: 500 });
     }
-    const id = ctx.params.id;
+    const id = (await ctx.params).id;
     await serviceFetch(`/rest/v1/storyflow_ai_prompt_overrides?id=eq.${encodeURIComponent(id)}`, {
       method: "DELETE",
     });

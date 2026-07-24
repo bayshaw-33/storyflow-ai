@@ -6,13 +6,13 @@ import { serviceFetch, hasServiceRoleConfig } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, ctx: { params: { key: string } }) {
+export async function POST(request: Request, ctx: { params: Promise<{ key: string }> }) {
   try {
     const admin = await requireAdminRole(request, "operator");
     if (!hasServiceRoleConfig()) {
       return Response.json({ error: "MISSING_SERVICE_ROLE_CONFIG" }, { status: 500 });
     }
-    const key = ctx.params.key;
+    const key = (await ctx.params).key;
     const body = await request.json().catch(() => ({}));
     const versionId: string = body.versionId;
     if (!versionId) return Response.json({ error: "MISSING_VERSION_ID" }, { status: 400 });
