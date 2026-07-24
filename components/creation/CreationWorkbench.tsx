@@ -282,8 +282,10 @@ export function CreationWorkbench() {
 
   // PRD V1.0 §8：左侧目录主导航 + AI 面板默认收起
   const [view, setView] = useState<ViewKey>("background");
-  // PRD V1.0 验收 P0-02：新项目默认展开 AI 对话与上传入口，避免小白面对空白 Markdown
-  const [aiPanelOpen, setAiPanelOpen] = useState(true);
+  // PRD V1.0 验收 P0-02：AI 面板默认策略 — 新项目/创作基座阶段默认展开，正文阶段默认收起
+  // 用 useEffect 按阶段智能设置初始值，避免全局固定 true 干扰正文写作
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const aiPanelInitedRef = useRef(false);
   const [unitSubMode, setUnitSubMode] = useState<"manuscript" | "translation" | "localization">("manuscript");
   // PRD V1.0 验收 P1-04：小白主路径隐藏高级功能 — 翻译/本土化收进「更多工具」
   const [moreToolsOpen, setMoreToolsOpen] = useState(false);
@@ -364,6 +366,19 @@ export function CreationWorkbench() {
     : (mode === "screenplay" && !planFinalized ? (isZh ? "剧本版需先定稿分集规划。" : "Finalize the episode plan first.") : "");
   const productionGate = canEnterProduction(workspace, activeUnit?.id);
   const exportGate = true; // 导出始终可用
+
+  // PRD V1.0 验收 P0-02：AI 面板智能默认 — 首次加载时按阶段决定初始展开状态
+  // 创作基座未全部定稿（背景/角色/大纲阶段）→ 默认展开 AI（小白需要 AI 引导）
+  // 进入正文阶段（view=unit/episodePlan）→ 默认收起 AI（专注写作）
+  // 用户手动开关后不再自动覆盖（aiPanelInitedRef 一次性）
+  useEffect(() => {
+    if (aiPanelInitedRef.current) return;
+    // 等项目真实加载后再判断（避免 freshProject 占位态误判）
+    if (!project.id || project.id.startsWith("draft-")) return;
+    aiPanelInitedRef.current = true;
+    const inFoundation = !outlineFinalized || view === "background" || view === "characters" || view === "outline";
+    setAiPanelOpen(inFoundation);
+  }, [project.id, outlineFinalized, view]);
 
   useEffect(() => {
     setMessages((current) => current.map((item) => item.id === "welcome" ? message("assistant", welcome(isZh), "welcome") : item));

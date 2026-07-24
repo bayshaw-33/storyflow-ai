@@ -533,13 +533,20 @@ export function finalizeEpisodePlan(
   const finalizedPlan = { ...track.episodePlan, status: "finalized" as CreationStatus, updatedAt };
 
   // PRD V1.0 验收 P0-06：根据规划 items 自动建立集结构
-  // 保留已存在集（按 episodeNo 匹配）的 screenplay/内容，仅补建缺失集
+  // 保留所有已存在集（不丢失正文），仅补建规划中新增的集；
+  // 规划中仍存在的集同步标题；规划中已删除的集保留在 units 中不静默丢弃（降级为草稿）。
   const existingByNo = new Map(track.units.map((u) => [u.number, u]));
-  const units = track.episodePlan.items.map((item, idx) => {
+  const plannedNos = new Set(track.episodePlan.items.map((it) => it.episodeNo));
+
+  // 1. 同步/补建规划中的集
+  const plannedUnits = track.episodePlan.items.map((item) => {
     const existing = existingByNo.get(item.episodeNo);
     if (existing) {
-      // 同步标题（规划为源）
-      return existing.title === item.title ? existing : { ...existing, title: item.title, updatedAt };
+      // 同步标题（规划为源）；标题变更时降级为草稿（正文可能需要重写）
+      const titleChanged = existing.title !== item.title;
+      return titleChanged
+        ? { ...existing, title: item.title, status: "draft" as CreationUnitStatus, updatedAt }
+        : existing;
     }
     const newUnitId = `${mode}-unit-${crypto.randomUUID()}`;
     return {
@@ -560,6 +567,14 @@ export function finalizeEpisodePlan(
       updatedAt,
     };
   });
+
+  // 2. 保留规划中已删除但仍有正文的集（降级为草稿，标记为"规划外"——通过 number 不在 plannedNos 体现）
+  //    这些集不静默丢弃，让用户能手动迁移或归档
+  const orphanUnits = track.units
+    .filter((u) => !plannedNos.has(u.number))
+    .map((u) => u.status === "finalized" ? { ...u, status: "draft" as CreationUnitStatus, updatedAt } : u);
+
+  const units = [...plannedUnits, ...orphanUnits];
 
   return {
     ...workspace,

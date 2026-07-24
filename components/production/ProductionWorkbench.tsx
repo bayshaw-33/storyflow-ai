@@ -117,8 +117,10 @@ export function ProductionWorkbench() {
   >("resolving_scope");
   const [draftPersistError, setDraftPersistError] = useState<string>("");
   const [notice, setNotice] = useState<string>("");
-  // PRD V1.0 验收 P0-05：制作台门禁 — 校验 sourceUnit 是否为剧本版定稿集，否则阻断
+  // PRD V1.0 验收 P0-05：制作台门禁 — 服务端 fail-closed 校验
+  // productionGateLoading=true 时表示正在调服务端校验，未收到结果前不显示主界面也不显示阻断
   const [productionGateError, setProductionGateError] = useState<string>("");
+  const [productionGateLoading, setProductionGateLoading] = useState<boolean>(false);
 
   // --- Storyboard 状态（contracts.ts）---
   const [scenes, setScenes] = useState<StoryboardScene[]>([]);
@@ -308,31 +310,43 @@ export function ProductionWorkbench() {
     setNotice(draftPersistError);
   }, [draftPersistError]);
 
-  // PRD V1.0 验收 P0-05：制作台门禁 — sourceUnit 必须是剧本版定稿集才能进入制作
-  // 草稿项目（需求墙 setup=1 流程）跳过门禁；找不到项目时不阻断（交由下游处理）
+  // PRD V1.0 验收 P0-05：制作台门禁 — 服务端 fail-closed 双重校验
+  // 草稿项目（需求墙 setup=1 流程）跳过门禁；正式项目必须通过服务端校验
+  // 服务端校验未返回 ok=true 前，默认阻断（fail-closed），不再"找不到项目就放行"
   useEffect(() => {
     if (!projectId || !sourceUnitId) return;
     if (projectId.startsWith("draft-")) {
       setProductionGateError("");
+      setProductionGateLoading(false);
       return;
     }
-    const projects = readProjectsFromStorage();
-    const target = projects.find((p) => p.id === projectId);
-    if (!target) {
-      setProductionGateError("");
-      return;
-    }
-    const ws = target.creationWorkspace;
-    if (!ws) {
-      setProductionGateError("该项目缺少创作工作区数据，不能进入制作。");
-      return;
-    }
-    const gate = canEnterProduction(ws, sourceUnitId);
-    if (!gate.ok) {
-      setProductionGateError(gate.reason || "该集未定稿或非剧本集，不能进入制作。");
-      return;
-    }
+    let cancelled = false;
     setProductionGateError("");
+    setProductionGateLoading(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/production/verify-entry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, sourceUnitId }),
+        });
+        const data = await res.json() as { ok: boolean; reason?: string; projectTitle?: string };
+        if (cancelled) return;
+        if (!data.ok) {
+          setProductionGateError(data.reason || "该集未满足制作条件，不能进入制作。");
+        } else {
+          setProductionGateError("");
+          if (data.projectTitle && !projectTitle) setProjectTitle(data.projectTitle);
+        }
+      } catch {
+        if (!cancelled) {
+          setProductionGateError("制作入口校验失败，请检查网络后重试。");
+        }
+      } finally {
+        if (!cancelled) setProductionGateLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [projectId, sourceUnitId]);
 
   // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
@@ -1266,6 +1280,29 @@ export function ProductionWorkbench() {
   if (isEmptyState) {
     return (
       <ProductionEmptyState entryMode={typeof entryMode === "string" ? entryMode : undefined} />
+    );
+  }
+
+  // PRD V1.0 验收 P0-05：服务端校验进行中 — 不显示主界面，避免校验未完成时暴露
+  if (productionGateLoading) {
+    return (
+      <main className={styles.shell}>
+        <section
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 14,
+            minHeight: "60vh",
+            padding: "32px",
+            textAlign: "center",
+          }}
+        >
+          <div className="spinner" style={{ width: 28, height: 28, border: "3px solid var(--border)", borderTopColor: "#14B8A6", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <p style={{ margin: 0, fontSize: 13, color: "var(--ink-secondary)" }}>正在校验制作入口…</p>
+        </section>
+      </main>
     );
   }
 
