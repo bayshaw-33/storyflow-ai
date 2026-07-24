@@ -42,7 +42,10 @@ import {
   applyScreenplayToUnit,
   applyUnitTranslation,
   appendPreviewScene,
+  canEnterProduction,
+  canCreateUnit,
   canGenerateEpisodePlan,
+  canGenerateScript,
   createCreationWorkspace,
   deleteScene,
   deleteSceneBlock,
@@ -61,6 +64,8 @@ import type {
   CreationStatus,
   CreationUnit,
   CreationWorkspaceV2,
+  EpisodePlan,
+  EpisodePlanItem,
   ScreenplayBlock,
   ScreenplayFormat,
   ScreenplayScene,
@@ -214,6 +219,35 @@ function appendNotes(current: string, role: "USER" | "AI", content: string) {
     .slice(-30000);
 }
 
+// PRD V1.0 验收 第三批/P1-05：创作基座文档结构化字段模板（点击插入 markdown 标题到光标处）
+const DOC_FIELD_TEMPLATES: Record<"background" | "characters" | "outline", Array<{ zh: string; en: string }>> = {
+  background: [
+    { zh: "题材", en: "Genre" },
+    { zh: "发布平台", en: "Platform" },
+    { zh: "世界观", en: "World" },
+    { zh: "时代背景", en: "Era" },
+    { zh: "主角设定", en: "Protagonist" },
+    { zh: "反派设定", en: "Antagonist" },
+    { zh: "核心冲突", en: "Core conflict" },
+    { zh: "情绪基调", en: "Tone" },
+  ],
+  characters: [
+    { zh: "主角·身份", en: "Protagonist·Identity" },
+    { zh: "主角·目标", en: "Protagonist·Goal" },
+    { zh: "主角·弱点", en: "Protagonist·Flaw" },
+    { zh: "主角·秘密", en: "Protagonist·Secret" },
+    { zh: "主角·成长弧线", en: "Protagonist·Arc" },
+    { zh: "反派设定", en: "Antagonist" },
+    { zh: "关键配角", en: "Key supporting" },
+  ],
+  outline: [
+    { zh: "第一幕·开篇", en: "Act 1·Opening" },
+    { zh: "第二幕·发展", en: "Act 2·Development" },
+    { zh: "第三幕·高潮结局", en: "Act 3·Climax" },
+    { zh: "12 集大纲要点", en: "12-episode beats" },
+  ],
+};
+
 export function CreationWorkbench() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -239,6 +273,7 @@ export function CreationWorkbench() {
   const sourceInput = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const docEditorRef = useRef<HTMLTextAreaElement>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -247,8 +282,11 @@ export function CreationWorkbench() {
 
   // PRD V1.0 §8：左侧目录主导航 + AI 面板默认收起
   const [view, setView] = useState<ViewKey>("background");
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  // PRD V1.0 验收 P0-02：新项目默认展开 AI 对话与上传入口，避免小白面对空白 Markdown
+  const [aiPanelOpen, setAiPanelOpen] = useState(true);
   const [unitSubMode, setUnitSubMode] = useState<"manuscript" | "translation" | "localization">("manuscript");
+  // PRD V1.0 验收 P1-04：小白主路径隐藏高级功能 — 翻译/本土化收进「更多工具」
+  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
 
   // PRD V1.0 §8.3：左侧集场目录 — 展开/搜索/收起/当前场高亮
   const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
@@ -256,16 +294,17 @@ export function CreationWorkbench() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSceneId, setActiveSceneId] = useState("");
 
-  // PRD V1.0 §8.5：AI 输入作用范围（整集/当前场/选中文字）
-  const [aiScope, setAiScope] = useState<"episode" | "scene" | "selection">("episode");
+  // PRD V1.0 §8.5：AI 输入作用范围（整集/当前场/选中文字；创作基座阶段：当前阶段/全部资料）
+  const [aiScope, setAiScope] = useState<"episode" | "scene" | "selection" | "stage" | "materials">("episode");
 
   // PRD V1.0 §8.5：AI 修改预览后应用
   const [pendingPreview, setPendingPreview] = useState<null | {
-    kind: "newScene" | "modifyScene";
+    kind: "newScene" | "modifyScene" | "episodeScript";
     scene?: ScreenplayScene;
     sceneId?: string;
     originalText?: string;
     proposedText?: string;
+    screenplay?: ScreenplayEpisode;
   }>(null);
 
   // PRD V1.0 §7.2：上传资料理解摘要
@@ -318,9 +357,32 @@ export function CreationWorkbench() {
   const outlineFinalized = workspace.documents.plotOutline.status === "finalized";
   const planFinalized = track.episodePlan?.status === "finalized";
 
+  // PRD V1.0 验收 P1-06：顶层流程入口门禁 — 根据上游状态决定按钮是否可用
+  const manuscriptGate = outlineFinalized && (mode === "novel" || planFinalized);
+  const manuscriptGateReason = !outlineFinalized
+    ? (isZh ? "请先完成创作基座（背景/角色/大纲）。" : "Finish the foundation (background/characters/outline) first.")
+    : (mode === "screenplay" && !planFinalized ? (isZh ? "剧本版需先定稿分集规划。" : "Finalize the episode plan first.") : "");
+  const productionGate = canEnterProduction(workspace, activeUnit?.id);
+  const exportGate = true; // 导出始终可用
+
   useEffect(() => {
     setMessages((current) => current.map((item) => item.id === "welcome" ? message("assistant", welcome(isZh), "welcome") : item));
   }, [isZh]);
+
+  // PRD V1.0 验收 P1-07：导出页默认只勾选定稿单元（首次进入导出视图或单元集合变化时初始化）
+  const exportSelectionInit = useRef(false);
+  useEffect(() => {
+    if (view !== "export" || exportSelectionInit.current) return;
+    exportSelectionInit.current = true;
+    const defaults: Record<string, boolean> = {};
+    for (const u of track.units) defaults[u.id] = u.status === "finalized";
+    setExportSelection(defaults);
+  }, [view, track.units]);
+
+  // 单元集合变化时（新增/删除/切换 mode）重置初始化标志，允许下次重新计算默认值
+  useEffect(() => {
+    exportSelectionInit.current = false;
+  }, [mode, track.units.length]);
 
   // 任务 3：制作工作台 → 创作工作台 定位到 sourceUnitId 对应单元（携带上下文）
   const focusUnitBySourceId = (target: DramaProject, sourceUnitId: string | null) => {
@@ -375,16 +437,14 @@ export function CreationWorkbench() {
     }).catch(() => undefined);
   }, [project.universeId, session?.access_token]);
 
+  // PRD V1.0 验收 P0-04：移除「无 unit 时自动创建第 1 章/集」逻辑。
+  // 正文单元必须由分集规划定稿后自动建立（screenplay）或用户主动新建（novel，需大纲定稿）。
+  // 仅在 track 已有 unit 但 activeUnitId 失效时回退到首个 unit。
   useEffect(() => {
-    if (track.units.length) {
-      if (!track.units.some((unit) => unit.id === activeUnitId)) setActiveUnitId(track.units[0].id);
-      return;
+    if (track.units.length && !track.units.some((unit) => unit.id === activeUnitId)) {
+      setActiveUnitId(track.units[0].id);
     }
-    const unit = createUnit(mode, 1);
-    const next = { ...workspace, [mode]: { ...track, units: [unit] }, updatedAt: new Date().toISOString() };
-    setProject((current) => syncLegacy(current, next));
-    setActiveUnitId(unit.id);
-  }, [activeUnitId, mode, track, workspace]);
+  }, [activeUnitId, track.units]);
 
   useEffect(() => {
     if (track.arcs.length && !track.arcs.some((arc) => arc.id === activeArcId)) setActiveArcId(track.arcs[0].id);
@@ -409,6 +469,16 @@ export function CreationWorkbench() {
     if (center && scrollMemory.current[key] != null) center.scrollTop = scrollMemory.current[key];
     return () => { if (center) scrollMemory.current[key] = center.scrollTop; };
   }, [activeUnitId, view]);
+
+  // PRD V1.0 验收 P1-03：view 切换时，AI 作用范围跟随阶段重置
+  // 创作基座（background/characters/outline）→ stage；正文（unit）→ episode
+  useEffect(() => {
+    if (view === "background" || view === "characters" || view === "outline") {
+      setAiScope((cur) => (cur === "stage" || cur === "materials" ? cur : "stage"));
+    } else if (view === "unit") {
+      setAiScope((cur) => (cur === "episode" || cur === "scene" || cur === "selection" ? cur : "episode"));
+    }
+  }, [view]);
 
   function commitWorkspace(updater: (current: CreationWorkspaceV2) => CreationWorkspaceV2) {
     const currentProject = projectRef.current;
@@ -466,6 +536,12 @@ export function CreationWorkbench() {
   }
 
   function addUnit() {
+    // PRD V1.0 验收 P0-04：创建正文单元前校验门禁
+    const gate = canCreateUnit(workspace);
+    if (!gate.ok) {
+      setError(gate.reason || (isZh ? `当前阶段不能新建${mode === "novel" ? "章" : "集"}。` : "Cannot create a unit at this stage."));
+      return;
+    }
     const number = track.units.length + 1;
     const unit = createUnit(mode, number, `${mode}-unit-${crypto.randomUUID()}`);
     updateWorkspace((current) => ({
@@ -493,11 +569,15 @@ export function CreationWorkbench() {
     setStatus(isZh ? "已同步大章与章/集结构。" : "Arc and unit structure synchronized.");
   }
 
-  // PRD V1.0 §7.3：创作基座定稿
+  // PRD V1.0 §7.3 + 验收 P0-03：创作基座定稿（内容校验在 state 层）
   function finalizeDoc(docKey: keyof CreationWorkspaceV2["documents"]) {
-    const next = commitWorkspace((current) => finalizeDocument(current, docKey));
-    void saveProject(next);
-    setStatus(isZh ? "已定稿。" : "Finalized.");
+    try {
+      const next = commitWorkspace((current) => finalizeDocument(current, docKey));
+      void saveProject(next);
+      setStatus(isZh ? "已定稿。" : "Finalized.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "定稿失败");
+    }
   }
 
   // PRD V1.0 §7.4：修改创作文档（含上游修改降级）
@@ -532,6 +612,20 @@ export function CreationWorkbench() {
     const next = commitWorkspace((current) => finalizeEpisodePlan(current, mode));
     void saveProject(next);
     setStatus(isZh ? "分集规划已定稿，可逐集生成剧本。" : "Episode plan finalized.");
+  }
+
+  // PRD V1.0 验收 第二批：分集规划草稿可编辑（定稿后只读）
+  function editEpisodePlanItem(
+    episodeNo: number,
+    patch: Partial<Pick<EpisodePlanItem, "title" | "coreEvent" | "mainGoal" | "conflict" | "sceneCount">>,
+  ) {
+    if (!track.episodePlan || planFinalized) return;
+    const nextPlan: EpisodePlan = {
+      ...track.episodePlan,
+      items: track.episodePlan.items.map((it) => it.episodeNo === episodeNo ? { ...it, ...patch } : it),
+    };
+    const next = commitWorkspace((current) => setEpisodePlan(current, mode, nextPlan));
+    void saveProject(next);
   }
 
   // PRD V1.0 §7.8：逐场定稿 / 降级
@@ -624,6 +718,11 @@ export function CreationWorkbench() {
     if (!pendingPreview || !activeUnit) return;
     if (pendingPreview.kind === "newScene" && pendingPreview.scene) {
       const next = commitWorkspace((current) => appendPreviewScene(current, mode, activeUnit.id, pendingPreview.scene!));
+      void saveProject(next);
+    }
+    if (pendingPreview.kind === "episodeScript" && pendingPreview.screenplay) {
+      // PRD V1.0 验收 第二批：接受本集完整剧本生成预览，整体替换当前集 screenplay
+      const next = commitWorkspace((current) => applyScreenplayToUnit(current, mode, activeUnit.id, pendingPreview.screenplay!));
       void saveProject(next);
     }
     if (pendingPreview.kind === "modifyScene" && pendingPreview.sceneId) {
@@ -844,7 +943,7 @@ export function CreationWorkbench() {
     const isUnitTranslation = view === "unit" && unitSubMode === "translation";
     const isUnitLocalization = view === "unit" && unitSubMode === "localization";
     if (isUnitManuscript && activeUnit?.status === "finalized") {
-      setError(isZh ? "当前章/集已定稿，修改后会自动降级为草稿。" : "The current unit is finalized.");
+      setError(isZh ? `当前${mode === "novel" ? "章" : "集"}已定稿，修改后会自动降级为草稿。` : "The current unit is finalized.");
     }
     const translationSource = activeUnit ? buildTranslationSource(workspace, mode, activeUnit) : "";
     if (isUnitTranslation) {
@@ -858,7 +957,7 @@ export function CreationWorkbench() {
         return;
       }
       if (!translationSource) {
-        setError(isZh ? "当前章/集没有可翻译的正文。" : "The current unit has no source content to translate.");
+        setError(isZh ? `当前${mode === "novel" ? "章" : "集"}没有可翻译的正文。` : "The current unit has no source content to translate.");
         return;
       }
     }
@@ -927,6 +1026,56 @@ export function CreationWorkbench() {
     }
   }
 
+  // PRD V1.0 验收 第二批：生成本集完整剧本（剧本版专用主按钮）
+  // 校验 → 调 AI → 解析 → 预览确认（不直接覆盖）
+  async function generateEpisodeScript() {
+    if (busy) return;
+    if (!activeUnit) {
+      setError(isZh ? "请先选择一集剧本。" : "Select an episode first.");
+      return;
+    }
+    if (!canGenerateScript(workspace)) {
+      setError(isZh ? "请先完成并定稿剧情大纲与分集规划，再生成剧本。" : "Finalize the outline and episode plan before generating the script.");
+      return;
+    }
+    if (!session?.access_token) { setAuthOpen(true); return; }
+    setBusy(true);
+    setError("");
+    setStatus(isZh ? `正在生成第 ${activeUnit.number} 集完整剧本…` : `Generating episode ${activeUnit.number} script…`);
+    try {
+      // 前序定稿集的连续性备注，供 AI 保持前后一致
+      const previous = track.units
+        .filter((unit) => unit.status === "finalized" && unit.number < activeUnit.number)
+        .map((unit) => `第${unit.number}集《${unit.title}》连续性：${unit.continuityNotes || unit.outline || "—"}`)
+        .join("\n\n");
+      // 本集规划（从分集规划里匹配）
+      const planItem = track.episodePlan?.items.find((it) => it.episodeNo === activeUnit.number);
+      const episodePlanText = planItem
+        ? `本集规划：\n标题：${planItem.title}\n核心事件：${planItem.coreEvent}\n主角目标：${planItem.mainGoal}\n冲突：${planItem.conflict}\n计划场次：${planItem.sceneCount}`
+        : activeUnit.outline;
+      const input = [
+        `背景及世界观：\n${workspace.documents.backgroundWorld.content}`,
+        `角色圣经：\n${workspace.documents.characterBible.content}`,
+        `剧情大纲：\n${workspace.documents.plotOutline.content}`,
+        episodePlanText ? `\n${episodePlanText}` : "",
+        previous ? `\n前序集连续性：\n${previous}` : "",
+        chatInput.trim() ? `\n补充指令：${chatInput.trim()}` : "",
+      ].filter(Boolean).join("\n\n");
+      const output = await callAI("creation_screenplay_unit", input);
+      if (!output.trim()) throw new Error(isZh ? "AI 没有返回剧本内容。" : "AI returned no screenplay.");
+      const parsed = parseScreenplayUnitOutput(output);
+      const screenplay = parsed.screenplay;
+      if (!screenplay || !screenplay.scenes.length) throw new Error(isZh ? "AI 返回的剧本没有场次，无法应用。" : "AI screenplay has no scenes.");
+      setPendingPreview({ kind: "episodeScript", screenplay, proposedText: output });
+      setMessages((cur) => [...cur, message("assistant", isZh ? `已生成第 ${activeUnit.number} 集《${screenplay.title || activeUnit.title}》剧本预览（${screenplay.scenes.length} 场），请确认后应用。` : `Episode ${activeUnit.number} script preview ready (${screenplay.scenes.length} scenes). Confirm to apply.`)]);
+      setStatus(isZh ? "剧本生成预览已就绪，请确认。" : "Script preview ready. Confirm to apply.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Episode script generation failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function uploadSources(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
@@ -946,8 +1095,8 @@ export function CreationWorkbench() {
       const notes = added.map((file) => `【上传资料：${file.name}】\n${file.text}`).join("\n\n");
       setProject((current) => ({ ...current, novelDevelopmentNotes: [current.novelDevelopmentNotes, notes].filter(Boolean).join("\n\n") }));
       setMessages((current) => [...current, message("assistant", isZh ? `已读取 ${added.length} 份资料并加入创作上下文。` : `Read ${added.length} files and added them to the creation context.`)]);
-      // PRD V1.0 §7.2：上传资料后自动触发 AI 理解摘要
-      if (session?.access_token) void requestSourceComprehension([...sourceFiles, ...added]);
+      // PRD V1.0 §7.2：上传资料后自动触发 AI 理解摘要（仅当尚未生成理解时触发，避免重复）
+      if (session?.access_token && !sourceComprehension) void requestSourceComprehension([...sourceFiles, ...added]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "File parsing failed");
     } finally {
@@ -1023,10 +1172,21 @@ export function CreationWorkbench() {
 
   async function openDownstream(target: "art" | "production") {
     await saveProject();
-    // BLOCKER 3 (KIIKIS-P1-TRAE-002 §2): production handoff 必须锁定当前集，
-    // 不允许导入整部剧本或串到其他项目。sourceUnitId = activeUnitId。
-    if (target === "production" && !activeUnit) {
-      setStatus(isZh ? "请先选择或创建一集剧本，再进入分镜制作台。" : "Select or create an episode first.");
+    if (target === "production") {
+      // PRD V1.0 验收 P0-05：制作门禁 — 只有剧本版定稿且非空集才能进入
+      const gate = canEnterProduction(workspace, activeUnit?.id);
+      if (!gate.ok) {
+        setError(gate.reason || (isZh ? "不能进入制作。" : "Cannot enter production."));
+        return;
+      }
+      if (!activeUnit) {
+        setError(isZh ? "请先选择一集剧本。" : "Select an episode first.");
+        return;
+      }
+    }
+    if (target === "art" && mode === "novel") {
+      // PRD V1.0 验收 P1-02：美术台仅接收剧本版，小说版不可进入
+      setError(isZh ? "美术台仅接收剧本版集，请先切换到剧本版并定稿一集。" : "Art workbench only accepts finalized screenplay episodes.");
       return;
     }
     const contentType = mode === "novel" ? "novel" : "script";
@@ -1070,6 +1230,30 @@ export function CreationWorkbench() {
     updateUnit({ content: value });
   }
 
+  // PRD V1.0 验收 第三批/P1-05：点击字段模板，在光标处插入 markdown 标题
+  function insertFieldTemplate(fieldLabel: string) {
+    const ta = docEditorRef.current;
+    const insertText = `## ${fieldLabel}\n`;
+    if (!ta) {
+      // 无 ref 时追加到末尾
+      editValue((editorValue() ? editorValue() + "\n" : "") + insertText);
+      return;
+    }
+    const start = ta.selectionStart ?? editorValue().length;
+    const end = ta.selectionEnd ?? editorValue().length;
+    const before = editorValue().slice(0, start);
+    const after = editorValue().slice(end);
+    const needPrefix = before.length && !before.endsWith("\n") ? "\n" : "";
+    const next = before + needPrefix + insertText + after;
+    editValue(next);
+    // 恢复光标到插入内容之后
+    queueMicrotask(() => {
+      const pos = (before + needPrefix + insertText).length;
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+    });
+  }
+
   /** PRD V1.0 §9：单场渲染（连续编辑器内只读预览） */
   function renderSceneBlocks(scene: ScreenplayScene): string {
     return scene.blocks.map((block) => {
@@ -1095,6 +1279,19 @@ export function CreationWorkbench() {
 
   /** PRD V1.0 §8.5：按 aiScope 构造 AI 输入作用范围内容 */
   function buildScopeContent(): string {
+    // PRD V1.0 验收 P1-03：创作基座阶段 — 当前阶段（当前文档内容）
+    if (aiScope === "stage") {
+      const doc = view === "background" ? workspace.documents.backgroundWorld.content
+        : view === "characters" ? workspace.documents.characterBible.content
+        : view === "outline" ? workspace.documents.plotOutline.content
+        : "";
+      return doc ? `${isZh ? "【作用范围：当前阶段】" : "[Scope: current stage]"}\n${doc}` : "";
+    }
+    // PRD V1.0 验收 P1-03：全部资料（上传的 sourceFiles 拼接）
+    if (aiScope === "materials") {
+      const mats = sourceFiles.map((f) => `资料 ${f.name}：\n${f.text}`).join("\n\n");
+      return mats ? `${isZh ? "【作用范围：全部资料】" : "[Scope: all materials]"}\n${mats}` : "";
+    }
     if (aiScope === "scene" && activeSceneId && activeUnit?.screenplay) {
       const scene = activeUnit.screenplay.scenes.find((s) => s.id === activeSceneId);
       return scene ? `${isZh ? "【作用范围：当前场】" : "[Scope: current scene]"}\n${renderSceneBlocks(scene)}` : "";
@@ -1285,10 +1482,10 @@ export function CreationWorkbench() {
             </button>
             {flowMenuOpen ? (
               <div className="creation-flow-dropdown" role="menu">
-                <button type="button" className={view === "background" ? "active" : ""} onClick={() => { setView("background"); setFlowMenuOpen(false); }}>{isZh ? "① 创作基座" : "① Foundation"}</button>
-                <button type="button" className={view === "unit" || view === "episodePlan" ? "active" : ""} onClick={() => { setView(planFinalized ? "unit" : "episodePlan"); setFlowMenuOpen(false); }}>{isZh ? "② 正文创作" : "② Manuscript"}</button>
-                <button type="button" onClick={() => { void openDownstream("production"); setFlowMenuOpen(false); }} disabled={!activeUnit}>{isZh ? "③ 后期处理" : "③ Production"}</button>
-                <button type="button" className={view === "export" ? "active" : ""} onClick={() => { setView("export"); setFlowMenuOpen(false); }}>{isZh ? "④ 导出" : "④ Export"}</button>
+                <button type="button" className={view === "background" ? "active" : ""} onClick={() => { setView("background"); setFlowMenuOpen(false); }} title={isZh ? "创作基座（背景/角色/大纲）" : "Foundation"}>{isZh ? "① 创作基座" : "① Foundation"}</button>
+                <button type="button" className={`${view === "unit" || view === "episodePlan" ? "active" : ""} ${!manuscriptGate ? "disabled" : ""}`} onClick={() => { if (manuscriptGate) { setView(planFinalized ? "unit" : "episodePlan"); setFlowMenuOpen(false); } }} disabled={!manuscriptGate} title={manuscriptGate ? (isZh ? "正文创作" : "Manuscript") : manuscriptGateReason}>{isZh ? "② 正文创作" : "② Manuscript"}</button>
+                <button type="button" className={`${!productionGate.ok ? "disabled" : ""}`} onClick={() => { if (productionGate.ok) { void openDownstream("production"); setFlowMenuOpen(false); } }} disabled={!productionGate.ok} title={productionGate.ok ? (isZh ? "后期处理（分镜制作）" : "Production") : (productionGate.reason || (isZh ? "不可进入制作" : "Cannot enter production"))}>{isZh ? "③ 后期处理" : "③ Production"}</button>
+                <button type="button" className={view === "export" ? "active" : ""} onClick={() => { setView("export"); setFlowMenuOpen(false); }} title={isZh ? "导出" : "Export"} disabled={!exportGate}>{isZh ? "④ 导出" : "④ Export"}</button>
               </div>
             ) : null}
           </div>
@@ -1331,7 +1528,18 @@ export function CreationWorkbench() {
         <div className="creation-preview-bar">
           <div className="creation-preview-content">
             <strong>{isZh ? "AI 修改预览" : "AI Edit Preview"}</strong>
-            {pendingPreview.kind === "modifyScene" && pendingPreview.originalText ? (
+            {pendingPreview.kind === "episodeScript" && pendingPreview.screenplay ? (
+              <div className="creation-preview-script">
+                <p className="creation-preview-script-meta">
+                  {isZh ? `本集剧本：《${pendingPreview.screenplay.title}》 · 共 ${pendingPreview.screenplay.scenes.length} 场` : `Episode script: ${pendingPreview.screenplay.title} · ${pendingPreview.screenplay.scenes.length} scenes`}
+                </p>
+                <ol className="creation-preview-script-scenes">
+                  {pendingPreview.screenplay.scenes.map((sc) => (
+                    <li key={sc.id}>{sc.interiorExterior}·{sc.location || "—"}·{sc.timeOfDay || "—"}<span className="creation-preview-script-count">（{sc.blocks.length} 段）</span></li>
+                  ))}
+                </ol>
+              </div>
+            ) : pendingPreview.kind === "modifyScene" && pendingPreview.originalText ? (
               <div className="creation-preview-diff">
                 <div className="creation-preview-diff-col">
                   <span className="creation-preview-diff-label">{isZh ? "原内容" : "Original"}</span>
@@ -1373,7 +1581,7 @@ export function CreationWorkbench() {
             {/* PRD V1.0 §8.3：搜索集/场 */}
             <div className="creation-sidebar-search">
               <Search size={14} />
-              <input ref={searchInputRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={isZh ? "搜索集或场" : "Search"} />
+              <input ref={searchInputRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={isZh ? (mode === "novel" ? "搜索章或卷" : "搜索集或场") : "Search"} />
             </div>
             <button className="icon-button subtle" type="button" onClick={() => setSidebarCollapsed((v) => !v)} title={isZh ? "收起目录" : "Collapse"}><ChevronLeft size={16} /></button>
           </div>
@@ -1408,7 +1616,7 @@ export function CreationWorkbench() {
             <h3>
               <span>{isZh ? "正文" : "Manuscript"}</span>
               {mode === "novel" ? <button className="icon-button subtle" type="button" onClick={createArc} title={isZh ? "新建卷" : "Add volume"}><Plus size={14} /></button> : null}
-              <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? "新增章/集" : "Add unit"} disabled={mode === "screenplay" && !planFinalized}><Plus size={14} /></button>
+              <button className="icon-button subtle" type="button" onClick={addUnit} title={isZh ? (mode === "novel" ? "新增章" : "新增集") : "Add unit"} disabled={mode === "screenplay" && !planFinalized}><Plus size={14} /></button>
             </h3>
             {mode === "screenplay" && !planFinalized ? <p className="creation-sidebar-hint">{isZh ? "分集规划定稿后可逐集生成剧本。" : "Finalize episode plan first."}</p> : null}
             {/* P1-A：小说版卷（arc）层级 */}
@@ -1482,6 +1690,12 @@ export function CreationWorkbench() {
               {view === "unit" && activeUnit ? (
                 <button className="secondary-button" type="button" onClick={() => void openDownstream("production")} title={isZh ? "进入分镜制作" : "Storyboard"}><Clapperboard size={15} />{isZh ? "进入制作" : "Produce"}</button>
               ) : null}
+              {/* PRD V1.0 验收 第二批：剧本版正文阶段 — 生成本集完整剧本主按钮 */}
+              {view === "unit" && activeUnit && mode === "screenplay" && unitSubMode === "manuscript" ? (
+                <button className="primary-button" type="button" onClick={() => void generateEpisodeScript()} disabled={busy} title={isZh ? "基于背景/角色/大纲+本集规划生成完整剧本" : "Generate full episode script"}>
+                  <Sparkles size={15} />{isZh ? "生成本集完整剧本" : "Generate episode script"}
+                </button>
+              ) : null}
               {view === "unit" && activeUnit ? (
                 <>
                   <button className="secondary-button" type="button" onClick={() => setSearchReplaceOpen((v) => !v)} title={isZh ? "搜索替换" : "Find & replace"}><Replace size={15} />{isZh ? "替换" : "Replace"}</button>
@@ -1518,7 +1732,20 @@ export function CreationWorkbench() {
             ) : null}
             {/* 创作基座文档编辑器 */}
             {docView ? (
-              <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={editorValue()} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "在此编辑 Markdown 内容。定稿后下游将锁定，修改会自动降级。" : "Edit Markdown here. Finalizing locks downstream; edits downgrade automatically."} />
+              <>
+                {/* PRD V1.0 验收 第三批/P1-05：结构化字段模板提示卡 */}
+                <div className="creation-doc-templates">
+                  <span className="creation-doc-templates-label">{isZh ? "字段模板：" : "Field templates:"}</span>
+                  <div className="creation-doc-templates-chips">
+                    {(DOC_FIELD_TEMPLATES[view as "background" | "characters" | "outline"] || []).map((field) => (
+                      <button key={field.zh} className="creation-doc-template-chip" type="button" onClick={() => insertFieldTemplate(isZh ? field.zh : field.en)} title={isZh ? `插入「${field.zh}」` : `Insert "${field.en}"`}>
+                        {isZh ? field.zh : field.en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea ref={docEditorRef} className="novel-main-editor creation-markdown-editor creation-doc-editor" value={editorValue()} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "在这里描述你的故事背景、世界观、主角设定…点击上方字段模板开始，或直接输入。定稿后下游将锁定，修改会自动降级。" : "Describe your story world, characters… Click a field template above to start, or type directly. Finalizing locks downstream; edits downgrade automatically."} />
+              </>
             ) : null}
 
             {/* 分集规划 */}
@@ -1534,13 +1761,31 @@ export function CreationWorkbench() {
                     <div className="creation-plan-meta">{isZh ? `共 ${track.episodePlan.totalEpisodes} 集 · ${track.episodePlan.items.length} 条规划` : `${track.episodePlan.totalEpisodes} episodes · ${track.episodePlan.items.length} items`}</div>
                     {track.episodePlan.items.map((item) => (
                       <article className="creation-plan-item" key={item.episodeNo}>
-                        <header><strong>{isZh ? `第 ${item.episodeNo} 集` : `Episode ${item.episodeNo}`}</strong> · {item.title}</header>
-                        <dl>
-                          <dt>{isZh ? "核心事件" : "Core event"}</dt><dd>{item.coreEvent || "—"}</dd>
-                          <dt>{isZh ? "主角目标" : "Main goal"}</dt><dd>{item.mainGoal || "—"}</dd>
-                          <dt>{isZh ? "冲突" : "Conflict"}</dt><dd>{item.conflict || "—"}</dd>
-                          <dt>{isZh ? "场次" : "Scenes"}</dt><dd>{item.sceneCount}</dd>
-                        </dl>
+                        <header>
+                          <strong>{isZh ? `第 ${item.episodeNo} 集` : `Episode ${item.episodeNo}`}</strong>
+                          {planFinalized ? <span className="creation-plan-item-title">{item.title}</span> : (
+                            <input className="creation-plan-edit-title" value={item.title} onChange={(e) => editEpisodePlanItem(item.episodeNo, { title: e.target.value })} placeholder={isZh ? "集标题" : "Episode title"} />
+                          )}
+                        </header>
+                        {planFinalized ? (
+                          <dl>
+                            <dt>{isZh ? "核心事件" : "Core event"}</dt><dd>{item.coreEvent || "—"}</dd>
+                            <dt>{isZh ? "主角目标" : "Main goal"}</dt><dd>{item.mainGoal || "—"}</dd>
+                            <dt>{isZh ? "冲突" : "Conflict"}</dt><dd>{item.conflict || "—"}</dd>
+                            <dt>{isZh ? "场次" : "Scenes"}</dt><dd>{item.sceneCount}</dd>
+                          </dl>
+                        ) : (
+                          <dl className="creation-plan-edit-grid">
+                            <dt>{isZh ? "核心事件" : "Core event"}</dt>
+                            <dd><textarea value={item.coreEvent} onChange={(e) => editEpisodePlanItem(item.episodeNo, { coreEvent: e.target.value })} placeholder={isZh ? "本集核心事件" : "Core event"} rows={2} /></dd>
+                            <dt>{isZh ? "主角目标" : "Main goal"}</dt>
+                            <dd><textarea value={item.mainGoal} onChange={(e) => editEpisodePlanItem(item.episodeNo, { mainGoal: e.target.value })} placeholder={isZh ? "主角目标" : "Main goal"} rows={2} /></dd>
+                            <dt>{isZh ? "冲突" : "Conflict"}</dt>
+                            <dd><textarea value={item.conflict} onChange={(e) => editEpisodePlanItem(item.episodeNo, { conflict: e.target.value })} placeholder={isZh ? "冲突" : "Conflict"} rows={2} /></dd>
+                            <dt>{isZh ? "场次" : "Scenes"}</dt>
+                            <dd><input type="number" min={0} value={item.sceneCount} onChange={(e) => editEpisodePlanItem(item.episodeNo, { sceneCount: Number(e.target.value) || 0 })} /></dd>
+                          </dl>
+                        )}
                         {item.sceneOutlines.length ? (
                           <ol className="creation-plan-scenes">{item.sceneOutlines.map((outline, idx) => <li key={idx}>{outline}</li>)}</ol>
                         ) : null}
@@ -1554,10 +1799,18 @@ export function CreationWorkbench() {
             {/* 单元编辑器 */}
             {view === "unit" && activeUnit ? (
               <>
+                {/* PRD V1.0 验收 P1-04：主路径只留「正文」，翻译/本土化收进「更多工具」 */}
                 <div className="creation-unit-subtabs">
                   <button className={unitSubMode === "manuscript" ? "active" : ""} type="button" onClick={() => setUnitSubMode("manuscript")}>{isZh ? "正文" : "Manuscript"}</button>
-                  <button className={unitSubMode === "translation" ? "active" : ""} type="button" onClick={() => setUnitSubMode("translation")}>{isZh ? "翻译" : "Translation"}</button>
-                  <button className={unitSubMode === "localization" ? "active" : ""} type="button" onClick={() => setUnitSubMode("localization")}>{isZh ? "本土化" : "Localization"}</button>
+                  <button className={`creation-more-tools-trigger ${moreToolsOpen ? "open" : ""} ${unitSubMode !== "manuscript" ? "active" : ""}`} type="button" onClick={() => setMoreToolsOpen((v) => !v)} title={isZh ? "更多工具" : "More tools"} aria-expanded={moreToolsOpen}>
+                    {isZh ? "更多工具" : "More"}<ChevronDown size={13} />
+                  </button>
+                  {moreToolsOpen ? (
+                    <div className="creation-more-tools-menu" role="menu">
+                      <button type="button" className={unitSubMode === "translation" ? "active" : ""} onClick={() => { setUnitSubMode("translation"); setMoreToolsOpen(false); }} role="menuitem">{isZh ? "翻译" : "Translation"}</button>
+                      <button type="button" className={unitSubMode === "localization" ? "active" : ""} onClick={() => { setUnitSubMode("localization"); setMoreToolsOpen(false); }} role="menuitem">{isZh ? "本土化及雷同查验" : "Localization & Similarity"}</button>
+                    </div>
+                  ) : null}
                 </div>
 
                 {unitSubMode === "manuscript" ? (
@@ -1616,7 +1869,7 @@ export function CreationWorkbench() {
                       ))}
                     </div>
                   ) : (
-                    <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={activeUnit.content} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? "当前章/集正文。定稿后修改会自动降级为草稿。" : "Manuscript for this unit. Edits after finalizing downgrade to draft."} />
+                    <textarea className="novel-main-editor creation-markdown-editor creation-doc-editor" value={activeUnit.content} onChange={(event) => editValue(event.target.value)} placeholder={isZh ? `当前${mode === "novel" ? "章" : "集"}正文。定稿后修改会自动降级为草稿。` : "Manuscript for this unit. Edits after finalizing downgrade to draft."} />
                   )
                 ) : null}
 
@@ -1675,7 +1928,7 @@ export function CreationWorkbench() {
                 {/* ① 当前集导出 */}
                 <section className="creation-export-tier">
                   <h3>{isZh ? "① 当前集导出" : "① Current unit"}</h3>
-                  <p>{isZh ? "导出当前正在编辑的章/集，文件名含集号。" : "Export the unit currently being edited."}</p>
+                  <p>{isZh ? `导出当前正在编辑的${mode === "novel" ? "章" : "集"}，文件名含${mode === "novel" ? "章" : "集"}号。` : "Export the unit currently being edited."}</p>
                   <div className="creation-export-tier-actions">
                     <button className="primary-button" type="button" disabled={!activeUnit} onClick={() => { if (activeUnit) downloadMarkdown(unitToDocument(activeUnit), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${activeUnit.number}`); }}><Download size={15} />{isZh ? "当前集 MD" : "MD"}</button>
                     <button className="secondary-button" type="button" disabled={!activeUnit} onClick={() => { if (activeUnit) void downloadDocx(unitToDocument(activeUnit), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${activeUnit.number}`); }}><Download size={15} />{isZh ? "当前集 DOCX" : "DOCX"}</button>
@@ -1685,15 +1938,24 @@ export function CreationWorkbench() {
                 {/* ② 多集批量导出 */}
                 <section className="creation-export-tier">
                   <h3>{isZh ? "② 多集批量导出" : "② Batch export"}</h3>
-                  <p>{isZh ? "勾选要导出的章/集，批量下载。" : "Select units to export in batch."}</p>
+                  <p>{isZh ? `勾选要导出的${mode === "novel" ? "章" : "集"}，批量下载。` : "Select units to export in batch."}</p>
                   <div className="creation-export-batch">
                     {track.units.map((u) => (
                       <label key={u.id} className="creation-export-check">
                         <input type="checkbox" checked={Boolean(exportSelection[u.id])} onChange={(event) => setExportSelection((cur) => ({ ...cur, [u.id]: event.target.checked }))} />
                         <span>{mode === "novel" ? (isZh ? `第 ${u.number} 章` : `Ch.${u.number}`) : (isZh ? `第 ${u.number} 集` : `Ep.${u.number}`)} · {u.title}</span>
+                        <span className={`creation-export-badge ${u.status === "finalized" ? "finalized" : "draft"}`}>{u.status === "finalized" ? (isZh ? "定稿" : "Final") : (isZh ? "草稿" : "Draft")}</span>
                       </label>
                     ))}
                   </div>
+                  {(() => {
+                    const selectedUnits = track.units.filter((u) => exportSelection[u.id]);
+                    const hasDraft = selectedUnits.some((u) => u.status !== "finalized");
+                    const hasAny = selectedUnits.length > 0;
+                    return hasAny && hasDraft ? (
+                      <p className="creation-export-warning">{isZh ? "⚠ 含草稿内容，导出前请确认。" : "⚠ Contains draft content, please confirm before export."}</p>
+                    ) : null;
+                  })()}
                   <div className="creation-export-tier-actions">
                     <button className="primary-button" type="button" disabled={!Object.values(exportSelection).some(Boolean)} onClick={() => track.units.filter((u) => exportSelection[u.id]).forEach((u) => downloadMarkdown(unitToDocument(u), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${u.number}`))}><Download size={15} />{isZh ? "批量 MD" : "Batch MD"}</button>
                     <button className="secondary-button" type="button" disabled={!Object.values(exportSelection).some(Boolean)} onClick={() => void Promise.all(track.units.filter((u) => exportSelection[u.id]).map((u) => downloadDocx(unitToDocument(u), `${project.title}-${mode === "novel" ? "ch" : "ep"}-${u.number}`)))}><Download size={15} />{isZh ? "批量 DOCX" : "Batch DOCX"}</button>
@@ -1744,16 +2006,32 @@ export function CreationWorkbench() {
             </div>
 
             <div className="novel-chat-composer">
-              {/* PRD V1.0 §8.5：AI 输入作用范围 */}
+              {/* PRD V1.0 §8.5 / 验收 P1-03：AI 输入作用范围按阶段切换 */}
               <div className="creation-segmented creation-ai-scope" role="group" aria-label={isZh ? "AI 作用范围" : "AI scope"}>
-                <button className={aiScope === "episode" ? "active" : ""} type="button" onClick={() => setAiScope("episode")} title={isZh ? "整集" : "Episode"}>{isZh ? "整集" : "Episode"}</button>
-                <button className={aiScope === "scene" ? "active" : ""} type="button" onClick={() => setAiScope("scene")} title={isZh ? "当前场" : "Scene"}>{isZh ? "当前场" : "Scene"}</button>
-                <button className={aiScope === "selection" ? "active" : ""} type="button" onClick={() => setAiScope("selection")} title={isZh ? "选中文字" : "Selection"}>{isZh ? "选中" : "Selection"}</button>
+                {view === "background" || view === "characters" || view === "outline" ? (
+                  <>
+                    <button className={aiScope === "stage" ? "active" : ""} type="button" onClick={() => setAiScope("stage")} title={isZh ? "当前阶段文档" : "Current stage"}>{isZh ? "当前阶段" : "Stage"}</button>
+                    <button className={aiScope === "materials" ? "active" : ""} type="button" onClick={() => setAiScope("materials")} title={isZh ? "全部上传资料" : "All materials"}>{isZh ? "全部资料" : "Materials"}</button>
+                  </>
+                ) : (
+                  <>
+                    <button className={aiScope === "episode" ? "active" : ""} type="button" onClick={() => setAiScope("episode")} title={isZh ? "整集" : "Episode"}>{isZh ? "整集" : "Episode"}</button>
+                    <button className={aiScope === "scene" ? "active" : ""} type="button" onClick={() => setAiScope("scene")} title={isZh ? "当前场" : "Scene"}>{isZh ? "当前场" : "Scene"}</button>
+                    <button className={aiScope === "selection" ? "active" : ""} type="button" onClick={() => setAiScope("selection")} title={isZh ? "选中文字" : "Selection"}>{isZh ? "选中" : "Selection"}</button>
+                  </>
+                )}
               </div>
               <textarea ref={chatInputRef} value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); void sendChat(); } }} placeholder={isZh ? "输入想法、修改意见。⌘/Ctrl+Enter 发送。" : "Share ideas. Cmd/Ctrl+Enter to send."} />
               <div className="novel-chat-actions">
                 <button className="secondary-button" type="button" disabled={!chatInput.trim() || busy} onClick={() => void sendChat()}><Send size={15} />{isZh ? "发送" : "Send"}</button>
-                {view !== "export" ? <button className="primary-button" type="button" disabled={busy} onClick={() => void generateStage()}><Sparkles size={15} />{isZh ? "生成/更新当前阶段" : "Generate"}</button> : null}
+                {view === "unit" && mode === "screenplay" && unitSubMode === "manuscript" ? (
+                  // PRD V1.0 验收 第二批：剧本正文阶段禁用通用生成，引导用「生成本集完整剧本」主按钮
+                  <span className="creation-ai-hint" title={isZh ? "请使用上方「生成本集完整剧本」按钮" : "Use the Generate episode script button above"}>
+                    {isZh ? "用上方按钮生成剧本" : "Use the script button above"}
+                  </span>
+                ) : view !== "export" ? (
+                  <button className="primary-button" type="button" disabled={busy} onClick={() => void generateStage()}><Sparkles size={15} />{isZh ? "生成/更新当前阶段" : "Generate"}</button>
+                ) : null}
               </div>
             </div>
           </aside>

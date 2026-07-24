@@ -184,7 +184,8 @@ export function createCreationWorkspace(source: LegacyCreationSource = {}): Crea
     novel: { arcs: [], units: legacyNovelUnits(source, timestamp), episodePlan: null },
     screenplay: { arcs: [], units: [], episodePlan: null },
     settings: {
-      activeMode: "novel",
+      // PRD V1.0 验收 P0-01：默认创作剧本
+      activeMode: "screenplay",
       interfaceLanguage: "zh",
       targetMarket: "",
       genre: "",
@@ -198,6 +199,43 @@ export function createCreationWorkspace(source: LegacyCreationSource = {}): Crea
     },
     createdAt: timestamp,
     updatedAt: timestamp,
+  };
+}
+
+/**
+ * PRD V1.0 验收 P0-03：内容有效性校验。
+ * 创作基座文档必须有有效内容才能定稿。
+ * 有效内容 = 去除空白/markdown 装饰后仍有实质字符（>= 20 字）。
+ */
+const MIN_DOC_CONTENT_LEN = 20;
+export function hasValidDocContent(content: string): boolean {
+  const stripped = content.replace(/[#*>`\-\s]/g, "").trim();
+  return stripped.length >= MIN_DOC_CONTENT_LEN;
+}
+
+/**
+ * PRD V1.0 验收 P0-03：定稿创作文档前校验内容。
+ * 内容无效时抛错，由调用方 catch 并提示用户。
+ */
+export function finalizeDocument(
+  workspace: CreationWorkspaceV2,
+  docKey: keyof CreationWorkspaceV2["documents"],
+): CreationWorkspaceV2 {
+  const doc = workspace.documents[docKey];
+  if (!hasValidDocContent(doc.content)) {
+    const label = docKey === "backgroundWorld" ? "背景及世界观" : docKey === "characterBible" ? "角色圣经" : "剧情及大纲";
+    throw new Error(`${label} 内容为空或过短，请先通过 AI 生成或手动填写后再定稿。`);
+  }
+  const updatedAt = now();
+  // PRD V1.0 验收 P0-06：大纲定稿时，若 screenplay track 还没有 episodePlan，
+  // 不在此自动创建单元——分集规划定稿后才建集（见 finalizeEpisodePlan）。
+  return {
+    ...workspace,
+    documents: {
+      ...workspace.documents,
+      [docKey]: { ...doc, status: "finalized", updatedAt },
+    },
+    updatedAt,
   };
 }
 
@@ -311,22 +349,7 @@ export function reorderCreationStructure(
 }
 
 // ===== PRD V1.0 创作基座状态管理 =====
-
-/** 定稿创作文档（背景/角色/大纲） */
-export function finalizeDocument(
-  workspace: CreationWorkspaceV2,
-  docKey: keyof CreationWorkspaceV2["documents"],
-): CreationWorkspaceV2 {
-  const updatedAt = now();
-  return {
-    ...workspace,
-    documents: {
-      ...workspace.documents,
-      [docKey]: { ...workspace.documents[docKey], status: "finalized", updatedAt },
-    },
-    updatedAt,
-  };
-}
+// finalizeDocument 已移至文件上方（含内容校验）。
 
 /** 修改创作文档，触发下游降级（PRD §7.4） */
 export function updateDocument(
@@ -402,6 +425,48 @@ export function canGenerateScript(workspace: CreationWorkspaceV2): boolean {
   return workspace.documents.plotOutline.status === "finalized" && track.episodePlan?.status === "finalized";
 }
 
+/**
+ * PRD V1.0 验收 P0-05：制作门禁。
+ * 只有「剧本版 + 该集已定稿 + 该集有结构化场次且非空」才能进入后期制作。
+ * 返回 { ok, reason } 供调用方判断与提示。
+ */
+export function canEnterProduction(
+  workspace: CreationWorkspaceV2,
+  unitId: string | null | undefined,
+): { ok: boolean; reason?: string } {
+  if (workspace.settings.activeMode !== "screenplay") {
+    return { ok: false, reason: "只有剧本版定稿集才能进入制作，请切换到剧本版。" };
+  }
+  if (!unitId) return { ok: false, reason: "请先选择一集剧本。" };
+  const unit = workspace.screenplay.units.find((u) => u.id === unitId);
+  if (!unit) return { ok: false, reason: "未找到该集剧本。" };
+  if (unit.status !== "finalized") return { ok: false, reason: "该集尚未定稿，不能进入制作。" };
+  if (!unit.screenplay || !unit.screenplay.scenes.length) {
+    return { ok: false, reason: "该集没有结构化场次，不能进入制作。" };
+  }
+  const hasContent = unit.screenplay.scenes.some((sc) => sc.blocks.some((b) => b.text.trim().length > 0));
+  if (!hasContent) return { ok: false, reason: "该集场次内容为空，不能进入制作。" };
+  return { ok: true };
+}
+
+/**
+ * PRD V1.0 验收 P0-04：是否允许在当前 track 创建正文单元。
+ * - novel mode：大纲定稿后即可创建章（无分集规划约束）
+ * - screenplay mode：必须分集规划定稿后才能创建集（由 finalizeEpisodePlan 自动建集，用户不应手动新建）
+ */
+export function canCreateUnit(workspace: CreationWorkspaceV2): { ok: boolean; reason?: string } {
+  const mode = workspace.settings.activeMode;
+  if (workspace.documents.plotOutline.status !== "finalized") {
+    return { ok: false, reason: "请先完成并定稿剧情及大纲。" };
+  }
+  if (mode === "screenplay") {
+    if (!workspace.screenplay.episodePlan || workspace.screenplay.episodePlan.status !== "finalized") {
+      return { ok: false, reason: "剧本版需先完成并定稿分集规划，集会自动建立。" };
+    }
+  }
+  return { ok: true };
+}
+
 /** 定稿场次 */
 export function finalizeScene(
   workspace: CreationWorkspaceV2,
@@ -452,19 +517,56 @@ export function draftScene(
   return { ...workspace, [mode]: { ...track, units }, updatedAt };
 }
 
-/** 定稿分集规划 */
+/**
+ * PRD V1.0 验收 P0-06：定稿分集规划。
+ * 定稿后根据规划 items 自动建立对应集结构（保留已存在集的内容）。
+ * - screenplay mode：必须先有 episodePlan 才能定稿；定稿后自动建集。
+ * - novel mode：无分集规划概念，直接 return。
+ */
 export function finalizeEpisodePlan(
   workspace: CreationWorkspaceV2,
   mode: CreationMode,
 ): CreationWorkspaceV2 {
   const updatedAt = now();
   const track = workspace[mode];
-  if (!track.episodePlan) return workspace;
+  if (!track.episodePlan || !track.episodePlan.items.length) return workspace;
+  const finalizedPlan = { ...track.episodePlan, status: "finalized" as CreationStatus, updatedAt };
+
+  // PRD V1.0 验收 P0-06：根据规划 items 自动建立集结构
+  // 保留已存在集（按 episodeNo 匹配）的 screenplay/内容，仅补建缺失集
+  const existingByNo = new Map(track.units.map((u) => [u.number, u]));
+  const units = track.episodePlan.items.map((item, idx) => {
+    const existing = existingByNo.get(item.episodeNo);
+    if (existing) {
+      // 同步标题（规划为源）
+      return existing.title === item.title ? existing : { ...existing, title: item.title, updatedAt };
+    }
+    const newUnitId = `${mode}-unit-${crypto.randomUUID()}`;
+    return {
+      id: newUnitId,
+      number: item.episodeNo,
+      title: item.title || `${mode === "novel" ? "Chapter" : "Episode"} ${item.episodeNo}`,
+      outline: item.coreEvent ? `${item.coreEvent}\n目标：${item.mainGoal}\n冲突：${item.conflict}` : "",
+      content: "",
+      screenplay: null,
+      continuityNotes: "",
+      status: "draft" as CreationUnitStatus,
+      versions: [],
+      translation: "",
+      localizedContent: "",
+      localizationChanges: "",
+      similarityReport: "",
+      createdAt: updatedAt,
+      updatedAt,
+    };
+  });
+
   return {
     ...workspace,
     [mode]: {
       ...track,
-      episodePlan: { ...track.episodePlan, status: "finalized", updatedAt },
+      episodePlan: finalizedPlan,
+      units,
     },
     updatedAt,
   };

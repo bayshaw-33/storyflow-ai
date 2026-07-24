@@ -53,6 +53,8 @@ import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createProductionId } from "@/lib/production/state";
 import { isScopeActionable, isCloudActionable } from "@/lib/production/scope";
+import { canEnterProduction } from "@/lib/creation/state";
+import { readProjectsFromStorage } from "@/lib/projects";
 
 import type { ProductionSourceFile } from "@/lib/production/types";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
@@ -115,6 +117,8 @@ export function ProductionWorkbench() {
   >("resolving_scope");
   const [draftPersistError, setDraftPersistError] = useState<string>("");
   const [notice, setNotice] = useState<string>("");
+  // PRD V1.0 验收 P0-05：制作台门禁 — 校验 sourceUnit 是否为剧本版定稿集，否则阻断
+  const [productionGateError, setProductionGateError] = useState<string>("");
 
   // --- Storyboard 状态（contracts.ts）---
   const [scenes, setScenes] = useState<StoryboardScene[]>([]);
@@ -303,6 +307,33 @@ export function ProductionWorkbench() {
     if (!draftPersistError) return;
     setNotice(draftPersistError);
   }, [draftPersistError]);
+
+  // PRD V1.0 验收 P0-05：制作台门禁 — sourceUnit 必须是剧本版定稿集才能进入制作
+  // 草稿项目（需求墙 setup=1 流程）跳过门禁；找不到项目时不阻断（交由下游处理）
+  useEffect(() => {
+    if (!projectId || !sourceUnitId) return;
+    if (projectId.startsWith("draft-")) {
+      setProductionGateError("");
+      return;
+    }
+    const projects = readProjectsFromStorage();
+    const target = projects.find((p) => p.id === projectId);
+    if (!target) {
+      setProductionGateError("");
+      return;
+    }
+    const ws = target.creationWorkspace;
+    if (!ws) {
+      setProductionGateError("该项目缺少创作工作区数据，不能进入制作。");
+      return;
+    }
+    const gate = canEnterProduction(ws, sourceUnitId);
+    if (!gate.ok) {
+      setProductionGateError(gate.reason || "该集未定稿或非剧本集，不能进入制作。");
+      return;
+    }
+    setProductionGateError("");
+  }, [projectId, sourceUnitId]);
 
   // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
   // PRD §6.2: hydration gate —— ready 之前禁止把空初始 state 写入 localStorage
@@ -1235,6 +1266,48 @@ export function ProductionWorkbench() {
   if (isEmptyState) {
     return (
       <ProductionEmptyState entryMode={typeof entryMode === "string" ? entryMode : undefined} />
+    );
+  }
+
+  // PRD V1.0 验收 P0-05：制作台门禁阻断 — sourceUnit 非剧本版定稿集时显示阻断提示
+  if (productionGateError) {
+    return (
+      <main className={styles.shell}>
+        <section
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 14,
+            minHeight: "60vh",
+            padding: "32px",
+            textAlign: "center",
+          }}
+        >
+          <AlertTriangle size={36} color="#ffd166" />
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>该集未定稿或非剧本集，不能进入制作</h2>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--ink-secondary)", maxWidth: 460 }}>
+            {productionGateError}
+          </p>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => router.back()}
+            >
+              <ArrowLeft size={15} />返回
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => router.push("/dashboard")}
+            >
+              返回工作台
+            </button>
+          </div>
+        </section>
+      </main>
     );
   }
 

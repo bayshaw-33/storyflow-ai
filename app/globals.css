@@ -884,6 +884,10 @@ input:focus, textarea:focus, select:focus {
 }
 .creation-flow-dropdown button:hover { background: rgba(255,255,255,.06); }
 .creation-flow-dropdown button.active { background: rgba(0,200,170,.12); color: var(--accent); }
+.creation-flow-dropdown button.disabled,
+.creation-flow-dropdown button:disabled { opacity: .4; cursor: not-allowed; }
+.creation-flow-dropdown button.disabled:hover,
+.creation-flow-dropdown button:disabled:hover { background: transparent; }
 
 .creation-version-select { display: inline-flex; align-items: center; gap: 6px; }
 .creation-version-select select { min-width: 96px; }
@@ -1067,6 +1071,28 @@ input:focus, textarea:focus, select:focus {
 .creation-export-tier-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .creation-export-batch { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-height: 200px; overflow-y: auto; }
 .creation-export-check { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
+.creation-export-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.creation-export-badge.finalized { background: rgba(0, 200, 170, 0.14); color: #5eead4; border-color: rgba(0, 200, 170, 0.3); }
+.creation-export-badge.draft { background: rgba(255, 170, 80, 0.14); color: #ffb866; border-color: rgba(255, 170, 80, 0.3); }
+.creation-export-warning {
+  margin: 6px 0 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #ffb866;
+  background: rgba(255, 170, 80, 0.08);
+  border: 1px solid rgba(255, 170, 80, 0.24);
+}
 .creation-export-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--glass-border); }
 .creation-export-head h2 { margin: 0; font-size: 16px; }
 .creation-export-row {
@@ -8473,4 +8499,41 @@ a.ghost-button {
   .actors-layout {
     grid-template-columns: 1fr;
   }
+}
+
+/* ===== PRD V1.0 验收 第四批：响应式布局 ===== */
+/* 容器定位基准，供 AI 覆盖式抽屉绝对定位 */
+.creation-workbench-body { position: relative; }
+/* 中央编辑区最低宽度：桌面三栏下保证编辑器可用宽度 */
+.creation-v3-page:not(.sidebar-collapsed):not(.focus-mode) .creation-center { min-width: 380px; }
+
+/* 1280px 及以下：收窄侧栏与 AI 面板，优先保证中央宽度 */
+@media (max-width: 1280px) {
+  .creation-sidebar { flex: 0 0 200px; }
+  .creation-ai-panel { flex: 0 0 320px; }
+}
+
+/* 平板横屏（901–1024px）：AI 面板改为覆盖式抽屉，左侧目录进一步收窄 */
+@media (max-width: 1024px) and (min-width: 901px) {
+  .creation-sidebar { flex: 0 0 168px; }
+  .creation-ai-panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 340px;
+    max-width: 85vw;
+    z-index: 30;
+    box-shadow: -8px 0 24px rgba(0,0,0,.45);
+    border-left: 1px solid var(--glass-border);
+  }
+  .creation-v3-page:not(.focus-mode) .creation-center { min-width: 0; }
+}
+
+/* 小屏（≤768px）：折叠全局导航，顶部栏精简 */
+@media (max-width: 768px) {
+  .creation-v3-page .novel-topbar { flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
+  .creation-v3-page .novel-topbar-left { flex: 1 1 auto; min-width: 0; }
+  .creation-v3-page .novel-topbar-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+  .creation-version-select select { min-width: 72px; }
+  .creation-episode-select { min-width: 120px; max-width: 160px; }
+  .creation-flow-menu .creation-flow-dropdown { min-width: 150px; }
 }
