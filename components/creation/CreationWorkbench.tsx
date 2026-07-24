@@ -297,7 +297,11 @@ export function CreationWorkbench() {
   const [activeSceneId, setActiveSceneId] = useState("");
 
   // PRD V1.0 §8.5：AI 输入作用范围（整集/当前场/选中文字；创作基座阶段：当前阶段/全部资料）
-  const [aiScope, setAiScope] = useState<"episode" | "scene" | "selection" | "stage" | "materials">("episode");
+  // PRD V1.0 §8.5 / 验收 P1-03 + R-03：AI 输入作用范围按阶段切换
+  // 创作基座（background/characters/outline）→ Stage / Materials
+  // 分集规划（episodePlan）→ Plan / Materials（此时尚无集场，不应显示 Episode/Scene/Selection）
+  // 正文（unit）→ Episode / Scene / Selection
+  const [aiScope, setAiScope] = useState<"episode" | "scene" | "selection" | "stage" | "materials" | "plan">("episode");
 
   // PRD V1.0 §8.5：AI 修改预览后应用
   const [pendingPreview, setPendingPreview] = useState<null | {
@@ -367,7 +371,16 @@ export function CreationWorkbench() {
   const productionGate = canEnterProduction(workspace, activeUnit?.id);
   const exportGate = true; // 导出始终可用
 
-  // PRD V1.0 验收 P0-02：AI 面板智能默认 — 首次加载时按阶段决定初始展开状态
+  // PRD V1.0 验收 P1-03 + R-03：view 变化时自动重置 aiScope 到对应阶段默认值
+  useEffect(() => {
+    if (view === "background" || view === "characters" || view === "outline") {
+      setAiScope((prev) => (prev === "stage" || prev === "materials" ? prev : "stage"));
+    } else if (view === "episodePlan") {
+      setAiScope((prev) => (prev === "plan" || prev === "materials" ? prev : "plan"));
+    } else if (view === "unit") {
+      setAiScope((prev) => (prev === "episode" || prev === "scene" || prev === "selection" ? prev : "episode"));
+    }
+  }, [view]);
   // 创作基座未全部定稿（背景/角色/大纲阶段）→ 默认展开 AI（小白需要 AI 引导）
   // 进入正文阶段（view=unit/episodePlan）→ 默认收起 AI（专注写作）
   // 用户手动开关后不再自动覆盖（aiPanelInitedRef 一次性）
@@ -1307,6 +1320,15 @@ export function CreationWorkbench() {
       const mats = sourceFiles.map((f) => `资料 ${f.name}：\n${f.text}`).join("\n\n");
       return mats ? `${isZh ? "【作用范围：全部资料】" : "[Scope: all materials]"}\n${mats}` : "";
     }
+    // PRD V1.0 验收 R-03：分集规划阶段 — 当前分集规划
+    if (aiScope === "plan") {
+      const plan = track.episodePlan;
+      if (!plan) return "";
+      const planText = plan.items.map((it) =>
+        `第${it.episodeNo}集 ${it.title}\n核心事件：${it.coreEvent}\n目标：${it.mainGoal}\n冲突：${it.conflict}\n场次规划：${it.sceneOutlines.join("；")}`
+      ).join("\n\n");
+      return planText ? `${isZh ? "【作用范围：当前分集规划】" : "[Scope: current episode plan]"}\n${planText}` : "";
+    }
     if (aiScope === "scene" && activeSceneId && activeUnit?.screenplay) {
       const scene = activeUnit.screenplay.scenes.find((s) => s.id === activeSceneId);
       return scene ? `${isZh ? "【作用范围：当前场】" : "[Scope: current scene]"}\n${renderSceneBlocks(scene)}` : "";
@@ -2026,6 +2048,11 @@ export function CreationWorkbench() {
                 {view === "background" || view === "characters" || view === "outline" ? (
                   <>
                     <button className={aiScope === "stage" ? "active" : ""} type="button" onClick={() => setAiScope("stage")} title={isZh ? "当前阶段文档" : "Current stage"}>{isZh ? "当前阶段" : "Stage"}</button>
+                    <button className={aiScope === "materials" ? "active" : ""} type="button" onClick={() => setAiScope("materials")} title={isZh ? "全部上传资料" : "All materials"}>{isZh ? "全部资料" : "Materials"}</button>
+                  </>
+                ) : view === "episodePlan" ? (
+                  <>
+                    <button className={aiScope === "plan" ? "active" : ""} type="button" onClick={() => setAiScope("plan")} title={isZh ? "当前分集规划" : "Current episode plan"}>{isZh ? "当前规划" : "Plan"}</button>
                     <button className={aiScope === "materials" ? "active" : ""} type="button" onClick={() => setAiScope("materials")} title={isZh ? "全部上传资料" : "All materials"}>{isZh ? "全部资料" : "Materials"}</button>
                   </>
                 ) : (

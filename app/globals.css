@@ -594,7 +594,8 @@ input:focus, textarea:focus, select:focus {
 .kk-nav-vertical a[aria-current="page"],
 .kk-nav-settings-corner a[aria-current="page"] { color: #006BFF; font-weight: 500; }
 
-@media (max-width: 720px) {
+/* R-01：768px 及以下折叠全局左侧导航（原 720px 阈值导致 721-768 仍占 128px） */
+@media (max-width: 768px) {
   .kk-nav-vertical, .kk-nav-settings-corner { display: none; }
 }
 
@@ -8530,10 +8531,25 @@ a.ghost-button {
 
 /* 小屏（≤768px）：折叠全局导航，顶部栏精简 */
 @media (max-width: 768px) {
+  /* R-01：移除全局左侧导航占位，工作台从 x=0 开始 */
+  .app-shell,
+  .workflow-shell,
+  .song-workbench-page,
+  .novel-workbench-page,
+  .art-workbench-page,
+  .art-workbench-shell,
+  .universe-library-page,
+  .storyboard-workbench-page,
+  .video-workbench-page {
+    padding-left: 0;
+  }
   .creation-v3-page .novel-topbar { flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
   .creation-v3-page .novel-topbar-left { flex: 1 1 auto; min-width: 0; }
   .creation-v3-page .novel-topbar-actions { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
   .creation-version-select select { min-width: 72px; }
   .creation-episode-select { min-width: 120px; max-width: 160px; }
   .creation-flow-menu .creation-flow-dropdown { min-width: 150px; }
+  /* R-02：AI 对话区在 768px 下保证最小高度，避免被压缩到 24px */
+  .creation-ai-panel { flex: 1 1 auto; min-height: 320px; }
+  .creation-ai-panel .novel-chat-thread { flex: 1 1 auto; min-height: 180px; }
 }
