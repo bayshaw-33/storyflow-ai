@@ -1,0 +1,446 @@
+/* 资料编辑 · 暗色 Linear 风格，使用 design token */
+
+/* ===== SettingsTabs ===== */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--divider);
+  overflow-x: auto;
+}
+
+.tabLink {
+  position: relative;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--transition-base);
+}
+
+.tabLink:hover {
+  color: var(--ink-secondary);
+}
+
+.tabActive {
+  color: var(--accent-cyan);
+}
+
+.tabActive::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent-cyan);
+  border-radius: 2px;
+}
+
+.tabBody {
+  padding-top: var(--space-6);
+}
+
+/* ===== 表单通用 ===== */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 720px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.labelHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--input-bg);
+  color: var(--ink-primary);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-base);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-color: var(--accent-cyan);
+}
+
+.input:disabled,
+.textarea:disabled,
+.select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.hint {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.errorText {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.successText {
+  font-size: 12px;
+  color: var(--success);
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.rowEnd {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+/* ===== Notice（内联 toast 替代） ===== */
+.notice {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--glass-border);
+}
+
+.noticeSuccess {
+  background: var(--notice-success-bg);
+  border-color: var(--notice-success-border);
+  color: var(--success);
+}
+
+.noticeError {
+  background: var(--notice-error-bg);
+  border-color: var(--notice-error-border);
+  color: var(--danger);
+}
+
+/* ===== 按钮 ===== */
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: background var(--transition-base), border-color var(--transition-base), opacity var(--transition-base);
+}
+
+.primaryButton {
+  background: var(--button-primary-bg);
+  color: var(--button-primary-fg);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+}
+
+.secondaryButton {
+  background: var(--button-secondary-bg);
+  color: var(--ink-primary);
+  border-color: var(--glass-border);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--button-secondary-hover);
+  border-color: var(--glass-border-hover);
+}
+
+.dangerButton {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--glass-border);
+}
+
+.dangerButton:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ===== AvatarUploader ===== */
+.avatarUploader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.avatarPreview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.avatarPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatarActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===== AvatarAIGenerator ===== */
+.aiPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.aiHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.aiLimit {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.aiPreview {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.aiPreview img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--glass-border);
+}
+
+/* ===== UsernameField ===== */
+.usernameRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.usernameRow .input {
+  flex: 1;
+}
+
+.urlPreview {
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  padding: 6px 0;
+  word-break: break-all;
+}
+
+.urlPreview strong {
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
+.usernameStatus {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* ===== TagInput ===== */
+.tagInput {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tagChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 8px;
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  color: var(--accent-cyan);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+}
+
+.tagChipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.tagChipRemove:hover {
+  color: var(--danger);
+}
+
+/* ===== SocialLinksEditor ===== */
+.regionToggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  gap: 2px;
+  align-self: flex-start;
+}
+
+.regionToggle button {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+
+.regionToggle button:hover {
+  color: var(--ink-secondary);
+}
+
+.regionActive {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent-cyan) !important;
+}
+
+.regionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.regionGroupTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.regionHint {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  margin-top: var(--space-2);
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 640px) {
+  .row2 {
+    grid-template-columns: 1fr;
+  }
+  .avatarUploader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

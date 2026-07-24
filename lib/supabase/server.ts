@@ -1,3 +1,5 @@
+import { cookies } from "next/headers";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { GeneratePayload, TaskType } from "@/lib/ai/prompts";
 import type { AIUsage } from "@/lib/ai/providers";
 
@@ -62,6 +64,71 @@ export async function authenticateRequest(request: Request): Promise<Authenticat
     email: user.email || "",
     token,
   };
+}
+
+/**
+ * 在 Server Component / Route Handler 中读取当前访问者的 Supabase 会话。
+ * 通过解析 `sb-<project-ref>-auth-token` cookie 提取 access_token，
+ * 再复用 authenticateRequest() 校验。未登录或校验失败时返回 null。
+ *
+ * 注意：该 helper 依赖 @supabase/ssr 或等价机制将 session 写入 cookie。
+ * 若项目仅使用 localStorage 持久化（createClient persistSession），
+ * cookie 可能不存在，此时返回 null（视为匿名访客）。
+ */
+export async function getViewerFromCookies(): Promise<AuthenticatedUser | null> {
+  if (!hasServerSupabaseConfig()) return null;
+  const token = await readAccessTokenFromCookie();
+  if (!token) return null;
+  try {
+    const request = new Request("https://internal.kiikis.com/auth-viewer", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return await authenticateRequest(request);
+  } catch {
+    return null;
+  }
+}
+
+async function readAccessTokenFromCookie(): Promise<string> {
+  const cookieStore = await cookies();
+  const ref = getSupabaseProjectRef();
+  if (!ref) return "";
+  const cookieName = `sb-${ref}-auth-token`;
+
+  // @supabase/ssr 分片 cookie：sb-<ref>-auth-token.0 / .1 / ...
+  let raw = "";
+  for (let i = 0; i < 4; i += 1) {
+    const part = cookieStore.get(`${cookieName}.${i}`)?.value;
+    if (part) raw += part;
+  }
+  if (!raw) {
+    raw = cookieStore.get(cookieName)?.value || "";
+  }
+  if (!raw) return "";
+  return parseSupabaseSessionValue(raw);
+}
+
+function parseSupabaseSessionValue(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.access_token === "string") return parsed.access_token;
+  } catch {
+    // not plain JSON, try base64
+  }
+  try {
+    const decoded = Buffer.from(raw, "base64").toString("utf-8");
+    const parsed = JSON.parse(decoded);
+    if (typeof parsed?.access_token === "string") return parsed.access_token;
+  } catch {
+    // unable to parse
+  }
+  return "";
+}
+
+function getSupabaseProjectRef(): string {
+  const url = getSupabaseUrl();
+  const match = url.match(/^https?:\/\/([a-z0-9]+)\.supabase\./i);
+  return match?.[1] || "";
 }
 
 export async function getCreditAccount(userId: string): Promise<CreditAccount | null> {
@@ -355,4 +422,24 @@ function getSupabaseAnonKey() {
 
 function getSupabaseServiceRoleKey() {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+}
+
+
+let _serverSupabaseClient: SupabaseClient | null = null;
+
+/**
+ * 服务端 Supabase client（使用 service role key，绕过 RLS）。
+ * 用于需要 service-role 权限的查询/写入（如公开主页聚合、头像上传等）。
+ * 返回 null 表示缺少 SUPABASE_SERVICE_ROLE_KEY 配置。
+ */
+export function getSupabaseServerClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return null;
+  if (!_serverSupabaseClient) {
+    _serverSupabaseClient = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return _serverSupabaseClient;
 }
