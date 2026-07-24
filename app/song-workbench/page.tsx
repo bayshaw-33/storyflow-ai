@@ -1032,6 +1032,19 @@ export default function SongWorkbenchPage() {
     }
   }
 
+  // 聊天框直通生成：把输入作为上下文记录，但不显示为对话消息，直接调用生成
+  async function generateSongFromChat() {
+    const trimmed = chatInput.trim();
+    if (trimmed) {
+      const notesWithUser = appendSongNotes(songDevelopmentNotes, "USER", trimmed);
+      setSongDevelopmentNotes(notesWithUser);
+      if (!form.concept.trim()) updateForm("concept", trimmed);
+      setChatInput("");
+    }
+    setMobileView("results");
+    void generateAll();
+  }
+
   async function translateLyrics(sourceLyrics: string, targetLanguage: LyricsTranslationLanguage, signal: AbortSignal) {
     if (!session?.access_token || signal.aborted) return;
     setTranslationGenerating(true);
@@ -1923,9 +1936,14 @@ export default function SongWorkbenchPage() {
                 <Send size={15} />
                 {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
               </button>
-              {/* 移动端：AI 对话页提供"前往生成"进入结果页 */}
-              <button className="secondary-button song-mobile-goto-results" type="button" onClick={() => setMobileView("results")}>
-                {isZh ? "前往生成" : "Go to results"}
+              <button
+                className="primary-button song-generate-from-chat-btn"
+                type="button"
+                onClick={() => void generateSongFromChat()}
+                disabled={generating || chatGenerating}
+              >
+                <Sparkles size={15} />
+                {generating ? text.generating : (isZh ? "生成/更新歌曲" : "Generate / Update song")}
               </button>
             </div>
           </div>
@@ -1968,10 +1986,6 @@ export default function SongWorkbenchPage() {
                   <div className="song-card-actions">
                     <button className="icon-button" type="button" title={text.copy} disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>
                       <Copy size={15} />
-                    </button>
-                    <button className="primary-button song-generate-btn" type="button" onClick={() => void generateAll()} disabled={generating}>
-                      <Sparkles size={15} />
-                      {generating ? text.generating : (isZh ? "生成/更新" : "Generate / Update")}
                     </button>
                   </div>
                 </div>
