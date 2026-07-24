@@ -30,10 +30,43 @@ export const zh = {
   },
   overview: {
     title: "概览",
+    comingSoon: "运营看板即将上线",
+    totalGenerations: "生成任务总数",  // 保留，Task 14 后移除
+    range7days: "7天",
+    range30days: "30天",
+    refresh: "刷新",
+    // 用户模块
     totalUsers: "用户总数",
     newUsersToday: "今日新增",
-    totalGenerations: "生成任务总数",
-    comingSoon: "运营看板即将上线",
+    bannedUsers: "封禁用户",
+    planDistribution: "套餐分布",
+    registrationTrend: "注册趋势",
+    // 生成模块
+    textTasksTotal: "文本任务总数",
+    successRate: "成功率",
+    failureRate: "失败率",
+    generationTrend: "生成趋势",
+    jobTypeDistribution: "多媒体任务分布",
+    // 额度模块
+    totalBalance: "全局余额",
+    avgBalance: "平均水位",
+    lowBalanceUsers: "低额度用户",
+    monthlyLimitDistribution: "月度上限分布",
+    // 内容模块
+    projectsTotal: "项目总数",
+    episodesTotal: "剧集数",
+    scenesTotal: "场景数",
+    charactersTotal: "角色数",
+    projectStatusDistribution: "项目状态分布",
+    // 管理模块
+    adminCount: "管理员数",
+    roleDistribution: "角色分布",
+    auditLogLast24h: "24h 审计条数",
+    aiPromptsCount: "AI 指令数",
+    aiPromptsLastUpdated: "最近更新",
+    // 状态
+    loadFailed: "数据加载失败",
+    noData: "暂无数据",
   },
   users: {
     title: "用户管理",
