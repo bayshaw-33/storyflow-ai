@@ -47,12 +47,13 @@ type ProviderCallOptions = {
 };
 
 /**
- * PRD V1.0 验收修复（2026-07-24）：creation 文档类任务（背景/角色/大纲/分集规划/正文）输出长，
- * 原 DeepSeek 默认 90s 超时 + 8192 tokens 不足，导致"AI 请求超时"。
- * 这里给 creation 任务统一加到 180s + 16384 tokens，与前端 AI_TIMEOUT=120s 留余量。
+ * creation 文档类任务（背景/角色/大纲/分集规划/正文）输出长，需要 16384 tokens。
+ * Provider 按顺序调用时必须共用 210s 总预算，否则 DeepSeek 180s + Atlas 180s
+ * 会超过前端 240s 与 Vercel 300s 的硬上限。
  */
 const CREATION_DOC_MAX_TOKENS = 16384;
-const CREATION_DOC_TIMEOUT_MS = 180000;
+const CREATION_PRIMARY_TIMEOUT_MS = 120000;
+const CREATION_FALLBACK_TIMEOUT_MS = 90000;
 
 function isCreationDocTask(taskType: TaskType): boolean {
   return taskType === "creation_background_world"
@@ -117,20 +118,22 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
     return callStoryboardProviderChain(options);
   }
 
-  // PRD V1.0 验收修复：creation 文档类任务用更大的 timeout 和 maxTokens
-  const creationOpts = isCreationDocTask(options.taskType)
-    ? { maxTokens: CREATION_DOC_MAX_TOKENS, timeoutMs: CREATION_DOC_TIMEOUT_MS }
+  const creationPrimaryOpts = isCreationDocTask(options.taskType)
+    ? { maxTokens: CREATION_DOC_MAX_TOKENS, timeoutMs: CREATION_PRIMARY_TIMEOUT_MS }
+    : {};
+  const creationFallbackOpts = isCreationDocTask(options.taskType)
+    ? { maxTokens: CREATION_DOC_MAX_TOKENS, timeoutMs: CREATION_FALLBACK_TIMEOUT_MS }
     : {};
 
   const provider = chooseProvider(options.taskType, options.byoApi);
 
   try {
-    return await callProvider(provider, options, creationOpts);
+    return await callProvider(provider, options, creationPrimaryOpts);
   } catch (error) {
     // 情况 1：key 缺失 → 按原逻辑 fallback（deepseek↔minimax）
     const fallbackProvider = getFallbackProvider(provider);
     if (fallbackProvider && isMissingProviderKey(error)) {
-      return callProvider(fallbackProvider, options, creationOpts);
+      return callProvider(fallbackProvider, options, creationFallbackOpts);
     }
     // 情况 2：DeepSeek 出现可重试错误（5xx/429/401/403/404/超时/网络/空输出）→ 尝试 Atlas
     if (provider === "deepseek" && shouldTryAtlasAfterDeepSeek(error) && isAtlasLLMConfigured()) {
@@ -138,8 +141,8 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
         return await callAtlasLLM({
           messages: options.messages,
           temperature: options.temperature,
-          maxTokens: creationOpts.maxTokens,
-          timeoutMs: creationOpts.timeoutMs,
+          maxTokens: creationFallbackOpts.maxTokens,
+          timeoutMs: creationFallbackOpts.timeoutMs,
           modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
         });
       } catch {

@@ -19,9 +19,7 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_PER_MINUTE || 8);
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
-// 修复（2026-07-24）：角色圣经等创作文档任务输出长，后端 CREATION_DOC_TIMEOUT_MS=180s。
-// Vercel 默认函数超时只有 10s（Hobby）/60s（Pro），会导致长任务被杀。
-// 设置 maxDuration=300（5 分钟，Vercel Pro 上限），确保长任务能跑完。
+// 创作文档 Provider 链总预算为 210s，保留时间完成任务记录和额度收尾。
 export const maxDuration = 300;
 
 export async function GET() {
@@ -59,9 +57,17 @@ export async function POST(request: Request) {
   }
 
   const startedAt = Date.now();
+  const requestId = request.headers.get("x-vercel-id") || "local";
   const creditCost = estimateCreditCost(body.taskType);
   let taskId: string | null = null;
   const recordPayload = stripByoApi(body);
+  console.info(JSON.stringify({
+    level: "info",
+    event: "ai_generate_start",
+    route: "/api/ai/generate",
+    requestId,
+    taskType: body.taskType,
+  }));
 
   try {
     const byoApi = await resolveByoApi(body.byoApi, user.id);
@@ -89,8 +95,20 @@ export async function POST(request: Request) {
       costEstimate: creditCost,
     });
 
+    console.info(JSON.stringify({
+      level: "info",
+      event: "ai_generate_success",
+      route: "/api/ai/generate",
+      requestId,
+      taskType: body.taskType,
+      provider: result.meta.provider,
+      latencyMs: Date.now() - startedAt,
+    }));
     return NextResponse.json(result);
   } catch (error) {
+    const errorCode = error instanceof Error
+      ? error.message.split(":").slice(0, 2).join(":")
+      : "UNKNOWN_AI_ERROR";
     if (creditCost > 0) await refundCredits(user.id, creditCost).catch(() => null);
     await failGenerationTask({
       taskId,
@@ -98,6 +116,15 @@ export async function POST(request: Request) {
       latencyMs: Date.now() - startedAt,
     }).catch(() => null);
 
+    console.error(JSON.stringify({
+      level: "error",
+      event: "ai_generate_failure",
+      route: "/api/ai/generate",
+      requestId,
+      taskType: body.taskType,
+      errorCode,
+      latencyMs: Date.now() - startedAt,
+    }));
     return failure(toFriendlyError(error), 500);
   }
 }
