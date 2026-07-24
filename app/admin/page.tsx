@@ -1,73 +1,103 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { zh } from "@/lib/admin/zh";
 import styles from "./admin-shell.module.css";
+import { UsersSection } from "./_components/UsersSection";
+import { GenerationsSection } from "./_components/GenerationsSection";
+import { CreditsSection } from "./_components/CreditsSection";
+import { ContentSection } from "./_components/ContentSection";
+import { AdminSection } from "./_components/AdminSection";
 
-type Stats = {
-  totalUsers: number;
-  newUsersToday: number;
-  totalGenerations: number;
-} | null;
+type StatsData = {
+  users: { total: number; newToday: number; banned: number; planDistribution: { label: string; count: number }[]; registrationTrend: { date: string; count: number }[] } | null;
+  generations: { textTotal: number; textCompleted: number; textFailed: number; successRate: number; jobTypeDistribution: { label: string; count: number }[]; generationTrend: { date: string; count: number }[] } | null;
+  credits: { totalBalance: number; avgBalance: number; lowBalanceUsers: number; monthlyLimitDistribution: { label: string; count: number }[] } | null;
+  content: { projectsTotal: number; projectStatusDistribution: { label: string; count: number }[]; episodes: number; scenes: number; characters: number } | null;
+  admin: { adminCount: number; roleDistribution: { label: string; count: number }[]; auditLogLast24h: number; aiPromptsCount: number; aiPromptsLastUpdated: string | null } | null;
+};
 
 export default function AdminOverviewPage() {
-  const [stats, setStats] = useState<Stats>(null);
+  const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [range, setRange] = useState<7 | 30>(7);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const client = (await import("@/lib/supabase/client")).getSupabaseBrowserClient();
-        const { data } = await client?.auth.getSession() ?? {};
-        const token = data?.session?.access_token;
-        if (!token) { if (active) setLoading(false); return; }
-        // 概览数据复用 users 列表 meta（Task 6 实现 /admin/api/users 返回 total）
-        const res = await fetch("/admin/api/users?page=1&pageSize=1", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-        if (!active) return;
-        if (res.ok) {
-          const payload = await res.json();
-          setStats({
-            totalUsers: payload.total ?? 0,
-            newUsersToday: payload.newToday ?? 0,
-            totalGenerations: payload.totalGenerations ?? 0,
-          });
-        }
-      } catch {
-        // ignore
-      } finally {
-        if (active) setLoading(false);
+  const getToken = async () => {
+    const client = (await import("@/lib/supabase/client")).getSupabaseBrowserClient();
+    const { data: sessionData } = await client?.auth.getSession() ?? {};
+    return sessionData?.session?.access_token || "";
+  };
+
+  const load = useCallback(async (r: 7 | 30) => {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/admin/api/stats?range=${r}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        setFailed(true);
+        return;
       }
-    })();
-    return () => { active = false; };
+      const payload = await res.json();
+      setData(payload);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void load(range); }, [load, range]);
 
   return (
     <main>
-      <h1 style={{ fontSize: 24, fontWeight: 800, margin: "0 0 8px" }}>{zh.overview.title}</h1>
-      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, margin: "0 0 16px" }}>
-        {zh.overview.comingSoon}
-      </p>
-      {loading ? (
-        <p className="subtle">{zh.common.loading}</p>
-      ) : stats ? (
-        <div className={styles.overviewGrid}>
-          <div className={styles.statCard}>
-            <div className={styles.statLabel}>{zh.overview.totalUsers}</div>
-            <div className={styles.statValue}>{stats.totalUsers}</div>
+      <div className={styles.dashboardHeader}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{zh.overview.title}</h1>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className={styles.rangeToggle}>
+            <button
+              type="button"
+              className={`${styles.rangeButton} ${range === 7 ? styles.rangeButtonActive : ""}`}
+              onClick={() => setRange(7)}
+            >
+              {zh.overview.range7days}
+            </button>
+            <button
+              type="button"
+              className={`${styles.rangeButton} ${range === 30 ? styles.rangeButtonActive : ""}`}
+              onClick={() => setRange(30)}
+            >
+              {zh.overview.range30days}
+            </button>
           </div>
-          <div className={styles.statCard}>
-            <div className={styles.statLabel}>{zh.overview.newUsersToday}</div>
-            <div className={styles.statValue}>{stats.newUsersToday}</div>
-          </div>
-          <div className={styles.statCard}>
-            <div className={styles.statLabel}>{zh.overview.totalGenerations}</div>
-            <div className={styles.statValue}>{stats.totalGenerations}</div>
-          </div>
+          <button
+            type="button"
+            className={styles.refreshButton}
+            onClick={() => void load(range)}
+          >
+            {zh.overview.refresh}
+          </button>
         </div>
+      </div>
+
+      {loading ? (
+        <div className={styles.overviewGrid}>
+          {[0, 1, 2].map((i) => <div key={i} className={styles.skeletonCard} />)}
+        </div>
+      ) : failed ? (
+        <div className={styles.errorText}>{zh.overview.loadFailed}</div>
+      ) : data ? (
+        <>
+          <UsersSection data={data.users} />
+          <GenerationsSection data={data.generations} />
+          <CreditsSection data={data.credits} />
+          <ContentSection data={data.content} />
+          {data.admin ? <AdminSection data={data.admin} /> : null}
+        </>
       ) : null}
     </main>
   );

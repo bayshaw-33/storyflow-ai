@@ -31,7 +31,6 @@ export const zh = {
   overview: {
     title: "概览",
     comingSoon: "运营看板即将上线",
-    totalGenerations: "生成任务总数",  // 保留，Task 14 后移除
     range7days: "7天",
     range30days: "30天",
     refresh: "刷新",
