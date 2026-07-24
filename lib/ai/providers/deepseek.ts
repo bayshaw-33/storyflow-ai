@@ -9,6 +9,23 @@ type DeepSeekOptions = {
   modelOverride?: string;
 };
 
+const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro";
+const KNOWN_VALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-pro", "deepseek-v4-flash"]);
+
+export function resolveDeepSeekModel(modelOverride?: string) {
+  const rawModel = (modelOverride?.trim() || process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL).trim();
+  if (
+    !rawModel
+    || rawModel.startsWith("sk-")
+    || rawModel.length > 60
+    || !KNOWN_VALID_DEEPSEEK_MODELS.has(rawModel)
+  ) {
+    console.warn(`[deepseek] Invalid DEEPSEEK_MODEL; falling back to ${DEFAULT_DEEPSEEK_MODEL}`);
+    return DEFAULT_DEEPSEEK_MODEL;
+  }
+  return rawModel;
+}
+
 export async function callDeepSeek({
   messages,
   temperature = 0.75,
@@ -24,20 +41,7 @@ export async function callDeepSeek({
   //   modelOverride（API 调用方传入）> DEEPSEEK_MODEL > 默认值
   // 保护：如果 DEEPSEEK_MODEL 被误填成 API key（以 sk- 开头）或其他无效值，
   // 自动回退到默认模型，避免 400。
-  const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-pro";
-  const KNOWN_VALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-pro", "deepseek-v4-flash"]);
-  let rawModel = (modelOverride?.trim() || process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL).trim();
-  // 兜底 1：model 看起来像 API key（sk- 开头）或为空或过长 → 用默认模型
-  if (!rawModel || rawModel.startsWith("sk-") || rawModel.length > 60) {
-    rawModel = DEFAULT_DEEPSEEK_MODEL;
-  }
-  // 兜底 2：model 不在已知合法列表里（如 deepseek-chat、deepseek-coder 等旧名）→ 用默认模型
-  // DeepSeek API 现在只支持 deepseek-v4-pro / deepseek-v4-flash，其他模型名会 400
-  if (!KNOWN_VALID_DEEPSEEK_MODELS.has(rawModel)) {
-    console.warn(`[deepseek] Invalid DEEPSEEK_MODEL "${rawModel}", falling back to ${DEFAULT_DEEPSEEK_MODEL}`);
-    rawModel = DEFAULT_DEEPSEEK_MODEL;
-  }
-  const model = rawModel;
+  const model = resolveDeepSeekModel(modelOverride);
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");

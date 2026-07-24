@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { callRoutedProvider } from "../lib/ai/providers/index.ts";
+import { callRoutedProvider, getProviderStatus } from "../lib/ai/providers/index.ts";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const ATLAS_URL = "https://api.atlascloud.ai/v1/chat/completions";
@@ -77,4 +77,24 @@ test("AI 生成路由记录开始、成功和失败事件但不记录创作内�
   assert.match(routeSource, /event:\s*"ai_generate_failure"/);
   assert.match(routeSource, /request\.headers\.get\("x-vercel-id"\)/);
   assert.doesNotMatch(routeSource, /console\.(?:info|error)\([^)]*\b(?:input|context|messages)\b/s);
+});
+
+test("Provider 状态与警告不暴露误填在模型变量中的 API Key", () => {
+  const previousModel = process.env.DEEPSEEK_MODEL;
+  const exposedValue = "sk-test-secret-must-not-appear";
+  const warnings = [];
+  const originalWarn = console.warn;
+  process.env.DEEPSEEK_MODEL = exposedValue;
+  console.warn = (...args) => warnings.push(args.join(" "));
+
+  try {
+    const status = getProviderStatus();
+    assert.equal(status.deepseek.model, "deepseek-v4-pro");
+    assert.doesNotMatch(JSON.stringify(status), new RegExp(exposedValue));
+    assert.doesNotMatch(warnings.join("\n"), new RegExp(exposedValue));
+  } finally {
+    console.warn = originalWarn;
+    if (previousModel === undefined) delete process.env.DEEPSEEK_MODEL;
+    else process.env.DEEPSEEK_MODEL = previousModel;
+  }
 });

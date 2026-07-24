@@ -1,7 +1,7 @@
 import type { ByoApiConfig, TaskType } from "../prompts";
 import { callAtlasLLM, isAtlasLLMConfigured } from "./atlas-llm.ts";
 import { callCustomProvider } from "./custom.ts";
-import { callDeepSeek } from "./deepseek.ts";
+import { callDeepSeek, resolveDeepSeekModel } from "./deepseek.ts";
 import { callMiniMax, getMiniMaxApiKey } from "./minimax.ts";
 import type { AIMessage, AIProviderName, AIProviderResult, AIUsage } from "./types";
 
@@ -96,7 +96,7 @@ export function getProviderStatus() {
     mode: getProviderMode(),
     deepseek: {
       configured: Boolean(process.env.DEEPSEEK_API_KEY),
-      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-pro",
+      model: resolveDeepSeekModel(),
     },
     atlas: {
       configured: isAtlasLLMConfigured(),
