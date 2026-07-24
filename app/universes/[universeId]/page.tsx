@@ -11,6 +11,7 @@ import {
   FilePlus2,
   Loader2,
   Palette,
+  Share2,
   XCircle,
 } from "lucide-react";
 import {
@@ -46,6 +47,9 @@ import {
 } from "@/lib/universe";
 import { createSongUniverseLink, type SongUniverseRole } from "@/lib/song/universe-links";
 import { UniverseOverview } from "@/components/universe/UniverseOverview";
+import { ShareConfigDialog, type SharePermissions } from "@/components/universe/ShareConfigDialog";
+import { SharePasswordGate } from "@/components/universe/SharePasswordGate";
+import { SharedUniverseView, type SharedUniverseViewProps } from "@/components/universe/SharedUniverseView";
 import { UniverseAssets } from "@/components/universe/UniverseAssets";
 import { UniverseWorks } from "@/components/universe/UniverseWorks";
 import { UniverseCanon } from "@/components/universe/UniverseCanon";
@@ -74,7 +78,7 @@ export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { locale } = useI18n();
+  const { t, locale } = useI18n();
   const isZh = locale === "zh-CN";
   const copy = getUniverseCopy(isZh);
 
@@ -107,6 +111,24 @@ export default function UniverseDetailPage() {
   const [extracting, setExtracting] = useState(false);
   const [checking, setChecking] = useState(false);
 
+  // §阶段 B 分享：身份判断 + 分享配置 + 访客视图
+  const [universeMeta, setUniverseMeta] = useState<{
+    userId: string | null;
+    shareStatus: "private" | "shared" | "removed" | null;
+  } | null>(null);
+  const [metaLoading, setMetaLoading] = useState(true);
+  const [sessionResolved, setSessionResolved] = useState(false);
+  const [shareConfig, setShareConfig] = useState<{
+    share_status: "private" | "shared";
+    share_permissions: SharePermissions;
+    has_password: boolean;
+  } | null>(null);
+  const [shareConfigVersion, setShareConfigVersion] = useState(0);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [sharedData, setSharedData] = useState<Record<string, unknown> | null>(null);
+  const [sharedDataLoading, setSharedDataLoading] = useState(false);
+
   // Sync ?tab=... searchParam
   useEffect(() => {
     const fromUrl = searchParams?.get("tab");
@@ -128,6 +150,7 @@ export default function UniverseDetailPage() {
     const supabase = getSupabaseBrowserClient();
     void supabase?.auth.getSession().then(({ data }) => {
       setSession(data.session || null);
+      setSessionResolved(true);
       void refresh(data.session || null);
     });
 
@@ -172,6 +195,144 @@ export default function UniverseDetailPage() {
     () => bundle?.links.filter((link) => projectsById.has(link.project_id)) || [],
     [bundle?.links, projectsById],
   );
+
+  // §阶段 B 判断当前访问者是否为宇宙所有者
+  const isOwner = Boolean(
+    session?.user?.id && universeMeta?.userId && session.user.id === universeMeta.userId,
+  );
+
+  // §阶段 B 访客 share token 从 localStorage 初始化
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(`share_token_${params.universeId}`);
+    if (stored) setShareToken(stored);
+  }, [params.universeId]);
+
+  // §阶段 B 获取宇宙基本信息（user_id + share_status）用于身份判断
+  // RLS：本人可读所有自己的宇宙；访客只能读 share_status='shared' 的宇宙
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMeta() {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setUniverseMeta(null);
+          setMetaLoading(false);
+        }
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from("storyflow_universes")
+          .select("user_id, share_status")
+          .eq("id", params.universeId)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error || !data) {
+          setUniverseMeta(null);
+        } else {
+          setUniverseMeta({
+            userId: data.user_id || null,
+            shareStatus:
+              (data.share_status as "private" | "shared" | "removed" | null) || null,
+          });
+        }
+      } catch {
+        if (!cancelled) setUniverseMeta(null);
+      }
+      if (!cancelled) setMetaLoading(false);
+    }
+    void loadMeta();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.universeId]);
+
+  // §阶段 B 创作者获取本人宇宙的分享配置
+  useEffect(() => {
+    if (!isOwner || !session?.access_token) return;
+    let cancelled = false;
+    async function loadShareConfig() {
+      try {
+        const res = await fetch(
+          `/api/universes/${encodeURIComponent(params.universeId)}/share`,
+          {
+            headers: { Authorization: `Bearer ${session!.access_token}` },
+          },
+        );
+        const data = await res.json().catch(() => null);
+        if (!cancelled && data?.success && data?.config) {
+          const cfg = data.config as {
+            share_status: string;
+            permissions: SharePermissions;
+            has_password: boolean;
+          };
+          setShareConfig({
+            share_status: cfg.share_status === "shared" ? "shared" : "private",
+            share_permissions: cfg.permissions,
+            has_password: Boolean(cfg.has_password),
+          });
+        }
+      } catch {
+        // 分享配置是可选项，加载失败不影响主流程
+      }
+    }
+    void loadShareConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, session?.access_token, params.universeId, shareConfigVersion]);
+
+  // §阶段 B 访客加载分享内容（根据 share token 验证并获取过滤后的内容）
+  useEffect(() => {
+    if (isOwner) return;
+    if (!universeMeta || universeMeta.shareStatus !== "shared") return;
+
+    const tokenToUse = shareToken;
+    if (!tokenToUse) {
+      setSharedData(null);
+      setSharedDataLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSharedDataLoading(true);
+    async function loadShared() {
+      try {
+        const res = await fetch(
+          `/api/universes/${encodeURIComponent(params.universeId)}/shared`,
+          {
+            headers: { Authorization: `Bearer ${tokenToUse}` },
+          },
+        );
+        if (!res.ok) {
+          if (!cancelled) {
+            setSharedData(null);
+            if (res.status === 401 || res.status === 403) {
+              // token 无效或过期，清除 localStorage
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem(`share_token_${params.universeId}`);
+              }
+              setShareToken(null);
+            }
+          }
+          return;
+        }
+        const data = await res.json().catch(() => null);
+        if (!cancelled && data) {
+          setSharedData(data);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setSharedDataLoading(false);
+      }
+    }
+    void loadShared();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, universeMeta, params.universeId, shareToken]);
 
   // Load overview via /api/universe/:id/overview (PRD §6.1)
   useEffect(() => {
@@ -393,6 +554,105 @@ export default function UniverseDetailPage() {
     },
   ], [bundle, copy]);
 
+  // §阶段 B 访客身份分流：等待 session 和 meta 都加载完毕后再判断身份
+  if (!sessionResolved || metaLoading) {
+    return (
+      <main className={styles.page}>
+        <section className={styles.loadingState}>
+          <Loader2 size={28} className="spin" />
+          <span>{copy.list.loading}</span>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isOwner) {
+    // 访客视图
+    if (!universeMeta || universeMeta.shareStatus !== "shared") {
+      // 未分享或不存在（出于安全不区分两种情况）
+      return (
+        <main className={styles.page}>
+          <section className={styles.emptyState}>
+            <strong>{t("share.notShared")}</strong>
+            <Link className={styles.primaryButton} href="/universes">
+              {copy.detail.back}
+            </Link>
+          </section>
+        </main>
+      );
+    }
+    // 已分享 — 检查 share token
+    if (sharedDataLoading) {
+      return (
+        <main className={styles.page}>
+          <section className={styles.loadingState}>
+            <Loader2 size={28} className="spin" />
+            <span>{copy.list.loading}</span>
+          </section>
+        </main>
+      );
+    }
+    if (!shareToken || !sharedData) {
+      // 无 token 或 token 无效 → 显示密码输入页
+      return (
+        <main className={styles.page}>
+          <SharePasswordGate
+            universeId={params.universeId}
+            universe={{
+              name: bundle?.universe.name || "",
+            }}
+            onVerified={(token: string) => {
+              if (typeof window !== "undefined") {
+                window.localStorage.setItem(
+                  `share_token_${params.universeId}`,
+                  token,
+                );
+              }
+              setShareToken(token);
+            }}
+          />
+        </main>
+      );
+    }
+    // token 有效 → 显示访客视图
+    // sharedData 来自 /api/universes/[id]/shared，形状为 { universe, permissions, sections, owner }
+    const shared = sharedData as {
+      universe: {
+        id: string;
+        name: string;
+        cover_url?: string;
+        tagline?: string;
+        description?: string;
+      };
+      permissions: SharePermissions;
+      sections: SharedUniverseViewProps["sections"];
+      owner?: {
+        username?: string | null;
+        display_name?: string | null;
+        avatar_url?: string | null;
+      } | null;
+    };
+    return (
+      <main className={styles.page}>
+        <SharedUniverseView
+          universe={{
+            id: shared.universe.id,
+            name: shared.universe.name,
+            cover_url: shared.universe.cover_url,
+            tagline: shared.universe.tagline,
+            description: shared.universe.description,
+            owner_username: shared.owner?.username ?? undefined,
+            owner_display_name: shared.owner?.display_name ?? undefined,
+            owner_avatar_url: shared.owner?.avatar_url ?? undefined,
+          }}
+          permissions={shared.permissions}
+          sections={shared.sections}
+        />
+      </main>
+    );
+  }
+
+  // 以下为创作者（owner）视图
   if (loading) {
     return (
       <main className={styles.page}>
@@ -442,6 +702,32 @@ export default function UniverseDetailPage() {
           </div>
         </div>
         <div className={styles.headerActions}>
+          {shareConfig?.share_status === "shared" ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                background: "rgba(109, 231, 223, 0.15)",
+                color: "#6de7df",
+                border: "1px solid rgba(109, 231, 223, 0.3)",
+              }}
+            >
+              {t("share.status.sharedBadge")}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={() => setShareDialogOpen(true)}
+            title={t("share.button")}
+          >
+            <Share2 size={15} /> {t("share.button")}
+          </button>
           <button type="button" className={styles.secondaryButton} onClick={() => exportBundle("json")}>
             <Download size={15} /> JSON
           </button>
@@ -561,6 +847,19 @@ export default function UniverseDetailPage() {
           selectableLinks={inboxSelectableLinks}
           onRun={runCheck}
           checking={checking}
+        />
+      ) : null}
+
+      {shareDialogOpen && shareConfig ? (
+        <ShareConfigDialog
+          open={shareDialogOpen}
+          onClose={() => setShareDialogOpen(false)}
+          universeId={params.universeId}
+          initialConfig={shareConfig}
+          onSaved={() => {
+            setShareDialogOpen(false);
+            setShareConfigVersion((v) => v + 1);
+          }}
         />
       ) : null}
 

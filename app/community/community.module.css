@@ -1,0 +1,28 @@
+/* /community 占位页 —— 居中大字号提示，无副标题 */
+
+.shell {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16) var(--space-6);
+}
+
+.card {
+  width: 100%;
+  max-width: 720px;
+  text-align: center;
+  padding: var(--space-12) var(--space-8);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--ink-primary);
+  line-height: 1.2;
+}

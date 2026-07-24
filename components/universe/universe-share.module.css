@@ -1,0 +1,691 @@
+/* components/universe/universe-share.module.css
+   宇宙分享（阶段 B）—— ShareConfigDialog / SharePasswordGate / SharedUniverseView 共用样式。
+   暗色 Linear 风格：近黑底 + hairline border + cyan/blue 强调。强制 dark only。
+   全部使用 globals.css :root 的设计 token。 */
+
+/* ============================================================================
+   ShareConfigDialog —— 创作者分享配置 Modal
+   ============================================================================ */
+
+.configBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--modal-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.configDialog {
+  width: min(560px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.configHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.configTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.configClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.configClose:hover {
+  background: var(--text-hover-bg);
+  color: var(--ink-primary);
+}
+
+/* toast / inline notice */
+.toast {
+  align-self: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: var(--notice-success-bg);
+  border: 1px solid var(--notice-success-border);
+  color: var(--success);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inlineError {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--notice-error-bg);
+  border: 1px solid var(--notice-error-border);
+  color: var(--danger);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* field block */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.labelHint {
+  font-weight: 400;
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+/* radio group */
+.radioRow {
+  display: flex;
+  gap: 8px;
+}
+
+.radioChip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  color: var(--ink-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--transition-base), color var(--transition-base), background var(--transition-base);
+}
+.radioChip:hover {
+  border-color: var(--glass-border-hover);
+  color: var(--ink-primary);
+}
+.radioChipActive {
+  border-color: var(--accent-cyan);
+  color: var(--ink-primary);
+  background: var(--glass-fill-strong);
+}
+.radioChip input {
+  accent-color: var(--accent-cyan);
+}
+
+/* inputs */
+.input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--input-bg);
+  color: var(--ink-primary);
+  font-size: 13px;
+  transition: border-color var(--transition-base);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+.input::placeholder {
+  color: var(--ink-muted);
+}
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+.inputRow .input {
+  flex: 1;
+}
+
+.linkRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.linkInput {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--input-bg);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+  white-space: nowrap;
+}
+.btnPrimary {
+  background: var(--button-primary-bg);
+  color: var(--button-primary-fg);
+}
+.btnPrimary:hover {
+  background: var(--button-primary-hover);
+}
+.btnSecondary {
+  background: var(--button-secondary-bg);
+  color: var(--ink-primary);
+  border: 1px solid var(--glass-border);
+}
+.btnSecondary:hover {
+  background: var(--button-secondary-hover);
+  border-color: var(--glass-border-hover);
+}
+.btnGhost {
+  background: transparent;
+  color: var(--ink-secondary);
+  border: 1px solid var(--glass-border);
+}
+.btnGhost:hover {
+  color: var(--ink-primary);
+  border-color: var(--glass-border-hover);
+  background: var(--text-hover-bg);
+}
+.btnSmall {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.configFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* checkbox grid */
+.checkGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  font-size: 13px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition-base), color var(--transition-base);
+}
+.checkItem:hover {
+  border-color: var(--glass-border-hover);
+  color: var(--ink-primary);
+}
+.checkItem input {
+  accent-color: var(--accent-cyan);
+}
+.checkItemChecked {
+  color: var(--ink-primary);
+  border-color: var(--glass-border-hover);
+}
+
+/* section divider */
+.divider {
+  height: 1px;
+  background: var(--divider);
+  margin: 2px 0;
+}
+
+/* coming soon badge */
+.comingSoon {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--notice-warning-bg);
+  border: 1px solid var(--notice-warning-border);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* disabled block (used when private / edit permissions) */
+.disabledBlock {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ============================================================================
+   SharePasswordGate —— 访客密码输入页
+   ============================================================================ */
+
+.gateWrap {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  background: var(--bg-void);
+}
+
+.gateCard {
+  width: min(420px, 100%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.gateLock {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  color: var(--accent-cyan);
+}
+
+.gateCover {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  border: 1px solid var(--glass-border);
+}
+
+.gateName {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.gateOwner {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.gateHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.gateForm {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.gateSubmit {
+  width: 100%;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: var(--accent-cyan);
+  color: var(--bg-void);
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity var(--transition-base);
+}
+.gateSubmit:hover {
+  opacity: 0.9;
+}
+.gateSubmit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+   SharedUniverseView —— 访客视图
+   ============================================================================ */
+
+.sharedPage {
+  min-height: 100dvh;
+  background: var(--bg-void);
+  color: var(--ink-primary);
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 64px;
+}
+
+.sharedHeader {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sharedCover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--bg-deep);
+}
+
+.sharedTitleRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sharedName {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.sharedTagline {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-secondary);
+}
+
+.sharedOwner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.sharedOwnerAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  border: 1px solid var(--glass-border);
+}
+
+.sharedOwnerFallback {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.sharedOverview {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sharedOverviewTitle {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.sharedOverviewText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-secondary);
+  white-space: pre-wrap;
+}
+
+.sharedTabs {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--divider);
+  flex-wrap: wrap;
+}
+
+.sharedTab {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color var(--transition-base), border-color var(--transition-base);
+}
+.sharedTab:hover {
+  color: var(--ink-secondary);
+}
+.sharedTabActive {
+  color: var(--ink-primary);
+  border-bottom-color: var(--accent-cyan);
+}
+
+.sharedContent {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.sharedCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  transition: border-color var(--transition-base);
+}
+.sharedCard:hover {
+  border-color: var(--glass-border-hover);
+}
+
+.sharedCardThumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+}
+
+.sharedCardThumbFallback {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+
+.sharedCardName {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.sharedCardMeta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.listRow {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.listItem {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--divider);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.listItem:last-child {
+  border-bottom: none;
+}
+
+.listItemTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.listItemMeta {
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.6;
+}
+
+.emptyHint {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-muted);
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.sharedFooter {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-ui);
+  padding: 10px 16px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--glass-border);
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ===== 响应式 ===== */
+
+@media (max-width: 768px) {
+  .checkGrid {
+    grid-template-columns: 1fr;
+  }
+  .sharedHeader,
+  .sharedOverview,
+  .sharedTabs,
+  .sharedContent {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .sharedName {
+    font-size: 22px;
+  }
+  .configDialog {
+    padding: 18px 18px;
+  }
+}
