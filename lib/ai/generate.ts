@@ -43,7 +43,7 @@ export async function generateAIContent(payload: GeneratePayload): Promise<Gener
       },
       {
         role: "user",
-        content: buildPrompt(payload),
+        content: await buildPrompt(payload),
       },
     ],
   });

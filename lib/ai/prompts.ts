@@ -1,3 +1,5 @@
+import { loadPromptsFromDb, resolveRules, resolveTaskPrompt, getActiveOverrides } from "@/lib/admin/ai-prompts-server";
+
 export type TaskType =
   | "market_analysis"
   | "script_import"
@@ -764,16 +766,30 @@ const promptByTask: Record<TaskType, string> = {
   ].join("\n"),
 };
 
-export function buildPrompt(payload: GeneratePayload) {
-  const rules = payload.taskType === "song_workbench"
-    ? songRules
-    : isCreationTask(payload.taskType)
-      ? creationRules(payload.options?.interfaceLanguage)
-      : isNovelTask(payload.taskType)
-        ? novelRules
-        : commonRules;
+// 导出默认值供种子脚本和管理后台使用；DB 缓存未命中时回退到这些值。
+export const DEFAULT_RULES = {
+  common: commonRules,
+  song: songRules,
+  novel: novelRules,
+  // creation rules 是函数，种子时用空 interfaceLanguage 调用得到中文版默认值。
+  creation: creationRules(undefined),
+} as const;
 
-  return [
+export const DEFAULT_PROMPT_BY_TASK: Record<TaskType, string> = { ...promptByTask };
+
+export async function buildPrompt(payload: GeneratePayload) {
+  const cache = await loadPromptsFromDb();
+  const rulesName: "common" | "song" | "novel" | "creation" =
+    payload.taskType === "song_workbench"
+      ? "song"
+      : isCreationTask(payload.taskType)
+        ? "creation"
+        : isNovelTask(payload.taskType)
+          ? "novel"
+          : "common";
+  const rules = resolveRules(rulesName, cache);
+
+  const basePrompt = [
     rules,
     "",
     "【input】",
@@ -786,8 +802,20 @@ export function buildPrompt(payload: GeneratePayload) {
     JSON.stringify(buildOptions(payload), null, 2),
     "",
     `【taskType】${payload.taskType} / ${taskNames[payload.taskType]}`,
-    promptByTask[payload.taskType],
+    resolveTaskPrompt(payload.taskType, cache),
   ].join("\n");
+
+  const overrides = getActiveOverrides(payload.taskType, cache);
+  const prepend = overrides
+    .filter((o) => o.position === "prepend")
+    .map((o) => o.injection_text)
+    .join("\n\n");
+  const append = overrides
+    .filter((o) => o.position === "append")
+    .map((o) => o.injection_text)
+    .join("\n\n");
+
+  return [prepend, basePrompt, append].filter(Boolean).join("\n\n");
 }
 
 function isNovelTask(taskType: TaskType) {
