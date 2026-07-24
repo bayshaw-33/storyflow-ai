@@ -728,7 +728,6 @@ export default function SongWorkbenchPage() {
     void listUniverses({ accessToken: session?.access_token })
       .then((items) => {
         setUniverses(items);
-        setSelectedUniverseId((current) => current || items[0]?.id || "");
       })
       .catch(() => null);
   }, [session?.access_token]);
@@ -895,7 +894,6 @@ export default function SongWorkbenchPage() {
 
       const nextUniverses = await listUniverses({ accessToken: session?.access_token }).catch(() => universes);
       setUniverses(nextUniverses);
-      if (!selectedUniverseId && nextUniverses[0]) setSelectedUniverseId(nextUniverses[0].id);
 
       if (songProjectId) {
         const localSong = localProjects.find((project) => project.id === songProjectId);
