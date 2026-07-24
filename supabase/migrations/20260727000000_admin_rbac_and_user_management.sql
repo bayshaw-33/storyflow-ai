@@ -89,6 +89,16 @@ CREATE POLICY audit_log_super_select ON public.storyflow_admin_audit_log
 CREATE POLICY audit_log_self_select ON public.storyflow_admin_audit_log
   FOR SELECT USING (admin_user_id = auth.uid());
 
+DROP POLICY IF EXISTS audit_log_super_write ON public.storyflow_admin_audit_log;
+CREATE POLICY audit_log_super_write ON public.storyflow_admin_audit_log
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM public.storyflow_admin_roles r
+            WHERE r.user_id = auth.uid() AND r.role = 'super_admin')
+  ) WITH CHECK (
+    EXISTS (SELECT 1 FROM public.storyflow_admin_roles r
+            WHERE r.user_id = auth.uid() AND r.role = 'super_admin')
+  );
+
 -- ai_prompts: 任何 admin（含 viewer）可读；operator+ 可写
 DROP POLICY IF EXISTS ai_prompts_admin_read ON public.storyflow_ai_prompts;
 DROP POLICY IF EXISTS ai_prompts_operator_write ON public.storyflow_ai_prompts;
@@ -105,7 +115,7 @@ CREATE POLICY ai_prompts_operator_write ON public.storyflow_ai_prompts
             WHERE r.user_id = auth.uid() AND r.role IN ('super_admin','operator'))
   );
 
--- ai_prompt_versions: 同 ai_prompts
+-- ai_prompt_versions: append-only（版本历史不可修改），admin 可读，operator+ 可 INSERT
 DROP POLICY IF EXISTS ai_prompt_versions_admin_read ON public.storyflow_ai_prompt_versions;
 DROP POLICY IF EXISTS ai_prompt_versions_operator_write ON public.storyflow_ai_prompt_versions;
 CREATE POLICY ai_prompt_versions_admin_read ON public.storyflow_ai_prompt_versions
