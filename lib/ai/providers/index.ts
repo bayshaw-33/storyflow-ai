@@ -46,6 +46,25 @@ type ProviderCallOptions = {
   validateOutput?: (output: string) => void;
 };
 
+/**
+ * PRD V1.0 验收修复（2026-07-24）：creation 文档类任务（背景/角色/大纲/分集规划/正文）输出长，
+ * 原 DeepSeek 默认 90s 超时 + 8192 tokens 不足，导致"AI 请求超时"。
+ * 这里给 creation 任务统一加到 180s + 16384 tokens，与前端 AI_TIMEOUT=120s 留余量。
+ */
+const CREATION_DOC_MAX_TOKENS = 16384;
+const CREATION_DOC_TIMEOUT_MS = 180000;
+
+function isCreationDocTask(taskType: TaskType): boolean {
+  return taskType === "creation_background_world"
+    || taskType === "creation_character_bible"
+    || taskType === "creation_plot_outline"
+    || taskType === "creation_episode_plan"
+    || taskType === "creation_novel_unit"
+    || taskType === "creation_screenplay_unit"
+    || taskType === "creation_translate_unit"
+    || taskType === "creation_localize_unit";
+}
+
 const deepSeekPreferredTasks = new Set<TaskType>([
   "localization",
   "quality_evaluation",
@@ -98,15 +117,20 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
     return callStoryboardProviderChain(options);
   }
 
+  // PRD V1.0 验收修复：creation 文档类任务用更大的 timeout 和 maxTokens
+  const creationOpts = isCreationDocTask(options.taskType)
+    ? { maxTokens: CREATION_DOC_MAX_TOKENS, timeoutMs: CREATION_DOC_TIMEOUT_MS }
+    : {};
+
   const provider = chooseProvider(options.taskType, options.byoApi);
 
   try {
-    return await callProvider(provider, options);
+    return await callProvider(provider, options, creationOpts);
   } catch (error) {
     // 情况 1：key 缺失 → 按原逻辑 fallback（deepseek↔minimax）
     const fallbackProvider = getFallbackProvider(provider);
     if (fallbackProvider && isMissingProviderKey(error)) {
-      return callProvider(fallbackProvider, options);
+      return callProvider(fallbackProvider, options, creationOpts);
     }
     // 情况 2：DeepSeek 出现可重试错误（5xx/429/401/403/404/超时/网络/空输出）→ 尝试 Atlas
     if (provider === "deepseek" && shouldTryAtlasAfterDeepSeek(error) && isAtlasLLMConfigured()) {
@@ -114,6 +138,8 @@ export async function callRoutedProvider(options: ProviderCallOptions): Promise<
         return await callAtlasLLM({
           messages: options.messages,
           temperature: options.temperature,
+          maxTokens: creationOpts.maxTokens,
+          timeoutMs: creationOpts.timeoutMs,
           modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
         });
       } catch {
@@ -223,11 +249,17 @@ function getFallbackProvider(provider: AIProviderName): AIProviderName {
   return provider === "deepseek" ? "deepseek" : "deepseek";
 }
 
-async function callProvider(provider: AIProviderName, options: ProviderCallOptions) {
+async function callProvider(
+  provider: AIProviderName,
+  options: ProviderCallOptions,
+  extra: { maxTokens?: number; timeoutMs?: number } = {},
+) {
   if (provider === "atlas") {
     return callAtlasLLM({
       messages: options.messages,
       temperature: options.temperature,
+      maxTokens: extra.maxTokens,
+      timeoutMs: extra.timeoutMs,
       modelOverride: options.byoApi?.atlasModel?.trim() || undefined,
     });
   }
@@ -236,6 +268,8 @@ async function callProvider(provider: AIProviderName, options: ProviderCallOptio
     return callDeepSeek({
       messages: options.messages,
       temperature: options.temperature,
+      maxTokens: extra.maxTokens,
+      timeoutMs: extra.timeoutMs,
       apiKeyOverride: cleanSecret(options.byoApi?.deepseekApiKey),
       modelOverride: options.byoApi?.deepseekModel?.trim() || undefined,
     });
@@ -245,6 +279,8 @@ async function callProvider(provider: AIProviderName, options: ProviderCallOptio
     return callCustomProvider({
       messages: options.messages,
       temperature: options.temperature,
+      maxTokens: extra.maxTokens,
+      timeoutMs: extra.timeoutMs,
       apiKey: cleanSecret(options.byoApi?.customApiKey) || "",
       model: options.byoApi?.customModel?.trim() || "",
       baseUrl: options.byoApi?.customBaseUrl?.trim() || "",
@@ -255,6 +291,8 @@ async function callProvider(provider: AIProviderName, options: ProviderCallOptio
   return callMiniMax({
     messages: options.messages,
     temperature: options.temperature,
+    maxTokens: extra.maxTokens,
+    timeoutMs: extra.timeoutMs,
     apiKeyOverride: cleanSecret(options.byoApi?.minimaxApiKey),
     modelOverride: options.byoApi?.minimaxModel?.trim() || undefined,
     baseUrlOverride: options.byoApi?.minimaxBaseUrl?.trim() || undefined,
