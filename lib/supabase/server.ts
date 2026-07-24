@@ -25,7 +25,9 @@ export type GenerationTaskStatus =
   | "retrying"
   | "cancelled";
 
-const FREE_MONTHLY_CREDITS = Number(process.env.FREE_MONTHLY_CREDITS || 100);
+// PRD V1.0 验收后调整：全局月度免费额度从 100 提升至 500（2026-07-24）
+// 生产环境可通过 FREE_MONTHLY_CREDITS env 覆盖；env 未设时用此默认值
+const FREE_MONTHLY_CREDITS = Number(process.env.FREE_MONTHLY_CREDITS || 500);
 
 export function hasServerSupabaseConfig() {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
@@ -70,7 +72,29 @@ export async function getCreditAccount(userId: string): Promise<CreditAccount | 
   );
 
   const current = existing[0];
-  if (current && !isPeriodExpired(current.period_end)) return current;
+  if (current && !isPeriodExpired(current.period_end)) {
+    // PRD V1.0 验收后调整（2026-07-24）：额度上调自动补齐。
+    // 当全局 FREE_MONTHLY_CREDITS 上调后，旧账户的 monthly_limit 会小于新上限。
+    // 此时自动把 balance 补齐到新上限（只增不减），让现有用户立即享受新额度，无需手动 SQL。
+    if (Number(current.monthly_limit) < FREE_MONTHLY_CREDITS) {
+      const upgraded = {
+        ...current,
+        monthly_limit: FREE_MONTHLY_CREDITS,
+        balance: FREE_MONTHLY_CREDITS,
+        updated_at: new Date().toISOString(),
+      };
+      await serviceFetch(`/rest/v1/storyflow_credits?user_id=eq.${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          monthly_limit: FREE_MONTHLY_CREDITS,
+          balance: FREE_MONTHLY_CREDITS,
+          updated_at: upgraded.updated_at,
+        }),
+      });
+      return upgraded;
+    }
+    return current;
+  }
 
   const next = buildFreshCreditAccount(userId);
   await serviceFetch("/rest/v1/storyflow_credits?on_conflict=user_id", {
