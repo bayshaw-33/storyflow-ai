@@ -19,6 +19,11 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_PER_MINUTE || 8);
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
+// 修复（2026-07-24）：角色圣经等创作文档任务输出长，后端 CREATION_DOC_TIMEOUT_MS=180s。
+// Vercel 默认函数超时只有 10s（Hobby）/60s（Pro），会导致长任务被杀。
+// 设置 maxDuration=300（5 分钟，Vercel Pro 上限），确保长任务能跑完。
+export const maxDuration = 300;
+
 export async function GET() {
   const providers = getProviderStatus();
 

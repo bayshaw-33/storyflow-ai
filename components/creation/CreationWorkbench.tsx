@@ -100,7 +100,9 @@ type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 type SourceFile = { id: string; name: string; text: string };
 type LocalizationView = "content" | "changes" | "similarity";
 
-const AI_TIMEOUT = 120_000;
+// 修复（2026-07-24）：角色圣经等创作文档任务输出长，后端 CREATION_DOC_TIMEOUT_MS=180s。
+// 前端必须比后端长，否则后端还没返回前端就超时了。240s = 后端 180s + 60s 余量。
+const AI_TIMEOUT = 240_000;
 const LANGUAGE_OPTIONS = ["中文", "English", "Español", "Français", "Italiano", "日本語", "한국어"];
 const STAGES: Array<{ key: StageKey; zh: string; en: string; task?: TaskType }> = [
   { key: "background", zh: "背景及世界观", en: "Background & World", task: "creation_background_world" },
@@ -436,22 +438,42 @@ export function CreationWorkbench() {
     const urlSourceUnitId = searchParams.get("sourceUnitId");
     void supabase?.auth.getSession().then(async ({ data }) => {
       setSession(data.session || null);
-      if (forceNew || !projectId) return;
-      const local = readProjectsFromStorage();
-      const localProject = local.find((item) => item.id === projectId);
-      if (localProject) {
-        const ensured = ensureProject(localProject);
-        setProject(ensured);
-        focusUnitBySourceId(ensured, urlSourceUnitId);
+      if (forceNew) return;
+      if (projectId) {
+        // URL 有 projectId → 加载对应项目（原逻辑）
+        const local = readProjectsFromStorage();
+        const localProject = local.find((item) => item.id === projectId);
+        if (localProject) {
+          const ensured = ensureProject(localProject);
+          setProject(ensured);
+          focusUnitBySourceId(ensured, urlSourceUnitId);
+          return;
+        }
+        const synced = await syncProjectsWithSupabase(local, { accessToken: data.session?.access_token || null });
+        const cloudProject = synced.projects.find((item) => item.id === projectId);
+        if (cloudProject) {
+          const ensured = ensureProject(cloudProject);
+          setProject(ensured);
+          focusUnitBySourceId(ensured, urlSourceUnitId);
+        }
         return;
       }
-      const synced = await syncProjectsWithSupabase(local, { accessToken: data.session?.access_token || null });
-      const cloudProject = synced.projects.find((item) => item.id === projectId);
-      if (cloudProject) {
-        const ensured = ensureProject(cloudProject);
-        setProject(ensured);
-        focusUnitBySourceId(ensured, urlSourceUnitId);
-      }
+      // 修复（2026-07-24）：URL 无 projectId → 从 localStorage 加载最近更新的创作项目
+      // 避免用户在 /novel-workbench 创作后刷新丢失内容。
+      // 只在浏览器端执行，且只加载创作类项目（creation/novel workflowType 或有 creationWorkspace）。
+      if (typeof window === "undefined") return;
+      const local = readProjectsFromStorage();
+      if (!local.length) return;
+      const creationProjects = local
+        .filter((p) => p.workflowType === "creation" || p.workflowType === "novel" || Boolean(p.creationWorkspace))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      if (!creationProjects.length) return;
+      const ensured = ensureProject(creationProjects[0]);
+      setProject(ensured);
+      // 更新 URL（不触发路由事件），这样刷新后能直接通过 projectId 加载
+      const url = new URL(window.location.href);
+      url.searchParams.set("projectId", ensured.id);
+      window.history.replaceState(null, "", url.toString());
     });
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
     return () => listener?.subscription.unsubscribe();
@@ -538,10 +560,38 @@ export function CreationWorkbench() {
     }));
   }
 
+  /**
+   * 修复（2026-07-24）：确保项目已同步保存到 localStorage + URL 已更新。
+   * 解决"页面刷新丢失定稿内容"问题：用户在 /novel-workbench（无 projectId）创作后，
+   * 刷新页面会重新初始化为 freshProject，之前保存的内容找不到。
+   *
+   * 只做同步操作（localStorage + URL），不阻塞调用方。
+   * Supabase 同步由 saveProject（await）或 callAI（异步 fire-and-forget）负责。
+   *
+   * 用 window.history.replaceState 更新 URL，不触发 Next.js 路由事件，避免循环加载。
+   * 刷新时浏览器读取新 URL，useSearchParams 会拿到 projectId，加载对应项目。
+   */
+  function ensureProjectPersisted(target: DramaProject) {
+    // 1. 同步保存到 localStorage
+    upsertProject(target);
+
+    // 2. 更新 URL（如果不一致）— 用 replaceState 避免触发 Next.js 路由事件
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const urlProjectId = url.searchParams.get("projectId");
+      if (urlProjectId !== target.id) {
+        url.searchParams.set("projectId", target.id);
+        url.searchParams.delete("new");
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+  }
+
   async function saveProject(nextProject = project) {
     setError("");
     setSaveStatus("saving");
-    upsertProject(nextProject);
+    // 修复（2026-07-24）：同步保存到 localStorage + 更新 URL（确保刷新可恢复）
+    ensureProjectPersisted(nextProject);
     if (session?.access_token) {
       try {
         await upsertProjectToSupabase(nextProject, { accessToken: session.access_token });
@@ -877,6 +927,11 @@ export function CreationWorkbench() {
   async function callAI(taskType: TaskType, input: string) {
     if (!session?.access_token) throw new Error(isZh ? "请先登录后使用 AI。" : "Sign in to use AI.");
     const requestProject = projectRef.current;
+    // 修复（2026-07-24）：AI 调用前确保项目已持久化（localStorage + URL + 异步 Supabase）
+    // 这样即使用户在 /novel-workbench（无 projectId）直接开始创作，项目也会被保存，
+    // 刷新页面后能通过 URL 中的 projectId 恢复，不会丢失已生成/定稿的内容。
+    ensureProjectPersisted(requestProject);
+    void upsertProjectToSupabase(requestProject, { accessToken: session.access_token }).catch(() => undefined);
     const requestWorkspace = requestProject.creationWorkspace || createCreationWorkspace(requestProject);
     const requestMode = requestWorkspace.settings.activeMode;
     const controller = new AbortController();
