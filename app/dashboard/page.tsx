@@ -31,6 +31,7 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { ProjectList } from "@/components/home/ProjectList";
 import { WorkflowList } from "@/components/home/WorkflowList";
+import { SalesEntryCard } from "@/components/dashboard/SalesEntryCard";
 import { TopNav } from "@/components/layout/TopNav";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -355,6 +356,7 @@ export default function ProjectListPage() {
           </header>
 
           <WorkflowList />
+          <SalesEntryCard accessToken={session?.access_token || null} />
           <ProjectList
             groupedProjects={groupedProjects}
             groups={groups}

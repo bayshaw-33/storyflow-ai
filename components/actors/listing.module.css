@@ -1,0 +1,247 @@
+/* 上架/定价编辑器 · 暗色 Linear 风格，复用 settings.module.css 的视觉语言 */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 560px;
+}
+
+.statusBlock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  flex-wrap: wrap;
+}
+
+.statusLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-secondary);
+}
+
+.statusListed {
+  color: var(--success);
+  border-color: rgba(76, 239, 168, 0.32);
+  background: rgba(76, 239, 168, 0.08);
+}
+
+.statusDelisted {
+  color: var(--warning);
+  border-color: rgba(245, 200, 66, 0.32);
+  background: rgba(245, 200, 66, 0.08);
+}
+
+.statusRemoved {
+  color: var(--danger);
+  border-color: rgba(255, 107, 107, 0.32);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.statusUnlisted {
+  color: var(--ink-muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.labelHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-muted);
+}
+
+.priceInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--input-bg);
+  color: var(--ink-primary);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color var(--transition-base);
+}
+
+.priceInput:focus {
+  border-color: var(--accent-cyan);
+}
+
+.priceInput:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.priceInputSuffix {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.priceInputSuffix .priceInput {
+  flex: 1;
+}
+
+.suffixLabel {
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.hint {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--transition-base), border-color var(--transition-base), opacity var(--transition-base);
+}
+
+.primaryButton {
+  background: var(--button-primary-bg);
+  color: var(--button-primary-fg);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+}
+
+.secondaryButton {
+  background: var(--button-secondary-bg);
+  color: var(--ink-primary);
+  border-color: var(--glass-border);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--button-secondary-hover);
+  border-color: var(--glass-border-hover);
+}
+
+.dangerButton {
+  background: transparent;
+  color: var(--warning);
+  border-color: var(--glass-border);
+}
+
+.dangerButton:hover:not(:disabled) {
+  border-color: var(--warning);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.notice {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--glass-border);
+}
+
+.noticeSuccess {
+  background: var(--notice-success-bg);
+  border-color: var(--notice-success-border);
+  color: var(--success);
+}
+
+.noticeError {
+  background: var(--notice-error-bg);
+  border-color: var(--notice-error-border);
+  color: var(--danger);
+}
+
+.statsBlock {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statItemValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.statItemLabel {
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 480px) {
+  .statsBlock {
+    grid-template-columns: 1fr;
+  }
+}

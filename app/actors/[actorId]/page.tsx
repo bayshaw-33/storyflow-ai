@@ -9,6 +9,14 @@ import { ActorProfilePanel } from "@/components/actors/ActorProfilePanel";
 import { EditActorModal } from "@/components/actors/EditActorModal";
 import { PortrayalGallery } from "@/components/actors/PortrayalGallery";
 import { ReferenceSheetExport } from "@/components/actors/ReferenceSheetExport";
+import { ActorMarketDetail } from "@/components/marketplace/ActorMarketDetail";
+import type {
+  MarketActorDetail,
+  Listing,
+  ActorStats,
+  BuyerStatus,
+  ProjectOption,
+} from "@/components/marketplace/types";
 import { actorApiFetch } from "@/components/actors/actor-client";
 import { actorLibraryCopy, type ActorLibraryCopy } from "@/components/actors/actor-copy";
 import {
@@ -62,6 +70,18 @@ export default function ActorDetailPage() {
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // 市场详情数据：价格 + 销量 + 被使用次数 + 创作者信息 + 当前买家购买状态
+  // 公开端点，未登录也可读取；失败时静默降级（不显示购买卡）
+  // /api/actors/:actorId/market 返回已分解的 actor / listing / stats / buyerStatus / projects
+  const [marketActor, setMarketActor] = useState<MarketActorDetail | null>(null);
+  const [marketListing, setMarketListing] = useState<Listing | null>(null);
+  const [marketStats, setMarketStats] = useState<ActorStats | null>(null);
+  const [marketBuyerStatus, setMarketBuyerStatus] = useState<BuyerStatus | null>(null);
+  const [marketProjects, setMarketProjects] = useState<ProjectOption[]>([]);
+  const [marketIsOwner, setMarketIsOwner] = useState(false);
+  const [marketViewerLoggedIn, setMarketViewerLoggedIn] = useState(false);
+  const [marketLoaded, setMarketLoaded] = useState(false);
 
   // PRD §7.2 关键约束：详情页必须用 GET /api/actors/:actorId 单读。
   useEffect(() => {
@@ -144,6 +164,40 @@ export default function ActorDetailPage() {
         setPortrayalsError(issue instanceof Error ? issue.message : "");
       } finally {
         if (active) setPortrayalsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [token, actorId]);
+
+  // 演员市场详情：GET /api/actors/:actorId/market（公开端点）
+  // 即使未登录也尝试拉取，让访客能看到价格 + 销量；失败静默降级。
+  useEffect(() => {
+    if (!actorId) return;
+    let active = true;
+    void (async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(`/api/actors/${encodeURIComponent(actorId)}/market`, { headers });
+        if (!response.ok) return;
+        const json = await response.json();
+        if (!active) return;
+        if (json && json.success) {
+          // API 返回已分解的字段：actor / listing / stats / buyerStatus / projects / isOwner / viewerLoggedIn
+          if (json.actor) setMarketActor(json.actor as MarketActorDetail);
+          if (json.listing) setMarketListing(json.listing as Listing);
+          if (json.stats) setMarketStats(json.stats as ActorStats);
+          if (json.buyerStatus) setMarketBuyerStatus(json.buyerStatus as BuyerStatus);
+          if (Array.isArray(json.projects)) setMarketProjects(json.projects as ProjectOption[]);
+          setMarketIsOwner(Boolean(json.isOwner));
+          setMarketViewerLoggedIn(Boolean(json.viewerLoggedIn));
+        }
+      } catch {
+        // 静默降级：未读到市场数据时不显示购买卡
+      } finally {
+        if (active) setMarketLoaded(true);
       }
     })();
     return () => {
@@ -405,6 +459,17 @@ export default function ActorDetailPage() {
                 onSetPrimary={handleSetPrimary}
                 onUpload={handleUploadPack}
               />
+              {marketLoaded && marketActor && marketListing && marketStats && marketBuyerStatus ? (
+                <ActorMarketDetail
+                  actor={marketActor}
+                  listing={marketListing}
+                  stats={marketStats}
+                  buyerStatus={marketBuyerStatus}
+                  isOwner={marketIsOwner}
+                  viewerLoggedIn={marketViewerLoggedIn}
+                  projects={marketProjects}
+                />
+              ) : null}
               <PortrayalGallery copy={ui} portrayals={portrayals} loading={portrayalsLoading} error={portrayalsError} />
             </div>
           </div>

@@ -1,0 +1,46 @@
+/* 已购演员列表页：复用 actors.module.css 的 page/topbar/grid 等通用结构，
+   这里只声明本页特有的筛选条 / 卡片底部授权徽标行 / 加载更多行。 */
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+}
+
+.filterGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cardWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 8px;
+  flex-wrap: wrap;
+}
+
+.projectTag {
+  font-size: 11px;
+  color: #8f999b;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.loadMoreRow {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 8px;
+}

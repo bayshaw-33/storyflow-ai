@@ -7,6 +7,7 @@ import { ImageOff, LoaderCircle, Plus, Search, TriangleAlert, Users } from "luci
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { ActorCard } from "@/components/actors/ActorCard";
 import { CreateActorModal } from "@/components/actors/CreateActorModal";
+import { ActorMarketSection } from "@/components/marketplace/ActorMarketSection";
 import { actorApiFetch } from "@/components/actors/actor-client";
 import { actorLibraryCopy } from "@/components/actors/actor-copy";
 import {
@@ -149,6 +150,12 @@ export default function ActorsPage() {
                 aria-label={ui.searchPlaceholder}
               />
             </label>
+            <Link
+              className={styles.ghostBtn}
+              href={session ? "/actors/purchased" : "/login?next=/actors/purchased"}
+            >
+              {isZh ? "已购" : "Purchased"}
+            </Link>
             <button className={styles.primaryBtn} type="button" onClick={() => setCreateOpen(true)}>
               <Plus size={15} />
               {ui.newActor}
@@ -294,6 +301,8 @@ export default function ActorsPage() {
           <LoaderCircle className={styles.spin} size={16} />
         </span>
       ) : null}
+
+      <ActorMarketSection viewerToken={session?.access_token || null} />
 
       <CreateActorModal open={createOpen} token={session?.access_token || ""} copy={ui} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
     </main>
