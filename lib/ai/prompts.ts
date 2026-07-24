@@ -1,5 +1,3 @@
-import { loadPromptsFromDb, resolveRules, resolveTaskPrompt, getActiveOverrides } from "@/lib/admin/ai-prompts-server";
-
 export type TaskType =
   | "market_analysis"
   | "script_import"
@@ -777,8 +775,27 @@ export const DEFAULT_RULES = {
 
 export const DEFAULT_PROMPT_BY_TASK: Record<TaskType, string> = { ...promptByTask };
 
+// 模块级缓存：避免每次 buildPrompt 都重复 dynamic import。
+type PromptsServerModule = typeof import("@/lib/admin/ai-prompts-server");
+let promptsServer: PromptsServerModule | null = null;
+let promptsServerLoadFailed = false;
+
+async function getPromptsServer(): Promise<PromptsServerModule | null> {
+  if (promptsServer) return promptsServer;
+  if (promptsServerLoadFailed) return null;
+  try {
+    promptsServer = await import("@/lib/admin/ai-prompts-server");
+    return promptsServer;
+  } catch {
+    // 测试环境（无 @/ 别名解析）或模块加载失败；回退默认值。
+    promptsServerLoadFailed = true;
+    return null;
+  }
+}
+
 export async function buildPrompt(payload: GeneratePayload) {
-  const cache = await loadPromptsFromDb();
+  const server = await getPromptsServer();
+  const cache = server ? await server.loadPromptsFromDb() : null;
   const rulesName: "common" | "song" | "novel" | "creation" =
     payload.taskType === "song_workbench"
       ? "song"
@@ -787,7 +804,11 @@ export async function buildPrompt(payload: GeneratePayload) {
         : isNovelTask(payload.taskType)
           ? "novel"
           : "common";
-  const rules = resolveRules(rulesName, cache);
+  // creation rules 依赖 interfaceLanguage；DB 无缓存时动态生成以保留语言切换行为。
+  // 其他 rules 类别不依赖 payload，用 resolveRules（优先 DB，回退 DEFAULT_RULES）。
+  const rules = rulesName === "creation"
+    ? (cache?.rules.get("creation") || creationRules(payload.options?.interfaceLanguage))
+    : (cache ? server!.resolveRules(rulesName, cache) : DEFAULT_RULES[rulesName]);
 
   const basePrompt = [
     rules,
@@ -802,10 +823,10 @@ export async function buildPrompt(payload: GeneratePayload) {
     JSON.stringify(buildOptions(payload), null, 2),
     "",
     `【taskType】${payload.taskType} / ${taskNames[payload.taskType]}`,
-    resolveTaskPrompt(payload.taskType, cache),
+    cache ? server!.resolveTaskPrompt(payload.taskType, cache) : DEFAULT_PROMPT_BY_TASK[payload.taskType],
   ].join("\n");
 
-  const overrides = getActiveOverrides(payload.taskType, cache);
+  const overrides = cache ? server!.getActiveOverrides(payload.taskType, cache) : [];
   const prepend = overrides
     .filter((o) => o.position === "prepend")
     .map((o) => o.injection_text)

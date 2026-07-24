@@ -46,7 +46,7 @@ export async function loadPromptsFromDb(): Promise<Cache> {
         "/rest/v1/storyflow_ai_prompts?select=key,category,label,body",
       ),
       serviceFetch<OverrideRow[]>(
-        "/rest/v1/storyflow_ai_prompt_overrides?select=id,scope,target,injection_text,position,enabled&enabled=eq.true&order=created_at.asc",
+        "/rest/v1/storyflow_ai_prompt_overrides?select=id,scope,target,injection_text,position,enabled&enabled=eq.true&order=updated_at.asc",
       ),
     ]);
     const rules = new Map<string, string>();
