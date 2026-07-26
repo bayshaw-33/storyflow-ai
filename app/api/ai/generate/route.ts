@@ -19,8 +19,8 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_PER_MINUTE || 8);
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
-// 创作文档 Provider 链总预算为 210s，保留时间完成任务记录和额度收尾。
-export const maxDuration = 300;
+// 创作文档 Provider 链总预算提升到 500s，保留时间完成任务记录和额度收尾。
+export const maxDuration = 500;
 
 export async function GET() {
   const providers = getProviderStatus();
