@@ -12,7 +12,7 @@ import {
   TIMELINE_SCHEMA_VERSION,
   EDITOR_ENGINE_NONE,
   EDITOR_STATUS_FRAMEWORK,
-} from "./types";
+} from "./types.ts";
 import type {
   AssemblyItemRow,
   AssemblySequenceMeta,
@@ -22,7 +22,7 @@ import type {
   TimelineClip,
   TimelineTrack,
   VoiceLineSummary,
-} from "./types";
+} from "./types.ts";
 
 /**
  * 序列化：从 DB 行组装 KiikisTimeline DTO
