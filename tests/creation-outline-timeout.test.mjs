@@ -7,7 +7,7 @@ const componentPath = new URL("./CreationWorkbench-latest.tsx", import.meta.url)
 test("outline generation uses a longer timeout than the default creation chat window", async () => {
   const source = await readFile(componentPath, "utf8");
 
-  assert.match(source, /const LONG_FORM_AI_TIMEOUT = 520_000/);
+  assert.match(source, /const LONG_FORM_AI_TIMEOUT = 310_000/);
   assert.match(source, /function getAiTimeoutMs\(taskType: TaskType\)/);
   assert.match(source, /creation_plot_outline/);
   assert.match(source, /creation_episode_plan/);
