@@ -381,6 +381,7 @@ export type UniverseCopy = {
     works: string;
     canon: string;
     inbox: string;
+    graph: string;
     bible: string;
     bibleOpen: string;
     bibleClose: string;
@@ -513,6 +514,7 @@ export function getUniverseCopy(isZh: boolean): UniverseCopy {
         works: "作品",
         canon: "Canon",
         inbox: "待处理 Inbox",
+        graph: "角色图",
         bible: "Universe Bible",
         bibleOpen: "查看完整 Universe Bible",
         bibleClose: "关闭",
@@ -643,6 +645,7 @@ export function getUniverseCopy(isZh: boolean): UniverseCopy {
       works: "Works",
       canon: "Canon",
       inbox: "Inbox",
+      graph: "Character Graph",
       bible: "Universe Bible",
       bibleOpen: "Open full Universe Bible",
       bibleClose: "Close",

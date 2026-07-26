@@ -54,13 +54,14 @@ import { UniverseAssets } from "@/components/universe/UniverseAssets";
 import { UniverseWorks } from "@/components/universe/UniverseWorks";
 import { UniverseCanon } from "@/components/universe/UniverseCanon";
 import { UniverseInbox } from "@/components/universe/UniverseInbox";
+import { CharacterGraph } from "@/components/universe/CharacterGraph";
 import {
   getUniverseCopy,
   type UniverseOverviewData,
 } from "@/components/universe/universe-view-model";
 import styles from "@/components/universe/universe.module.css";
 
-type TabKey = "overview" | "assets" | "works" | "canon" | "inbox";
+type TabKey = "overview" | "assets" | "works" | "canon" | "inbox" | "graph";
 
 type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
 
@@ -72,7 +73,7 @@ const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: s
   { value: "video", label: "Video Creation" },
 ];
 
-const VALID_TABS: TabKey[] = ["overview", "assets", "works", "canon", "inbox"];
+const VALID_TABS: TabKey[] = ["overview", "assets", "works", "canon", "inbox", "graph"];
 
 export default function UniverseDetailPage() {
   const params = useParams<{ universeId: string }>();
@@ -565,6 +566,7 @@ export default function UniverseDetailPage() {
       label: copy.detail.inbox,
       count: bundle?.inbox.filter((item) => item.status === "pending").length,
     },
+    { key: "graph", label: copy.detail.graph, count: bundle?.entities.filter((e) => e.type === "character").length },
   ], [bundle, copy]);
 
   // §阶段 B 访客身份分流：等待 session 和 meta 都加载完毕后再判断身份
@@ -834,6 +836,14 @@ export default function UniverseDetailPage() {
             relationships={bundle.relationships}
             timeline={bundle.timeline}
             reports={bundle.reports}
+            isZh={isZh}
+          />
+        ) : null}
+
+        {activeTab === "graph" ? (
+          <CharacterGraph
+            universeId={params.universeId}
+            accessToken={session?.access_token || null}
             isZh={isZh}
           />
         ) : null}
