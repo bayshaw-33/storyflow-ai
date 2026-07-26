@@ -79,6 +79,7 @@ import {
   createNovelProject,
   readProjectsFromStorage,
   upsertProject,
+  type CreationChatMessage,
   type DramaProject,
   type NovelChapter,
 } from "@/lib/projects";
@@ -97,7 +98,7 @@ type StageKey = "background" | "characters" | "outline" | "manuscript" | "transl
 /** PRD V1.0 §8：左侧目录主导航，决定中央编辑器展示内容 */
 type ViewKey = "background" | "characters" | "outline" | "episodePlan" | "unit" | "export";
 type MobilePanel = "chat" | "content";
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+type ChatMessage = CreationChatMessage;
 type SourceFile = { id: string; name: string; text: string };
 type LocalizationView = "content" | "changes" | "similarity";
 
@@ -122,7 +123,40 @@ function welcome(isZh: boolean) {
 }
 
 function message(role: ChatMessage["role"], content: string, id = crypto.randomUUID()): ChatMessage {
-  return { id, role, content };
+  return { id, role, content, createdAt: new Date().toISOString() };
+}
+
+function parseLegacyChatHistory(notes: string): ChatMessage[] {
+  return notes
+    .split(/^##\s+/m)
+    .slice(1)
+    .flatMap((entry, index) => {
+      const lineBreak = entry.indexOf("\n");
+      if (lineBreak < 0) return [];
+      const header = entry.slice(0, lineBreak).trim();
+      const match = header.match(/^(.*?)\s+(USER|AI)$/);
+      const content = entry.slice(lineBreak + 1).trim();
+      if (!match || !content) return [];
+      return [{
+        id: `legacy-chat-${index}-${match[2].toLowerCase()}`,
+        role: match[2] === "USER" ? "user" : "assistant",
+        content,
+        createdAt: match[1],
+      }];
+    });
+}
+
+function readChatHistory(project: DramaProject, isZh: boolean) {
+  if (project.creationChatHistory?.length) return project.creationChatHistory;
+  const legacyHistory = parseLegacyChatHistory(project.novelDevelopmentNotes);
+  return legacyHistory.length ? legacyHistory : [message("assistant", welcome(isZh), "welcome")];
+}
+
+function hasSameChatHistory(left: ChatMessage[] | undefined, right: ChatMessage[]) {
+  return left?.length === right.length && left.every((item, index) => {
+    const candidate = right[index];
+    return item.id === candidate.id && item.role === candidate.role && item.content === candidate.content && item.createdAt === candidate.createdAt;
+  });
 }
 
 function createUnit(mode: CreationMode, number: number, id = `${mode}-unit-${number}`): CreationUnit {
@@ -262,6 +296,7 @@ export function CreationWorkbench() {
   const [activeArcId, setActiveArcId] = useState("");
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([message("assistant", welcome(true), "welcome")]);
+  const [chatProjectId, setChatProjectId] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [sourceFiles, setSourceFiles] = useState<SourceFile[]>([]);
   const [busy, setBusy] = useState(false);
@@ -399,6 +434,21 @@ export function CreationWorkbench() {
   useEffect(() => {
     setMessages((current) => current.map((item) => item.id === "welcome" ? message("assistant", welcome(isZh), "welcome") : item));
   }, [isZh]);
+
+  useEffect(() => {
+    if (!project.id || chatProjectId === project.id) return;
+    setMessages(readChatHistory(project, isZh));
+    setChatProjectId(project.id);
+  }, [chatProjectId, isZh, project]);
+
+  useEffect(() => {
+    if (!project.id || chatProjectId !== project.id || hasSameChatHistory(projectRef.current.creationChatHistory, messages)) return;
+    const nextProject = { ...projectRef.current, creationChatHistory: messages, updatedAt: new Date().toISOString() };
+    projectRef.current = nextProject;
+    setProject(nextProject);
+    ensureProjectPersisted(nextProject);
+    if (session?.access_token) void upsertProjectToSupabase(nextProject, { accessToken: session.access_token }).catch(() => undefined);
+  }, [chatProjectId, messages, project.id, session?.access_token]);
 
   // PRD V1.0 验收 P1-07：导出页默认只勾选定稿单元（首次进入导出视图或单元集合变化时初始化）
   const exportSelectionInit = useRef(false);
