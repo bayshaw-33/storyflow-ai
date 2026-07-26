@@ -124,6 +124,13 @@ export type NovelChapter = {
   updatedAt: string;
 };
 
+export type CreationChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
 export type DramaProject = {
   id: string;
   workflowType: WorkflowType;
@@ -174,6 +181,7 @@ export type DramaProject = {
   novelChapterOutline: string;
   novelChapterDraft: string;
   novelDevelopmentNotes: string;
+  creationChatHistory?: CreationChatMessage[];
   novelContinuityNotes: string;
   novelStyleGuide: string;
   novelChapters: NovelChapter[];
