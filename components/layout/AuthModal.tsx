@@ -66,23 +66,28 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
     }
 
     setBusy(true);
-    const result =
-      mode === "signup"
-        ? await supabase.auth.signUp({
-            email: nextEmail,
-            password: nextPassword,
-            options: { emailRedirectTo: siteUrl() || undefined },
-          })
-        : await supabase.auth.signInWithPassword({ email: nextEmail, password: nextPassword });
-    setBusy(false);
+    try {
+      const result =
+        mode === "signup"
+          ? await supabase.auth.signUp({
+              email: nextEmail,
+              password: nextPassword,
+              options: { emailRedirectTo: siteUrl() || undefined },
+            })
+          : await supabase.auth.signInWithPassword({ email: nextEmail, password: nextPassword });
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      setPassword("");
+      onClose();
+    } catch (authIssue) {
+      setError(authIssue instanceof Error ? authIssue.message : "登录服务暂时不可用，请稍后重试。");
+    } finally {
+      setBusy(false);
     }
-
-    setPassword("");
-    onClose();
   }
 
   async function sendResetLink() {
@@ -100,17 +105,22 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
     }
 
     setBusy(true);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(nextEmail, {
-      redirectTo: resetRedirectUrl(),
-    });
-    setBusy(false);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(nextEmail, {
+        redirectTo: resetRedirectUrl(),
+      });
 
-    if (resetError) {
-      setError(resetError.message);
-      return;
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
+
+      setView("sent");
+    } catch (resetIssue) {
+      setError(resetIssue instanceof Error ? resetIssue.message : "重置服务暂时不可用，请稍后重试。");
+    } finally {
+      setBusy(false);
     }
-
-    setView("sent");
   }
 
   return (
