@@ -233,13 +233,6 @@ export default function UniverseDetailPage() {
           { headers: { Authorization: `Bearer ${session.access_token}` } },
         );
         const data = await res.json().catch(() => null);
-        // TRAE-V2-00 诊断日志（排查 P0 修复后回归，确认后移除）
-        console.log("[universe-me]", {
-          status: res.status,
-          ok: res.ok,
-          hasToken: Boolean(session.access_token),
-          data,
-        });
         if (cancelled) return;
         if (!res.ok || !data?.success) {
           setUniverseMeta({ isOwner: false, shareStatus: null });
