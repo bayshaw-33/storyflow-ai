@@ -171,22 +171,29 @@ export async function fetchCharacterPassports(
   ownerId: string,
   projectId: string,
 ): Promise<CharacterPassportsPayload> {
-  // 通过 characters 表关联 portrayal + voice_profile
-  // 此处做最小可用聚合：分别查询再合并
+  // characters 表用 user_id（非 owner_id），无 actor_profile_id 字段
+  // 角色和演员通过 character_portrayals 表关联
   type CharacterRow = {
     id: string;
+    user_id: string;
+    project_id: string;
     name: string;
-    project_id: string | null;
-    actor_profile_id: string | null;
+    role: string | null;
+    age: string | null;
+    goal: string | null;
+    visual_prompt: string | null;
+    content_json: Record<string, unknown> | null;
   };
+  // portrayals 表无 owner_id, appearance_variant_id, identity_core_prompt, visual_dna, forbidden_changes 字段
+  // 这些在 metadata JSONB 中
   type PortrayalRow = {
     id: string;
+    actor_profile_id: string;
     character_id: string;
     project_id: string | null;
-    appearance_variant_id: string | null;
-    identity_core_prompt: string | null;
-    visual_dna: unknown;
-    forbidden_changes: string[];
+    portrayal_name: string;
+    visual_prompt: string;
+    metadata: Record<string, unknown> | null;
   };
   // V2-03 实际表结构：voice_profiles 无 character_id/project_id 字段
   // 通过 actor_profile_id 或 universe_entity_id 关联
@@ -202,19 +209,20 @@ export async function fetchCharacterPassports(
 
   const [characters, portrayals, voiceProfiles] = await Promise.all([
     serviceFetch<CharacterRow[]>(
-      `/rest/v1/storyflow_characters?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&select=id,name,project_id,actor_profile_id&order=name.asc&limit=500`,
+      `/rest/v1/storyflow_characters?user_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&select=id,user_id,project_id,name,role,age,goal,visual_prompt,content_json&order=name.asc&limit=500`,
     ),
     serviceFetch<PortrayalRow[]>(
-      `/rest/v1/storyflow_character_portrayals?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&select=id,character_id,project_id,appearance_variant_id,identity_core_prompt,visual_dna,forbidden_changes&limit=500`,
+      `/rest/v1/storyflow_character_portrayals?project_id=eq.${encodeURIComponent(projectId)}&select=id,actor_profile_id,character_id,project_id,portrayal_name,visual_prompt,metadata&limit=500`,
     ),
     serviceFetch<VoiceProfileRow[]>(
       `/rest/v1/storyflow_character_voice_profiles?owner_id=eq.${encodeURIComponent(ownerId)}&select=id,actor_profile_id,universe_entity_id&limit=500`,
     ),
   ]);
 
+  // V2-04: actor_profile_id 在 portrayals 表中，不在 characters 表中
   const actorIds = new Set<string>();
-  for (const c of characters ?? []) {
-    if (c.actor_profile_id) actorIds.add(c.actor_profile_id);
+  for (const p of portrayals ?? []) {
+    if (p.actor_profile_id) actorIds.add(p.actor_profile_id);
   }
   const actorList = Array.from(actorIds);
   const actors = actorList.length === 0 ? [] : await serviceFetch<ActorRow[]>(
@@ -222,6 +230,8 @@ export async function fetchCharacterPassports(
   );
   const actorMap = new Map((actors ?? []).map((a) => [a.id, a.display_name]));
 
+  // V2-04: portrayals 通过 character_id 关联，一个 character 可能有多个 portrayal
+  // 取第一个作为主 portrayal
   const portrayalByCharId = new Map<string, PortrayalRow>();
   for (const p of portrayals ?? []) {
     if (!portrayalByCharId.has(p.character_id)) {
@@ -238,17 +248,18 @@ export async function fetchCharacterPassports(
 
   const passports: CharacterPassportCompositeRow[] = (characters ?? []).map((c) => {
     const p = portrayalByCharId.get(c.id);
+    const meta = p?.metadata ?? {};
     return {
       character_id: c.id,
       character_name: c.name,
-      actor_profile_id: c.actor_profile_id,
-      actor_name: c.actor_profile_id ? actorMap.get(c.actor_profile_id) ?? null : null,
+      actor_profile_id: p?.actor_profile_id ?? null,
+      actor_name: p?.actor_profile_id ? actorMap.get(p.actor_profile_id) ?? null : null,
       portrayal_id: p?.id ?? null,
-      appearance_variant_id: p?.appearance_variant_id ?? null,
-      identity_core_prompt: p?.identity_core_prompt ?? null,
-      visual_dna: p?.visual_dna ?? null,
-      forbidden_changes: p?.forbidden_changes ?? [],
-      voice_profile_id: c.actor_profile_id ? voiceByActorId.get(c.actor_profile_id) ?? null : null,
+      appearance_variant_id: (meta.appearance_variant_id as string | null) ?? null,
+      identity_core_prompt: (meta.identity_core_prompt as string | null) ?? p?.visual_prompt ?? null,
+      visual_dna: (meta.visual_dna as Record<string, unknown> | null) ?? null,
+      forbidden_changes: Array.isArray(meta.forbidden_changes) ? (meta.forbidden_changes as string[]) : [],
+      voice_profile_id: p?.actor_profile_id ? voiceByActorId.get(p.actor_profile_id) ?? null : null,
     };
   });
 
@@ -325,12 +336,12 @@ export async function fetchVoiceProfiles(
 // Script
 // ============================================================
 
-type ScriptEpisodeRow = {
+// 剧本数据存储在 storyflow_projects.data JSONB 中（DramaProject 对象）
+// storyflow_script_episodes 表不存在
+type ProjectScriptRow = {
   id: string;
-  project_id: string;
-  source_unit_id: string;
   title: string;
-  content_md: string | null;
+  data: Record<string, unknown> | null;
 };
 
 export async function fetchScriptEpisode(
@@ -338,57 +349,78 @@ export async function fetchScriptEpisode(
   projectId: string,
   sourceUnitId: string,
 ): Promise<ScriptEpisodePayload | null> {
-  const rows = await serviceFetch<ScriptEpisodeRow[]>(
-    `/rest/v1/storyflow_script_episodes?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&source_unit_id=eq.${encodeURIComponent(sourceUnitId)}&select=id,project_id,source_unit_id,title,content_md&order=updated_at.desc&limit=1`,
+  const rows = await serviceFetch<ProjectScriptRow[]>(
+    `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(projectId)}&owner_id=eq.${encodeURIComponent(ownerId)}&select=id,title,data&limit=1`,
   );
   const row = rows?.[0];
   if (!row) return null;
+  const data = row.data ?? {};
+  // 从 DramaProject JSONB 读取剧本内容
+  const finalScriptVersion = (data.finalScriptVersion as string) ?? "chinese";
+  const finalScriptChinese = (data.finalScriptChinese as string) ?? "";
+  const finalScriptForeign = (data.finalScriptForeign as string) ?? "";
+  const finalScriptBilingual = (data.finalScriptBilingual as string) ?? "";
+  const contentMd =
+    finalScriptVersion === "bilingual"
+      ? finalScriptBilingual
+      : finalScriptVersion === "chinese"
+        ? finalScriptChinese
+        : finalScriptForeign;
+  if (!contentMd.trim()) return null;
   return {
-    projectId: row.project_id,
-    sourceUnitId: row.source_unit_id,
+    projectId: row.id,
+    sourceUnitId,
     title: row.title,
-    contentMd: row.content_md ?? "",
-    wordCount: (row.content_md ?? "").length,
+    contentMd,
+    wordCount: contentMd.length,
   };
 }
 
+// V2-04 实际表结构：scenes 用 production_project_id + sort_order
+// function_role/conflict/emotion/duration_target 在 director_meta JSONB 中
 type SceneRow = {
   id: string;
-  project_id: string;
-  scene_number: number;
+  production_project_id: string;
+  owner_id: string;
+  source_unit_id: string | null;
+  sort_order: number;
+  heading: string | null;
   location: string | null;
   time_of_day: string | null;
-  function_role: string | null;
-  characters: string[];
-  conflict: string | null;
-  emotion: string | null;
-  duration_target: number | null;
+  summary: string | null;
+  character_asset_ids: string[] | null;
   director_meta: unknown;
   locked: boolean;
+  deleted_at: string | null;
 };
 
 export async function fetchScenes(
   ownerId: string,
   projectId: string,
 ): Promise<ScriptScenesPayload> {
+  // 注意：scenes 表用 production_project_id 关联，不是 project_id
+  // 这里按 owner_id 过滤，deleted_at is null
   const rows = await serviceFetch<SceneRow[]>(
-    `/rest/v1/storyflow_production_scenes?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=scene_number.asc&limit=500&select=id,project_id,scene_number,location,time_of_day,function_role,characters,conflict,emotion,duration_target,director_meta,locked`,
+    `/rest/v1/storyflow_production_scenes?owner_id=eq.${encodeURIComponent(ownerId)}&deleted_at=is.null&order=sort_order.asc&limit=500&select=id,production_project_id,owner_id,source_unit_id,sort_order,heading,location,time_of_day,summary,character_asset_ids,director_meta,locked,deleted_at`,
   );
   return {
     projectId,
-    scenes: (rows ?? []).map((r) => ({
-      id: r.id,
-      sceneNumber: r.scene_number,
-      location: r.location,
-      timeOfDay: r.time_of_day,
-      functionRole: r.function_role,
-      characters: Array.isArray(r.characters) ? (r.characters as string[]) : [],
-      conflict: r.conflict,
-      emotion: r.emotion,
-      durationTarget: r.duration_target,
-      directorMeta: (r.director_meta as Record<string, unknown> | null) ?? null,
-      locked: Boolean(r.locked),
-    })),
+    scenes: (rows ?? []).map((r) => {
+      const meta = (r.director_meta as Record<string, unknown> | null) ?? {};
+      return {
+        id: r.id,
+        sceneNumber: r.sort_order,
+        location: r.location,
+        timeOfDay: r.time_of_day,
+        functionRole: (meta.scene_function as string | null) ?? null,
+        characters: Array.isArray(r.character_asset_ids) ? (r.character_asset_ids as string[]) : [],
+        conflict: (meta.conflict as string | null) ?? null,
+        emotion: (meta.emotion as string | null) ?? null,
+        durationTarget: (meta.duration_target as number | null) ?? null,
+        directorMeta: (r.director_meta as Record<string, unknown> | null) ?? null,
+        locked: Boolean(r.locked),
+      };
+    }),
   };
 }
 
@@ -396,29 +428,40 @@ export async function fetchScenes(
 // Director
 // ============================================================
 
+// V2-04 实际表结构：shots 用 scene_id + index
+// shot_type→shot_size, camera_angle→angle, focal_length/negative_rules/provider_params 在 director_meta 中
+// prompt_hash→source_hash
 type ShotRow = {
   id: string;
   scene_id: string;
-  shot_number: number;
-  shot_type: string | null;
-  camera_angle: string | null;
-  focal_length: string | null;
+  owner_id: string;
+  index: number;
+  story_beat: string | null;
+  visual_description: string | null;
+  shot_size: string | null;
+  camera_movement: string | null;
+  angle: string | null;
+  duration_seconds: number | null;
   duration: number | null;
   dialogue: string | null;
+  emotion: string | null;
+  continuity: string | null;
   image_prompt: string | null;
-  video_prompt: string | null;
-  negative_rules: string[];
-  provider_params: unknown;
-  prompt_hash: string | null;
+  jimeng_prompt_zh: string | null;
+  jimeng_prompt_en: string | null;
+  source_hash: string | null;
+  director_meta: unknown;
   locked: boolean;
+  status: string | null;
+  deleted_at: string | null;
 };
 
 async function fetchShots(
   ownerId: string,
-  projectId: string,
+  _projectId: string,
 ): Promise<ShotRow[]> {
   const rows = await serviceFetch<ShotRow[]>(
-    `/rest/v1/storyflow_production_shots?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=shot_number.asc&limit=2000&select=id,scene_id,shot_number,shot_type,camera_angle,focal_length,duration,dialogue,image_prompt,video_prompt,negative_rules,provider_params,prompt_hash,locked`,
+    `/rest/v1/storyflow_production_shots?owner_id=eq.${encodeURIComponent(ownerId)}&deleted_at=is.null&order=index.asc&limit=2000&select=id,scene_id,owner_id,index,story_beat,visual_description,shot_size,camera_movement,angle,duration_seconds,duration,dialogue,emotion,continuity,image_prompt,jimeng_prompt_zh,jimeng_prompt_en,source_hash,director_meta,locked,status,deleted_at`,
   );
   return rows ?? [];
 }
@@ -429,17 +472,19 @@ export async function fetchDirectorShotList(
 ): Promise<DirectorShotListPayload> {
   const shots = await fetchShots(ownerId, projectId);
   // CSV with BOM for Excel compatibility
-  const header = "shot_id,scene_id,shot_number,shot_type,camera_angle,focal_length,duration,dialogue,locked\n";
+  const header = "shot_id,scene_id,shot_index,shot_size,angle,focal_length,duration_seconds,dialogue,locked\n";
   const body = shots
     .map((s) => {
+      const meta = (s.director_meta as Record<string, unknown> | null) ?? {};
+      const focalLength = (meta.focal_length as string | null) ?? "";
       const cells = [
         s.id,
         s.scene_id,
-        String(s.shot_number),
-        s.shot_type ?? "",
-        s.camera_angle ?? "",
-        s.focal_length ?? "",
-        s.duration != null ? String(s.duration) : "",
+        String(s.index),
+        s.shot_size ?? "",
+        s.angle ?? "",
+        focalLength,
+        s.duration_seconds != null ? String(s.duration_seconds) : "",
         (s.dialogue ?? "").replace(/[\r\n]+/g, " ").replace(/"/g, '""'),
         s.locked ? "true" : "false",
       ];
@@ -449,17 +494,20 @@ export async function fetchDirectorShotList(
   return {
     projectId,
     csv: "\uFEFF" + header + body,
-    shots: shots.map((s) => ({
-      id: s.id,
-      sceneId: s.scene_id,
-      shotNumber: s.shot_number,
-      shotType: s.shot_type,
-      cameraAngle: s.camera_angle,
-      focalLength: s.focal_length,
-      duration: s.duration,
-      dialogue: s.dialogue,
-      locked: s.locked,
-    })),
+    shots: shots.map((s) => {
+      const meta = (s.director_meta as Record<string, unknown> | null) ?? {};
+      return {
+        id: s.id,
+        sceneId: s.scene_id,
+        shotNumber: s.index,
+        shotType: s.shot_size,
+        cameraAngle: s.angle,
+        focalLength: (meta.focal_length as string | null) ?? null,
+        duration: s.duration_seconds ?? s.duration,
+        dialogue: s.dialogue,
+        locked: s.locked,
+      };
+    }),
   };
 }
 
@@ -470,14 +518,17 @@ export async function fetchDirectorPrompts(
   const shots = await fetchShots(ownerId, projectId);
   return {
     projectId,
-    prompts: shots.map((s) => ({
-      shotId: s.id,
-      imagePrompt: s.image_prompt,
-      videoPrompt: s.video_prompt,
-      negativeRules: Array.isArray(s.negative_rules) ? (s.negative_rules as string[]) : [],
-      providerParams: (s.provider_params as Record<string, unknown> | null) ?? null,
-      promptHash: s.prompt_hash,
-    })),
+    prompts: shots.map((s) => {
+      const meta = (s.director_meta as Record<string, unknown> | null) ?? {};
+      return {
+        shotId: s.id,
+        imagePrompt: s.image_prompt,
+        videoPrompt: (meta.video_prompt as string | null) ?? null,
+        negativeRules: Array.isArray(meta.negative_rules) ? (meta.negative_rules as string[]) : [],
+        providerParams: (meta.provider_params as Record<string, unknown> | null) ?? null,
+        promptHash: s.source_hash,
+      };
+    }),
   };
 }
 
@@ -485,38 +536,43 @@ export async function fetchDirectorPrompts(
 // Media
 // ============================================================
 
+// V2-04 实际表结构：selected_takes 无 owner_id, asset_id, storage_path, provider_name, model_name 字段
+// 这些信息存在 metadata JSONB 中或通过 video_url 引用
 type SelectedTakeRow = {
   id: string;
+  project_id: string;
   shot_id: string;
-  take_label: string | null;
+  video_url: string;
+  take_label: string;
   status: string;
-  asset_id: string | null;
-  storage_path: string | null;
-  provider_name: string | null;
-  model_name: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
 
 export async function fetchSelectedTakes(
-  ownerId: string,
+  _ownerId: string,
   projectId: string,
 ): Promise<MediaSelectedTakesPayload> {
   const rows = await serviceFetch<SelectedTakeRow[]>(
-    `/rest/v1/storyflow_selected_takes?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=created_at.desc&limit=2000&select=id,shot_id,take_label,status,asset_id,storage_path,provider_name,model_name,created_at`,
+    `/rest/v1/storyflow_selected_takes?project_id=eq.${encodeURIComponent(projectId)}&order=created_at.desc&limit=2000&select=id,project_id,shot_id,video_url,take_label,status,metadata,created_at`,
   );
   return {
     projectId,
-    takes: (rows ?? []).map((r) => ({
-      id: r.id,
-      shotId: r.shot_id,
-      takeLabel: r.take_label,
-      status: r.status,
-      assetId: r.asset_id,
-      storagePath: r.storage_path,
-      providerName: r.provider_name,
-      modelName: r.model_name,
-      createdAt: r.created_at,
-    })),
+    takes: (rows ?? []).map((r) => {
+      const meta = r.metadata ?? {};
+      return {
+        id: r.id,
+        shotId: r.shot_id,
+        takeLabel: r.take_label,
+        status: r.status,
+        // asset_id / storage_path / provider_name / model_name 从 metadata 读取
+        assetId: (meta.asset_id as string | null) ?? null,
+        storagePath: (meta.storage_path as string | null) ?? null,
+        providerName: (meta.provider_name as string | null) ?? null,
+        modelName: (meta.model_name as string | null) ?? null,
+        createdAt: r.created_at,
+      };
+    }),
   };
 }
 
@@ -567,15 +623,16 @@ export async function fetchVoiceLines(
   };
 }
 
+// V2-04 实际表结构：assets 用 user_id（非 owner_id）
+// size_bytes/mime_type/source_job_id/shot_id/character_id 在 metadata JSONB 中
 type AssetRow = {
   id: string;
+  user_id: string;
+  project_id: string | null;
   asset_type: string;
-  storage_path: string;
-  size_bytes: number | null;
-  mime_type: string | null;
-  source_job_id: string | null;
-  shot_id: string | null;
-  character_id: string | null;
+  storage_path: string | null;
+  public_url: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
 
@@ -584,21 +641,24 @@ export async function fetchAssets(
   projectId: string,
 ): Promise<MediaAssetsPayload> {
   const rows = await serviceFetch<AssetRow[]>(
-    `/rest/v1/storyflow_assets?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=created_at.desc&limit=2000&select=id,asset_type,storage_path,size_bytes,mime_type,source_job_id,shot_id,character_id,created_at`,
+    `/rest/v1/storyflow_assets?user_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=created_at.desc&limit=2000&select=id,user_id,project_id,asset_type,storage_path,public_url,metadata,created_at`,
   );
   return {
     projectId,
-    assets: (rows ?? []).map((r) => ({
-      id: r.id,
-      assetType: r.asset_type,
-      storagePath: r.storage_path,
-      sizeBytes: r.size_bytes,
-      mimeType: r.mime_type,
-      sourceJobId: r.source_job_id,
-      shotId: r.shot_id,
-      characterId: r.character_id,
-      createdAt: r.created_at,
-    })),
+    assets: (rows ?? []).map((r) => {
+      const meta = r.metadata ?? {};
+      return {
+        id: r.id,
+        assetType: r.asset_type,
+        storagePath: r.storage_path ?? "",
+        sizeBytes: (meta.size_bytes as number | null) ?? null,
+        mimeType: (meta.mime_type as string | null) ?? null,
+        sourceJobId: (meta.source_job_id as string | null) ?? null,
+        shotId: (meta.shot_id as string | null) ?? null,
+        characterId: (meta.character_id as string | null) ?? null,
+        createdAt: r.created_at,
+      };
+    }),
   };
 }
 
