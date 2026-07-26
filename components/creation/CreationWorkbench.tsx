@@ -721,7 +721,7 @@ export function CreationWorkbench() {
     setError("");
     setStatus(isZh ? "正在生成分集规划…" : "Generating episode plan…");
     try {
-      const output = await callAI("creation_episode_plan", chatInput.trim() || contextText());
+      const output = await callAI("creation_episode_plan", chatInput.trim() || contextText(projectRef.current));
       if (!output.trim()) throw new Error(isZh ? "AI 没有返回分集规划。" : "AI returned no episode plan.");
       const plan = parseEpisodePlanOutput(output);
       const next = commitWorkspace((current) => setEpisodePlan(current, mode, plan));
@@ -949,9 +949,14 @@ export function CreationWorkbench() {
     return null;
   }
 
-  function contextText() {
-    const previous = track.units
-      .filter((unit) => unit.status === "finalized" && (!activeUnit || unit.number < activeUnit.number))
+  function contextText(requestProject: DramaProject) {
+    const requestWorkspace = requestProject.creationWorkspace || createCreationWorkspace(requestProject);
+    const requestMode = requestWorkspace.settings.activeMode;
+    const requestTrack = requestWorkspace[requestMode];
+    const requestActiveUnit = requestTrack.units.find((unit) => unit.id === activeUnitId) || requestTrack.units[0] || null;
+    const requestActiveArc = requestTrack.arcs.find((arc) => arc.id === activeArcId) || requestTrack.arcs[0] || null;
+    const previous = requestTrack.units
+      .filter((unit) => unit.status === "finalized" && (!requestActiveUnit || unit.number < requestActiveUnit.number))
       .map((unit) => `#${unit.number} ${unit.title}\n${unit.continuityNotes || unit.outline}`)
       .join("\n\n");
     const stageLabel = view === "background" ? "背景及世界观"
@@ -962,15 +967,15 @@ export function CreationWorkbench() {
       : "导出";
     return [
       `当前阶段：${stageLabel}`,
-      `当前模式：${mode}`,
-      `背景及世界观：\n${workspace.documents.backgroundWorld.content}`,
-      `角色圣经：\n${workspace.documents.characterBible.content}`,
-      `剧情及大纲：\n${workspace.documents.plotOutline.content}`,
-      track.episodePlan ? `分集规划：\n${track.episodePlan.items.map((it) => `第${it.episodeNo}集 ${it.title}：${it.coreEvent}`).join("\n")}` : "",
-      activeArc ? `当前大章：${activeArc.title}\n${activeArc.outline}` : "",
-      activeUnit ? `当前章/集：${activeUnit.number} ${activeUnit.title}\n${activeUnit.outline}\n${activeUnit.continuityNotes}` : "",
+      `当前模式：${requestMode}`,
+      `背景及世界观：\n${requestWorkspace.documents.backgroundWorld.content}`,
+      `角色圣经：\n${requestWorkspace.documents.characterBible.content}`,
+      `剧情及大纲：\n${requestWorkspace.documents.plotOutline.content}`,
+      requestTrack.episodePlan ? `分集规划：\n${requestTrack.episodePlan.items.map((it) => `第${it.episodeNo}集 ${it.title}：${it.coreEvent}`).join("\n")}` : "",
+      requestActiveArc ? `当前大章：${requestActiveArc.title}\n${requestActiveArc.outline}` : "",
+      requestActiveUnit ? `当前章/集：${requestActiveUnit.number} ${requestActiveUnit.title}\n${requestActiveUnit.outline}\n${requestActiveUnit.continuityNotes}` : "",
       previous ? `前序定稿单元：\n${previous}` : "",
-      project.novelDevelopmentNotes ? `创作沟通记录：\n${project.novelDevelopmentNotes}` : "",
+      requestProject.novelDevelopmentNotes ? `创作沟通记录：\n${requestProject.novelDevelopmentNotes}` : "",
       sourceFiles.map((file) => `资料 ${file.name}：\n${file.text}`).join("\n\n"),
     ].filter(Boolean).join("\n\n");
   }
@@ -1000,7 +1005,7 @@ export function CreationWorkbench() {
           genre: requestWorkspace.settings.genre,
           idea: requestProject.idea,
           input,
-          context: contextText(),
+          context: contextText(requestProject),
           options: {
             interfaceLanguage: locale,
             contentMode: requestMode,
@@ -1104,8 +1109,8 @@ export function CreationWorkbench() {
         : isUnitLocalization
           ? activeUnit?.translation || translationSource
           : isUnitManuscript && aiScope !== "episode"
-            ? (() => { const scope = buildScopeContent(); return scope ? `${chatInput.trim() ? chatInput.trim() + "\n\n" : ""}${scope}` : (chatInput.trim() || project.idea || contextText()); })()
-            : chatInput.trim() || project.idea || contextText();
+            ? (() => { const scope = buildScopeContent(); return scope ? `${chatInput.trim() ? chatInput.trim() + "\n\n" : ""}${scope}` : (chatInput.trim() || project.idea || contextText(projectRef.current)); })()
+            : chatInput.trim() || project.idea || contextText(projectRef.current);
       const output = await callAI(taskType, input);
       if (!output.trim()) throw new Error(isZh ? "AI 没有返回可保存的内容，当前版本未覆盖。" : "AI returned no savable content; the current version was preserved.");
       const nextProject = commitWorkspace((currentWorkspace) => {
