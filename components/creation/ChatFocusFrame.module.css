@@ -1,0 +1,117 @@
+.frame {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-void), transparent 10%);
+  color: var(--ink-primary);
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.toggle:hover,
+.toggle:focus-visible {
+  border-color: var(--glass-border-hover);
+  outline: none;
+}
+
+.content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.frame:not(.focused) .toolbar > span {
+  display: none;
+}
+
+.content {
+  min-height: 0;
+}
+
+.focused {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-void), #050707 36%);
+  padding: clamp(12px, 2vw, 28px);
+  overflow: hidden;
+}
+
+.focused .toolbar {
+  position: relative;
+  top: auto;
+  right: auto;
+  justify-content: space-between;
+  width: min(100%, 1040px);
+  margin: 0 auto 10px;
+  padding: 0 4px;
+}
+
+.focused .content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 1040px);
+  margin: 0 auto;
+}
+
+.focused .content :global(.creation-ai-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+}
+
+@media (max-width: 720px) {
+  .toolbar > span {
+    display: none;
+  }
+
+  .focused {
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+
+  .toggle span {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame,
+  .focused {
+    transition: none;
+  }
+}
