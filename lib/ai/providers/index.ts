@@ -51,8 +51,8 @@ type ProviderCallOptions = {
  * Provider 按顺序调用时必须共用 490s 左右的总预算，并给路由收尾留余量。
  */
 const CREATION_DOC_MAX_TOKENS = 16384;
-const CREATION_PRIMARY_TIMEOUT_MS = 400000;
-const CREATION_FALLBACK_TIMEOUT_MS = 90000;
+const CREATION_PRIMARY_TIMEOUT_MS = 400_000;
+const CREATION_FALLBACK_TIMEOUT_MS = 90_000;
 
 function isCreationDocTask(taskType: TaskType): boolean {
   return taskType === "creation_background_world"
