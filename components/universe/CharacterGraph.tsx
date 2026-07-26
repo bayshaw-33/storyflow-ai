@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, X, ZoomIn, ZoomOut, Maximize2, Trash2, Edit3 } from "lucide-react";
+import Link from "next/link";
+import { Search, Plus, X, ZoomIn, ZoomOut, Maximize2, Trash2, Edit3, ExternalLink } from "lucide-react";
 import {
   computeCharacterLayout,
   getNeighbors,
@@ -403,7 +404,7 @@ export const CharacterGraph = memo(function CharacterGraph({
 
       <div style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 12, overflow: "auto", maxHeight: 520 }}>
         {selectedNode ? (
-          <NodeDetail node={selectedNode} isZh={isZh} copy={copy} onClose={() => setSelected(null)} />
+          <NodeDetail node={selectedNode} universeId={universeId} isZh={isZh} copy={copy} onClose={() => setSelected(null)} />
         ) : selectedEdge && selectedEdgeNodes ? (
           <EdgeDetail
             edge={selectedEdge}
@@ -449,7 +450,7 @@ export const CharacterGraph = memo(function CharacterGraph({
   );
 });
 
-function NodeDetail({ node, isZh, copy, onClose }: { node: CharacterNode; isZh: boolean; copy: GraphCopy; onClose: () => void }) {
+function NodeDetail({ node, universeId, isZh, copy, onClose }: { node: CharacterNode; universeId: string; isZh: boolean; copy: GraphCopy; onClose: () => void }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -469,9 +470,15 @@ function NodeDetail({ node, isZh, copy, onClose }: { node: CharacterNode; isZh: 
       ) : (
         <p style={{ margin: "0 0 12px", fontSize: 13, color: "rgba(255,255,255,0.4)" }}>{copy.noSummary}</p>
       )}
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>
         {copy.updated}: {new Date(node.updated_at).toLocaleString(isZh ? "zh-CN" : "en-US")}
       </div>
+      <Link
+        href={`/universes/${encodeURIComponent(universeId)}/characters/${encodeURIComponent(node.id)}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.4)", borderRadius: 4, color: "#a5b4fc", cursor: "pointer", fontSize: 12, textDecoration: "none" }}
+      >
+        <ExternalLink size={12} /> {isZh ? "查看完整 Passport" : "Open Passport"}
+      </Link>
     </div>
   );
 }
