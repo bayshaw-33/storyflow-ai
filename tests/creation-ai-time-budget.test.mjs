@@ -14,7 +14,7 @@ function response(status, body) {
   });
 }
 
-test("角色圣经主模型与备用模型共用 500 秒级总预算", async () => {
+test("角色圣经主模型与备用模型共用 300 秒级总预算", async () => {
   const originalFetch = globalThis.fetch;
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
@@ -53,11 +53,11 @@ test("角色圣经主模型与备用模型共用 500 秒级总预算", async () 
 
     assert.equal(result.provider, "atlas");
     assert.equal(timeoutBudgets.length, 2);
-    assert.ok(timeoutBudgets[0] >= 400_000, "主模型至少应获得 400 秒");
-    assert.ok(timeoutBudgets[1] >= 90_000, "备用模型至少应获得 90 秒");
+    assert.ok(timeoutBudgets[0] >= 290_000, "主模型至少应获得 290 秒");
+    assert.ok(timeoutBudgets[1] >= 10_000, "备用模型至少应获得 10 秒");
     assert.ok(
-      timeoutBudgets[0] + timeoutBudgets[1] <= 500_000,
-      `Provider 总预算必须控制在 500 秒内，实际为 ${timeoutBudgets.join(" + ")}`,
+      timeoutBudgets[0] + timeoutBudgets[1] <= 300_000,
+      `Provider 总预算必须控制在 300 秒内，实际为 ${timeoutBudgets.join(" + ")}`,
     );
   } finally {
     globalThis.fetch = originalFetch;
