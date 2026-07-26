@@ -160,7 +160,7 @@ export async function buildProductionPackage(params: {
       return md;
     }),
     safeRun("script/scenes.json", "application/json", async () => {
-      const data = await fetchScenes(ownerId, projectId);
+      const data = await fetchScenes(ownerId, projectId, scope.productionProjectId);
       return jsonStringify(data);
     }),
   ]);
@@ -169,11 +169,11 @@ export async function buildProductionPackage(params: {
   // ===== Director =====
   const [shotListRes, promptsRes] = await Promise.all([
     safeRun("director/shot-list.csv", "text/csv", async () => {
-      const data = await fetchDirectorShotList(ownerId, projectId);
+      const data = await fetchDirectorShotList(ownerId, projectId, scope.productionProjectId);
       return data.csv;
     }),
     safeRun("director/prompts.json", "application/json", async () => {
-      const data = await fetchDirectorPrompts(ownerId, projectId);
+      const data = await fetchDirectorPrompts(ownerId, projectId, scope.productionProjectId);
       return jsonStringify(data);
     }),
   ]);

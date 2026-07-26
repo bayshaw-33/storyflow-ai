@@ -77,27 +77,39 @@ export async function resolveProjectScope(
 // Universe
 // ============================================================
 
+// V2-04 实际表结构：canon_facts 用 fact_text（无 title/content 字段）
+// category 可作为 title 替代，importance 为附加维度
 type CanonFactRow = {
   id: string;
-  title: string;
-  content: string;
+  universe_id: string;
+  user_id: string;
+  fact_text: string;
+  category: string;
+  importance: string;
   status: string;
+  is_locked: boolean;
+  source_project_id: string | null;
+  source_episode: string | null;
+  confirmed_by_user: boolean;
   created_at: string;
+  updated_at: string;
 };
 
 export async function fetchUniverseCanon(
   universeId: string,
 ): Promise<UniverseCanonPayload> {
   const rows = await serviceFetch<CanonFactRow[]>(
-    `/rest/v1/storyflow_canon_facts?universe_id=eq.${encodeURIComponent(universeId)}&order=created_at.desc&limit=500&select=id,title,content,status,created_at`,
+    `/rest/v1/storyflow_canon_facts?universe_id=eq.${encodeURIComponent(universeId)}&order=created_at.desc&limit=500&select=id,universe_id,user_id,fact_text,category,importance,status,is_locked,source_project_id,source_episode,confirmed_by_user,created_at,updated_at`,
   );
   return {
     universeId,
     universeName: "",
     canonFacts: (rows ?? []).map((r) => ({
       id: r.id,
-      title: r.title,
-      content: r.content,
+      // 用 category 作为 title（分类标签）
+      title: r.category,
+      // fact_text 是实际内容
+      content: r.fact_text,
       status: r.status,
       createdAt: r.created_at,
     })),
@@ -111,13 +123,18 @@ type CharacterEntityRow = {
   status: string;
 };
 
+// V2-04 实际表结构：relationships 无 label 字段
+// 关系摘要在 summary 字段，状态有 status（canon/draft/...）和 relationship_status（active）
 type RelationshipRow = {
   id: string;
-  source_entity_id: string;
-  target_entity_id: string;
+  universe_id: string;
+  source_entity_id: string | null;
+  target_entity_id: string | null;
   relationship_type: string;
+  relationship_status: string;
+  summary: string;
   status: string;
-  label: string | null;
+  created_at: string;
 };
 
 export async function fetchCharacterGraph(
@@ -128,7 +145,7 @@ export async function fetchCharacterGraph(
       `/rest/v1/storyflow_universe_entities?universe_id=eq.${encodeURIComponent(universeId)}&type=eq.character&order=name.asc&limit=500&select=id,name,type,status`,
     ),
     serviceFetch<RelationshipRow[]>(
-      `/rest/v1/storyflow_universe_relationships?universe_id=eq.${encodeURIComponent(universeId)}&status=neq.deprecated&order=created_at.desc&limit=1000&select=id,source_entity_id,target_entity_id,relationship_type,status,label`,
+      `/rest/v1/storyflow_universe_relationships?universe_id=eq.${encodeURIComponent(universeId)}&status=neq.deprecated&order=created_at.desc&limit=1000&select=id,universe_id,source_entity_id,target_entity_id,relationship_type,relationship_status,summary,status,created_at`,
     ),
   ]);
   return {
@@ -141,11 +158,12 @@ export async function fetchCharacterGraph(
     })),
     edges: (relationships ?? []).map((r) => ({
       id: r.id,
-      source: r.source_entity_id,
-      target: r.target_entity_id,
+      source: r.source_entity_id ?? "",
+      target: r.target_entity_id ?? "",
       type: r.relationship_type,
       status: r.status,
-      label: r.label ?? undefined,
+      // 关系摘要用 summary 字段（无 label）
+      label: r.summary || undefined,
     })),
   };
 }
@@ -397,11 +415,12 @@ type SceneRow = {
 export async function fetchScenes(
   ownerId: string,
   projectId: string,
+  productionProjectId: string,
 ): Promise<ScriptScenesPayload> {
-  // 注意：scenes 表用 production_project_id 关联，不是 project_id
-  // 这里按 owner_id 过滤，deleted_at is null
+  // V2-04 实际表结构：scenes 用 production_project_id 关联
+  // 必须按 production_project_id 过滤，避免跨项目混入
   const rows = await serviceFetch<SceneRow[]>(
-    `/rest/v1/storyflow_production_scenes?owner_id=eq.${encodeURIComponent(ownerId)}&deleted_at=is.null&order=sort_order.asc&limit=500&select=id,production_project_id,owner_id,source_unit_id,sort_order,heading,location,time_of_day,summary,character_asset_ids,director_meta,locked,deleted_at`,
+    `/rest/v1/storyflow_production_scenes?owner_id=eq.${encodeURIComponent(ownerId)}&production_project_id=eq.${encodeURIComponent(productionProjectId)}&deleted_at=is.null&order=sort_order.asc&limit=500&select=id,production_project_id,owner_id,source_unit_id,sort_order,heading,location,time_of_day,summary,character_asset_ids,director_meta,locked,deleted_at`,
   );
   return {
     projectId,
@@ -458,10 +477,14 @@ type ShotRow = {
 
 async function fetchShots(
   ownerId: string,
-  _projectId: string,
+  sceneIds: string[],
 ): Promise<ShotRow[]> {
+  // V2-04 实际表结构：shots 表无 production_project_id
+  // 必须通过 scene_id IN (当前项目的 scenes) 过滤，避免跨项目混入
+  if (sceneIds.length === 0) return [];
+  const inFilter = sceneIds.map((id) => encodeURIComponent(id)).join(",");
   const rows = await serviceFetch<ShotRow[]>(
-    `/rest/v1/storyflow_production_shots?owner_id=eq.${encodeURIComponent(ownerId)}&deleted_at=is.null&order=index.asc&limit=2000&select=id,scene_id,owner_id,index,story_beat,visual_description,shot_size,camera_movement,angle,duration_seconds,duration,dialogue,emotion,continuity,image_prompt,jimeng_prompt_zh,jimeng_prompt_en,source_hash,director_meta,locked,status,deleted_at`,
+    `/rest/v1/storyflow_production_shots?owner_id=eq.${encodeURIComponent(ownerId)}&scene_id=in.(${inFilter})&deleted_at=is.null&order=index.asc&limit=2000&select=id,scene_id,owner_id,index,story_beat,visual_description,shot_size,camera_movement,angle,duration_seconds,duration,dialogue,emotion,continuity,image_prompt,jimeng_prompt_zh,jimeng_prompt_en,source_hash,director_meta,locked,status,deleted_at`,
   );
   return rows ?? [];
 }
@@ -469,8 +492,12 @@ async function fetchShots(
 export async function fetchDirectorShotList(
   ownerId: string,
   projectId: string,
+  productionProjectId: string,
 ): Promise<DirectorShotListPayload> {
-  const shots = await fetchShots(ownerId, projectId);
+  // 先查询当前项目的 scenes，再用 scene_ids 过滤 shots
+  const scenesData = await fetchScenes(ownerId, projectId, productionProjectId);
+  const sceneIds = scenesData.scenes.map((s) => s.id);
+  const shots = await fetchShots(ownerId, sceneIds);
   // CSV with BOM for Excel compatibility
   const header = "shot_id,scene_id,shot_index,shot_size,angle,focal_length,duration_seconds,dialogue,locked\n";
   const body = shots
@@ -514,8 +541,12 @@ export async function fetchDirectorShotList(
 export async function fetchDirectorPrompts(
   ownerId: string,
   projectId: string,
+  productionProjectId: string,
 ): Promise<DirectorPromptsPayload> {
-  const shots = await fetchShots(ownerId, projectId);
+  // 先查询当前项目的 scenes，再用 scene_ids 过滤 shots
+  const scenesData = await fetchScenes(ownerId, projectId, productionProjectId);
+  const sceneIds = scenesData.scenes.map((s) => s.id);
+  const shots = await fetchShots(ownerId, sceneIds);
   return {
     projectId,
     prompts: shots.map((s) => {
