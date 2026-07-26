@@ -103,8 +103,9 @@ type SourceFile = { id: string; name: string; text: string };
 type LocalizationView = "content" | "changes" | "similarity";
 
 // 修复（2026-07-24）：角色圣经等创作文档任务输出长，后端 CREATION_DOC_TIMEOUT_MS=180s。
-// 前端必须比后端长，否则后端还没返回前端就超时了。240s = 后端 180s + 60s 余量。
-const AI_TIMEOUT = 240_000;
+// 其中“大纲 / 分集规划 / 长正文”在生产里可跑到 280s+，因此单独给更长的前端窗口。
+const DEFAULT_AI_TIMEOUT = 240_000;
+const LONG_FORM_AI_TIMEOUT = 295_000;
 const LANGUAGE_OPTIONS = ["中文", "English", "Español", "Français", "Italiano", "日本語", "한국어"];
 const STAGES: Array<{ key: StageKey; zh: string; en: string; task?: TaskType }> = [
   { key: "background", zh: "背景及世界观", en: "Background & World", task: "creation_background_world" },
@@ -115,6 +116,20 @@ const STAGES: Array<{ key: StageKey; zh: string; en: string; task?: TaskType }> 
   { key: "localization", zh: "本土化及雷同查验", en: "Localization & Similarity", task: "creation_localize_unit" },
   { key: "export", zh: "导出", en: "Export" },
 ];
+
+function getAiTimeoutMs(taskType: TaskType) {
+  if (
+    taskType === "creation_background_world"
+    || taskType === "creation_character_bible"
+    || taskType === "creation_plot_outline"
+    || taskType === "creation_episode_plan"
+    || taskType === "creation_novel_unit"
+    || taskType === "creation_screenplay_unit"
+  ) {
+    return LONG_FORM_AI_TIMEOUT;
+  }
+  return DEFAULT_AI_TIMEOUT;
+}
 
 function welcome(isZh: boolean) {
   return isZh
@@ -1022,7 +1037,7 @@ export function CreationWorkbench() {
     const requestWorkspace = requestProject.creationWorkspace || createCreationWorkspace(requestProject);
     const requestMode = requestWorkspace.settings.activeMode;
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), AI_TIMEOUT);
+    const timeout = window.setTimeout(() => controller.abort(), getAiTimeoutMs(taskType));
     try {
       const response = await fetch("/api/ai/generate", {
         method: "POST",
