@@ -13,6 +13,7 @@ import type {
   PassportIdentityInput,
   PassportPromptInput,
 } from "@/lib/character-passport/types";
+import { VoiceSection } from "./VoiceSection";
 
 // ============================================================
 // 文案
@@ -389,7 +390,14 @@ export const CharacterPassport = memo(function CharacterPassport({
         setError={(text) => setToast({ kind: "err", text })}
       />
 
-      <VoicePlaceholder copy={copy} />
+      <VoiceSection
+        universeId={universeId}
+        entityId={entityId}
+        accessToken={accessToken}
+        isZh={isZh}
+        initialProfile={passport.voiceProfile}
+        onSaved={(voiceProfile) => setPassport((prev) => (prev ? { ...prev, voiceProfile } : prev))}
+      />
 
       {toast ? (
         <div
@@ -859,19 +867,6 @@ function PromptEditor({
         style={{ ...TEXTAREA, opacity: locked ? 0.5 : 1, fontFamily: "ui-monospace,monospace" }}
       />
     </div>
-  );
-}
-
-// ============================================================
-// Voice 占位（V2-03）
-// ============================================================
-
-function VoicePlaceholder({ copy }: { copy: Copy }) {
-  return (
-    <section style={{ ...CARD, opacity: 0.5 }}>
-      <h2 style={SECTION_TITLE}>{copy.voice}</h2>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{copy.voiceComingSoon}</div>
-    </section>
   );
 }
 

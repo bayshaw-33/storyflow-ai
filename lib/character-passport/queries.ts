@@ -17,6 +17,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanonStatus } from "@/lib/universe";
+import { fetchVoiceProfileByEntity } from "@/lib/voice/queries";
+import type { VoiceProfileDTO } from "@/lib/voice/types";
 import type {
   CharacterPassportDTO,
   FetchPassportParams,
@@ -68,13 +70,20 @@ export async function fetchCharacterPassport(
     sceneId,
   );
 
+  // V2-03: 读取角色的 Voice Profile（按 universe_entity_id + owner）
+  const voiceProfile: VoiceProfileDTO | null = await fetchVoiceProfileByEntity(
+    serverClient,
+    entityId,
+    params.ownerId,
+  ).catch(() => null);
+
   return {
     identity,
     actors,
     portrayals,
     appearanceVariants,
     prompt,
-    voiceProfile: null, // V2-03 预留
+    voiceProfile,
   };
 }
 

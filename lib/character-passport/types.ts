@@ -12,6 +12,7 @@
  * 设计文档：Kiikis-V2.0-TRAE-80%-执行PRD.md §TRAE-V2-02
  */
 import type { CanonStatus } from "@/lib/universe";
+import type { VoiceProfileDTO } from "@/lib/voice/types";
 
 // ============================================================
 // Passport 子结构
@@ -113,7 +114,14 @@ export type PassportPrompt = {
   passportRowId: string | null;
 };
 
-/** Voice Profile 占位（V2-03 实施） */
+/**
+ * Voice Profile（V2-03 已实施）。
+ * - V2-02 阶段为 null（占位）
+ * - V2-03 阶段为 VoiceProfileDTO | null
+ */
+export type PassportVoiceProfile = VoiceProfileDTO | null;
+
+/** @deprecated 使用 PassportVoiceProfile */
 export type PassportVoiceProfilePlaceholder = null;
 
 // ============================================================
@@ -126,8 +134,8 @@ export type CharacterPassportDTO = {
   portrayals: PassportPortrayal[];
   appearanceVariants: PassportAppearanceVariant[];
   prompt: PassportPrompt;
-  /** V2-03 预留，始终为 null */
-  voiceProfile: PassportVoiceProfilePlaceholder;
+  /** V2-03: 角色声音档案（按 universe_entity_id 查询，未创建时为 null） */
+  voiceProfile: PassportVoiceProfile;
 };
 
 // ============================================================
@@ -180,6 +188,8 @@ export type PassportPromptInput = {
 // ============================================================
 
 export type FetchPassportParams = {
+  /** 调用方所有者 ID（用于读取该 owner 名下的 Voice Profile） */
+  ownerId: string;
   universeId: string;
   entityId: string;
   /** 限定到某个项目维度（影响 passport 读取顺序） */

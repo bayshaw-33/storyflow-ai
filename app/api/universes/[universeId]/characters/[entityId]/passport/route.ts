@@ -11,6 +11,12 @@ import {
   updateIdentity,
   updatePassportPrompt,
 } from "@/lib/character-passport/queries";
+import {
+  createVoiceProfile,
+  updateVoiceProfile,
+  fetchVoiceProfileByEntity,
+} from "@/lib/voice/queries";
+import type { CreateVoiceProfileInput, UpdateVoiceProfileInput } from "@/lib/voice/types";
 import type {
   PassportIdentityInput,
   PassportPromptInput,
@@ -62,6 +68,7 @@ export async function GET(
     const sceneId = url.searchParams.get("sceneId") || undefined;
 
     const passport = await fetchCharacterPassport(serverClient, {
+      ownerId: user.id,
       universeId,
       entityId,
       projectId,
@@ -123,6 +130,7 @@ export async function PATCH(
     const body = (await request.json().catch(() => null)) as
       | { section: "identity"; identity: PassportIdentityInput }
       | { section: "prompt"; prompt: PassportPromptInput }
+      | { section: "voice"; voice: Partial<CreateVoiceProfileInput> }
       | null;
 
     if (!body || !body.section) {
@@ -152,6 +160,29 @@ export async function PATCH(
         body.prompt,
       );
       return ok({ prompt, requestId });
+    }
+
+    if (body.section === "voice") {
+      // V2-03: 创建或更新该角色的 Voice Profile
+      // - 已存在 → 更新
+      // - 不存在 → 创建（自动绑定 universe_entity_id + owner_id）
+      const input: CreateVoiceProfileInput = {
+        universeEntityId: entityId,
+        ...body.voice,
+      };
+      const existing = await fetchVoiceProfileByEntity(serverClient, entityId, user.id);
+      let voiceProfile;
+      if (existing) {
+        voiceProfile = await updateVoiceProfile(
+          serverClient,
+          existing.id,
+          user.id,
+          input as UpdateVoiceProfileInput,
+        );
+      } else {
+        voiceProfile = await createVoiceProfile(serverClient, user.id, input);
+      }
+      return ok({ voiceProfile, requestId });
     }
 
     const section = (body as { section?: string }).section ?? 'unknown';
