@@ -129,6 +129,46 @@ test("V2-04 director_meta migration 为 scenes 表添加 locked 列", () => {
   assert.ok(migrationContent.includes("WHERE locked = true"), "索引应使用 WHERE locked = true");
 });
 
+test("V2-04 follow-up migration 存在（治理：不修改既有迁移）", () => {
+  // d70e9b1 修改了既有迁移 20260826000001_director_meta.sql，违反迁移不可变性
+  // 必须补一条 follow-up migration，让已执行旧版的环境通过它收敛
+  const files = readdirSync(MIGRATIONS_DIR).filter((f) =>
+    f.endsWith(".sql") && f.startsWith("20260826000002") && !f.includes("/rollback/")
+  );
+  assert.ok(files.length === 1, "应该存在唯一的 20260826000002 follow-up migration 文件");
+  assert.ok(files[0].includes("director_meta") && files[0].includes("followup"),
+    "follow-up 文件名应包含 director_meta 和 followup 标识");
+});
+
+test("V2-04 follow-up migration 幂等且修复旧版遗漏", () => {
+  const files = readdirSync(MIGRATIONS_DIR).filter((f) =>
+    f.endsWith(".sql") && f.startsWith("20260826000002")
+  );
+  assert.ok(files.length > 0, "应该存在 20260826000002 follow-up migration");
+  const followupContent = readFileSync(MIGRATIONS_DIR + "/" + files[0], "utf8");
+
+  // 幂等：必须使用 IF NOT EXISTS / IF EXISTS
+  assert.ok(followupContent.includes("ADD COLUMN IF NOT EXISTS locked"),
+    "follow-up 必须用 ADD COLUMN IF NOT EXISTS 补 locked 列（幂等）");
+  assert.ok(followupContent.includes("DROP INDEX IF EXISTS"),
+    "follow-up 必须用 DROP INDEX IF EXISTS 删除旧 JSONB 键索引（幂等）");
+  assert.ok(followupContent.includes("CREATE INDEX IF NOT EXISTS"),
+    "follow-up 必须用 CREATE INDEX IF NOT EXISTS 重建索引（幂等）");
+  assert.ok(followupContent.includes("WHERE locked = true"),
+    "follow-up 索引必须使用 WHERE locked = true（与查询代码匹配）");
+  // 不应使用 JSONB 键路径
+  assert.ok(!followupContent.includes("director_meta ? 'locked'"),
+    "follow-up 不应使用 JSONB 键路径索引");
+  // 必须在事务中执行
+  assert.ok(followupContent.includes("BEGIN") && followupContent.includes("COMMIT"),
+    "follow-up 必须在 BEGIN/COMMIT 事务中执行");
+  // 必须同时覆盖 scenes 和 shots 索引
+  assert.ok(followupContent.includes("idx_production_scenes_director_locked"),
+    "follow-up 必须重建 scenes 索引");
+  assert.ok(followupContent.includes("idx_production_shots_director_locked"),
+    "follow-up 必须重建 shots 索引");
+});
+
 test("Scenes 导出查询按 production_project_id 过滤", () => {
   const sceneQueryLine = queriesSource.split("\n").find((l) =>
     l.includes("storyflow_production_scenes") && l.includes("production_project_id=eq.")
