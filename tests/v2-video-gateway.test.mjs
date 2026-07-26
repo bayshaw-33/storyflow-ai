@@ -6,13 +6,13 @@
  *
  * 验证目标：
  *   1. PROVIDER_CATALOG 包含 atlas/minimax/runway/seedance 四个 provider
- *   2. runway / seedance 首期 stub：available=false，unavailableReason 明确
+ *   2. runway / seedance 可用性根据 env 动态计算（已从 stub 升级为真实实现）
  *   3. getProviderEntry 未知 provider 返回 null
  *   4. getProviderCatalog 不暴露 API Key / Secret / 内部端点
  *   5. VideoGatewayError 携带 code 和 details
  *   6. isVideoGatewayError 类型守卫
  *   7. AUTO_ROUTE_ORDER 顺序：atlas → minimax → seedance → runway
- *   8. atlas / minimax 可用性根据 env 动态计算
+ *   8. atlas / minimax / runway / seedance 可用性根据 env 动态计算
  *
  * 运行：node --test tests/v2-video-gateway.test.mjs
  */
@@ -55,22 +55,58 @@ test("每个 catalog entry 都有必需字段", () => {
   }
 });
 
-// ============================================================
-// 2. 首期 stub：runway / seedance 不可用
-// ============================================================
-
-test("runway 首期 stub：available=false 且有 unavailableReason", () => {
+test("runway catalog entry 默认模型为 gen4_turbo", () => {
   const entry = getProviderEntry("runway");
   assert.ok(entry);
-  assert.equal(entry.available, false);
-  assert.equal(entry.unavailableReason, "RUNWAY_NOT_CONFIGURED");
+  assert.equal(entry.defaultModel, "gen4_turbo");
 });
 
-test("seedance 首期 stub：available=false 且有 unavailableReason", () => {
+test("seedance catalog entry 默认模型为 doubao-seedance-2-0-260128", () => {
   const entry = getProviderEntry("seedance");
   assert.ok(entry);
-  assert.equal(entry.available, false);
-  assert.equal(entry.unavailableReason, "SEEDANCE_DIRECT_NOT_CONFIGURED");
+  assert.equal(entry.defaultModel, "doubao-seedance-2-0-260128");
+});
+
+// ============================================================
+// 2. runway / seedance 可用性根据 env（已升级为真实实现）
+// ============================================================
+
+test("runway 可用性取决于 RUNWAY_API_KEY", () => {
+  const saved = process.env.RUNWAY_API_KEY;
+  try {
+    delete process.env.RUNWAY_API_KEY;
+    const entry = getProviderEntry("runway");
+    assert.equal(entry.available, false);
+    process.env.RUNWAY_API_KEY = "test-key";
+    const entry2 = getProviderEntry("runway");
+    assert.equal(entry2.available, true);
+    assert.equal(entry2.unavailableReason, undefined);
+  } finally {
+    if (saved === undefined) delete process.env.RUNWAY_API_KEY;
+    else process.env.RUNWAY_API_KEY = saved;
+  }
+});
+
+test("seedance 可用性取决于 ARK_API_KEY 或 VOLC_ARK_API_KEY", () => {
+  const savedArk = process.env.ARK_API_KEY;
+  const savedVolc = process.env.VOLC_ARK_API_KEY;
+  try {
+    delete process.env.ARK_API_KEY;
+    delete process.env.VOLC_ARK_API_KEY;
+    assert.equal(getProviderEntry("seedance").available, false);
+
+    process.env.ARK_API_KEY = "test-key";
+    assert.equal(getProviderEntry("seedance").available, true);
+
+    delete process.env.ARK_API_KEY;
+    process.env.VOLC_ARK_API_KEY = "test-key";
+    assert.equal(getProviderEntry("seedance").available, true);
+  } finally {
+    if (savedArk === undefined) delete process.env.ARK_API_KEY;
+    else process.env.ARK_API_KEY = savedArk;
+    if (savedVolc === undefined) delete process.env.VOLC_ARK_API_KEY;
+    else process.env.VOLC_ARK_API_KEY = savedVolc;
+  }
 });
 
 // ============================================================
@@ -167,7 +203,7 @@ test("isVideoGatewayError 拒绝非 Error 值", () => {
 });
 
 // ============================================================
-// 7. atlas / minimax 可用性根据 env
+// 7. 各 provider 可用性根据 env 动态计算
 // ============================================================
 
 test("atlas 可用性取决于 ATLASCLOUD_API_KEY", () => {

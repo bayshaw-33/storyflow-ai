@@ -30,22 +30,20 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   {
     name: "runway",
     displayName: "Runway",
-    description: "Runway Gen-3/Gen-4 视频生成（首期框架，待接入）",
-    capabilities: ["image-to-video", "text-to-video", "first-frame", "last-frame"],
+    description: "Runway Gen-4 / Gen-4.5 视频生成（支持图生视频、首帧驱动）",
+    capabilities: ["image-to-video", "text-to-video", "first-frame"],
     available: false,
-    unavailableReason: "RUNWAY_NOT_CONFIGURED",
-    defaultModel: "gen3a-turbo",
-    tags: ["海外", "高质感"],
+    defaultModel: "gen4_turbo",
+    tags: ["海外", "高质感", "gen4"],
   },
   {
     name: "seedance",
     displayName: "火山引擎 Seedance",
-    description: "火山引擎 Seedance 直连（首期框架，待接入）",
-    capabilities: ["image-to-video", "text-to-video"],
+    description: "火山引擎 Seedance 2.0 直连（Ark API，支持图生视频首帧）",
+    capabilities: ["image-to-video", "text-to-video", "first-frame"],
     available: false,
-    unavailableReason: "SEEDANCE_DIRECT_NOT_CONFIGURED",
-    defaultModel: "seedance-2.0",
-    tags: ["国产", "直连"],
+    defaultModel: "doubao-seedance-2-0-260128",
+    tags: ["国产", "直连", "Ark"],
   },
 ];
 
@@ -78,11 +76,9 @@ function computeAvailability(name: VideoGatewayProviderName): boolean {
           process.env.MINIMAX_TOKEN,
       );
     case "runway":
-      // 首期 stub：永远返回 false，UI 显示"待接入"
-      return false;
+      return Boolean(process.env.RUNWAY_API_KEY);
     case "seedance":
-      // 首期 stub：永远返回 false，UI 显示"待接入"
-      return false;
+      return Boolean(process.env.ARK_API_KEY || process.env.VOLC_ARK_API_KEY);
     default:
       return false;
   }
