@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { AuthModal } from "@/components/layout/AuthModal";
+import { ChatFocusFrame } from "@/components/creation/ChatFocusFrame";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import type { TaskType } from "@/lib/ai/prompts";
 import { buildDeliveryManifest, type AssembledDocument } from "@/lib/creation/assembly";
@@ -2074,6 +2075,12 @@ export function CreationWorkbench() {
         {/* 按需 AI 面板（默认收起） */}
         {aiPanelOpen ? (
           <aside className={`creation-ai-panel ${mobilePanel === "chat" ? "is-mobile-active" : ""}`}>
+            <ChatFocusFrame
+              label={isZh ? "创作对话" : "Creation chat"}
+              title={isZh ? "专注创作" : "Focus writing"}
+              toggleLabel={isZh ? "专注创作" : "Focus writing"}
+              exitLabel={isZh ? "退出专注" : "Exit focus"}
+            >
             <header className="creation-ai-head">
               <div><span>KIiKIS AI</span><h2>{isZh ? "和 KK 一起创作" : "Create with KK"}</h2></div>
               <button className="icon-button" type="button" onClick={() => setAiPanelOpen(false)} title={isZh ? "收起" : "Collapse"}><X size={16} /></button>
@@ -2131,6 +2138,7 @@ export function CreationWorkbench() {
                 ) : null}
               </div>
             </div>
+            </ChatFocusFrame>
           </aside>
         ) : null}
       </section>
