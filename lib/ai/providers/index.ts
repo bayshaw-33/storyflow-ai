@@ -48,11 +48,10 @@ type ProviderCallOptions = {
 
 /**
  * creation 文档类任务（背景/角色/大纲/分集规划/正文）输出长，需要 16384 tokens。
- * Provider 按顺序调用时必须共用 210s 总预算，否则 DeepSeek 180s + Atlas 180s
- * 会超过前端 240s 与 Vercel 300s 的硬上限。
+ * Provider 按顺序调用时必须共用 490s 左右的总预算，并给路由收尾留余量。
  */
 const CREATION_DOC_MAX_TOKENS = 16384;
-const CREATION_PRIMARY_TIMEOUT_MS = 120000;
+const CREATION_PRIMARY_TIMEOUT_MS = 400000;
 const CREATION_FALLBACK_TIMEOUT_MS = 90000;
 
 function isCreationDocTask(taskType: TaskType): boolean {
