@@ -103,9 +103,9 @@ type SourceFile = { id: string; name: string; text: string };
 type LocalizationView = "content" | "changes" | "similarity";
 
 // 修复（2026-07-24）：角色圣经等创作文档任务输出长，后端 CREATION_DOC_TIMEOUT_MS=180s。
-// 其中“大纲 / 分集规划 / 长正文”在生产里可跑到 280s+，因此单独给 500s 级的前端窗口。
+// 其中“大纲 / 分集规划 / 长正文”在生产里可跑到 280s+，因此单独给 300s 级的前端窗口。
 const DEFAULT_AI_TIMEOUT = 240_000;
-const LONG_FORM_AI_TIMEOUT = 520_000;
+const LONG_FORM_AI_TIMEOUT = 310_000;
 const LANGUAGE_OPTIONS = ["中文", "English", "Español", "Français", "Italiano", "日本語", "한국어"];
 const STAGES: Array<{ key: StageKey; zh: string; en: string; task?: TaskType }> = [
   { key: "background", zh: "背景及世界观", en: "Background & World", task: "creation_background_world" },
