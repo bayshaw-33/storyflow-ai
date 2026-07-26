@@ -155,6 +155,37 @@ test("Voice lines 表用 text 字段（非 dialogue_text）", () => {
   const cols = getTableColumns("storyflow_voice_lines");
   assert.ok(cols.has("text"), "voice_lines 表必须有 text 列");
   assert.ok(cols.has("is_approved"), "voice_lines 表必须有 is_approved 列");
+  assert.ok(!cols.has("dialogue_text"), "voice_lines 表不应有 dialogue_text 列");
+  assert.ok(!cols.has("approved_asset_id"), "voice_lines 表不应有 approved_asset_id 列");
+  assert.ok(cols.has("asset_id"), "voice_lines 表必须有 asset_id 列");
+});
+
+test("V2-06 Editor getApprovedVoiceLines 查询使用 text 字段", () => {
+  const editorQueriesSource = readFileSync("lib/editor/queries.ts", "utf8");
+  assert.ok(editorQueriesSource.includes("text"), "editor/queries.ts 必须查询 text 字段");
+  assert.ok(editorQueriesSource.includes("is_approved"), "editor/queries.ts 必须按 is_approved 过滤");
+  // SQL 查询中不应包含 dialogue_text（映射层可能有 approved_asset_id 作为输出字段名）
+  const sqlLine = editorQueriesSource.split("\n").find((l) => l.includes("storyflow_voice_lines") && l.includes("select="));
+  assert.ok(sqlLine, "必须存在 voice_lines 查询");
+  assert.ok(!sqlLine.includes("dialogue_text"), "SQL 查询不应包含 dialogue_text");
+  assert.ok(!sqlLine.includes("approved_asset_id"), "SQL 查询不应包含 approved_asset_id");
+});
+
+test("Assembly sequences 表字段对齐", () => {
+  const cols = getTableColumns("storyflow_assembly_sequences");
+  assert.ok(cols.has("project_id"), "assembly_sequences 必须有 project_id");
+  assert.ok(cols.has("status"), "assembly_sequences 必须有 status");
+  assert.ok(cols.has("metadata"), "assembly_sequences 必须有 metadata");
+});
+
+test("Assembly items 表字段对齐", () => {
+  const cols = getTableColumns("storyflow_assembly_items");
+  assert.ok(cols.has("assembly_sequence_id"), "assembly_items 必须有 assembly_sequence_id");
+  assert.ok(cols.has("shot_id"), "assembly_items 必须有 shot_id");
+  assert.ok(cols.has("selected_take_id"), "assembly_items 必须有 selected_take_id");
+  assert.ok(cols.has("start_time_seconds"), "assembly_items 必须有 start_time_seconds");
+  assert.ok(cols.has("end_time_seconds"), "assembly_items 必须有 end_time_seconds");
+  assert.ok(cols.has("sort_order"), "assembly_items 必须有 sort_order");
 });
 
 test("Assets 表用 user_id（非 owner_id）", () => {

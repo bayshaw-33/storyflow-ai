@@ -84,32 +84,37 @@ export async function getSelectedTakes(
 // Voice Lines（已批准）
 // ============================================================
 
+// V2-03 实际表结构：voice_lines 无 character_id/dialogue_text/approved_asset_id 字段
+// character_id 通过 voice_profile_id 关联，dialogue_text→text, approved_asset_id→asset_id+is_approved
 type VoiceLineRow = {
   id: string;
   project_id: string | null;
   shot_id: string | null;
   scene_id: string | null;
-  character_id: string | null;
   voice_profile_id: string | null;
-  dialogue_text: string;
+  text: string;
+  language: string;
   status: string;
-  approved_asset_id: string | null;
+  asset_id: string | null;
   storage_path: string | null;
+  is_approved: boolean;
 };
 
 export async function getApprovedVoiceLines(
   projectId: string,
 ): Promise<VoiceLineSummary[]> {
+  // V2-03 实际表结构：用 text（非 dialogue_text）, asset_id（非 approved_asset_id）
+  // character_id 不在 voice_lines 表，置 null（调用方需通过 voice_profile_id 关联）
   const rows = await serviceFetch<VoiceLineRow[]>(
-    `/rest/v1/storyflow_voice_lines?project_id=eq.${encodeURIComponent(projectId)}&status=eq.approved&select=id,shot_id,scene_id,character_id,dialogue_text,status,approved_asset_id,storage_path`,
+    `/rest/v1/storyflow_voice_lines?project_id=eq.${encodeURIComponent(projectId)}&is_approved=eq.true&select=id,shot_id,scene_id,voice_profile_id,text,language,status,asset_id,storage_path,is_approved`,
   );
   return (rows ?? []).map((r) => ({
     id: r.id,
     shot_id: r.shot_id,
-    character_id: r.character_id,
-    dialogue_text: r.dialogue_text,
-    status: r.status,
-    approved_asset_id: r.approved_asset_id,
+    character_id: null,
+    dialogue_text: r.text,
+    status: r.is_approved ? "approved" : r.status,
+    approved_asset_id: r.is_approved ? r.asset_id : null,
     storage_path: r.storage_path,
   }));
 }
