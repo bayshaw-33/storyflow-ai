@@ -48,11 +48,11 @@ type ProviderCallOptions = {
 
 /**
  * creation 文档类任务（背景/角色/大纲/分集规划/正文）输出长，需要 16384 tokens。
- * Provider 按顺序调用时必须共用 490s 左右的总预算，并给路由收尾留余量。
+ * Provider 按顺序调用时必须共用 300s 总预算，并给路由收尾留余量。
  */
 const CREATION_DOC_MAX_TOKENS = 16384;
-const CREATION_PRIMARY_TIMEOUT_MS = 400_000;
-const CREATION_FALLBACK_TIMEOUT_MS = 90_000;
+const CREATION_PRIMARY_TIMEOUT_MS = 290_000;
+const CREATION_FALLBACK_TIMEOUT_MS = 10_000;
 
 function isCreationDocTask(taskType: TaskType): boolean {
   return taskType === "creation_background_world"
