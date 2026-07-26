@@ -115,8 +115,18 @@ test("Production scenes 表有 production_project_id 字段", () => {
   assert.ok(cols.has("production_project_id"), "scenes 表必须有 production_project_id 列");
   assert.ok(cols.has("sort_order"), "scenes 表必须有 sort_order 列");
   assert.ok(cols.has("director_meta"), "scenes 表必须有 director_meta 列");
-  assert.ok(cols.has("locked"), "scenes 表必须有 locked 列");
+  assert.ok(cols.has("locked"), "scenes 表必须有 locked 列（V2-04 migration 补充）");
   assert.ok(cols.has("deleted_at"), "scenes 表必须有 deleted_at 列");
+});
+
+test("V2-04 director_meta migration 为 scenes 表添加 locked 列", () => {
+  const migrationContent = readFileSync("supabase/migrations/20260826000001_director_meta.sql", "utf8");
+  assert.ok(migrationContent.includes("storyflow_production_scenes"), "migration 必须涉及 scenes 表");
+  assert.ok(migrationContent.includes("locked boolean"), "migration 必须为 scenes 添加 locked boolean 列");
+  assert.ok(migrationContent.includes("director_meta JSONB"), "migration 必须添加 director_meta JSONB 列");
+  // 索引应使用独立列而非 JSONB 键
+  assert.ok(!migrationContent.includes("director_meta ? 'locked'"), "索引不应使用 JSONB 键，应使用独立 locked 列");
+  assert.ok(migrationContent.includes("WHERE locked = true"), "索引应使用 WHERE locked = true");
 });
 
 test("Scenes 导出查询按 production_project_id 过滤", () => {
