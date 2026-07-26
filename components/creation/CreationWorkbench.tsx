@@ -159,6 +159,10 @@ function hasSameChatHistory(left: ChatMessage[] | undefined, right: ChatMessage[
   });
 }
 
+function isDefaultWelcomeHistory(history: ChatMessage[]) {
+  return history.length === 1 && history[0]?.id === "welcome";
+}
+
 function createUnit(mode: CreationMode, number: number, id = `${mode}-unit-${number}`): CreationUnit {
   const now = new Date().toISOString();
   return {
@@ -291,6 +295,7 @@ export function CreationWorkbench() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [project, setProject] = useState<DramaProject>(() => freshProject());
+  const [projectReady, setProjectReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [activeUnitId, setActiveUnitId] = useState("");
   const [activeArcId, setActiveArcId] = useState("");
@@ -424,31 +429,33 @@ export function CreationWorkbench() {
   // 用户手动开关后不再自动覆盖（aiPanelInitedRef 一次性）
   useEffect(() => {
     if (aiPanelInitedRef.current) return;
+    if (!projectReady) return;
     // 等项目真实加载后再判断（避免 freshProject 占位态误判）
     if (!project.id || project.id.startsWith("draft-")) return;
     aiPanelInitedRef.current = true;
     const inFoundation = !outlineFinalized || view === "background" || view === "characters" || view === "outline";
     setAiPanelOpen(inFoundation);
-  }, [project.id, outlineFinalized, view]);
+  }, [project.id, outlineFinalized, projectReady, view]);
 
   useEffect(() => {
     setMessages((current) => current.map((item) => item.id === "welcome" ? message("assistant", welcome(isZh), "welcome") : item));
   }, [isZh]);
 
   useEffect(() => {
-    if (!project.id || chatProjectId === project.id) return;
+    if (!projectReady || !project.id || chatProjectId === project.id) return;
     setMessages(readChatHistory(project, isZh));
     setChatProjectId(project.id);
-  }, [chatProjectId, isZh, project]);
+  }, [chatProjectId, isZh, project, projectReady]);
 
   useEffect(() => {
-    if (!project.id || chatProjectId !== project.id || hasSameChatHistory(projectRef.current.creationChatHistory, messages)) return;
+    if (!projectReady || !project.id || chatProjectId !== project.id || hasSameChatHistory(projectRef.current.creationChatHistory, messages)) return;
+    if (isDefaultWelcomeHistory(messages)) return;
     const nextProject = { ...projectRef.current, creationChatHistory: messages, updatedAt: new Date().toISOString() };
     projectRef.current = nextProject;
     setProject(nextProject);
     ensureProjectPersisted(nextProject);
     if (session?.access_token) void upsertProjectToSupabase(nextProject, { accessToken: session.access_token }).catch(() => undefined);
-  }, [chatProjectId, messages, project.id, session?.access_token]);
+  }, [chatProjectId, messages, project.id, projectReady, session?.access_token]);
 
   // PRD V1.0 验收 P1-07：导出页默认只勾选定稿单元（首次进入导出视图或单元集合变化时初始化）
   const exportSelectionInit = useRef(false);
@@ -487,9 +494,17 @@ export function CreationWorkbench() {
     const projectId = searchParams.get("projectId");
     const forceNew = searchParams.get("new") === "1";
     const urlSourceUnitId = searchParams.get("sourceUnitId");
-    void supabase?.auth.getSession().then(async ({ data }) => {
+    let cancelled = false;
+
+    async function hydrateProject() {
+      setProjectReady(false);
+      const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+      if (cancelled) return;
       setSession(data.session || null);
-      if (forceNew) return;
+      if (forceNew) {
+        setProjectReady(true);
+        return;
+      }
       if (projectId) {
         // URL 有 projectId → 加载对应项目（原逻辑）
         const local = readProjectsFromStorage();
@@ -497,37 +512,57 @@ export function CreationWorkbench() {
         if (localProject) {
           const ensured = ensureProject(localProject);
           setProject(ensured);
+          setProjectReady(true);
           focusUnitBySourceId(ensured, urlSourceUnitId);
           return;
         }
         const synced = await syncProjectsWithSupabase(local, { accessToken: data.session?.access_token || null });
+        if (cancelled) return;
         const cloudProject = synced.projects.find((item) => item.id === projectId);
         if (cloudProject) {
           const ensured = ensureProject(cloudProject);
           setProject(ensured);
+          setProjectReady(true);
           focusUnitBySourceId(ensured, urlSourceUnitId);
+          return;
         }
+        setError(isZh ? "没有找到这个项目，请返回工作台刷新后再打开。" : "This project was not found. Return to the dashboard and refresh.");
         return;
       }
       // 修复（2026-07-24）：URL 无 projectId → 从 localStorage 加载最近更新的创作项目
       // 避免用户在 /novel-workbench 创作后刷新丢失内容。
       // 只在浏览器端执行，且只加载创作类项目（creation/novel workflowType 或有 creationWorkspace）。
-      if (typeof window === "undefined") return;
+      if (typeof window === "undefined") {
+        setProjectReady(true);
+        return;
+      }
       const local = readProjectsFromStorage();
-      if (!local.length) return;
+      if (!local.length) {
+        setProjectReady(true);
+        return;
+      }
       const creationProjects = local
         .filter((p) => p.workflowType === "creation" || p.workflowType === "novel" || Boolean(p.creationWorkspace))
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      if (!creationProjects.length) return;
+      if (!creationProjects.length) {
+        setProjectReady(true);
+        return;
+      }
       const ensured = ensureProject(creationProjects[0]);
       setProject(ensured);
+      setProjectReady(true);
       // 更新 URL（不触发路由事件），这样刷新后能直接通过 projectId 加载
       const url = new URL(window.location.href);
       url.searchParams.set("projectId", ensured.id);
       window.history.replaceState(null, "", url.toString());
-    });
+    }
+
+    void hydrateProject();
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
-    return () => listener?.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      listener?.subscription.unsubscribe();
+    };
   }, [searchParams]);
 
   useEffect(() => {
@@ -555,6 +590,7 @@ export function CreationWorkbench() {
   const skipAutoSave = useRef(true);
   useEffect(() => {
     if (skipAutoSave.current) { skipAutoSave.current = false; return; }
+    if (!projectReady) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       void saveProject(projectRef.current).catch(() => undefined);
@@ -721,7 +757,7 @@ export function CreationWorkbench() {
     setError("");
     setStatus(isZh ? "正在生成分集规划…" : "Generating episode plan…");
     try {
-      const output = await callAI("creation_episode_plan", chatInput.trim() || contextText(projectRef.current));
+      const output = await callAI("creation_episode_plan", chatInput.trim() || contextText());
       if (!output.trim()) throw new Error(isZh ? "AI 没有返回分集规划。" : "AI returned no episode plan.");
       const plan = parseEpisodePlanOutput(output);
       const next = commitWorkspace((current) => setEpisodePlan(current, mode, plan));
@@ -949,14 +985,9 @@ export function CreationWorkbench() {
     return null;
   }
 
-  function contextText(requestProject: DramaProject) {
-    const requestWorkspace = requestProject.creationWorkspace || createCreationWorkspace(requestProject);
-    const requestMode = requestWorkspace.settings.activeMode;
-    const requestTrack = requestWorkspace[requestMode];
-    const requestActiveUnit = requestTrack.units.find((unit) => unit.id === activeUnitId) || requestTrack.units[0] || null;
-    const requestActiveArc = requestTrack.arcs.find((arc) => arc.id === activeArcId) || requestTrack.arcs[0] || null;
-    const previous = requestTrack.units
-      .filter((unit) => unit.status === "finalized" && (!requestActiveUnit || unit.number < requestActiveUnit.number))
+  function contextText() {
+    const previous = track.units
+      .filter((unit) => unit.status === "finalized" && (!activeUnit || unit.number < activeUnit.number))
       .map((unit) => `#${unit.number} ${unit.title}\n${unit.continuityNotes || unit.outline}`)
       .join("\n\n");
     const stageLabel = view === "background" ? "背景及世界观"
@@ -967,15 +998,15 @@ export function CreationWorkbench() {
       : "导出";
     return [
       `当前阶段：${stageLabel}`,
-      `当前模式：${requestMode}`,
-      `背景及世界观：\n${requestWorkspace.documents.backgroundWorld.content}`,
-      `角色圣经：\n${requestWorkspace.documents.characterBible.content}`,
-      `剧情及大纲：\n${requestWorkspace.documents.plotOutline.content}`,
-      requestTrack.episodePlan ? `分集规划：\n${requestTrack.episodePlan.items.map((it) => `第${it.episodeNo}集 ${it.title}：${it.coreEvent}`).join("\n")}` : "",
-      requestActiveArc ? `当前大章：${requestActiveArc.title}\n${requestActiveArc.outline}` : "",
-      requestActiveUnit ? `当前章/集：${requestActiveUnit.number} ${requestActiveUnit.title}\n${requestActiveUnit.outline}\n${requestActiveUnit.continuityNotes}` : "",
+      `当前模式：${mode}`,
+      `背景及世界观：\n${workspace.documents.backgroundWorld.content}`,
+      `角色圣经：\n${workspace.documents.characterBible.content}`,
+      `剧情及大纲：\n${workspace.documents.plotOutline.content}`,
+      track.episodePlan ? `分集规划：\n${track.episodePlan.items.map((it) => `第${it.episodeNo}集 ${it.title}：${it.coreEvent}`).join("\n")}` : "",
+      activeArc ? `当前大章：${activeArc.title}\n${activeArc.outline}` : "",
+      activeUnit ? `当前章/集：${activeUnit.number} ${activeUnit.title}\n${activeUnit.outline}\n${activeUnit.continuityNotes}` : "",
       previous ? `前序定稿单元：\n${previous}` : "",
-      requestProject.novelDevelopmentNotes ? `创作沟通记录：\n${requestProject.novelDevelopmentNotes}` : "",
+      project.novelDevelopmentNotes ? `创作沟通记录：\n${project.novelDevelopmentNotes}` : "",
       sourceFiles.map((file) => `资料 ${file.name}：\n${file.text}`).join("\n\n"),
     ].filter(Boolean).join("\n\n");
   }
@@ -1005,7 +1036,7 @@ export function CreationWorkbench() {
           genre: requestWorkspace.settings.genre,
           idea: requestProject.idea,
           input,
-          context: contextText(requestProject),
+          context: contextText(),
           options: {
             interfaceLanguage: locale,
             contentMode: requestMode,
@@ -1109,8 +1140,8 @@ export function CreationWorkbench() {
         : isUnitLocalization
           ? activeUnit?.translation || translationSource
           : isUnitManuscript && aiScope !== "episode"
-            ? (() => { const scope = buildScopeContent(); return scope ? `${chatInput.trim() ? chatInput.trim() + "\n\n" : ""}${scope}` : (chatInput.trim() || project.idea || contextText(projectRef.current)); })()
-            : chatInput.trim() || project.idea || contextText(projectRef.current);
+            ? (() => { const scope = buildScopeContent(); return scope ? `${chatInput.trim() ? chatInput.trim() + "\n\n" : ""}${scope}` : (chatInput.trim() || project.idea || contextText()); })()
+            : chatInput.trim() || project.idea || contextText();
       const output = await callAI(taskType, input);
       if (!output.trim()) throw new Error(isZh ? "AI 没有返回可保存的内容，当前版本未覆盖。" : "AI returned no savable content; the current version was preserved.");
       const nextProject = commitWorkspace((currentWorkspace) => {
