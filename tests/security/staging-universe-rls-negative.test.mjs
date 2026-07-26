@@ -13,6 +13,7 @@ test("staging rejects User B access to User A universe graph", { skip: !enabled 
   const password = `Rls-${crypto.randomUUID()}-Aa1!`;
   const users = [];
   let universeId = null;
+  let projectId = null;
 
   try {
     const userA = await createUser(`v2-rls-a-${suffix}@example.invalid`, password);
@@ -31,6 +32,16 @@ test("staging rejects User B access to User A universe graph", { skip: !enabled 
     assert.equal(created.response.status, 201, "User A must create a staging universe");
     universeId = created.body[0]?.id;
     assert.ok(universeId, "created universe ID is required");
+
+    projectId = `v2-rls-${suffix}`;
+    const project = await rest("/rest/v1/storyflow_projects", {
+      key: anonKey,
+      token: tokenA,
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: { id: projectId, user_id: userA.id, title: "V2 RLS project" },
+    });
+    assert.equal(project.response.status, 201, "User A must create a staging project");
 
     const entity = await rest("/rest/v1/storyflow_universe_entities", {
       key: anonKey,
@@ -52,6 +63,34 @@ test("staging rejects User B access to User A universe graph", { skip: !enabled 
     });
     assert.equal(insertByB.response.ok, false, "User B must not add entities to User A's universe");
 
+    const crossUniverseWrites = [
+      ["storyflow_universe_inbox_items", { item_type: "character", title: "Intrusion" }],
+      ["storyflow_universe_project_links", { project_id: projectId }],
+      ["storyflow_universe_relationships", {}],
+      ["storyflow_universe_timeline_events", { title: "Intrusion" }],
+      ["storyflow_canon_facts", { fact_text: "Intrusion" }],
+      ["storyflow_canon_state_snapshots", { title: "Intrusion" }],
+      ["storyflow_canon_check_reports", {}],
+      ["storyflow_song_universe_links", { song_project_id: projectId }],
+    ];
+    for (const [table, payload] of crossUniverseWrites) {
+      const ownerWrite = await rest(`/rest/v1/${table}`, {
+        key: anonKey,
+        token: tokenA,
+        method: "POST",
+        body: { id: crypto.randomUUID(), universe_id: universeId, user_id: userA.id, ...payload },
+      });
+      assert.equal(ownerWrite.response.ok, true, `User A must add ${table} rows to their own universe`);
+
+      const result = await rest(`/rest/v1/${table}`, {
+        key: anonKey,
+        token: tokenB,
+        method: "POST",
+        body: { id: crypto.randomUUID(), universe_id: universeId, user_id: userB.id, ...payload },
+      });
+      assert.equal(result.response.ok, false, `User B must not add ${table} rows to User A's universe`);
+    }
+
     await rest(`/rest/v1/storyflow_universes?id=eq.${universeId}`, {
       key: anonKey,
       token: tokenB,
@@ -67,9 +106,20 @@ test("staging rejects User B access to User A universe graph", { skip: !enabled 
     assert.equal(verifyExists.body[0]?.id, universeId, "User B must not delete User A's universe");
   } finally {
     if (universeId) {
-      await rest(`/rest/v1/storyflow_universe_entities?universe_id=eq.${universeId}`, { key: serviceKey, method: "DELETE" });
+      await Promise.all([
+        "storyflow_universe_entities",
+        "storyflow_universe_inbox_items",
+        "storyflow_universe_project_links",
+        "storyflow_universe_relationships",
+        "storyflow_universe_timeline_events",
+        "storyflow_canon_facts",
+        "storyflow_canon_state_snapshots",
+        "storyflow_canon_check_reports",
+        "storyflow_song_universe_links",
+      ].map((table) => rest(`/rest/v1/${table}?universe_id=eq.${universeId}`, { key: serviceKey, method: "DELETE" })));
       await rest(`/rest/v1/storyflow_universes?id=eq.${universeId}`, { key: serviceKey, method: "DELETE" });
     }
+    if (projectId) await rest(`/rest/v1/storyflow_projects?id=eq.${projectId}`, { key: serviceKey, method: "DELETE" });
     await Promise.all(users.map((userId) => admin(`/auth/v1/admin/users/${userId}`, { method: "DELETE" })));
   }
 });
