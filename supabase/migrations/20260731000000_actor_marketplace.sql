@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.storyflow_actor_orders (
   actor_id UUID NOT NULL REFERENCES public.storyflow_actor_profiles(id) ON DELETE RESTRICT,
   buyer_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   seller_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
-  project_id UUID REFERENCES public.storyflow_projects(id) ON DELETE SET NULL,
+  project_id TEXT REFERENCES public.storyflow_projects(id) ON DELETE SET NULL,
   price_kk INT NOT NULL CHECK (price_kk >= 0),
   platform_fee_kk INT NOT NULL DEFAULT 0 CHECK (platform_fee_kk >= 0),
   seller_revenue_kk INT NOT NULL DEFAULT 0 CHECK (seller_revenue_kk >= 0),
@@ -45,12 +45,12 @@ CREATE INDEX IF NOT EXISTS idx_actor_orders_seller ON public.storyflow_actor_ord
 CREATE INDEX IF NOT EXISTS idx_actor_orders_actor ON public.storyflow_actor_orders(actor_id);
 
 -- 唯一购买约束：同买家+演员+项目只能一笔 paid 订单
--- project_id 为 NULL 时用 UUID 零值占位，使唯一索引生效
+-- project_id 为 NULL 时用 TEXT 零值占位，使唯一索引生效
 CREATE UNIQUE INDEX IF NOT EXISTS uq_actor_orders_actor_buyer_project
   ON public.storyflow_actor_orders(
     actor_id,
     buyer_id,
-    COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid)
+    COALESCE(project_id, '__no_project__')
   )
   WHERE status = 'paid';
 
