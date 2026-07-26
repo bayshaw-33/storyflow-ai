@@ -188,10 +188,12 @@ export async function fetchCharacterPassports(
     visual_dna: unknown;
     forbidden_changes: string[];
   };
+  // V2-03 实际表结构：voice_profiles 无 character_id/project_id 字段
+  // 通过 actor_profile_id 或 universe_entity_id 关联
   type VoiceProfileRow = {
     id: string;
-    character_id: string;
-    project_id: string | null;
+    actor_profile_id: string | null;
+    universe_entity_id: string | null;
   };
   type ActorRow = {
     id: string;
@@ -206,7 +208,7 @@ export async function fetchCharacterPassports(
       `/rest/v1/storyflow_character_portrayals?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&select=id,character_id,project_id,appearance_variant_id,identity_core_prompt,visual_dna,forbidden_changes&limit=500`,
     ),
     serviceFetch<VoiceProfileRow[]>(
-      `/rest/v1/storyflow_character_voice_profiles?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&select=id,character_id,project_id&limit=500`,
+      `/rest/v1/storyflow_character_voice_profiles?owner_id=eq.${encodeURIComponent(ownerId)}&select=id,actor_profile_id,universe_entity_id&limit=500`,
     ),
   ]);
 
@@ -226,10 +228,11 @@ export async function fetchCharacterPassports(
       portrayalByCharId.set(p.character_id, p);
     }
   }
-  const voiceByCharId = new Map<string, string>();
+  // V2-03: voice_profiles 通过 actor_profile_id 关联到 character
+  const voiceByActorId = new Map<string, string>();
   for (const v of voiceProfiles ?? []) {
-    if (!voiceByCharId.has(v.character_id)) {
-      voiceByCharId.set(v.character_id, v.id);
+    if (v.actor_profile_id && !voiceByActorId.has(v.actor_profile_id)) {
+      voiceByActorId.set(v.actor_profile_id, v.id);
     }
   }
 
@@ -245,7 +248,7 @@ export async function fetchCharacterPassports(
       identity_core_prompt: p?.identity_core_prompt ?? null,
       visual_dna: p?.visual_dna ?? null,
       forbidden_changes: p?.forbidden_changes ?? [],
-      voice_profile_id: voiceByCharId.get(c.id) ?? null,
+      voice_profile_id: c.actor_profile_id ? voiceByActorId.get(c.actor_profile_id) ?? null : null,
     };
   });
 
@@ -268,42 +271,53 @@ export async function fetchCharacterPassports(
 
 type VoiceProfileDetailRow = {
   id: string;
-  character_id: string;
-  display_name: string;
+  owner_id: string;
+  actor_profile_id: string | null;
+  universe_entity_id: string | null;
+  voice_label: string;
+  voice_provider: string;
+  voice_provider_voice_id: string | null;
   language: string;
-  locale: string | null;
-  provider: string;
-  provider_voice_id: string;
-  timbre_tags: unknown;
-  speaking_rate: number;
+  speed: number;
   pitch: number;
-  license_status: string;
+  stability: number;
+  style_prompt: string;
   status: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
 };
 
+/**
+ * 查询 Voice Profile（V2-03 实际表结构）
+ * 注意：表无 project_id 字段，按 owner_id 过滤
+ * character_id 用 universe_entity_id 近似（若存在）
+ */
 export async function fetchVoiceProfiles(
   ownerId: string,
-  projectId: string,
+  _projectId: string,
 ): Promise<VoiceProfilesPayload> {
   const rows = await serviceFetch<VoiceProfileDetailRow[]>(
-    `/rest/v1/storyflow_character_voice_profiles?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&select=id,character_id,display_name,language,locale,provider,provider_voice_id,timbre_tags,speaking_rate,pitch,license_status,status&order=created_at.desc&limit=500`,
+    `/rest/v1/storyflow_character_voice_profiles?owner_id=eq.${encodeURIComponent(ownerId)}&select=id,owner_id,actor_profile_id,universe_entity_id,voice_label,voice_provider,voice_provider_voice_id,language,speed,pitch,stability,style_prompt,status,metadata,created_at&order=created_at.desc&limit=500`,
   );
   return {
-    projectId,
-    profiles: (rows ?? []).map((r) => ({
-      id: r.id,
-      characterId: r.character_id,
-      displayName: r.display_name,
-      language: r.language,
-      locale: r.locale,
-      provider: r.provider,
-      providerVoiceId: r.provider_voice_id,
-      timbreTags: Array.isArray(r.timbre_tags) ? (r.timbre_tags as string[]) : [],
-      speakingRate: r.speaking_rate,
-      pitch: r.pitch,
-      licenseStatus: r.license_status,
-      status: r.status,
-    })),
+    projectId: _projectId,
+    profiles: (rows ?? []).map((r) => {
+      const meta = r.metadata ?? {};
+      return {
+        id: r.id,
+        characterId: r.universe_entity_id ?? r.actor_profile_id ?? "",
+        displayName: r.voice_label,
+        language: r.language,
+        locale: (meta.locale as string | null) ?? null,
+        provider: r.voice_provider,
+        providerVoiceId: r.voice_provider_voice_id ?? "",
+        timbreTags: Array.isArray(meta.timbre_tags) ? (meta.timbre_tags as string[]) : [],
+        speakingRate: r.speed,
+        pitch: r.pitch,
+        licenseStatus: (meta.license_status as string) ?? "unknown",
+        status: r.status,
+      };
+    }),
   };
 }
 
@@ -508,35 +522,47 @@ export async function fetchSelectedTakes(
 
 type VoiceLineRow = {
   id: string;
+  owner_id: string;
+  voice_profile_id: string;
+  text: string;
+  language: string;
+  ssml: string | null;
+  project_id: string | null;
+  scene_id: string | null;
   shot_id: string | null;
-  character_id: string | null;
-  voice_profile_id: string | null;
-  dialogue_text: string;
-  status: string;
-  approved_asset_id: string | null;
+  latest_job_id: string | null;
+  asset_id: string | null;
   storage_path: string | null;
-  locale: string | null;
+  status: string;
+  revision: number;
+  is_approved: boolean;
+  created_at: string;
+  completed_at: string | null;
 };
 
+/**
+ * 查询 Voice Lines（V2-03 实际表结构）
+ * character_id 不在 voice_lines 表，需通过 voice_profile_id 关联获取
+ */
 export async function fetchVoiceLines(
   ownerId: string,
   projectId: string,
 ): Promise<MediaVoiceLinesPayload> {
   const rows = await serviceFetch<VoiceLineRow[]>(
-    `/rest/v1/storyflow_voice_lines?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=created_at.desc&limit=2000&select=id,shot_id,character_id,voice_profile_id,dialogue_text,status,approved_asset_id,storage_path,locale`,
+    `/rest/v1/storyflow_voice_lines?owner_id=eq.${encodeURIComponent(ownerId)}&project_id=eq.${encodeURIComponent(projectId)}&order=created_at.desc&limit=2000&select=id,owner_id,voice_profile_id,text,language,ssml,project_id,scene_id,shot_id,latest_job_id,asset_id,storage_path,status,revision,is_approved,created_at,completed_at`,
   );
   return {
     projectId,
     voiceLines: (rows ?? []).map((r) => ({
       id: r.id,
       shotId: r.shot_id,
-      characterId: r.character_id,
+      characterId: null, // 需通过 voice_profile_id 关联，此处留空
       voiceProfileId: r.voice_profile_id,
-      dialogueText: r.dialogue_text,
-      status: r.status,
-      approvedAssetId: r.approved_asset_id,
+      dialogueText: r.text,
+      status: r.is_approved ? "approved" : r.status,
+      approvedAssetId: r.is_approved ? r.asset_id : null,
       storagePath: r.storage_path,
-      locale: r.locale,
+      locale: r.language,
     })),
   };
 }
