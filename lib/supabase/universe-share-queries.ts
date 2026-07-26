@@ -101,6 +101,12 @@ type AssetVersionRow = {
  * 本函数使用 service role 绕过 RLS，直接读取 user_id 与 share_status，
  * 是 P0 缺陷修复的服务端权威判断入口。
  *
+ * 容错设计（TRAE-V2-00 临时修复）：
+ * 生产 Supabase 的 storyflow_universes 表可能尚未运行 universe-share 阶段 B
+ * 的 migration，缺少 share_status 列。此时查询会返回 42703 错误。
+ * 本函数在 share_status 列缺失时 fallback 到只查 user_id，
+ * 让所有者访问不再被阻塞（share_status 返回 null，访客分享功能在 schema 修复前不可用）。
+ *
  * 返回值：
  * - { isOwner: true, shareStatus } — 访问者是所有者
  * - { isOwner: false, shareStatus } — 访问者不是所有者（或宇宙不存在），shareStatus 可能为 null
@@ -112,11 +118,30 @@ export async function getUniverseOwnership(
   universeId: string,
   userId: string,
 ): Promise<{ isOwner: boolean; shareStatus: ShareStatus | null }> {
+  // 先尝试完整查询（包含 share_status）
   const { data, error } = await serverClient
     .from("storyflow_universes")
     .select("id, user_id, share_status")
     .eq("id", universeId)
     .maybeSingle();
+
+  // 容错：share_status 列不存在时，fallback 到只查 user_id
+  if (error && isMissingColumnError(error)) {
+    const fallback = await serverClient
+      .from("storyflow_universes")
+      .select("id, user_id")
+      .eq("id", universeId)
+      .maybeSingle();
+    if (fallback.error) throw fallback.error;
+    if (!fallback.data) {
+      return { isOwner: false, shareStatus: null };
+    }
+    const fallbackRow = fallback.data as { id: string; user_id: string | null };
+    return {
+      isOwner: Boolean(fallbackRow.user_id && fallbackRow.user_id === userId),
+      shareStatus: null,
+    };
+  }
 
   if (error) throw error;
   if (!data) {
@@ -128,6 +153,20 @@ export async function getUniverseOwnership(
     isOwner,
     shareStatus: row.share_status ?? null,
   };
+}
+
+/**
+ * 判断 Supabase 错误是否为“列不存在”（42703 / PGRST204）。
+ * 用于 share_status 列缺失时的容错判断。
+ */
+function isMissingColumnError(error: unknown): boolean {
+  const msg = (error as { message?: string } | Error)?.message || "";
+  return (
+    msg.includes("42703") ||
+    msg.includes("PGRST204") ||
+    msg.includes("Could not find the column") ||
+    msg.includes("column") && msg.includes("does not exist")
+  );
 }
 
 /**
