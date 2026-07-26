@@ -92,6 +92,45 @@ type AssetVersionRow = {
 // ============================================================
 
 /**
+ * 服务端判断访问者是否为宇宙所有者，并返回 share_status。
+ *
+ * 用于解决客户端依赖浏览器 RLS 返回 user_id 不可靠的问题：
+ * 当 RLS 策略不允许返回 user_id 列时，客户端 isOwner 判断会失效，
+ * 导致所有者访问自己的宇宙被误判为访客显示“未分享”（TRAE-V2-00 P0 缺陷）。
+ *
+ * 本函数使用 service role 绕过 RLS，直接读取 user_id 与 share_status，
+ * 是 P0 缺陷修复的服务端权威判断入口。
+ *
+ * 返回值：
+ * - { isOwner: true, shareStatus } — 访问者是所有者
+ * - { isOwner: false, shareStatus } — 访问者不是所有者（或宇宙不存在），shareStatus 可能为 null
+ *
+ * 出于安全考虑，不区分“宇宙不存在”与“非所有者访问”，统一返回 isOwner=false。
+ */
+export async function getUniverseOwnership(
+  serverClient: SupabaseClient,
+  universeId: string,
+  userId: string,
+): Promise<{ isOwner: boolean; shareStatus: ShareStatus | null }> {
+  const { data, error } = await serverClient
+    .from("storyflow_universes")
+    .select("id, user_id, share_status")
+    .eq("id", universeId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    return { isOwner: false, shareStatus: null };
+  }
+  const row = data as UniverseRow;
+  const isOwner = Boolean(row.user_id && row.user_id === userId);
+  return {
+    isOwner,
+    shareStatus: row.share_status ?? null,
+  };
+}
+
+/**
  * 获取本人宇宙的分享配置（所有者校验）。
  * 不返回 share_password 哈希，仅返回 has_password 布尔。
  */

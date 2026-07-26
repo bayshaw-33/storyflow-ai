@@ -112,8 +112,11 @@ export default function UniverseDetailPage() {
   const [checking, setChecking] = useState(false);
 
   // §阶段 B 分享：身份判断 + 分享配置 + 访客视图
+  // TRAE-V2-00 P0 修复：universeMeta 改为只承载 { isOwner, shareStatus }，
+  // 不再依赖浏览器 RLS 返回 user_id（RLS 可能过滤该列导致所有者被误判为访客）。
+  // isOwner 由服务端 /api/universes/[id]/me 权威返回。
   const [universeMeta, setUniverseMeta] = useState<{
-    userId: string | null;
+    isOwner: boolean;
     shareStatus: "private" | "shared" | "removed" | null;
   } | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
@@ -197,9 +200,9 @@ export default function UniverseDetailPage() {
   );
 
   // §阶段 B 判断当前访问者是否为宇宙所有者
-  const isOwner = Boolean(
-    session?.user?.id && universeMeta?.userId && session.user.id === universeMeta.userId,
-  );
+  // TRAE-V2-00 P0 修复：isOwner 直接使用服务端 /api/universes/[id]/me 的返回值，
+  // 不再比较 session.user.id 与 universeMeta.userId（后者依赖浏览器 RLS，不可靠）。
+  const isOwner = Boolean(universeMeta?.isOwner);
 
   // §阶段 B 访客 share token 从 localStorage 初始化
   useEffect(() => {
@@ -208,37 +211,39 @@ export default function UniverseDetailPage() {
     if (stored) setShareToken(stored);
   }, [params.universeId]);
 
-  // §阶段 B 获取宇宙基本信息（user_id + share_status）用于身份判断
-  // RLS：本人可读所有自己的宇宙；访客只能读 share_status='shared' 的宇宙
+  // §阶段 B 获取宇宙基本信息（isOwner + share_status）用于身份判断
+  // TRAE-V2-00 P0 修复：改用服务端 /api/universes/[id]/me 判断所有者身份，
+  // 不再依赖浏览器 RLS 返回 user_id 列（RLS 可能过滤该列，导致所有者被误判为访客）。
+  // 服务端用 service role 绕过 RLS 读取 user_id 并与 session.user.id 比较。
   useEffect(() => {
     let cancelled = false;
     async function loadMeta() {
-      const supabase = getSupabaseBrowserClient();
-      if (!supabase) {
+      // 未登录：直接标记为非所有者，shareStatus 未知
+      if (!session?.access_token) {
         if (!cancelled) {
-          setUniverseMeta(null);
+          setUniverseMeta({ isOwner: false, shareStatus: null });
           setMetaLoading(false);
         }
         return;
       }
       try {
-        const { data, error } = await supabase
-          .from("storyflow_universes")
-          .select("user_id, share_status")
-          .eq("id", params.universeId)
-          .maybeSingle();
+        const res = await fetch(
+          `/api/universes/${encodeURIComponent(params.universeId)}/me`,
+          { headers: { Authorization: `Bearer ${session.access_token}` } },
+        );
+        const data = await res.json().catch(() => null);
         if (cancelled) return;
-        if (error || !data) {
-          setUniverseMeta(null);
+        if (!res.ok || !data?.success) {
+          setUniverseMeta({ isOwner: false, shareStatus: null });
         } else {
           setUniverseMeta({
-            userId: data.user_id || null,
+            isOwner: Boolean(data.isOwner),
             shareStatus:
-              (data.share_status as "private" | "shared" | "removed" | null) || null,
+              (data.shareStatus as "private" | "shared" | "removed" | null) || null,
           });
         }
       } catch {
-        if (!cancelled) setUniverseMeta(null);
+        if (!cancelled) setUniverseMeta({ isOwner: false, shareStatus: null });
       }
       if (!cancelled) setMetaLoading(false);
     }
@@ -246,7 +251,7 @@ export default function UniverseDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.universeId]);
+  }, [params.universeId, session?.access_token]);
 
   // §阶段 B 创作者获取本人宇宙的分享配置
   useEffect(() => {
