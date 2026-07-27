@@ -144,6 +144,11 @@ export async function getProfileByUsername(
 
 /**
  * 按 user_id 查本人完整 profile（含私密字段）。
+ *
+ * 注意：不使用 PostgREST 的 `avatar_asset:avatar_asset_id(storage_path)` JOIN 语法，
+ * 因为 storyflow_profiles.avatar_asset_id 到 storyflow_assets(id) 的外键关系
+ * 在某些环境（migration 未完整应用）下可能缺失，会导致 PGRST200 错误。
+ * 改成两步查询：先查 profile，再用 avatar_asset_id 单独查 storage_path。
  */
 export async function getProfileByUserId(
   serverClient: SupabaseClient,
@@ -151,13 +156,28 @@ export async function getProfileByUserId(
 ): Promise<OwnProfile | null> {
   const { data, error } = await serverClient
     .from("storyflow_profiles")
-    .select(`*, ${AVATAR_JOIN_SELECT}`)
+    .select("*")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (error) throw error;
   if (!data) return null;
-  return normalizeOwnProfile(data);
+
+  // 单独查 avatar storage_path（如果有 avatar_asset_id）
+  const row = data as Record<string, unknown>;
+  const avatarAssetId = row.avatar_asset_id as string | null;
+  let avatarStoragePath: string | null = null;
+  if (avatarAssetId) {
+    const { data: assetRow, error: assetErr } = await serverClient
+      .from("storyflow_assets")
+      .select("storage_path")
+      .eq("id", avatarAssetId)
+      .maybeSingle();
+    if (assetErr) throw assetErr;
+    avatarStoragePath = (assetRow as { storage_path?: string } | null)?.storage_path ?? null;
+  }
+
+  return normalizeOwnProfile({ ...row, avatar_storage_path: avatarStoragePath });
 }
 
 /**
