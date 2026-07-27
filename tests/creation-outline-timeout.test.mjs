@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const componentPath = new URL("./CreationWorkbench-latest.tsx", import.meta.url);
+const componentPath = new URL("../components/creation/CreationWorkbench.tsx", import.meta.url);
 
 test("outline generation uses a longer timeout than the default creation chat window", async () => {
   const source = await readFile(componentPath, "utf8");

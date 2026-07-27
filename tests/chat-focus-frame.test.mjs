@@ -26,5 +26,5 @@ test("creation workbench uses the shared focus frame around its AI panel", async
   assert.match(source, /import \{ ChatFocusFrame \} from "@\/components\/creation\/ChatFocusFrame"/);
   assert.match(source, /<ChatFocusFrame[\s\S]*label=\{isZh \? "创作对话" : "Creation chat"\}/);
   assert.match(source, /chatInputRef/);
-  assert.match(source, /sourceFiles\.map/);
+  assert.match(source, /sourceMaterialContext\(\)/);
 });

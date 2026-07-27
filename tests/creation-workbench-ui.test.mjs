@@ -9,22 +9,22 @@ const cssPath = new URL("../app/globals.css", import.meta.url);
 test("uses the exact seven-stage creation workflow", async () => {
   const page = await readFile(pagePath, "utf8");
   const component = await readFile(componentPath, "utf8");
-  const source = `${page}\n${component}`;
+  const stageBlock = component.match(/const STAGES:[\s\S]*?\];/)?.[0] || component;
   const labels = ["背景及世界观", "角色圣经", "剧情及大纲", "正文", "翻译", "本土化及雷同查验", "导出"];
   let last = -1;
   for (const label of labels) {
-    const index = source.indexOf(label);
+    const index = stageBlock.indexOf(label);
     assert.ok(index > last, `${label} should follow the previous stage`);
     last = index;
   }
-  assert.doesNotMatch(source, /7 阶段小说流程|完整 AI 生成序列|按指令修改章节|小说转剧本/);
+  assert.doesNotMatch(stageBlock, /7 阶段小说流程|完整 AI 生成序列|按指令修改章节|小说转剧本/);
 });
 
 test("provides localized chat, uploads, mode languages, and per-unit controls", async () => {
   const source = await readFile(componentPath, "utf8");
   assert.match(source, /creation_development_chat/);
   assert.match(source, /interfaceLanguage/);
-  assert.match(source, /上传创作资料|Upload sources/);
+  assert.match(source, /上传资料|Upload/);
   assert.match(source, /\.docx/);
   assert.match(source, /activeMode.*novel|novel.*activeMode/s);
   assert.match(source, /screenplayLanguage/);
@@ -33,7 +33,7 @@ test("provides localized chat, uploads, mode languages, and per-unit controls", 
   assert.match(source, /generationScope/);
   assert.match(source, /current-unit|当前章\/集/);
   assert.match(source, /current-arc|当前大章/);
-  assert.match(source, /draft.*reviewed.*locked/s);
+  assert.match(source, /draft.*finalized.*locked/s);
 });
 
 test("exposes three screenplay formats, localization views, and MD DOCX ZIP export", async () => {

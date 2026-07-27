@@ -970,7 +970,9 @@ export function CreationWorkbench() {
     setError("");
     try {
       const input = files.map((f) => `资料 ${f.name}：\n${f.text}`).join("\n\n");
-      const output = await callAI("creation_development_chat", `${isZh ? "请阅读以下资料，输出：1) 理解摘要 2) 已识别的背景/角色/主要剧情 3) 明显缺失的信息 4) 资料内部可能的冲突。用简洁中文输出。" : "Read the following materials and output: 1) summary 2) identified background/characters/plot 3) missing info 4) internal conflicts."}\n\n${input}`);
+      const output = await callAI("creation_development_chat", `${isZh
+        ? "请把以下资料压缩成可复用的创作底稿，只保留事实、设定和冲突线索，不要全文复述。输出必须包含：1) 资料总摘要 2) 背景/角色/剧情压缩要点 3) 资料间重复或冲突 4) 明显缺失的信息 5) 可直接进入背景及世界观的关键事实。"
+        : "Compress the following materials into a reusable creative brief. Keep only facts, setup, and conflict cues; do not restate the full text. Output: 1) overall summary 2) compressed background/character/plot points 3) overlaps or conflicts 4) missing information 5) key facts ready for Background & World."}\n\n${input}`);
       setSourceComprehension({ summary: output, confirmed: false });
       setMessages((cur) => [...cur, message("assistant", output)]);
       setStatus(isZh ? "已生成资料理解摘要，请确认后进入背景生成。" : "Source comprehension generated. Confirm to proceed.");
@@ -1000,6 +1002,27 @@ export function CreationWorkbench() {
     return null;
   }
 
+  function sourceMaterialContext() {
+    const fileList = sourceFiles.map((file) => `- ${file.name}`).join("\n");
+    const summary = sourceComprehension?.summary?.trim();
+    if (summary) {
+      return [
+        isZh ? "压缩后的上传资料：" : "Compressed uploaded materials:",
+        summary,
+        fileList ? (isZh ? `资料清单：\n${fileList}` : `Source file list:\n${fileList}`) : "",
+      ].filter(Boolean).join("\n\n");
+    }
+    if (!sourceFiles.length) return "";
+    const preview = sourceFiles
+      .map((file) => {
+        const text = file.text.replace(/\s+/g, " ").trim();
+        const excerpt = text.length > 1000 ? `${text.slice(0, 1000)}…` : text;
+        return `资料 ${file.name}（${isZh ? "截断预览" : "truncated preview"}）：\n${excerpt}`;
+      })
+      .join("\n\n");
+    return preview ? `${isZh ? "上传资料预览：" : "Uploaded materials preview:"}\n${preview}` : "";
+  }
+
   function contextText() {
     const previous = track.units
       .filter((unit) => unit.status === "finalized" && (!activeUnit || unit.number < activeUnit.number))
@@ -1022,7 +1045,7 @@ export function CreationWorkbench() {
       activeUnit ? `当前章/集：${activeUnit.number} ${activeUnit.title}\n${activeUnit.outline}\n${activeUnit.continuityNotes}` : "",
       previous ? `前序定稿单元：\n${previous}` : "",
       project.novelDevelopmentNotes ? `创作沟通记录：\n${project.novelDevelopmentNotes}` : "",
-      sourceFiles.map((file) => `资料 ${file.name}：\n${file.text}`).join("\n\n"),
+      sourceMaterialContext(),
     ].filter(Boolean).join("\n\n");
   }
 
@@ -1472,9 +1495,9 @@ export function CreationWorkbench() {
         : "";
       return doc ? `${isZh ? "【作用范围：当前阶段】" : "[Scope: current stage]"}\n${doc}` : "";
     }
-    // PRD V1.0 验收 P1-03：全部资料（上传的 sourceFiles 拼接）
+    // PRD V1.0 验收 P1-03：全部资料（优先压缩摘要，回退到截断预览）
     if (aiScope === "materials") {
-      const mats = sourceFiles.map((f) => `资料 ${f.name}：\n${f.text}`).join("\n\n");
+      const mats = sourceMaterialContext();
       return mats ? `${isZh ? "【作用范围：全部资料】" : "[Scope: all materials]"}\n${mats}` : "";
     }
     // PRD V1.0 验收 R-03：分集规划阶段 — 当前分集规划
