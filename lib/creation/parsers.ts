@@ -21,15 +21,44 @@ export type GenerationMetadata = {
 };
 
 const OUTPUT_PATTERN = /<CREATION_OUTPUT>\s*([\s\S]*?)\s*<\/CREATION_OUTPUT>/i;
+// 兜底：AI 偶发不按 prompt 要求包裹标记，直接返回纯 JSON 或代码块包裹的 JSON。
+// 先剥离 markdown 代码块和首尾套话，再用 JSON.parse 解析剩余内容。
+const CODE_FENCE_PATTERN = /^\s*\`\`\`(?:json|markdown|md|text)?\s*([\s\S]*?)\s*\`\`\`\s*$/i;
 
 function parseMarkedJson(output: string): unknown {
   const match = output.match(OUTPUT_PATTERN);
-  if (!match?.[1]) throw new Error("Malformed creation output: missing CREATION_OUTPUT markers.");
-  try {
-    return JSON.parse(match[1]);
-  } catch {
-    throw new Error("Malformed creation output: invalid JSON.");
+  if (match?.[1]) {
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      throw new Error("Malformed creation output: invalid JSON.");
+    }
   }
+  // 兜底：AI 偶发忽略 prompt 直接返回纯 JSON（可能被 markdown 代码块或套话包裹）。
+  // 先剥离代码块，再提取首个 { 到末尾 } 的子串作为 JSON 候选。
+  const stripped = output
+    .replace(CODE_FENCE_PATTERN, "$1")
+    .trim();
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(stripped.slice(start, end + 1));
+    } catch {
+      // fall through to error
+    }
+  }
+  // 数组场景：提取首个 [ 到末尾 ]
+  const arrStart = stripped.indexOf("[");
+  const arrEnd = stripped.lastIndexOf("]");
+  if (arrStart >= 0 && arrEnd > arrStart) {
+    try {
+      return JSON.parse(stripped.slice(arrStart, arrEnd + 1));
+    } catch {
+      // fall through to error
+    }
+  }
+  throw new Error("Malformed creation output: missing CREATION_OUTPUT markers.");
 }
 
 function parseUnit(value: unknown, mode: CreationMode): ParsedUnit {

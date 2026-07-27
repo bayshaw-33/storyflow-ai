@@ -6,6 +6,7 @@ import {
   applyUnitGeneration,
   parseArcStructure,
   parseBatchUnitOutput,
+  parseEpisodePlanOutput,
 } from "../lib/creation/parsers.ts";
 import { createCreationWorkspace, normalizeCreationWorkspace } from "../lib/creation/state.ts";
 
@@ -121,4 +122,45 @@ test("keeps successful batch units when another unit fails", () => {
   assert.equal(result.workspace.novel.units[0].content, "New 1");
   assert.equal(result.workspace.novel.units[1].content, "Old 2");
   assert.deepEqual(result.failures.map((failure) => failure.unitId), ["chapter-2"]);
+});
+test("parses episode plan from plain JSON without CREATION_OUTPUT markers", () => {
+  const plan = {
+    totalEpisodes: 2,
+    items: [
+      { episodeNo: 1, title: "第一集", coreEvent: "事件一", mainGoal: "目标一", conflict: "冲突一", sceneCount: 3, sceneOutlines: ["a", "b", "c"] },
+      { episodeNo: 2, title: "第二集", coreEvent: "事件二", mainGoal: "目标二", conflict: "冲突二", sceneCount: 2, sceneOutlines: ["d", "e"] },
+    ],
+  };
+  const parsed = parseEpisodePlanOutput(JSON.stringify(plan));
+  assert.equal(parsed.totalEpisodes, 2);
+  assert.equal(parsed.items.length, 2);
+  assert.equal(parsed.items[0].title, "第一集");
+});
+
+test("parses episode plan from markdown code-fenced JSON", () => {
+  const plan = {
+    totalEpisodes: 1,
+    items: [{ episodeNo: 1, title: "Pilot", coreEvent: "x", mainGoal: "y", conflict: "z", sceneCount: 1, sceneOutlines: ["s"] }],
+  };
+  const output = "```json\n" + JSON.stringify(plan) + "\n```";
+  const parsed = parseEpisodePlanOutput(output);
+  assert.equal(parsed.totalEpisodes, 1);
+  assert.equal(parsed.items[0].title, "Pilot");
+});
+
+test("parses episode plan when AI prepends preamble before JSON", () => {
+  const plan = {
+    totalEpisodes: 1,
+    items: [{ episodeNo: 1, title: "Pilot", coreEvent: "x", mainGoal: "y", conflict: "z", sceneCount: 1, sceneOutlines: ["s"] }],
+  };
+  const output = "好的，这是分集规划：\n" + JSON.stringify(plan);
+  const parsed = parseEpisodePlanOutput(output);
+  assert.equal(parsed.items[0].title, "Pilot");
+});
+
+test("still rejects completely non-JSON output with missing markers", () => {
+  assert.throws(
+    () => parseEpisodePlanOutput("this is plain text, not json and not marked"),
+    /missing CREATION_OUTPUT markers/,
+  );
 });
