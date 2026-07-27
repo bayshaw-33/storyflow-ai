@@ -81,6 +81,21 @@ export default function SettingsProfilePage() {
 
   useEffect(() => {
     void loadProfile();
+
+    // 监听 auth 状态变化（与 dashboard/login 一致），避免已登录用户在 session
+    // 异步恢复完成前被误判为未登录，导致要求重新登录却始终登录不上。
+    const supabase = getSupabaseBrowserClient();
+    const { data: listener } =
+      supabase?.auth.onAuthStateChange((_event, nextSession) => {
+        setSession(nextSession || null);
+        if (nextSession?.access_token) {
+          void loadProfile();
+        }
+      }) ?? {};
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
   }, [loadProfile, reloadKey]);
 
   return (

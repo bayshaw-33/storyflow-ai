@@ -196,6 +196,7 @@ export default function SettingsApiPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const supabase = getSupabaseBrowserClient();
 
     async function load() {
       setLoading(true);
@@ -203,7 +204,6 @@ export default function SettingsApiPage() {
       setByoApi(readByoApiSettings());
       setWorkflowRouting(readWorkflowModelRouting());
 
-      const supabase = getSupabaseBrowserClient();
       if (!supabase) {
         setLoading(false);
         return;
@@ -250,8 +250,20 @@ export default function SettingsApiPage() {
     }
 
     void load();
+
+    // 监听 auth 状态变化（与 dashboard/login 一致），避免已登录用户在 session
+    // 异步恢复完成前被误判为未登录，导致要求重新登录却始终登录不上。
+    const { data: listener } =
+      supabase?.auth.onAuthStateChange((_event, nextSession) => {
+        setSession(nextSession || null);
+        if (nextSession?.access_token) {
+          void load();
+        }
+      }) ?? {};
+
     return () => {
       cancelled = true;
+      listener?.subscription.unsubscribe();
     };
   }, [reloadKey]);
 
