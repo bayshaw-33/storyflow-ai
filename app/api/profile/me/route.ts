@@ -330,7 +330,7 @@ function validateSocialLinks(input: unknown): string | null {
 }
 
 function handleError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? "");
+  const message = flattenError(error);
   const authError = message === "MISSING_AUTH_TOKEN" || message === "INVALID_AUTH_TOKEN";
   // 开发期：把数据库 / Supabase 返回的具体错误消息带出来，便于前端定位
   // （认证错误仍然走标准的"请先登录"提示）
@@ -340,9 +340,28 @@ function handleError(error: unknown) {
       { status: 401 },
     );
   }
-  const detail = message || "请求失败，请稍后重试。";
   return NextResponse.json(
-    { success: false, error: detail, detail: message },
+    { success: false, error: message, detail: JSON.stringify(error) },
     { status: 500 },
   );
+}
+
+/**
+ * 把任意 error（Error / string / Supabase PostgrestError / 其他对象）拍平成可读字符串。
+ * PostgrestError 的 message 字段才是真正的错误描述，直接 String() 会得到 "[object Object]"。
+ */
+function flattenError(error: unknown): string {
+  if (error instanceof Error) return error.message || error.toString();
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const e = error as Record<string, unknown>;
+    if (typeof e.message === "string" && e.message.trim()) return e.message;
+    if (typeof e.error === "string" && e.error.trim()) return e.error;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error ?? "");
 }

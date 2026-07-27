@@ -101,8 +101,8 @@ export default function SettingsProfilePage() {
         });
         setProfileError(null);
       } else {
-        const apiMessage = payload?.error || `HTTP ${response.status}`;
-        const detail = payload?.detail ? `\n${payload.detail}` : "";
+        const apiMessage = flattenString(payload?.error) || `HTTP ${response.status}`;
+        const detail = payload?.detail ? `\n${flattenString(payload.detail)}` : "";
         setProfileError({
           kind: "api-error",
           status: response.status,
@@ -135,6 +135,21 @@ export default function SettingsProfilePage() {
       listener?.subscription.unsubscribe();
     };
   }, [loadProfile, reloadKey]);
+
+function flattenString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const v = value as Record<string, unknown>;
+    if (typeof v.message === "string") return v.message;
+    if (typeof v.error === "string") return v.error;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return value == null ? "" : String(value);
+}
 
   return (
     <main className="cosmic-page settings-page">
