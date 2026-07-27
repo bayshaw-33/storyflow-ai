@@ -81,8 +81,21 @@ export function AuthModal({ open, mode, onClose }: AuthModalProps) {
         return;
       }
 
+      // 登录成功但 session 未建立（可能需要邮箱验证等）
+      if (!result.data?.session) {
+        setError(
+          mode === "signup"
+            ? (isZh ? "注册成功，但需要邮箱验证后才能登录。" : "Sign up successful, but email verification is required.")
+            : (isZh ? "登录响应异常：未返回会话。请稍后重试。" : "Login response did not include a session. Please retry."),
+        );
+        return;
+      }
+
       setPassword("");
-      onClose();
+
+      // 延迟关闭 modal，确保 onAuthStateChange(SIGNED_IN) 有时间触发，
+      // 避免父组件的 useEffect cleanup 在事件派发前就 unsubscribe 监听器。
+      setTimeout(() => onClose(), 200);
     } catch (authIssue) {
       setError(authIssue instanceof Error ? authIssue.message : "登录服务暂时不可用，请稍后重试。");
     } finally {

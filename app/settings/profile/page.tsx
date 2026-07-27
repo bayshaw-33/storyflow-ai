@@ -19,24 +19,34 @@ type ProfileResponse = {
   error?: string;
 };
 
+type ProfileError =
+  | { kind: "no-supabase" }
+  | { kind: "no-session" }
+  | { kind: "api-error"; status: number; message: string }
+  | { kind: "network-error"; message: string };
+
 /**
  * /settings/profile
  * 本人资料编辑页：在 SettingsTabs 容器中渲染 ProfileEditor。
  * 未登录时显示登录 CTA。
  */
 export default function SettingsProfilePage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [reloadKey, setReloadKey] = useState(0);
+  const [profileError, setProfileError] = useState<ProfileError | null>(null);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
+    setProfileError(null);
     const supabase = getSupabaseBrowserClient();
     if (!supabase) {
+      setProfileError({ kind: "no-supabase" });
       setLoading(false);
       return;
     }
@@ -44,13 +54,30 @@ export default function SettingsProfilePage() {
     const nextSession = sessionData.session;
     setSession(nextSession || null);
     if (!nextSession?.access_token) {
+      setProfileError({ kind: "no-session" });
       setLoading(false);
       return;
     }
+
+    let accessToken = nextSession.access_token;
+
     try {
-      const response = await fetch("/api/profile/me", {
-        headers: { Authorization: `Bearer ${nextSession.access_token}` },
+      let response = await fetch("/api/profile/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
+
+      // 401 时尝试刷新 session 后重试（token 可能已过期）
+      if (response.status === 401) {
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError && refreshData.session?.access_token) {
+          accessToken = refreshData.session.access_token;
+          setSession(refreshData.session);
+          response = await fetch("/api/profile/me", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+        }
+      }
+
       const payload = (await response.json().catch(() => null)) as ProfileResponse | null;
       if (response.ok && payload?.success && payload.profile) {
         const p = payload.profile;
@@ -71,9 +98,19 @@ export default function SettingsProfilePage() {
           username_changed_at: p.username_changed_at ?? null,
           username_set_at: p.username_set_at ?? null,
         });
+        setProfileError(null);
+      } else {
+        setProfileError({
+          kind: "api-error",
+          status: response.status,
+          message: payload?.error || `HTTP ${response.status}`,
+        });
       }
-    } catch {
-      // ignore — profile stays null
+    } catch (e) {
+      setProfileError({
+        kind: "network-error",
+        message: e instanceof Error ? e.message : "网络错误",
+      });
     } finally {
       setLoading(false);
     }
@@ -82,8 +119,6 @@ export default function SettingsProfilePage() {
   useEffect(() => {
     void loadProfile();
 
-    // 监听 auth 状态变化（与 dashboard/login 一致），避免已登录用户在 session
-    // 异步恢复完成前被误判为未登录，导致要求重新登录却始终登录不上。
     const supabase = getSupabaseBrowserClient();
     const { data: listener } =
       supabase?.auth.onAuthStateChange((_event, nextSession) => {
@@ -121,17 +156,65 @@ export default function SettingsProfilePage() {
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start", padding: "var(--space-6) 0" }}>
-            <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>{t("settings.signedOut")}</p>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                setAuthMode("signin");
-                setAuthOpen(true);
-              }}
-            >
-              {t("settings.signIn")}
-            </button>
+            {profileError?.kind === "no-session" ? (
+              <>
+                <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>{t("settings.signedOut")}</p>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setAuthMode("signin");
+                    setAuthOpen(true);
+                  }}
+                >
+                  {t("settings.signIn")}
+                </button>
+              </>
+            ) : profileError?.kind === "no-supabase" ? (
+              <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>
+                {isZh ? "Supabase 未配置，无法加载资料。" : "Supabase is not configured."}
+              </p>
+            ) : profileError?.kind === "api-error" ? (
+              <>
+                <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>
+                  {isZh ? "资料加载失败" : "Profile load failed"}（{profileError.status}）
+                </p>
+                <p style={{ color: "var(--ink-muted)", fontSize: 12 }}>{profileError.message}</p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => void loadProfile()}
+                  >
+                    {isZh ? "重试" : "Retry"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setAuthMode("signin");
+                      setAuthOpen(true);
+                    }}
+                  >
+                    {isZh ? "重新登录" : "Sign in again"}
+                  </button>
+                </div>
+              </>
+            ) : profileError?.kind === "network-error" ? (
+              <>
+                <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>
+                  {isZh ? "网络错误" : "Network error"}
+                </p>
+                <p style={{ color: "var(--ink-muted)", fontSize: 12 }}>{profileError.message}</p>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void loadProfile()}
+                >
+                  {isZh ? "重试" : "Retry"}
+                </button>
+              </>
+            ) : null}
           </div>
         )}
       </SettingsTabs>
