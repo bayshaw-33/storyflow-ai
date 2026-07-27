@@ -330,13 +330,19 @@ function validateSocialLinks(input: unknown): string | null {
 }
 
 function handleError(error: unknown) {
-  const message = error instanceof Error ? error.message : "";
+  const message = error instanceof Error ? error.message : String(error ?? "");
   const authError = message === "MISSING_AUTH_TOKEN" || message === "INVALID_AUTH_TOKEN";
+  // 开发期：把数据库 / Supabase 返回的具体错误消息带出来，便于前端定位
+  // （认证错误仍然走标准的"请先登录"提示）
+  if (authError) {
+    return NextResponse.json(
+      { success: false, error: "请先登录。" },
+      { status: 401 },
+    );
+  }
+  const detail = message || "请求失败，请稍后重试。";
   return NextResponse.json(
-    {
-      success: false,
-      error: authError ? "请先登录。" : "请求失败，请稍后重试。",
-    },
-    { status: authError ? 401 : 500 },
+    { success: false, error: detail, detail: message },
+    { status: 500 },
   );
 }

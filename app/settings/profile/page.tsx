@@ -17,6 +17,7 @@ type ProfileResponse = {
   success: boolean;
   profile?: Profile & { email?: string | null; plan?: string | null };
   error?: string;
+  detail?: string;
 };
 
 type ProfileError =
@@ -100,10 +101,12 @@ export default function SettingsProfilePage() {
         });
         setProfileError(null);
       } else {
+        const apiMessage = payload?.error || `HTTP ${response.status}`;
+        const detail = payload?.detail ? `\n${payload.detail}` : "";
         setProfileError({
           kind: "api-error",
           status: response.status,
-          message: payload?.error || `HTTP ${response.status}`,
+          message: `${apiMessage}${detail}`,
         });
       }
     } catch (e) {
@@ -179,7 +182,9 @@ export default function SettingsProfilePage() {
                 <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>
                   {isZh ? "资料加载失败" : "Profile load failed"}（{profileError.status}）
                 </p>
-                <p style={{ color: "var(--ink-muted)", fontSize: 12 }}>{profileError.message}</p>
+                <p style={{ color: "var(--ink-muted)", fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", maxWidth: 480 }}>
+                  {profileError.message}
+                </p>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     type="button"
@@ -205,7 +210,9 @@ export default function SettingsProfilePage() {
                 <p style={{ color: "var(--ink-secondary)", fontSize: 14 }}>
                   {isZh ? "网络错误" : "Network error"}
                 </p>
-                <p style={{ color: "var(--ink-muted)", fontSize: 12 }}>{profileError.message}</p>
+                <p style={{ color: "var(--ink-muted)", fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", maxWidth: 480 }}>
+                  {profileError.message}
+                </p>
                 <button
                   type="button"
                   className="primary-button"
