@@ -813,7 +813,8 @@ export function CreationWorkbench() {
     try {
       const next = commitWorkspace((current) => current.documents[docKey].status === "finalized" ? unfinalizeDocument(current, docKey) : finalizeDocument(current, docKey));
       void saveProject(next);
-      setStatus(isZh ? (next.documents[docKey].status === "finalized" ? "已定稿。" : "已取消定稿，可修改。") : (next.documents[docKey].status === "finalized" ? "Finalized." : "Unfinalized; ready to edit."));
+      const isFinalized = next.creationWorkspace?.documents[docKey].status === "finalized";
+      setStatus(isZh ? (isFinalized ? "已定稿。" : "已取消定稿，可修改。") : (isFinalized ? "Finalized." : "Unfinalized; ready to edit."));
     } catch (err) {
       setError(err instanceof Error ? err.message : "定稿失败");
     }
@@ -860,9 +861,10 @@ export function CreationWorkbench() {
         ? unfinalizeUnit(current, mode, activeUnit.id)
         : finalizeUnit(current, mode, activeUnit.id));
       void saveProject(next);
+      const isFinalized = next.creationWorkspace?.[mode].units.find((unit) => unit.id === activeUnit.id)?.status === "finalized";
       setStatus(isZh
-        ? (next[mode].units.find((unit) => unit.id === activeUnit.id)?.status === "finalized" ? "正文已定稿。" : "已取消定稿，可修改正文。")
-        : (next[mode].units.find((unit) => unit.id === activeUnit.id)?.status === "finalized" ? "Manuscript finalized." : "Manuscript unfinalized; ready to edit."));
+        ? (isFinalized ? "正文已定稿。" : "已取消定稿，可修改正文。")
+        : (isFinalized ? "Manuscript finalized." : "Manuscript unfinalized; ready to edit."));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "正文定稿失败");
     }
