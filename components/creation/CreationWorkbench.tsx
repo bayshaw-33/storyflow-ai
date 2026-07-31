@@ -517,14 +517,21 @@ export function CreationWorkbench() {
     const ws = target.creationWorkspace || createCreationWorkspace(target);
     const savedMode = ws.settings.lastMode;
     const savedUnitId = ws.settings.lastUnitId;
-    const explicit = sourceUnitId
-      ? (["novel", "screenplay"] as const).map((candidate) => ({ mode: candidate, unit: ws[candidate].units.find((unit) => unit.id === sourceUnitId) })).find((entry) => entry.unit)
+    const explicit: { mode: CreationMode; unit: CreationUnit } | null = sourceUnitId
+      ? (["novel", "screenplay"] as const).reduce<{ mode: CreationMode; unit: CreationUnit } | null>((found, candidate) => {
+        if (found) return found;
+        const unit = ws[candidate].units.find((item) => item.id === sourceUnitId);
+        return unit ? { mode: candidate, unit } : null;
+      }, null)
       : null;
-    const saved = savedMode && savedUnitId
-      ? { mode: savedMode, unit: ws[savedMode].units.find((unit) => unit.id === savedUnitId) }
+    const saved: { mode: CreationMode; unit: CreationUnit } | null = savedMode && savedUnitId
+      ? (() => {
+        const unit = ws[savedMode].units.find((item) => item.id === savedUnitId);
+        return unit ? { mode: savedMode, unit } : null;
+      })()
       : null;
     const fallback = latestManuscriptPosition(ws);
-    const position = explicit?.unit ? explicit : saved?.unit ? saved : fallback;
+    const position: { mode: CreationMode; unit: CreationUnit } | null = explicit || saved || fallback;
     const restoredWorkspace = position
       ? { ...ws, settings: { ...ws.settings, activeMode: position.mode, lastMode: position.mode, lastView: "unit" as CreationView, lastUnitId: position.unit.id, lastUnitUpdatedAt: position.unit.updatedAt } }
       : ws;
