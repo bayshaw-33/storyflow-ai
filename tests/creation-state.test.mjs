@@ -3,7 +3,12 @@ import test from "node:test";
 
 import {
   createCreationWorkspace,
+  finalizeUnit,
   normalizeCreationWorkspace,
+  recordCreationPosition,
+  unfinalizeDocument,
+  unfinalizeEpisodePlan,
+  unfinalizeUnit,
   updateCreationUnit,
 } from "../lib/creation/state.ts";
 import { normalizeStoredProject } from "../lib/projects.ts";
@@ -129,4 +134,63 @@ test("does not overwrite a locked unit", () => {
     /locked/i,
   );
   assert.equal(workspace.novel.units[0].content, "Approved text");
+});
+
+test("records and normalizes the last creation position", () => {
+  const workspace = createCreationWorkspace();
+  const positioned = recordCreationPosition(workspace, { mode: "screenplay", view: "unit", unitId: "episode-1", unitUpdatedAt: "2026-07-31T01:00:00.000Z" });
+  assert.equal(positioned.settings.lastMode, "screenplay");
+  assert.equal(positioned.settings.lastView, "unit");
+  assert.equal(positioned.settings.lastUnitId, "episode-1");
+  const normalized = normalizeCreationWorkspace(positioned);
+  assert.equal(normalized.settings.lastUnitId, "episode-1");
+});
+
+test("unfinalizing a foundation document cascades without deleting content", () => {
+  const base = createCreationWorkspace();
+  const workspace = {
+    ...base,
+    documents: {
+      backgroundWorld: { content: "world", status: "finalized", updatedAt: "world" },
+      characterBible: { content: "characters", status: "finalized", updatedAt: "characters" },
+      plotOutline: { content: "outline", status: "finalized", updatedAt: "outline" },
+    },
+    novel: { arcs: [], units: [{ ...base.novel.units[0], content: "chapter", status: "finalized" }] },
+  };
+  const updated = unfinalizeDocument(workspace, "backgroundWorld");
+  assert.equal(updated.documents.backgroundWorld.content, "world");
+  assert.equal(updated.documents.backgroundWorld.status, "draft");
+  assert.equal(updated.documents.characterBible.status, "draft");
+  assert.equal(updated.documents.plotOutline.status, "draft");
+  assert.equal(updated.novel.units[0].content, "chapter");
+  assert.equal(updated.novel.units[0].status, "draft");
+});
+
+test("unfinalizing an episode plan and unit preserves downstream content", () => {
+  const base = createCreationWorkspace();
+  const unit = { ...base.screenplay.units[0], id: "episode-1", content: "episode", status: "finalized" };
+  const workspace = {
+    ...base,
+    screenplay: {
+      arcs: [],
+      units: [unit],
+      episodePlan: { totalEpisodes: 1, items: [], status: "finalized", updatedAt: "plan" },
+    },
+  };
+  const planDraft = unfinalizeEpisodePlan(workspace, "screenplay");
+  assert.equal(planDraft.screenplay.episodePlan.status, "draft");
+  assert.equal(planDraft.screenplay.units[0].content, "episode");
+  assert.equal(planDraft.screenplay.units[0].status, "draft");
+  const unitFinal = { ...planDraft, screenplay: { ...planDraft.screenplay, units: [{ ...unit, status: "finalized" }] } };
+  const unitDraft = unfinalizeUnit(unitFinal, "screenplay", "episode-1");
+  assert.equal(unitDraft.screenplay.units[0].content, "episode");
+  assert.equal(unitDraft.screenplay.units[0].status, "draft");
+});
+
+test("finalizing a non-empty unit makes it eligible for unfinalize-and-edit", () => {
+  const base = createCreationWorkspace();
+  const workspace = { ...base, novel: { arcs: [], units: [{ ...base.novel.units[0], id: "chapter-1", content: "正文内容" }] } };
+  const finalized = finalizeUnit(workspace, "novel", "chapter-1");
+  assert.equal(finalized.novel.units[0].status, "finalized");
+  assert.equal(finalized.novel.units[0].content, "正文内容");
 });

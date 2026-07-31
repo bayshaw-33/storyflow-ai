@@ -34,6 +34,19 @@ test("provides localized chat, uploads, mode languages, and per-unit controls", 
   assert.match(source, /current-unit|当前章\/集/);
   assert.match(source, /current-arc|当前大章/);
   assert.match(source, /draft.*finalized.*locked/s);
+  assert.match(source, /lastUnitId/);
+  assert.match(source, /latestManuscriptPosition/);
+  assert.match(source, /取消定稿并修改/);
+  assert.doesNotMatch(source, /创作流程入口/);
+  assert.doesNotMatch(source, /<Sparkles size=\{15\} \/>\{isZh \? "AI 生成"/);
+});
+
+test("restores the latest manuscript and keeps screenplay labels episode-based", async () => {
+  const source = await readFile(componentPath, "utf8");
+  assert.match(source, /restoreProjectPosition/);
+  assert.match(source, /setView\("unit"\)/);
+  assert.match(source, /第 \$\{unit\.number\} 集/);
+  assert.doesNotMatch(source, /mode === "screenplay"[^\n]*第 \$\{unit\.number\} 卷/);
 });
 
 test("exposes three screenplay formats, localization views, and MD DOCX ZIP export", async () => {

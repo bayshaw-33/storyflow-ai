@@ -53,17 +53,23 @@ import {
   draftScene,
   finalizeDocument,
   finalizeEpisodePlan,
+  finalizeUnit,
   finalizeScene,
   normalizeCreationWorkspace,
+  recordCreationPosition,
   reorderScenes,
   setEpisodePlan,
   updateDocument,
   updateSceneBlock,
+  unfinalizeDocument,
+  unfinalizeEpisodePlan,
+  unfinalizeUnit,
 } from "@/lib/creation/state";
 import type {
   CreationMode,
   CreationStatus,
   CreationUnit,
+  CreationView,
   CreationWorkspaceV2,
   EpisodePlan,
   EpisodePlanItem,
@@ -201,6 +207,18 @@ function createUnit(mode: CreationMode, number: number, id = `${mode}-unit-${num
 
 function ensureProject(project: DramaProject): DramaProject {
   return { ...project, creationWorkspace: normalizeCreationWorkspace(project.creationWorkspace, project) };
+}
+
+function unitHasManuscript(unit: CreationUnit) {
+  return Boolean(unit.content.trim() || unit.screenplay?.scenes.some((scene) => scene.blocks.some((block) => block.text.trim())));
+}
+
+function latestManuscriptPosition(workspace: CreationWorkspaceV2) {
+  const candidates = (["novel", "screenplay"] as const).flatMap((mode) => workspace[mode].units
+    .filter(unitHasManuscript)
+    .map((unit) => ({ mode, unit })));
+  candidates.sort((left, right) => new Date(right.unit.updatedAt).getTime() - new Date(left.unit.updatedAt).getTime());
+  return candidates[0] || null;
 }
 
 function freshProject() {
@@ -386,9 +404,6 @@ export function CreationWorkbench() {
   // PRD V1.0 §11.3：多集批量导出选择
   const [exportSelection, setExportSelection] = useState<Record<string, boolean>>({});
 
-  // PRD V1.0 §8.2：创作流程入口下拉
-  const [flowMenuOpen, setFlowMenuOpen] = useState(false);
-
   // PRD V1.0 §8.5：AI 生成中的预览草稿（不直接覆盖）
   const [pendingGeneration, setPendingGeneration] = useState<null | {
     taskType: TaskType;
@@ -421,13 +436,7 @@ export function CreationWorkbench() {
   const outlineFinalized = workspace.documents.plotOutline.status === "finalized";
   const planFinalized = track.episodePlan?.status === "finalized";
 
-  // PRD V1.0 验收 P1-06：顶层流程入口门禁 — 根据上游状态决定按钮是否可用
-  const manuscriptGate = outlineFinalized && (mode === "novel" || planFinalized);
-  const manuscriptGateReason = !outlineFinalized
-    ? (isZh ? "请先完成创作基座（背景/角色/大纲）。" : "Finish the foundation (background/characters/outline) first.")
-    : (mode === "screenplay" && !planFinalized ? (isZh ? "剧本版需先定稿分集规划。" : "Finalize the episode plan first.") : "");
   const productionGate = canEnterProduction(workspace, activeUnit?.id);
-  const exportGate = true; // 导出始终可用
 
   // PRD V1.0 验收 P1-03 + R-03：view 变化时自动重置 aiScope 到对应阶段默认值
   useEffect(() => {
@@ -504,6 +513,33 @@ export function CreationWorkbench() {
     queueMicrotask(() => setActiveUnitId(sourceUnitId));
   };
 
+  function restoreProjectPosition(target: DramaProject, sourceUnitId: string | null = null) {
+    const ws = target.creationWorkspace || createCreationWorkspace(target);
+    const savedMode = ws.settings.lastMode;
+    const savedUnitId = ws.settings.lastUnitId;
+    const explicit = sourceUnitId
+      ? (["novel", "screenplay"] as const).map((candidate) => ({ mode: candidate, unit: ws[candidate].units.find((unit) => unit.id === sourceUnitId) })).find((entry) => entry.unit)
+      : null;
+    const saved = savedMode && savedUnitId
+      ? { mode: savedMode, unit: ws[savedMode].units.find((unit) => unit.id === savedUnitId) }
+      : null;
+    const fallback = latestManuscriptPosition(ws);
+    const position = explicit?.unit ? explicit : saved?.unit ? saved : fallback;
+    const restoredWorkspace = position
+      ? { ...ws, settings: { ...ws.settings, activeMode: position.mode, lastMode: position.mode, lastView: "unit" as CreationView, lastUnitId: position.unit.id, lastUnitUpdatedAt: position.unit.updatedAt } }
+      : ws;
+    const restored = ensureProject({ ...target, creationWorkspace: restoredWorkspace });
+    setProject(restored);
+    if (position) {
+      setView("unit");
+      setActiveUnitId(position.unit.id);
+      setUnitSubMode("manuscript");
+    } else if (ws.settings.lastView) {
+      setView(ws.settings.lastView);
+    }
+    return restored;
+  }
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     const projectId = searchParams.get("projectId");
@@ -525,20 +561,16 @@ export function CreationWorkbench() {
         const local = readProjectsFromStorage();
         const localProject = local.find((item) => item.id === projectId);
         if (localProject) {
-          const ensured = ensureProject(localProject);
-          setProject(ensured);
+          const ensured = restoreProjectPosition(ensureProject(localProject), urlSourceUnitId);
           setProjectReady(true);
-          focusUnitBySourceId(ensured, urlSourceUnitId);
           return;
         }
         const synced = await syncProjectsWithSupabase(local, { accessToken: data.session?.access_token || null });
         if (cancelled) return;
         const cloudProject = synced.projects.find((item) => item.id === projectId);
         if (cloudProject) {
-          const ensured = ensureProject(cloudProject);
-          setProject(ensured);
+          const ensured = restoreProjectPosition(ensureProject(cloudProject), urlSourceUnitId);
           setProjectReady(true);
-          focusUnitBySourceId(ensured, urlSourceUnitId);
           return;
         }
         setError(isZh ? "没有找到这个项目，请返回工作台刷新后再打开。" : "This project was not found. Return to the dashboard and refresh.");
@@ -563,8 +595,7 @@ export function CreationWorkbench() {
         setProjectReady(true);
         return;
       }
-      const ensured = ensureProject(creationProjects[0]);
-      setProject(ensured);
+      const ensured = restoreProjectPosition(ensureProject(creationProjects[0]));
       setProjectReady(true);
       // 更新 URL（不触发路由事件），这样刷新后能直接通过 projectId 加载
       const url = new URL(window.location.href);
@@ -613,6 +644,27 @@ export function CreationWorkbench() {
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
+
+  useEffect(() => {
+    if (!projectReady || !project.id) return;
+    const current = workspace.settings;
+    const nextUnitId = view === "unit" ? activeUnit?.id : undefined;
+    const nextUnitUpdatedAt = view === "unit" ? activeUnit?.updatedAt : undefined;
+    if (
+      current.lastMode === mode
+      && current.lastView === view
+      && current.lastUnitId === nextUnitId
+      && current.lastUnitUpdatedAt === nextUnitUpdatedAt
+    ) return;
+    const nextProject = syncLegacy(projectRef.current, recordCreationPosition(workspace, {
+      mode,
+      view,
+      unitId: nextUnitId,
+      unitUpdatedAt: nextUnitUpdatedAt,
+    }));
+    projectRef.current = nextProject;
+    setProject(nextProject);
+  }, [activeUnit?.id, activeUnit?.updatedAt, mode, project.id, projectReady, view, workspace]);
 
   // 切换集时恢复滚动位置
   useEffect(() => {
@@ -752,9 +804,9 @@ export function CreationWorkbench() {
   // PRD V1.0 §7.3 + 验收 P0-03：创作基座定稿（内容校验在 state 层）
   function finalizeDoc(docKey: keyof CreationWorkspaceV2["documents"]) {
     try {
-      const next = commitWorkspace((current) => finalizeDocument(current, docKey));
+      const next = commitWorkspace((current) => current.documents[docKey].status === "finalized" ? unfinalizeDocument(current, docKey) : finalizeDocument(current, docKey));
       void saveProject(next);
-      setStatus(isZh ? "已定稿。" : "Finalized.");
+      setStatus(isZh ? (next.documents[docKey].status === "finalized" ? "已定稿。" : "已取消定稿，可修改。") : (next.documents[docKey].status === "finalized" ? "Finalized." : "Unfinalized; ready to edit."));
     } catch (err) {
       setError(err instanceof Error ? err.message : "定稿失败");
     }
@@ -789,9 +841,24 @@ export function CreationWorkbench() {
   // PRD V1.0 §7.6：定稿分集规划
   function finalizePlan() {
     if (!track.episodePlan) return;
-    const next = commitWorkspace((current) => finalizeEpisodePlan(current, mode));
+    const next = commitWorkspace((current) => planFinalized ? unfinalizeEpisodePlan(current, mode) : finalizeEpisodePlan(current, mode));
     void saveProject(next);
-    setStatus(isZh ? "分集规划已定稿，可逐集生成剧本。" : "Episode plan finalized.");
+    setStatus(isZh ? (planFinalized ? "已取消定稿，可修改分集规划。" : "分集规划已定稿，可逐集生成剧本。") : (planFinalized ? "Episode plan unfinalized; ready to edit." : "Episode plan finalized."));
+  }
+
+  function toggleUnitFinalized() {
+    if (!activeUnit) return;
+    try {
+      const next = commitWorkspace((current) => activeUnit.status === "finalized"
+        ? unfinalizeUnit(current, mode, activeUnit.id)
+        : finalizeUnit(current, mode, activeUnit.id));
+      void saveProject(next);
+      setStatus(isZh
+        ? (next[mode].units.find((unit) => unit.id === activeUnit.id)?.status === "finalized" ? "正文已定稿。" : "已取消定稿，可修改正文。")
+        : (next[mode].units.find((unit) => unit.id === activeUnit.id)?.status === "finalized" ? "Manuscript finalized." : "Manuscript unfinalized; ready to edit."));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "正文定稿失败");
+    }
   }
 
   // PRD V1.0 验收 第二批：分集规划草稿可编辑（定稿后只读）
@@ -1628,7 +1695,7 @@ export function CreationWorkbench() {
       if (meta && event.key.toLowerCase() === "e") { event.preventDefault(); setMode(mode === "novel" ? "screenplay" : "novel"); return; }
       if (meta && event.key.toLowerCase() === "b") { event.preventDefault(); setSidebarCollapsed((v) => !v); return; }
       if (meta && event.key.toLowerCase() === "k") { event.preventDefault(); searchInputRef.current?.focus(); return; }
-      if (event.key === "Escape") { setPendingPreview(null); setFlowMenuOpen(false); setSearchReplaceOpen(false); }
+      if (event.key === "Escape") { setPendingPreview(null); setSearchReplaceOpen(false); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1691,20 +1758,6 @@ export function CreationWorkbench() {
           <div className="novel-title-block">
             <span>{isZh ? "创作工作台" : "Creation Workbench"}</span>
             <input aria-label={isZh ? "项目名称" : "Project title"} value={project.title} onChange={(event) => setProject((current) => ({ ...current, title: event.target.value }))} />
-          </div>
-          {/* PRD V1.0 §8.2：创作流程入口 */}
-          <div className="creation-flow-menu">
-            <button className="secondary-button" type="button" onClick={() => setFlowMenuOpen((v) => !v)} title={isZh ? "创作流程" : "Flow"}>
-              {isZh ? "创作流程" : "Flow"}<ChevronDown size={14} />
-            </button>
-            {flowMenuOpen ? (
-              <div className="creation-flow-dropdown" role="menu">
-                <button type="button" className={view === "background" ? "active" : ""} onClick={() => { setView("background"); setFlowMenuOpen(false); }} title={isZh ? "创作基座（背景/角色/大纲）" : "Foundation"}>{isZh ? "① 创作基座" : "① Foundation"}</button>
-                <button type="button" className={`${view === "unit" || view === "episodePlan" ? "active" : ""} ${!manuscriptGate ? "disabled" : ""}`} onClick={() => { if (manuscriptGate) { setView(planFinalized ? "unit" : "episodePlan"); setFlowMenuOpen(false); } }} disabled={!manuscriptGate} title={manuscriptGate ? (isZh ? "正文创作" : "Manuscript") : manuscriptGateReason}>{isZh ? "② 正文创作" : "② Manuscript"}</button>
-                <button type="button" className={`${!productionGate.ok ? "disabled" : ""}`} onClick={() => { if (productionGate.ok) { void openDownstream("production"); setFlowMenuOpen(false); } }} disabled={!productionGate.ok} title={productionGate.ok ? (isZh ? "后期处理（分镜制作）" : "Production") : (productionGate.reason || (isZh ? "不可进入制作" : "Cannot enter production"))}>{isZh ? "③ 后期处理" : "③ Production"}</button>
-                <button type="button" className={view === "export" ? "active" : ""} onClick={() => { setView("export"); setFlowMenuOpen(false); }} title={isZh ? "导出" : "Export"} disabled={!exportGate}>{isZh ? "④ 导出" : "④ Export"}</button>
-              </div>
-            ) : null}
           </div>
         </div>
         <div className="novel-topbar-actions">
@@ -1897,12 +1950,17 @@ export function CreationWorkbench() {
             </div>
             <div className="creation-center-actions">
               {docView && docMeta ? (
-                <button className="primary-button" type="button" onClick={() => finalizeDoc(docMeta.key)} disabled={docMeta.finalized}>
-                  <Check size={15} />{docMeta.finalized ? (isZh ? "已定稿" : "Finalized") : (isZh ? "定稿" : "Finalize")}
+                <button className="primary-button" type="button" onClick={() => finalizeDoc(docMeta.key)}>
+                  <Check size={15} />{docMeta.finalized ? (isZh ? "取消定稿并修改" : "Unfinalize & edit") : (isZh ? "定稿" : "Finalize")}
                 </button>
               ) : null}
-              {view === "episodePlan" && track.episodePlan && !planFinalized ? (
-                <button className="primary-button" type="button" onClick={finalizePlan}><Check size={15} />{isZh ? "定稿分集规划" : "Finalize plan"}</button>
+              {view === "episodePlan" && track.episodePlan ? (
+                <button className="primary-button" type="button" onClick={finalizePlan}><Check size={15} />{planFinalized ? (isZh ? "取消定稿并修改" : "Unfinalize & edit") : (isZh ? "定稿分集规划" : "Finalize plan")}</button>
+              ) : null}
+              {view === "unit" && activeUnit ? (
+                <button className="primary-button" type="button" onClick={toggleUnitFinalized}>
+                  <Check size={15} />{activeUnit.status === "finalized" ? (isZh ? "取消定稿并修改" : "Unfinalize & edit") : (isZh ? "定稿正文" : "Finalize manuscript")}
+                </button>
               ) : null}
               {view === "unit" && activeUnit ? (
                 <button className="secondary-button" type="button" onClick={() => void openDownstream("production")} title={isZh ? "进入分镜制作" : "Storyboard"}><Clapperboard size={15} />{isZh ? "进入制作" : "Produce"}</button>
@@ -1921,7 +1979,6 @@ export function CreationWorkbench() {
                   ) : null}
                 </>
               ) : null}
-              <button className="secondary-button" type="button" disabled={busy || view === "export"} onClick={() => { setAiPanelOpen(true); }}><Sparkles size={15} />{isZh ? "AI 生成" : "Generate"}</button>
             </div>
           </header>
 

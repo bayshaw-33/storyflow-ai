@@ -1,4 +1,5 @@
 export type CreationMode = "novel" | "screenplay";
+export type CreationView = "background" | "characters" | "outline" | "episodePlan" | "unit" | "export";
 
 /** PRD V1.0：所有创作内容只有草稿和定稿两种状态 */
 export type CreationStatus = "draft" | "finalized";
@@ -125,6 +126,10 @@ export type CreationWorkspaceV2 = {
     dialogueLanguage: string;
     screenplayFormat: ScreenplayFormat;
     generationScope: "unit" | "arc";
+    lastMode?: CreationMode;
+    lastView?: CreationView;
+    lastUnitId?: string;
+    lastUnitUpdatedAt?: string;
   };
   createdAt: string;
   updatedAt: string;

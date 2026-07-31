@@ -7,6 +7,7 @@ import type {
   CreationUnit,
   CreationUnitStatus,
   CreationWorkspaceV2,
+  CreationView,
   EpisodePlan,
   ScreenplayBlock,
   ScreenplayEpisode,
@@ -284,6 +285,12 @@ export function normalizeCreationWorkspace(value: unknown, source: LegacyCreatio
       dialogueLanguage: text(settings.dialogueLanguage) || fallback.settings.dialogueLanguage,
       screenplayFormat: normalizeFormat(settings.screenplayFormat),
       generationScope: settings.generationScope === "arc" ? "arc" : "unit",
+      lastMode: settings.lastMode === "screenplay" || settings.lastMode === "novel" ? settings.lastMode : undefined,
+      lastView: ["background", "characters", "outline", "episodePlan", "unit", "export"].includes(settings.lastView as string)
+        ? settings.lastView as CreationView
+        : undefined,
+      lastUnitId: text(settings.lastUnitId) || undefined,
+      lastUnitUpdatedAt: text(settings.lastUnitUpdatedAt) || undefined,
     },
     createdAt: text(workspace.createdAt) || fallback.createdAt,
     updatedAt: timestamp,
@@ -330,6 +337,24 @@ export function updateCreationUnit(
   const updatedAt = now();
   const units = track.units.map((unit) => (unit.id === unitId ? { ...unit, ...patch, id: unit.id, updatedAt } : unit));
   return { ...workspace, [mode]: { ...track, units }, updatedAt };
+}
+
+export function recordCreationPosition(
+  workspace: CreationWorkspaceV2,
+  position: { mode: CreationMode; view: CreationView; unitId?: string; unitUpdatedAt?: string },
+): CreationWorkspaceV2 {
+  const updatedAt = now();
+  return {
+    ...workspace,
+    settings: {
+      ...workspace.settings,
+      lastMode: position.mode,
+      lastView: position.view,
+      lastUnitId: position.unitId === undefined ? workspace.settings.lastUnitId : position.unitId || undefined,
+      lastUnitUpdatedAt: position.unitUpdatedAt === undefined ? workspace.settings.lastUnitUpdatedAt : position.unitUpdatedAt || undefined,
+    },
+    updatedAt,
+  };
 }
 
 export function reorderCreationStructure(
@@ -407,6 +432,84 @@ function downgradeAllTracks(workspace: CreationWorkspaceV2): CreationWorkspaceV2
     ...workspace,
     novel: downgradeTrack(workspace.novel),
     screenplay: downgradeTrack(workspace.screenplay),
+  };
+}
+
+export function unfinalizeDocument(
+  workspace: CreationWorkspaceV2,
+  docKey: keyof CreationWorkspaceV2["documents"],
+): CreationWorkspaceV2 {
+  const doc = workspace.documents[docKey];
+  if (doc.status !== "finalized") return workspace;
+  const documents = {
+    ...workspace.documents,
+    [docKey]: { ...doc, status: "draft" as CreationStatus, updatedAt: now() },
+  };
+  if (docKey === "backgroundWorld") {
+    documents.characterBible = { ...documents.characterBible, status: "draft" };
+    documents.plotOutline = { ...documents.plotOutline, status: "draft" };
+  } else if (docKey === "characterBible") {
+    documents.plotOutline = { ...documents.plotOutline, status: "draft" };
+  }
+  return downgradeAllTracks({ ...workspace, documents, updatedAt: now() });
+}
+
+export function unfinalizeEpisodePlan(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+): CreationWorkspaceV2 {
+  const track = workspace[mode];
+  if (!track.episodePlan || track.episodePlan.status !== "finalized") return workspace;
+  const updatedAt = now();
+  return {
+    ...workspace,
+    [mode]: {
+      ...track,
+      episodePlan: { ...track.episodePlan, status: "draft", updatedAt },
+      units: track.units.map((unit) => ({
+        ...unit,
+        status: "draft" as CreationUnitStatus,
+        screenplay: unit.screenplay ? { ...unit.screenplay, scenes: unit.screenplay.scenes.map((scene) => ({ ...scene, status: "draft" as CreationStatus })) } : null,
+      })),
+    },
+    updatedAt,
+  };
+}
+
+export function unfinalizeUnit(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+): CreationWorkspaceV2 {
+  const track = workspace[mode];
+  const unit = track.units.find((candidate) => candidate.id === unitId);
+  if (!unit || unit.status !== "finalized") return workspace;
+  const updatedAt = now();
+  return {
+    ...workspace,
+    [mode]: {
+      ...track,
+      units: track.units.map((candidate) => candidate.id === unitId ? { ...candidate, status: "draft", updatedAt } : candidate),
+    },
+    updatedAt,
+  };
+}
+
+export function finalizeUnit(
+  workspace: CreationWorkspaceV2,
+  mode: CreationMode,
+  unitId: string,
+): CreationWorkspaceV2 {
+  const track = workspace[mode];
+  const unit = track.units.find((candidate) => candidate.id === unitId);
+  if (!unit || !unit.content.trim() && !unit.screenplay?.scenes.some((scene) => scene.blocks.some((block) => block.text.trim()))) {
+    throw new Error("正文为空，无法定稿。");
+  }
+  const updatedAt = now();
+  return {
+    ...workspace,
+    [mode]: { ...track, units: track.units.map((candidate) => candidate.id === unitId ? { ...candidate, status: "finalized", updatedAt } : candidate) },
+    updatedAt,
   };
 }
 
