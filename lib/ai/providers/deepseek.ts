@@ -10,6 +10,7 @@ type DeepSeekOptions = {
 };
 
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
+const FALLBACK_DEEPSEEK_MODEL = "deepseek-v4-pro";
 const KNOWN_VALID_DEEPSEEK_MODELS = new Set(["deepseek-v4-pro", "deepseek-v4-flash"]);
 
 export function resolveDeepSeekModel(modelOverride?: string) {
@@ -24,6 +25,21 @@ export function resolveDeepSeekModel(modelOverride?: string) {
     return DEFAULT_DEEPSEEK_MODEL;
   }
   return rawModel;
+}
+
+/**
+ * 判断错误是否值得用 fallback 模型重试。
+ * 换模型可能解决的错误：
+ *   - EMPTY_DEEPSEEK_OUTPUT：flash 返回空内容，pro 可能能生成
+ *   - DEEPSEEK_TIMEOUT：flash 超时，pro 可能表现不同
+ *   - DEEPSEEK_API_ERROR:5xx：服务端临时错误，重试可能成功
+ */
+function isFallbackWorthyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "EMPTY_DEEPSEEK_OUTPUT") return true;
+  if (message === "DEEPSEEK_TIMEOUT") return true;
+  if (message.startsWith("DEEPSEEK_API_ERROR:5")) return true;
+  return false;
 }
 
 export async function callDeepSeek({
@@ -41,12 +57,41 @@ export async function callDeepSeek({
   //   modelOverride（API 调用方传入）> DEEPSEEK_MODEL > 默认值
   // 保护：如果 DEEPSEEK_MODEL 被误填成 API key（以 sk- 开头）或其他无效值，
   // 自动回退到默认模型，避免 400。
+  // Model 级 fallback：主模型是 flash 且遇到可重试错误时，自动用 pro 重试一次。
   const model = resolveDeepSeekModel(modelOverride);
 
   if (!apiKey) {
     throw new Error("MISSING_DEEPSEEK_API_KEY");
   }
 
+  try {
+    return await callDeepSeekOnce(model, { messages, temperature, timeoutMs, maxTokens, apiKey });
+  } catch (error) {
+    if (model === FALLBACK_DEEPSEEK_MODEL || !isFallbackWorthyError(error)) {
+      throw error;
+    }
+    console.warn(`[deepseek] Primary model ${model} failed (${error instanceof Error ? error.message : "unknown"}); falling back to ${FALLBACK_DEEPSEEK_MODEL}`);
+    const result = await callDeepSeekOnce(FALLBACK_DEEPSEEK_MODEL, { messages, temperature, timeoutMs, maxTokens, apiKey });
+    return { ...result, fallbackUsed: true };
+  }
+}
+
+async function callDeepSeekOnce(
+  model: string,
+  {
+    messages,
+    temperature,
+    timeoutMs,
+    maxTokens,
+    apiKey,
+  }: {
+    messages: AIMessage[];
+    temperature: number;
+    timeoutMs: number;
+    maxTokens: number;
+    apiKey: string;
+  },
+): Promise<AIProviderResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;

@@ -89,7 +89,7 @@ test("Provider 状态与警告不暴露误填在模型变量中的 API Key", () 
 
   try {
     const status = getProviderStatus();
-    assert.equal(status.deepseek.model, "deepseek-v4-pro");
+    assert.equal(status.deepseek.model, "deepseek-v4-flash");
     assert.doesNotMatch(JSON.stringify(status), new RegExp(exposedValue));
     assert.doesNotMatch(warnings.join("\n"), new RegExp(exposedValue));
   } finally {

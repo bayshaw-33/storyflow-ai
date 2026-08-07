@@ -72,6 +72,7 @@ const EMPTY_BYO_API: ByoApiSettings = {
 
 const ATLAS_LLM_MODEL_OPTIONS = [
   { value: "deepseek-ai/DeepSeek-V3.1", label: "DeepSeek V3.1（推荐·经济快速）" },
+  { value: "deepseek-ai/deepseek-v4-flash", label: "DeepSeek V4 Flash（快速·推荐）" },
   { value: "deepseek-ai/deepseek-v4-pro", label: "DeepSeek V4 Pro（高质量）" },
   { value: "qwen/qwen3.6-plus", label: "通义千问 Qwen 3.6 Plus" },
   { value: "qwen/qwen3.5-flash", label: "通义千问 Qwen 3.5 Flash（极速）" },
@@ -521,7 +522,7 @@ export default function SettingsApiPage() {
               <input
                 value={byoApi.deepseekModel}
                 disabled={!canUseByoApi}
-                placeholder="deepseek-v4-pro"
+                placeholder="deepseek-v4-flash"
                 onChange={(event) => setByoApi((current) => ({ ...current, deepseekModel: event.target.value }))}
               />
             </label>

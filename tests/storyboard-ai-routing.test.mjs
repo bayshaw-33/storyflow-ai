@@ -233,7 +233,8 @@ test("DeepSeek 和 Atlas 都失败时抛错（不返回空输出）", async () =
       return true;
     },
   );
-  assert.equal(fetchLog.length, 2);
+  // DeepSeek 2 次（flash + pro model fallback）+ Atlas 1 次 = 3 次
+  assert.equal(fetchLog.length, 3);
 });
 
 test("Atlas 未配置时 DeepSeek 失败直接抛 DeepSeek 错误", async () => {
@@ -251,8 +252,8 @@ test("Atlas 未配置时 DeepSeek 失败直接抛 DeepSeek 错误", async () => 
       return true;
     },
   );
-  // 不该调用 Atlas（未配置）
-  assert.equal(fetchLog.length, 1);
+  // 不该调用 Atlas（未配置）；DeepSeek 调用 2 次（flash 主调 + pro model fallback）
+  assert.equal(fetchLog.length, 2);
 });
 
 test("MiniMax 在 storyboard_script 链路零调用（即使配置了 MiniMax key）", async () => {
@@ -371,20 +372,20 @@ test("fallback 仅执行一次（Atlas 失败不二次回 DeepSeek）", async ()
     () => callRoutedProvider({ taskType: "storyboard_script", messages: MESSAGES }),
   );
 
-  // DeepSeek 只调用 1 次，Atlas 只调用 1 次（不二次回 DeepSeek）
-  assert.equal(deepseekCallCount, 1);
+  // DeepSeek 调用 2 次（flash 主调 + pro model fallback），Atlas 调用 1 次（provider fallback）
+  assert.equal(deepseekCallCount, 2);
   assert.equal(atlasCallCount, 1);
 });
 
 
 // ============================================================================
 // KIIKIS-TR-ACTOR-P0-011: Vercel 环境变量 DEEPSEEK_MODEL 被误填成 API key
-// （以 sk- 开头）时，代码层应自动回退到 deepseek-v4-pro，避免 400
+// （以 sk- 开头）时，代码层应自动回退到 deepseek-v4-flash（默认模型），避免 400
 // 直接测试 callDeepSeek，绕过 router，纯粹验证模型名回退逻辑
 // ============================================================================
 import { callDeepSeek } from "../lib/ai/providers/deepseek.ts";
 
-test("DEEPSEEK_MODEL 被误填成 API key (sk-xxx) 时自动回退到 deepseek-v4-pro", async () => {
+test("DEEPSEEK_MODEL 被误填成 API key (sk-xxx) 时自动回退到 deepseek-v4-flash", async () => {
   setupEnv();
   // 模拟 Vercel 误填场景：DEEPSEEK_MODEL 被设成了 API key
   process.env.DEEPSEEK_MODEL = "sk-fake-test-key-not-real";
@@ -400,8 +401,8 @@ test("DEEPSEEK_MODEL 被误填成 API key (sk-xxx) 时自动回退到 deepseek-v
 
   const result = await callDeepSeek({ messages: MESSAGES });
 
-  // 验证：实际发给 DeepSeek 的 model 是 deepseek-v4-pro（不是 sk-xxx）
-  assert.equal(capturedModel, "deepseek-v4-pro");
+  // 验证：实际发给 DeepSeek 的 model 是 deepseek-v4-flash（默认值，不是 sk-xxx）
+  assert.equal(capturedModel, "deepseek-v4-flash");
   assert.equal(result.output, "deepseek-output");
 });
 
