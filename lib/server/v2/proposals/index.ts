@@ -77,31 +77,6 @@ export type ProposalDto = ChangeProposal & {
 export async function createProposal(params: { fetcher: ProposalFetcher; userId: string; universeId: string; input: ProposalInput }) {
   await assertUniverseAccess(params);
   validateProposalInput(params.input);
-  await assertSourceProject(params.fetcher, params.userId, params.input.sourceProjectId);
-  const existing = await query<ProposalRow[]>(params.fetcher, proposalPath(params.universeId, params.userId, params.input.idempotencyKey));
-  if (existing?.[0]) return { proposal: toProposalDto(existing[0]), created: false };
-
-  const rows = await query<ProposalRow[]>(params.fetcher, "/rest/v1/storyflow_change_proposals", {
-    method: "POST",
-    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
-    body: JSON.stringify({
-      universe_id: params.universeId,
-      user_id: params.userId,
-      source_project_id: params.input.sourceProjectId,
-      source_step: params.input.sourceStep,
-      source_text: params.input.originalText || "",
-      source_asset_id: params.input.sourceAssetId || null,
-      source_reference: params.input.sourceReference || null,
-      confidence: params.input.confidence,
-      field_diffs: params.input.fieldDiffs,
-      suggested_action: params.input.suggestedAction,
-      idempotency_key: params.input.idempotencyKey,
-      status: "pending_review",
-    }),
-  });
-  const proposal = rows?.[0] || (await query<ProposalRow[]>(params.fetcher, proposalPath(params.universeId, params.userId, params.input.idempotencyKey)))[0];
-  if (!proposal) throw new ProposalError("service_unavailable", "Unable to create change proposal.");
-
   const items = params.input.items?.length ? params.input.items : [{
     objectType: params.input.target.objectType,
     objectId: params.input.target.objectId,
@@ -109,19 +84,33 @@ export async function createProposal(params: { fetcher: ProposalFetcher; userId:
     currentPayload: params.input.currentPayload,
     fieldDiffs: params.input.fieldDiffs,
   }];
-  await query(params.fetcher, "/rest/v1/storyflow_change_proposal_items", {
+  const result = await query<{ created: boolean; proposal: ProposalRow }>(params.fetcher, "/rpc/create_change_proposal", {
     method: "POST",
-    headers: { Prefer: "resolution=ignore-duplicates" },
-    body: JSON.stringify(items.map((item) => ({
-      proposal_id: proposal.id,
-      object_type: item.objectType,
-      object_id: item.objectId || null,
-      current_payload: item.currentPayload || null,
-      proposed_payload: item.proposedPayload,
-      field_diffs: item.fieldDiffs || [],
-    }))),
+    body: JSON.stringify({
+      p_user_id: params.userId,
+      p_universe_id: params.universeId,
+      p_source_project_id: params.input.sourceProjectId,
+      p_source_step: params.input.sourceStep,
+      p_source_text: params.input.originalText || "",
+      p_source_asset_id: params.input.sourceAssetId || null,
+      p_source_reference: params.input.sourceReference || null,
+      p_confidence: params.input.confidence,
+      p_field_diffs: params.input.fieldDiffs,
+      p_suggested_action: params.input.suggestedAction,
+      p_idempotency_key: params.input.idempotencyKey,
+      p_items: items.map((item, index) => ({
+        itemKey: `${item.objectType}:${item.objectId || `new-${index}`}`,
+        objectType: item.objectType,
+        objectId: item.objectId || null,
+        currentPayload: item.currentPayload || null,
+        proposedPayload: item.proposedPayload,
+        fieldDiffs: item.fieldDiffs || [],
+      })),
+    }),
   });
-  return { proposal: toProposalDto(proposal), created: proposal.id === rows?.[0]?.id };
+  const proposal = result?.proposal;
+  if (!proposal) throw new ProposalError("service_unavailable", "Unable to create change proposal.");
+  return { proposal: toProposalDto(proposal), created: Boolean(result.created) };
 }
 
 export async function createProposalBatch(params: {
@@ -192,7 +181,10 @@ export async function updateProposal(params: {
 async function previewBatch(params: { fetcher: ProposalFetcher; userId: string; universeId: string; proposalIds: string[] }) {
   const idFilter = params.proposalIds.map(encodeURIComponent).join(",");
   const rows = await query<ProposalRow[]>(params.fetcher, `/rest/v1/storyflow_change_proposals?id=in.(${idFilter})&universe_id=eq.${encodeURIComponent(params.universeId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=*&limit=500`);
-  const items = await query<ProposalItemRow[]>(params.fetcher, `/rest/v1/storyflow_change_proposal_items?proposal_id=in.(${idFilter})&select=*&limit=2000`);
+  const authorizedIds = (rows || []).map((row) => encodeURIComponent(row.id));
+  const items = authorizedIds.length
+    ? await query<ProposalItemRow[]>(params.fetcher, `/rest/v1/storyflow_change_proposal_items?proposal_id=in.(${authorizedIds.join(",")})&select=*&limit=2000`)
+    : [];
   const objects = new Map<string, number>();
   for (const item of items || []) objects.set(`${item.object_type}:${item.object_id || item.id}`, (objects.get(`${item.object_type}:${item.object_id || item.id}`) || 0) + 1);
   const affectedObjectTypes: Record<string, number> = {};
@@ -201,13 +193,6 @@ async function previewBatch(params: { fetcher: ProposalFetcher; userId: string; 
     affectedObjectTypes[type] = (affectedObjectTypes[type] || 0) + 1;
   }
   return { proposals: (rows || []).map(toProposalDto), impactSummary: { proposalCount: rows?.length || 0, affectedObjectCount: objects.size, affectedObjectTypes } };
-}
-
-async function recordProposalEvent(fetcher: ProposalFetcher, userId: string, universeId: string, proposalId: string, action: string) {
-  await query(fetcher, "/rpc/record_change_proposal_event", {
-    method: "POST",
-    body: JSON.stringify({ p_user_id: userId, p_universe_id: universeId, p_proposal_id: proposalId, p_action: action }),
-  });
 }
 
 async function assertUniverseAccess(params: { fetcher: ProposalFetcher; userId: string; universeId: string }) {
@@ -224,22 +209,11 @@ async function assertUniverseAccess(params: { fetcher: ProposalFetcher; userId: 
   }
 }
 
-async function assertSourceProject(fetcher: ProposalFetcher, userId: string, projectId: string) {
-  const rows = await query<ProjectRow[]>(fetcher, `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(projectId)}&select=id,owner_id,user_id,universe_id&limit=1`);
-  const project = rows?.[0];
-  if (!project) throw new ProposalError("not_found", "Source project not found.");
-  if (project.owner_id !== userId && project.user_id !== userId) throw new ProposalError("forbidden", "Source project access denied.");
-}
-
 function validateProposalInput(input: ProposalInput) {
   if (!input.sourceProjectId || !input.sourceStep || !input.idempotencyKey || !input.target?.objectType) throw new ProposalError("validation_failed", "sourceProjectId, sourceStep, target, and idempotencyKey are required.");
   if (!input.originalText && !input.sourceAssetId) throw new ProposalError("validation_failed", "Proposal must include original text or an asset reference.");
   if (!Number.isFinite(input.confidence) || input.confidence < 0 || input.confidence > 1) throw new ProposalError("validation_failed", "confidence must be between 0 and 1.");
   if (!Array.isArray(input.fieldDiffs)) throw new ProposalError("validation_failed", "fieldDiffs must be an array.");
-}
-
-function proposalPath(universeId: string, userId: string, idempotencyKey: string) {
-  return `/rest/v1/storyflow_change_proposals?universe_id=eq.${encodeURIComponent(universeId)}&user_id=eq.${encodeURIComponent(userId)}&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&select=*&limit=1`;
 }
 
 function toProposalDto(row: ProposalRow): ChangeProposal {

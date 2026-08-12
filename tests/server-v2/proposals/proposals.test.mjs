@@ -29,7 +29,7 @@ function createFetcher(overrides = {}) {
       if (path.includes(needle)) return typeof value === "function" ? value(path, init) : value;
     }
     if (path.includes("storyflow_universes")) return [universe];
-    if (path.includes("storyflow_projects")) return [{ id: "project-1", owner_id: "user-1", user_id: "user-1", universe_id: "u-1" }];
+    if (path.includes("/rpc/create_change_proposal")) return { created: true, proposal: existingProposal };
     if (path.includes("storyflow_change_proposals") && init.method === "POST") return [existingProposal];
     if (path.includes("storyflow_change_proposals")) return [existingProposal];
     if (path.includes("storyflow_change_proposal_items")) return [{ id: "item-1", proposal_id: "proposal-1", object_type: "entity", object_id: "entity-1", proposed_payload: { summary: "Has a scar." } }];
@@ -43,23 +43,22 @@ const createInput = { sourceProjectId: "project-1", sourceStep: "script_finalize
 
 test("createProposal is idempotent when the same source is extracted twice", async () => {
   const fetcher = createFetcher({
-    "storyflow_change_proposals": (path, init) => init.method === "POST" ? [] : [existingProposal],
+    "/rpc/create_change_proposal": { created: false, proposal: existingProposal },
   });
   const result = await createProposal({ fetcher, userId: "user-1", universeId: "u-1", input: createInput });
   assert.equal(result.proposal.id, "proposal-1");
   assert.equal(result.created, false);
-  assert.equal(fetcher.calls.filter(({ path, init }) => path.includes("storyflow_change_proposals") && init.method === "POST").length, 0);
+  assert.equal(fetcher.calls.filter(({ path }) => path.includes("/rpc/create_change_proposal")).length, 1);
 });
 
 test("new proposals retain source evidence for the database insert trigger", async () => {
   const created = { ...existingProposal, id: "proposal-new", idempotency_key: "extract-new" };
   const fetcher = createFetcher({
-    "storyflow_change_proposals": (path, init) => init.method === "POST" ? [created] : [],
+    "/rpc/create_change_proposal": { created: true, proposal: created },
   });
   const result = await createProposal({ fetcher, userId: "user-1", universeId: "u-1", input: { ...createInput, idempotencyKey: "extract-new" } });
   assert.equal(result.created, true);
-  assert.ok(fetcher.calls.some(({ path, init }) => path.includes("storyflow_change_proposal_items") && init.method === "POST"));
-  assert.equal(fetcher.calls.some(({ path }) => path.includes("record_change_proposal_event")), false);
+  assert.ok(fetcher.calls.some(({ path }) => path.includes("/rpc/create_change_proposal")));
 });
 
 test("batch acceptance is delegated to an atomic database operation", async () => {
