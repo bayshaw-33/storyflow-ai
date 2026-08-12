@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the public KIIKIS strategic whitepaper from a structured manuscript."""
+"""Generate the confidential KIIKIS 2.0 strategic whitepaper."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from reportlab.lib.utils import ImageReader
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MANUSCRIPT = ROOT / "docs/whitepaper/kiikis-whitepaper-v2-zh.json"
-OUTPUT = ROOT / "output/pdf/kiikis-whitepaper-v2-zh.pdf"
+MANUSCRIPT = ROOT / "docs/whitepaper/kiikis-whitepaper-2.0-zh.json"
+OUTPUT = ROOT / "output/pdf/kiikis-whitepaper-2.0-zh.pdf"
 LOGO_LOCKUP = ROOT / "public/brand/kiikis-logo-header.png"
 LOGO_MARK = ROOT / "public/brand/kiikis-cat-mark.png"
 PAGE_W, PAGE_H = A4
@@ -312,7 +312,7 @@ def draw_cover(
     draw_tags(pdf, page["tags"], MARGIN, 128, palette)
     set_fill(pdf, palette["muted"])
     pdf.setFont(font, 7.5)
-    pdf.drawString(MARGIN, 76, "KIIKIS Strategic Whitepaper · 2026.07")
+    pdf.drawString(MARGIN, 76, "KIIKIS Strategic Whitepaper 2.0 · 2026.08")
     pdf.drawString(MARGIN, 60, "Confidential · Limited Distribution")
     pdf.drawString(MARGIN, 44, "本版本已省略专有技术与实施细节")
     reset_alpha(pdf)
@@ -721,7 +721,7 @@ def draw_closing(
     draw_tags(pdf, page["tags"], 102, 72, palette)
 
 
-def assert_public_copy(text: str) -> None:
+def assert_disclosure_copy(text: str) -> None:
     forbidden = (
         "投资人",
         "融资",
@@ -810,10 +810,10 @@ def main() -> None:
             raise FileNotFoundError(f"Missing brand asset: {asset}")
     manuscript = json.loads(MANUSCRIPT.read_text(encoding="utf-8"))
     raw_copy = json.dumps(manuscript, ensure_ascii=False)
-    assert_public_copy(raw_copy)
+    assert_disclosure_copy(raw_copy)
     pages = manuscript["pages"]
-    if len(pages) != 20:
-        raise ValueError(f"Expected 20 pages, got {len(pages)}")
+    if len(pages) != 22:
+        raise ValueError(f"Expected 22 pages, got {len(pages)}")
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     fonts = register_fonts()
