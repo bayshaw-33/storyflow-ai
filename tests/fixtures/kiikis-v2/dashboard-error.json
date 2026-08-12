@@ -1,0 +1,7 @@
+{
+  "contractVersion": "2.0.0-alpha.1",
+  "error": {
+    "code": "DASHBOARD_FETCH_FAILED",
+    "message": "无法加载首页数据，请稍后重试。若问题持续，可前往任务中心查看运行中任务。"
+  }
+}

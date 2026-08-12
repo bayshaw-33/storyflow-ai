@@ -1,0 +1,430 @@
+/* Kiikis 2.0 Dashboard 指挥中心样式
+   参考 app/job-center 的深色风格：背景 #070808，accent #6de7df。 */
+
+.shell {
+  min-height: 100dvh;
+  padding: 24px;
+  background: #070808;
+  color: #f4f7f8;
+  box-sizing: border-box;
+}
+
+.container {
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+.header {
+  margin: 0 0 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #6de7df;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(24px, 2vw, 34px);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 主网格：桌面两列，移动单列。 */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 960px) {
+  .grid {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+.spanFull {
+  grid-column: 1 / -1;
+}
+
+.card {
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #f4f7f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardCount {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cardLink {
+  color: #6de7df;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.cardLink:hover {
+  text-decoration: underline;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rowClickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.rowClickable:hover {
+  border-color: rgba(109, 231, 223, 0.4);
+  background: rgba(109, 231, 223, 0.06);
+}
+
+.rowTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.rowTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+}
+
+.rowMeta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rowMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rowDesc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.badgeAccent {
+  background: rgba(109, 231, 223, 0.12);
+  color: #6de7df;
+}
+
+.badgeWarn {
+  background: rgba(255, 209, 102, 0.14);
+  color: #ffd166;
+}
+
+.badgeDanger {
+  background: rgba(255, 139, 139, 0.14);
+  color: #ff8b8b;
+}
+
+.badgeOk {
+  background: rgba(125, 209, 129, 0.14);
+  color: #7dd181;
+}
+
+.progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: #6de7df;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.healthRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.healthItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.healthValue {
+  color: #6de7df;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f4f7f8;
+  font-size: 13px;
+}
+
+.noticeError {
+  background: rgba(255, 139, 139, 0.08);
+  border: 1px solid rgba(255, 139, 139, 0.24);
+  color: #ff8b8b;
+}
+
+.noticeEmpty {
+  text-align: center;
+  padding: 24px 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #f4f7f8;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.button:hover {
+  border-color: rgba(109, 231, 223, 0.5);
+  color: #6de7df;
+}
+
+.buttonPrimary {
+  background: #6de7df;
+  color: #070808;
+  border-color: #6de7df;
+  font-weight: 700;
+}
+
+.buttonPrimary:hover {
+  background: #8aefe8;
+  color: #070808;
+}
+
+.hint {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(109, 231, 223, 0.1), rgba(109, 231, 223, 0.02));
+  border: 1px solid rgba(109, 231, 223, 0.28);
+}
+
+.hintIcon {
+  color: #6de7df;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.hintText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #f4f7f8;
+}
+
+.hintLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #6de7df;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+/* 骨架屏 */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skeletonCard {
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.skeletonLine {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+.skeletonLineShort {
+  width: 40%;
+}
+
+.skeletonLineMedium {
+  width: 70%;
+  margin-top: 8px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.errorBox {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.errorTitle {
+  margin: 12px 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.errorMessage {
+  margin: 0 0 16px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+}
+
+.emptyBox {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.emptyTitle {
+  margin: 12px 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.emptyText {
+  margin: 0 0 16px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+}
+
+/* KK 浮动入口 */
+.kkFab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6de7df, #4db8b1);
+  border: none;
+  color: #070808;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(109, 231, 223, 0.35);
+  z-index: 50;
+  transition: transform 0.15s ease;
+}
+
+.kkFab:hover {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.kkFabLabel {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+@media (max-width: 600px) {
+  .shell {
+    padding: 16px;
+  }
+  .rowTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
