@@ -23,6 +23,7 @@ function createFetcher(overrides = {}) {
     if (path.includes("storyflow_universe_timeline_events")) return [{ id: "timeline-1", title: "Flood", description: "The harbor floods", date_label: "dusk", status: "canon" }];
     if (path.includes("storyflow_universe_project_links")) return [{ id: "link-1", universe_id: "u-1", project_id: "project-1", user_id: "user-1", updated_at: universe.updated_at }];
     if (path.includes("storyflow_projects")) return [{ id: "project-1", title: "Episode One", user_id: "user-1", owner_id: "user-1", updated_at: universe.updated_at }];
+    if (path.includes("storyflow_art_projects")) return [{ id: "art-project-1", owner_id: "user-1", source_project_id: "project-1" }];
     if (path.includes("storyflow_universe_inheritance_snapshots")) return [{ id: "snapshot-1", project_id: "project-1", universe_id: "u-1", universe_version: "2026-08-11T00:00:00Z", payload: { entities: [{ id: "entity-1" }] }, created_at: "2026-08-11T00:00:00Z" }];
     if (path.includes("storyflow_characters")) return [{ id: "character-1", project_id: "project-1", name: "Mara" }];
     if (path.includes("storyflow_scenes")) return [{ id: "scene-1", project_id: "project-1", location: "Harbor" }];

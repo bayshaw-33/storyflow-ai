@@ -19,6 +19,7 @@ type RelationshipRow = { id: string; source_entity_id?: string | null; target_en
 type TimelineRow = { id: string; title: string; description?: string | null; date_label?: string | null; status?: string | null };
 type LinkRow = { id: string; universe_id: string; project_id: string; user_id?: string | null; updated_at?: string };
 type ProjectRow = { id: string; title?: string | null; owner_id?: string | null; user_id?: string | null; updated_at?: string | null; universe_id?: string | null };
+type ArtProjectRow = { id: string; owner_id?: string | null; universe_id?: string | null; source_project_id?: string | null };
 type SnapshotRow = { id: string; project_id: string; universe_id: string; universe_version: string; payload?: Record<string, unknown> | null; created_at: string; updated_at?: string };
 
 export interface CanonCheckInput {
@@ -37,6 +38,10 @@ export function validateCanonCheckInput(value: unknown): CanonCheckInput {
   if (!triggers.includes(trigger as CanonCheckTrigger)) throw new CanonError("validation_failed", "Unsupported Canon Check trigger.");
   if (mode !== "rules" && mode !== "ai") throw new CanonError("validation_failed", "Unsupported Canon Check mode.");
   if (!target || typeof target !== "object" || typeof (target as Record<string, unknown>).text !== "string") throw new CanonError("validation_failed", "target.text is required.");
+  const targetRecord = target as Record<string, unknown>;
+  const categories = ["identity", "character", "relationship", "relationships", "timeline", "world_rule", "world_rules", "location", "locations", "secret", "secrets", "production_rule", "production_rules"];
+  if (targetRecord.category !== undefined && (typeof targetRecord.category !== "string" || !categories.includes(targetRecord.category))) throw new CanonError("validation_failed", "Unsupported Canon target category.");
+  for (const key of ["id", "entityId"]) if (targetRecord[key] !== undefined && typeof targetRecord[key] !== "string") throw new CanonError("validation_failed", `${key} must be a string.`);
   return { trigger: trigger as CanonCheckTrigger, mode: mode as "rules" | "ai", target: target as CanonCheckInput["target"] };
 }
 
@@ -58,8 +63,8 @@ export async function runCanonCheck(params: { fetcher: CanonFetcher; userId: str
   const [facts, entities, relationships, timeline] = await Promise.all([
     query<FactRow[]>(params.fetcher, `/rest/v1/storyflow_canon_facts?universe_id=eq.${encodeURIComponent(params.universeId)}&status=eq.canon&is_locked=eq.true&select=id,universe_id,fact_text,category,importance,status,is_locked,updated_at&order=importance.desc,updated_at.desc&limit=2000`),
     query<EntityRow[]>(params.fetcher, `/rest/v1/storyflow_universe_entities?universe_id=eq.${encodeURIComponent(params.universeId)}&status=neq.deprecated&select=id,universe_id,type,name,summary,details_json,status,updated_at&limit=2000`),
-    query<RelationshipRow[]>(params.fetcher, `/rest/v1/storyflow_universe_relationships?universe_id=eq.${encodeURIComponent(params.universeId)}&status=neq.deprecated&select=id,source_entity_id,target_entity_id,relationship_type,summary,status&limit=2000`),
-    query<TimelineRow[]>(params.fetcher, `/rest/v1/storyflow_universe_timeline_events?universe_id=eq.${encodeURIComponent(params.universeId)}&status=neq.deprecated&select=id,title,description,date_label,status&limit=2000`),
+    query<RelationshipRow[]>(params.fetcher, `/rest/v1/storyflow_universe_relationships?universe_id=eq.${encodeURIComponent(params.universeId)}&status=eq.canon&select=id,source_entity_id,target_entity_id,relationship_type,summary,status&limit=2000`),
+    query<TimelineRow[]>(params.fetcher, `/rest/v1/storyflow_universe_timeline_events?universe_id=eq.${encodeURIComponent(params.universeId)}&status=eq.canon&select=id,title,description,date_label,status&limit=2000`),
   ]);
   const references = [
     ...(facts || []).map((fact) => ({ id: fact.id, content: fact.fact_text, category: canonicalCategory(fact.category), locked: fact.is_locked, importance: fact.importance })),
@@ -90,18 +95,22 @@ export async function readCanonImpact(params: { fetcher: CanonFetcher; userId: s
   const filter = linkedProjectIds.length ? `id=in.(${linkedProjectIds.map(encodeURIComponent).join(",")})` : "id=eq.__none__";
   const allProjects = await query<ProjectRow[]>(params.fetcher, `/rest/v1/storyflow_projects?${filter}&select=id,title,owner_id,user_id,updated_at,universe_id&limit=500`);
   const projectById = new Map((allProjects || []).map((project) => [project.id, project]));
-  const projectIds = linkedProjectIds.filter((projectId) => {
+  const authorizedProjectIds = linkedProjectIds.filter((projectId) => {
     const link = (links || []).find((candidate) => candidate.project_id === projectId);
     const project = projectById.get(projectId);
-    return link?.user_id === params.userId || project?.owner_id === params.userId || project?.user_id === params.userId;
+    return project?.owner_id === params.userId || project?.user_id === params.userId;
   });
-  const projectFilter = projectIds.map(encodeURIComponent).join(",");
-  const [characters, scenes, productionProjects, assets, artAssets] = projectIds.length ? await Promise.all([
-    query<Array<{ id: string; project_id: string; name: string; content_json?: Record<string, unknown> | null }>>(params.fetcher, `/rest/v1/storyflow_characters?project_id=in.(${projectFilter})&select=id,project_id,name,content_json&limit=2000`),
-    query<Array<{ id: string; project_id: string; location?: string | null; characters?: unknown; beats?: unknown }>>(params.fetcher, `/rest/v1/storyflow_scenes?project_id=in.(${projectFilter})&select=id,project_id,location,characters,beats&limit=2000`),
-    query<Array<{ id: string; project_id?: string | null; title?: string | null }>>(params.fetcher, `/rest/v1/storyflow_production_projects?project_id=in.(${projectFilter})&select=id,project_id,title&limit=500`),
-    query<Array<{ id: string; project_id?: string | null; asset_type?: string | null; metadata?: Record<string, unknown> | null }>>(params.fetcher, `/rest/v1/storyflow_assets?project_id=in.(${projectFilter})&select=id,project_id,asset_type,metadata&limit=2000`),
-    query<Array<{ id: string; project_id?: string | null; kind?: string | null }>>(params.fetcher, `/rest/v1/storyflow_art_assets?universe_entity_id=eq.${encodeURIComponent(params.entityId)}&project_id=in.(${projectFilter})&select=id,project_id,kind&limit=2000`),
+  const projectFilter = authorizedProjectIds.map(encodeURIComponent).join(",");
+  const artProjects = authorizedProjectIds.length
+    ? await query<ArtProjectRow[]>(params.fetcher, `/rest/v1/storyflow_art_projects?source_project_id=in.(${projectFilter})&owner_id=eq.${encodeURIComponent(params.userId)}&select=id,owner_id,universe_id,source_project_id&limit=500`)
+    : [];
+  const artProjectIds = (artProjects || []).map((project) => encodeURIComponent(project.id));
+  const [characters, scenes, productionProjects, assets, artAssets] = authorizedProjectIds.length ? await Promise.all([
+    query<Array<{ id: string; project_id: string; user_id?: string | null; name: string; content_json?: Record<string, unknown> | null }>>(params.fetcher, `/rest/v1/storyflow_characters?project_id=in.(${projectFilter})&user_id=eq.${encodeURIComponent(params.userId)}&select=id,project_id,user_id,name,content_json&limit=2000`),
+    query<Array<{ id: string; project_id: string; user_id?: string | null; location?: string | null; characters?: unknown; beats?: unknown }>>(params.fetcher, `/rest/v1/storyflow_scenes?project_id=in.(${projectFilter})&user_id=eq.${encodeURIComponent(params.userId)}&select=id,project_id,user_id,location,characters,beats&limit=2000`),
+    query<Array<{ id: string; project_id?: string | null; owner_id?: string | null; title?: string | null }>>(params.fetcher, `/rest/v1/storyflow_production_projects?project_id=in.(${projectFilter})&owner_id=eq.${encodeURIComponent(params.userId)}&select=id,project_id,owner_id,title&limit=500`),
+    query<Array<{ id: string; project_id?: string | null; user_id?: string | null; asset_type?: string | null; metadata?: Record<string, unknown> | null }>>(params.fetcher, `/rest/v1/storyflow_assets?project_id=in.(${projectFilter})&user_id=eq.${encodeURIComponent(params.userId)}&select=id,project_id,user_id,asset_type,metadata&limit=2000`),
+    query<Array<{ id: string; project_id?: string | null; created_by?: string | null; kind?: string | null }>>(params.fetcher, artProjectIds.length ? `/rest/v1/storyflow_art_assets?universe_entity_id=eq.${encodeURIComponent(params.entityId)}&project_id=in.(${artProjectIds.join(",")})&created_by=eq.${encodeURIComponent(params.userId)}&select=id,project_id,created_by,kind&limit=2000` : "/rest/v1/storyflow_art_assets?id=eq.__none__&select=id,project_id,created_by,kind"),
   ]) : [[], [], [], [], []];
   const productionIds = (productionProjects || []).map((project) => encodeURIComponent(project.id));
   const productionShots = productionIds.length
@@ -116,15 +125,23 @@ export async function readCanonImpact(params: { fetcher: CanonFetcher; userId: s
   const affectedProductionIds = new Set(affectedShots.map((shot) => shot.production_project_id));
   const affectedStoryboards = (productionProjects || []).filter((project) => affectedProductionIds.has(project.id));
   const affectedAssets = [
-    ...(assets || []).filter((asset) => matchesEntity(asset.metadata) || (asset.asset_type === "character" && projectIds.includes(asset.project_id || ""))).map((asset) => ({ id: asset.id, projectId: asset.project_id || null, kind: asset.asset_type || "asset" })),
+    ...(assets || []).filter((asset) => matchesEntity(asset.metadata)).map((asset) => ({ id: asset.id, projectId: asset.project_id || null, kind: asset.asset_type || "asset" })),
     ...(artAssets || []).map((asset) => ({ id: asset.id, projectId: asset.project_id || null, kind: asset.kind || "art" })),
   ];
+  const affectedProjectIds = new Set([
+    ...affectedCharacters.map((item) => item.project_id),
+    ...affectedScenes.map((item) => item.project_id),
+    ...(affectedStoryboards || []).map((item) => item.project_id).filter((value): value is string => Boolean(value)),
+    ...affectedAssets.map((item) => item.projectId).filter((value): value is string => Boolean(value)),
+    ...(snapshots || []).filter((snapshot) => authorizedProjectIds.includes(snapshot.project_id) && snapshotTouchesEntity(snapshot, params.entityId, entity.name)).map((snapshot) => snapshot.project_id),
+  ]);
+  const projectIds = authorizedProjectIds.filter((projectId) => affectedProjectIds.has(projectId));
   return {
     universeId: universe.id,
     entityId: params.entityId,
     entity: { id: entity.id, type: entity.type, name: entity.name, summary: entity.summary || "" },
     works: projectIds.map((id) => ({ id, name: projectById.get(id)?.title || "Untitled work", updatedAt: projectById.get(id)?.updated_at || null })),
-    snapshots: (snapshots || []).filter((snapshot) => projectIds.includes(snapshot.project_id)).map((snapshot) => toSnapshotImpact(snapshot, universe.updated_at)),
+    snapshots: (snapshots || []).filter((snapshot) => projectIds.includes(snapshot.project_id) && snapshotTouchesEntity(snapshot, params.entityId, entity.name)).map((snapshot) => toSnapshotImpact(snapshot, universe.updated_at)),
     characters: affectedCharacters.map((character) => ({ id: character.id, projectId: character.project_id, name: character.name })),
     scenes: affectedScenes.map((scene) => ({ id: scene.id, projectId: scene.project_id, location: scene.location || "" })),
     storyboards: affectedStoryboards.map((project) => ({ id: project.id, projectId: project.project_id || null, name: project.title || "Untitled storyboard", shotIds: affectedShots.filter((shot) => shot.production_project_id === project.id).map((shot) => shot.id) })),
@@ -142,7 +159,6 @@ export async function listStaleSnapshots(params: { fetcher: CanonFetcher; userId
 
 function buildIssues(target: CanonCheckInput["target"], facts: Array<{ id: string; content: string; category: string; locked: boolean; importance: string }>, entities: EntityRow[]): CanonIssue[] {
   const text = target.text.trim();
-  const normalizedTarget = normalize(text);
   const relevantFacts = facts.filter((fact) => !target.category || categoryMatches(target.category, fact.category));
   const issues: CanonIssue[] = [];
   for (const fact of relevantFacts) {
@@ -198,6 +214,10 @@ function toSnapshotImpact(snapshot: SnapshotRow, currentUpdatedAt: string) {
   return { snapshotId: snapshot.id, projectId: snapshot.project_id, universeVersion: snapshot.universe_version, createdAt: snapshot.created_at, stale: snapshot.universe_version < currentUpdatedAt || snapshot.created_at < currentUpdatedAt };
 }
 
+function snapshotTouchesEntity(snapshot: SnapshotRow, entityId: string, entityName: string) {
+  return normalize(JSON.stringify(snapshot.payload || "")).includes(normalize(entityId)) || normalize(JSON.stringify(snapshot.payload || "")).includes(normalize(entityName));
+}
+
 async function assertUniverseAccess(params: { fetcher: CanonFetcher; userId: string; universeId: string }) {
   if (!params.userId) throw new CanonError("unauthenticated", "Authentication is required.");
   if (!params.universeId) throw new CanonError("validation_failed", "Universe id is required.");
@@ -221,7 +241,7 @@ async function readAuthorizedProjectIds(params: { fetcher: CanonFetcher; userId:
   return linkedIds.filter((projectId) => {
     const link = (links || []).find((candidate) => candidate.project_id === projectId);
     const project = projectById.get(projectId);
-    return link?.user_id === params.userId || project?.owner_id === params.userId || project?.user_id === params.userId;
+    return project?.owner_id === params.userId || project?.user_id === params.userId;
   });
 }
 
