@@ -1,0 +1,52 @@
+{
+  "contractVersion": "2.0.0-alpha.1",
+  "contentTypeOptions": ["drama", "novel", "song", "storyboard", "video"],
+  "startModes": ["idea", "script", "material"],
+  "universeOptions": [
+    {
+      "id": "universe-aurora",
+      "name": "Aurora City Chronicles",
+      "summary": "霓虹与永夜交织的近未来都市，记忆可以被交易、被窃取、被改写。",
+      "characterCount": 12,
+      "ruleCount": 8,
+      "lastActivityAt": "2026-08-10T14:22:00.000Z",
+      "healthScore": 92
+    },
+    {
+      "id": "universe-tidewatch",
+      "name": "Tidewatch Saga",
+      "summary": "群岛王朝的继承战争，潮汐魔法与海神信仰塑造了七大家族的命运。",
+      "characterCount": 28,
+      "ruleCount": 15,
+      "lastActivityAt": "2026-08-11T09:05:00.000Z",
+      "healthScore": 78
+    },
+    {
+      "id": "universe-silent-bloom",
+      "name": "Silent Bloom",
+      "summary": "末日后的植物园社会，植物拥有意识，人类在共生关系中寻找新的伦理。",
+      "characterCount": 7,
+      "ruleCount": 5,
+      "lastActivityAt": "2026-07-28T20:41:00.000Z",
+      "healthScore": 64
+    },
+    {
+      "id": "universe-iron-hymn",
+      "name": "Iron Hymn",
+      "summary": "工业革命被推迟三百年的架空欧洲，蒸汽圣歌驱动着机械骑士团。",
+      "characterCount": 19,
+      "ruleCount": 11,
+      "lastActivityAt": "2026-08-12T03:18:00.000Z",
+      "healthScore": 85
+    },
+    {
+      "id": "universe-paper-lantern",
+      "name": "Paper Lantern Tales",
+      "summary": "民国上海的奇幻短剧宇宙，纸灯笼里住着未了愿的魂灵，每集一盏灯一个故事。",
+      "characterCount": 14,
+      "ruleCount": 9,
+      "lastActivityAt": "2026-06-30T11:00:00.000Z",
+      "healthScore": 71
+    }
+  ]
+}
