@@ -1,0 +1,619 @@
+/* Kiikis 2.0 工作台外壳样式
+   参考 dashboard / task-center 深色风格：背景 #070808，accent #6de7df。
+   响应式：桌面四栏，平板折叠侧栏，移动端单列。 */
+
+.shell {
+  min-height: 100dvh;
+  background: #070808;
+  color: #f4f7f8;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* 顶部栏 */
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+}
+
+.topBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.projectTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f4f7f8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+}
+
+.badgeAccent {
+  background: rgba(109, 231, 223, 0.12);
+  color: #6de7df;
+}
+
+.badgeWarn {
+  background: rgba(255, 209, 102, 0.14);
+  color: #ffd166;
+}
+
+.badgeDanger {
+  background: rgba(255, 139, 139, 0.14);
+  color: #ff8b8b;
+}
+
+.badgeOk {
+  background: rgba(125, 209, 129, 0.14);
+  color: #7dd181;
+}
+
+.stageBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6de7df;
+  background: rgba(109, 231, 223, 0.08);
+  border: 1px solid rgba(109, 231, 223, 0.2);
+}
+
+.taskButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #6de7df;
+  background: transparent;
+  color: #6de7df;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.taskButton:hover {
+  background: rgba(109, 231, 223, 0.1);
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  border-color: rgba(109, 231, 223, 0.5);
+  color: #6de7df;
+}
+
+/* 主体三栏布局 */
+.body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 中间区可滚动，侧栏各自滚动 */
+.contentArea {
+  min-width: 0;
+  padding: 20px;
+  overflow-y: auto;
+  background: #070808;
+}
+
+.leftPanel,
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.02);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rightPanel {
+  border-right: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.panelSection {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.panelSection:last-child {
+  border-bottom: none;
+}
+
+.panelTitle {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 步骤列表 */
+.stepList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.stepItem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f7f8;
+}
+
+.stepItemCurrent {
+  background: rgba(109, 231, 223, 0.1);
+  border-color: rgba(109, 231, 223, 0.3);
+  color: #6de7df;
+  font-weight: 700;
+}
+
+.stepItemLocked {
+  cursor: not-allowed;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.stepItemLocked:hover {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.stepIcon {
+  flex-shrink: 0;
+}
+
+.stepLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 资产列表 */
+.assetList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assetItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+
+.assetName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f4f7f8;
+}
+
+.assetMeta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* AI 面板 */
+.aiMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.aiMessage {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.aiMessageUser {
+  background: rgba(109, 231, 223, 0.08);
+  color: #f4f7f8;
+  margin-left: 16px;
+  border-bottom-right-radius: 2px;
+}
+
+.aiMessageAssistant {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.85);
+  margin-right: 16px;
+  border-bottom-left-radius: 2px;
+}
+
+.aiInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f7f8;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.aiInput:focus {
+  outline: none;
+  border-color: rgba(109, 231, 223, 0.5);
+}
+
+.aiSend {
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #6de7df;
+  background: #6de7df;
+  color: #070808;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.aiSend:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.suggestionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.suggestionItem {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(109, 231, 223, 0.05);
+  border: 1px solid rgba(109, 231, 223, 0.15);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.suggestionItem:hover {
+  background: rgba(109, 231, 223, 0.1);
+  color: #f4f7f8;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 6px 0;
+}
+
+.modelValue {
+  color: #6de7df;
+  font-weight: 600;
+}
+
+.modelReason {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* 底部任务浮层 */
+.taskBar {
+  position: sticky;
+  bottom: 0;
+  background: rgba(7, 8, 8, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+}
+
+.taskBarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+
+.taskBarTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4f7f8;
+}
+
+.taskBarBody {
+  padding: 0 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+}
+
+.taskRowName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f4f7f8;
+}
+
+.taskRowMeta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.taskError {
+  color: #ff8b8b;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(255, 139, 139, 0.08);
+  border-radius: 4px;
+}
+
+.taskLink {
+  color: #6de7df;
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.taskLink:hover {
+  text-decoration: underline;
+}
+
+/* 未保存确认对话框 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.dialog {
+  max-width: 420px;
+  width: 100%;
+  padding: 24px;
+  border-radius: 12px;
+  background: #0d0f0f;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dialogTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f4f7f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialogMessage {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+}
+
+.dialogActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.dialogButton {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #f4f7f8;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.dialogButton:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.dialogButtonPrimary {
+  background: #6de7df;
+  color: #070808;
+  border-color: #6de7df;
+  font-weight: 700;
+}
+
+.dialogButtonPrimary:hover {
+  background: #8aefe8;
+}
+
+/* 抽屉遮罩（平板/移动端侧栏） */
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
+.drawerLeft,
+.drawerRight {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 280px;
+  background: #0d0f0f;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.drawerLeft {
+  left: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.drawerRight {
+  right: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 平板：侧栏收起为抽屉 */
+@media (max-width: 1023px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .leftPanel,
+  .rightPanel {
+    display: none;
+  }
+  .contentArea {
+    padding: 16px;
+  }
+}
+
+/* 移动端：精简顶部栏 */
+@media (max-width: 600px) {
+  .topBar {
+    padding: 10px 12px;
+  }
+  .projectTitle {
+    max-width: 160px;
+    font-size: 14px;
+  }
+  .topBarRight {
+    gap: 6px;
+  }
+  .badge {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+  .contentArea {
+    padding: 12px;
+  }
+}
