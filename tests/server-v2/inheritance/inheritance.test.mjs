@@ -25,6 +25,7 @@ function createFetcher(overrides = {}) {
     if (path.includes("storyflow_projects")) return [project];
     if (path.includes("storyflow_universes")) return [universe];
     if (path.includes("storyflow_universe_project_links")) return [link];
+    if (path.includes("storyflow_universe_binding_history")) return [];
     if (path.includes("storyflow_universe_inheritance_snapshots")) return [snapshot];
     if (path.includes("storyflow_universe_entities")) return [{ id: "character-1", universe_id: "universe-1", type: "character", name: "Mara", summary: "Engineer", status: "canon", updated_at: universe.updated_at }];
     throw new Error(`unexpected query: ${path}`);
@@ -47,6 +48,18 @@ test("bindUniverse rejects a project that already has another primary Universe",
     bindUniverse({ fetcher, userId: "user-1", projectId: "project-1", universeId: "universe-1" }),
     (error) => error instanceof InheritanceError && error.code === "conflict",
   );
+});
+
+test("new team binding requires active membership and records binding history", async () => {
+  const fetcher = createFetcher({
+    storyflow_universe_project_links: (path, init) => init.method === "POST" ? [link] : [],
+    storyflow_team_members: [{ team_id: "team-1" }],
+  });
+  const result = await bindUniverse({ fetcher, userId: "user-1", projectId: "project-1", universeId: "universe-1" });
+  assert.equal(result.created, true);
+  const history = fetcher.calls.find(({ path, init }) => path.includes("storyflow_universe_binding_history") && init.method === "POST");
+  assert.ok(history);
+  assert.match(history.init.body, /"action":"bound"/);
 });
 
 test("createInheritanceSnapshot freezes the current Universe payload", async () => {
@@ -81,4 +94,7 @@ test("unbind keeps historical link and snapshot records", async () => {
   const patch = fetcher.calls.find(({ path, init }) => path.includes("storyflow_universe_project_links") && init.method === "PATCH");
   assert.ok(patch);
   assert.match(patch.init.body, /unbound_at/);
+  const history = fetcher.calls.find(({ path, init }) => path.includes("storyflow_universe_binding_history") && init.method === "POST");
+  assert.ok(history);
+  assert.match(history.init.body, /"action":"unbound"/);
 });
