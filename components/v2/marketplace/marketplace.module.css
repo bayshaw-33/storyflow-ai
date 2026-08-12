@@ -1,0 +1,773 @@
+/* K2-T-09 演员与资产市场样式
+ * 深色 #070808，accent #6de7df（与 batch-1/2 一致）
+ * 免费/付费视觉区分：免费用 #6de7df，付费用 #ffd166 */
+
+.shell {
+  min-height: 100dvh;
+  padding: 24px;
+  background: #070808;
+  color: #f4f7f8;
+}
+
+.container {
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+/* ============ 头部 ============ */
+.header {
+  margin: 0 0 18px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #6de7df;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(24px, 2vw, 34px);
+  font-weight: 900;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ============ 统计条 ============ */
+.statsBar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.statNum {
+  color: #6de7df;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* ============ 筛选栏 ============ */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+}
+
+.searchBox {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f4f7f8;
+  font-size: 13px;
+}
+
+.searchInput::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.filterGroup {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filterLabel {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-right: 4px;
+}
+
+.chip {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.chip:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #f4f7f8;
+}
+
+.chipActive {
+  background: rgba(109, 231, 223, 0.16);
+  border-color: #6de7df;
+  color: #6de7df;
+}
+
+.chipPaidActive {
+  background: rgba(255, 209, 102, 0.16);
+  border-color: #ffd166;
+  color: #ffd166;
+}
+
+/* ============ 推荐说明 ============ */
+.recommendBanner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(109, 231, 223, 0.06);
+  border: 1px solid rgba(109, 231, 223, 0.2);
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.recommendBanner strong {
+  color: #6de7df;
+}
+
+/* ============ 资产卡片网格 ============ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(109, 231, 223, 0.3);
+}
+
+.cardSuspended {
+  opacity: 0.55;
+}
+
+.cardRecommended {
+  border-color: rgba(109, 231, 223, 0.4);
+  box-shadow: 0 0 0 1px rgba(109, 231, 223, 0.15);
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cardName {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+}
+
+.cardType {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cardCreator {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.cardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cardTag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cardFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.priceBadge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.priceFree {
+  background: rgba(109, 231, 223, 0.16);
+  color: #6de7df;
+  border: 1px solid rgba(109, 231, 223, 0.3);
+}
+
+.pricePaid {
+  background: rgba(255, 209, 102, 0.16);
+  color: #ffd166;
+  border: 1px solid rgba(255, 209, 102, 0.3);
+}
+
+.cardMeta {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.recommendTag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(109, 231, 223, 0.12);
+  color: #6de7df;
+  border: 1px solid rgba(109, 231, 223, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.rightsWarn {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 139, 139, 0.12);
+  color: #ff8b8b;
+  border: 1px solid rgba(255, 139, 139, 0.3);
+}
+
+.statusTag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.statusPublished {
+  color: #7dd181;
+  border-color: rgba(125, 209, 129, 0.3);
+}
+
+.statusReady {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.3);
+}
+
+.statusSuspended {
+  color: #ff8b8b;
+  border-color: rgba(255, 139, 139, 0.3);
+}
+
+/* ============ 空状态 / 加载 / 错误 ============ */
+.empty {
+  padding: 60px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+.loading {
+  padding: 60px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+.errorBox {
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(255, 139, 139, 0.08);
+  border: 1px solid rgba(255, 139, 139, 0.3);
+  color: #ff8b8b;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ============ 按钮 ============ */
+.button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #f4f7f8;
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.button:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.buttonPrimary {
+  border-color: #6de7df;
+  color: #6de7df;
+  background: rgba(109, 231, 223, 0.08);
+}
+
+.buttonPrimary:hover {
+  background: rgba(109, 231, 223, 0.16);
+}
+
+.buttonDanger {
+  border-color: rgba(255, 139, 139, 0.4);
+  color: #ff8b8b;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============ 详情页 ============ */
+.detailWrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .detailWrap {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detailPreview {
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.detailPreviewImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.detailPanel {
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.detailName {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #f4f7f8;
+}
+
+.detailCreator {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 14px;
+}
+
+.detailCreator strong {
+  color: #6de7df;
+}
+
+.detailDesc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.sectionTitle {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6de7df;
+}
+
+.useList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.7;
+}
+
+.useList li {
+  margin-bottom: 2px;
+}
+
+.useAllowed {
+  color: #7dd181;
+}
+
+.useForbidden {
+  color: #ff8b8b;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.metaRow:last-child {
+  border-bottom: none;
+}
+
+.metaKey {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.metaVal {
+  color: #f4f7f8;
+  font-weight: 600;
+}
+
+.licenseBox {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 8px;
+}
+
+.licenseRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.detailActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 14px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.backLink:hover {
+  color: #6de7df;
+}
+
+/* ============ 发布流程 ============ */
+.stepper {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.step {
+  flex: 1;
+  min-width: 80px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  position: relative;
+}
+
+.stepActive {
+  background: rgba(109, 231, 223, 0.1);
+  border-color: #6de7df;
+  color: #6de7df;
+  font-weight: 700;
+}
+
+.stepDone {
+  background: rgba(125, 209, 129, 0.08);
+  border-color: rgba(125, 209, 129, 0.3);
+  color: #7dd181;
+}
+
+.stepNum {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.stepForm {
+  padding: 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-width: 640px;
+}
+
+.fieldGroup {
+  margin-bottom: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.fieldHint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 4px;
+}
+
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.4);
+  color: #f4f7f8;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #6de7df;
+}
+
+.textarea {
+  composes: input;
+  min-height: 80px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.optionCard {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  transition: all 0.12s ease;
+}
+
+.optionCard:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.optionCardSelected {
+  border-color: #6de7df;
+  background: rgba(109, 231, 223, 0.1);
+  color: #6de7df;
+}
+
+.optionCardPaid {
+  border-color: rgba(255, 209, 102, 0.3);
+}
+
+.stepNav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.rightsDeclBox {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 209, 102, 0.06);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.6;
+}
+
+.rightsDeclBox strong {
+  color: #ffd166;
+}
+
+.rightsBlock {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 139, 139, 0.08);
+  border: 1px solid rgba(255, 139, 139, 0.3);
+  margin-top: 12px;
+  font-size: 12px;
+  color: #ff8b8b;
+  line-height: 1.6;
+}
+
+/* ============ 调用入口 Modal ============ */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #0c0d0d;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 24px;
+}
+
+.modalTitle {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #f4f7f8;
+}
+
+.summaryBox {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(109, 231, 223, 0.06);
+  border: 1px solid rgba(109, 231, 223, 0.2);
+  margin: 12px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.7;
+}
+
+.summaryBox strong {
+  color: #6de7df;
+}
+
+.noticeBox {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+  margin-top: 12px;
+}
