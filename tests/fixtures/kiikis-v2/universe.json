@@ -1,0 +1,473 @@
+{
+  "contractVersion": "2.0.0-alpha.1",
+  "universe": {
+    "id": "uni-umbral",
+    "name": "Umbral Pact Universe",
+    "summary": "在一个被契约阴影笼罩的现代都市，五大家族通过血誓维持着脆弱的平衡。当第七代继承人觉醒时，旧秩序开始崩塌。",
+    "corePremise": "权力与代价：每一份契约都需要偿还，而觉醒的继承人将面对家族百年债务的总清算。",
+    "createdAt": "2026-06-01T09:00:00+08:00",
+    "updatedAt": "2026-08-12T15:42:00+08:00",
+    "owner": "kiikis"
+  },
+  "healthSummary": {
+    "canonCompleteness": 0.78,
+    "characterCompleteness": 0.65,
+    "relationshipTimeline": 0.82,
+    "assetCoverage": 0.54,
+    "pendingProposals": 4,
+    "conflicts": 2
+  },
+  "rules": [
+    {
+      "id": "rule-pact-binding",
+      "name": "契约绑定不可逆",
+      "summary": "一旦血誓契约成立，缔约双方将共享生命体征，单方面撕毁契约会导致双方同时陨落。",
+      "status": "canon",
+      "source": "EP01 主线确认",
+      "mainVersion": "v1.2",
+      "usedBy": ["proj-umbral-pact", "proj-song-lullaby"]
+    },
+    {
+      "id": "rule-shadow-tax",
+      "name": "影子税",
+      "summary": "每使用一次契约之力，使用者将损失等量的记忆片段。损失无法恢复，长期使用会引发身份消解。",
+      "status": "canon",
+      "source": "EP03 角色独白",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "rule-awakening-cycle",
+      "name": "觉醒周期",
+      "summary": "契约继承人在每七代中只会出现一次，觉醒时刻固定在月蚀之夜。当前为第七代觉醒周期。",
+      "status": "alternative",
+      "source": "世界观草稿 v0.3",
+      "mainVersion": "v0.3",
+      "usedBy": []
+    },
+    {
+      "id": "rule-deprecated-pact",
+      "name": "初代契约形式",
+      "summary": "初代契约需以血液书写的羊皮纸为载体。该设定已被 v1.0 替换为血誓仪式。",
+      "status": "deprecated",
+      "source": "早期设定集",
+      "mainVersion": "v0.1",
+      "usedBy": []
+    }
+  ],
+  "characters": [
+    {
+      "id": "char-isadora",
+      "name": "Isadora Vane",
+      "summary": "Vane 家族第七代继承人，觉醒者。冷静、克制，背负家族百年债务。EP06 首次完整登场。",
+      "status": "canon",
+      "source": "EP06 主线",
+      "mainVersion": "v1.4",
+      "usedBy": ["proj-umbral-pact", "proj-song-lullaby"],
+      "portrait": "/fixtures/universe/char-isadora.png"
+    },
+    {
+      "id": "char-elias",
+      "name": "Elias Thorne",
+      "summary": "契约守护者组织末代成员，Isadora 的导师与守护者。",
+      "status": "canon",
+      "source": "EP02 主线",
+      "mainVersion": "v1.1",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "char-marcus",
+      "name": "Marcus Vane",
+      "summary": "Isadora 之兄，第六代继承人，因过度使用契约之力而陷入身份消解。当前为反派候选。",
+      "status": "draft",
+      "source": "EP05 草稿",
+      "mainVersion": "v0.2",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "char-cora",
+      "name": "Cora Lin",
+      "summary": "外来侦探，介入五大家族调查。设定仍为备选方案。",
+      "status": "alternative",
+      "source": "外传剧本草稿",
+      "mainVersion": "v0.1",
+      "usedBy": []
+    },
+    {
+      "id": "char-old-patriarch",
+      "name": "老家长 Vane",
+      "summary": "初代设定中的家族家长，已被 Marcus 设定替代。",
+      "status": "deprecated",
+      "source": "早期设定集",
+      "mainVersion": "v0.1",
+      "usedBy": []
+    }
+  ],
+  "locations": [
+    {
+      "id": "loc-vane-estate",
+      "name": "Vane 家族宅邸",
+      "summary": "故事主舞台，位于都市边缘的哥特复兴风格庄园，地下藏有契约圣殿。",
+      "status": "canon",
+      "source": "EP01 场景设定",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact", "proj-song-lullaby"]
+    },
+    {
+      "id": "loc-pact-temple",
+      "name": "契约圣殿",
+      "summary": "Vane 宅邸地下的仪式空间，血誓契约在此缔结。",
+      "status": "canon",
+      "source": "EP03 场景设定",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "loc-thorne-archive",
+      "name": "Thorne 档案馆",
+      "summary": "契约守护者组织的禁地，存放历代契约记录。设定为草稿。",
+      "status": "draft",
+      "source": "EP04 草稿",
+      "mainVersion": "v0.2",
+      "usedBy": []
+    }
+  ],
+  "organizations": [
+    {
+      "id": "org-pact-wardens",
+      "name": "契约守护者",
+      "summary": "中立组织，监督五大家族契约执行，Elias 所属。当前势力衰微。",
+      "status": "canon",
+      "source": "EP02 世界观",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "org-five-families",
+      "name": "五大家族议会",
+      "summary": "Vane / Thorne / Lin / Kane / Sable 五家族的联合决策机构。",
+      "status": "canon",
+      "source": "EP01 世界观",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "org-shadow-brokers",
+      "name": "影子经纪人",
+      "summary": "黑市契约 intermediary 设定，当前为备选反派组织。",
+      "status": "alternative",
+      "source": "外传剧本草稿",
+      "mainVersion": "v0.1",
+      "usedBy": []
+    }
+  ],
+  "props": [
+    {
+      "id": "prop-pact-knife",
+      "name": "契约之刃",
+      "summary": "缔结血誓时使用的仪式匕首，刀身刻有五家族纹章。",
+      "status": "canon",
+      "source": "EP03 道具设定",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "prop-memory-vial",
+      "name": "记忆瓶",
+      "summary": "存放影子税扣除的记忆片段的容器，可作为货币流通。",
+      "status": "canon",
+      "source": "EP03 道具设定",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "prop-awakening-amulet",
+      "name": "觉醒护符",
+      "summary": "抑制觉醒力量的护符，设定草稿，可能调整用途。",
+      "status": "draft",
+      "source": "EP05 草稿",
+      "mainVersion": "v0.2",
+      "usedBy": []
+    }
+  ],
+  "concepts": [
+    {
+      "id": "concept-shadow-pact",
+      "name": "影子契约",
+      "summary": "本宇宙核心魔法体系：通过血誓建立等价交换，代价为记忆与生命体征共享。",
+      "status": "canon",
+      "source": "世界观圣经",
+      "mainVersion": "v1.2",
+      "usedBy": ["proj-umbral-pact", "proj-song-lullaby"]
+    },
+    {
+      "id": "concept-family-debt",
+      "name": "家族债务",
+      "summary": "五大家族百年累积的契约债务，将在第七代觉醒时统一清算。",
+      "status": "canon",
+      "source": "EP01 世界观",
+      "mainVersion": "v1.0",
+      "usedBy": ["proj-umbral-pact"]
+    },
+    {
+      "id": "concept-memory-economy",
+      "name": "记忆经济",
+      "summary": "记忆片段作为流通货币的黑市体系。设定为备选扩展。",
+      "status": "alternative",
+      "source": "外传剧本草稿",
+      "mainVersion": "v0.1",
+      "usedBy": []
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel-isadora-elias",
+      "fromId": "char-isadora",
+      "toId": "char-elias",
+      "type": "mentor",
+      "description": "Elias 是 Isadora 的契约守护者与导师，自其十二岁起开始训练。",
+      "history": "EP02 建立，EP06 经历信任危机但仍维系。"
+    },
+    {
+      "id": "rel-isadora-marcus",
+      "fromId": "char-isadora",
+      "toId": "char-marcus",
+      "type": "siblings",
+      "description": "亲兄妹，因 Marcus 走向反派而对立。",
+      "history": "EP05 揭示，EP06 完全决裂。"
+    },
+    {
+      "id": "rel-marcus-shadow-brokers",
+      "fromId": "char-marcus",
+      "toId": "org-shadow-brokers",
+      "type": "employed",
+      "description": "Marcus 与影子经纪人合作获取非法契约之力。",
+      "history": "EP05 草稿，尚未正式上线。"
+    },
+    {
+      "id": "rel-vane-thorne",
+      "fromId": "org-five-families",
+      "toId": "org-pact-wardens",
+      "type": "oversight",
+      "description": "五大家族议会委托契约守护者监督契约执行。",
+      "history": "百年契约，长期有效。"
+    }
+  ],
+  "timelineEvents": [
+    {
+      "id": "evt-founding-pact",
+      "name": "初代契约签订",
+      "when": "百年前·月蚀夜",
+      "description": "五大家族祖先签订初代血誓契约，建立 Vane 宅邸与契约圣殿。",
+      "involvedEntities": ["org-five-families", "loc-vane-estate", "loc-pact-temple"]
+    },
+    {
+      "id": "evt-shadow-tax-discovered",
+      "name": "影子税发现",
+      "when": "约 50 年前",
+      "description": "守护者记录首次确认契约之力的记忆代价。",
+      "involvedEntities": ["org-pact-wardens", "concept-shadow-pact"]
+    },
+    {
+      "id": "evt-marcus-awakening",
+      "name": "Marcus 第六代觉醒",
+      "when": "20 年前·月蚀夜",
+      "description": "Marcus 觉醒契约之力，因过度使用陷入身份消解。",
+      "involvedEntities": ["char-marcus", "concept-shadow-pact"]
+    },
+    {
+      "id": "evt-isadora-awakening",
+      "name": "Isadora 第七代觉醒",
+      "when": "EP01·当下",
+      "description": "Isadora 在月蚀之夜觉醒，故事正式开始。",
+      "involvedEntities": ["char-isadora", "char-elias", "loc-pact-temple"]
+    },
+    {
+      "id": "evt-ep06-confrontation",
+      "name": "EP06 兄妹对峙",
+      "when": "EP06",
+      "description": "Isadora 与 Marcus 在契约圣殿首次正面冲突。",
+      "involvedEntities": ["char-isadora", "char-marcus", "loc-pact-temple"]
+    }
+  ],
+  "canonFacts": [
+    {
+      "id": "canon-001",
+      "statement": "Isadora Vane 是 Vane 家族第七代继承人，觉醒者。",
+      "locked": true,
+      "source": "EP01 主线确认",
+      "references": ["char-isadora", "rule-awakening-cycle"]
+    },
+    {
+      "id": "canon-002",
+      "statement": "血誓契约一旦缔结，缔约双方共享生命体征，单方面撕毁导致双方陨落。",
+      "locked": true,
+      "source": "EP01 主线确认",
+      "references": ["rule-pact-binding", "concept-shadow-pact"]
+    },
+    {
+      "id": "canon-003",
+      "statement": "Marcus Vane 因过度使用契约之力陷入身份消解，是当前主要反派候选。",
+      "locked": false,
+      "source": "EP05 草稿",
+      "references": ["char-marcus", "rule-shadow-tax"]
+    },
+    {
+      "id": "canon-004",
+      "statement": "契约守护者组织当前势力衰微，仅 Elias 一人活跃。",
+      "locked": false,
+      "source": "EP02 主线",
+      "references": ["org-pact-wardens", "char-elias"]
+    },
+    {
+      "id": "canon-005",
+      "statement": "初代契约形式为羊皮纸书写（已被血誓仪式替换）。",
+      "locked": false,
+      "source": "早期设定集（已弃用）",
+      "references": ["rule-deprecated-pact"]
+    }
+  ],
+  "proposals": [
+    {
+      "id": "cp-001",
+      "type": "character",
+      "title": "EP06 反派 Isadora 首次出场设定变更",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "EP06 剧本定稿",
+      "originalContent": "Isadora EP06 出场时手持契约之刃，与 Marcus 对峙。",
+      "fieldDiff": [
+        { "path": "characters[char-isadora].appearance", "before": "黑袍、未持武器", "after": "黑袍、手持契约之刃" },
+        { "path": "characters[char-isadora].status", "before": "draft", "after": "canon" }
+      ],
+      "confidence": 0.82,
+      "status": "pending_review",
+      "createdAt": "2026-08-12T10:12:00+08:00",
+      "impactSummary": "影响 EP06 分镜 12 个、Isadora 角色立绘 1 张、Canon Fact 1 条。"
+    },
+    {
+      "id": "cp-002",
+      "type": "canon_fact",
+      "title": "EP05 与 EP03 婚戒描述不一致",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "Canon Check",
+      "originalContent": "EP03 称婚戒为银质，EP05 称为金质。",
+      "fieldDiff": [
+        { "path": "canonFacts.canon-003.ringMaterial", "before": "silver (EP03)", "after": "gold (EP05)" }
+      ],
+      "confidence": 0.91,
+      "status": "pending_review",
+      "createdAt": "2026-08-12T09:40:00+08:00",
+      "impactSummary": "影响 Canon Fact 1 条、EP03/EP05 分镜各 2 个。"
+    },
+    {
+      "id": "cp-003",
+      "type": "relationship",
+      "title": "Cora Lin 与 Isadora 关系建立",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "外传剧本草稿",
+      "originalContent": "Cora Lin 作为外来侦探介入调查，与 Isadora 形成合作。",
+      "fieldDiff": [
+        { "path": "relationships[].fromId", "before": "—", "after": "char-cora" },
+        { "path": "relationships[].toId", "before": "—", "after": "char-isadora" }
+      ],
+      "confidence": 0.62,
+      "status": "draft",
+      "createdAt": "2026-08-11T20:00:00+08:00",
+      "impactSummary": "新增关系 1 条，影响外传时间线 3 个事件。"
+    },
+    {
+      "id": "cp-004",
+      "type": "rule",
+      "title": "觉醒周期规则扩展",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "世界观修订",
+      "originalContent": "觉醒周期从 7 代扩展为 7 代 + 月蚀夜双重条件。",
+      "fieldDiff": [
+        { "path": "rules[rule-awakening-cycle].status", "before": "alternative", "after": "canon" }
+      ],
+      "confidence": 0.74,
+      "status": "deferred",
+      "createdAt": "2026-08-10T14:00:00+08:00",
+      "impactSummary": "影响规则 1 条、Canon Fact 1 条、时间线事件 2 个。"
+    },
+    {
+      "id": "cp-005",
+      "type": "character",
+      "title": "Marcus 反派身份确认",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "EP05 主线",
+      "originalContent": "Marcus 与影子经纪人合作，正式确立为反派。",
+      "fieldDiff": [
+        { "path": "characters[char-marcus].status", "before": "draft", "after": "canon" }
+      ],
+      "confidence": 0.88,
+      "status": "accepted",
+      "createdAt": "2026-08-09T11:30:00+08:00",
+      "impactSummary": "影响角色 1 条、关系 1 条、Canon Fact 1 条。"
+    },
+    {
+      "id": "cp-006",
+      "type": "location",
+      "title": "Thorne 档案馆设定扩展",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "EP04 草稿",
+      "originalContent": "档案馆增加禁地层级设定。",
+      "fieldDiff": [
+        { "path": "locations[loc-thorne-archive].summary", "before": "契约守护者组织的档案馆", "after": "契约守护者组织的禁地，存放历代契约记录" }
+      ],
+      "confidence": 0.55,
+      "status": "edited_and_accepted",
+      "createdAt": "2026-08-08T16:20:00+08:00",
+      "impactSummary": "影响地点 1 条、EP04 分镜 4 个。"
+    },
+    {
+      "id": "cp-007",
+      "type": "canon_fact",
+      "title": "初代契约形式弃用",
+      "sourceProject": "proj-umbral-pact",
+      "sourceStep": "设定集整理",
+      "originalContent": "初代契约羊皮纸形式被血誓仪式替换。",
+      "fieldDiff": [
+        { "path": "rules[rule-deprecated-pact].status", "before": "alternative", "after": "deprecated" }
+      ],
+      "confidence": 0.95,
+      "status": "rejected",
+      "createdAt": "2026-08-07T10:00:00+08:00",
+      "impactSummary": "已拒绝，无影响。"
+    }
+  ],
+  "works": [
+    {
+      "id": "proj-umbral-pact",
+      "title": "Umbral Pact EP06-EP10",
+      "type": "novel",
+      "relationship": "inherited",
+      "snapshotId": "snap-umbral-2026-08-12"
+    },
+    {
+      "id": "proj-song-lullaby",
+      "title": "Lullaby 主题曲",
+      "type": "song",
+      "relationship": "derived",
+      "snapshotId": "snap-umbral-2026-08-10"
+    },
+    {
+      "id": "proj-marriage-contract",
+      "title": "婚姻契约 第一季",
+      "type": "short_drama",
+      "relationship": "referenced"
+    }
+  ],
+  "impactAnalysis": {
+    "targetCanonId": "canon-002",
+    "affectedWorks": ["proj-umbral-pact", "proj-song-lullaby"],
+    "affectedSnapshots": ["snap-umbral-2026-08-12", "snap-umbral-2026-08-10"],
+    "affectedAssets": ["char-isadora", "char-marcus", "prop-pact-knife", "loc-pact-temple"]
+  },
+  "recentActivity": [
+    { "id": "act-001", "message": "EP06 反派 Isadora 设定变更提案已进入待审", "at": "2026-08-12T10:12:00+08:00" },
+    { "id": "act-002", "message": "Canon Check 发现 EP03/EP05 婚戒描述不一致", "at": "2026-08-12T09:40:00+08:00" },
+    { "id": "act-003", "message": "Marcus 反派身份已接受写入 canon", "at": "2026-08-09T11:30:00+08:00" },
+    { "id": "act-004", "message": "Thorne 档案馆设定已编辑后接受", "at": "2026-08-08T16:20:00+08:00" }
+  ]
+}

@@ -1,0 +1,759 @@
+/* Kiikis 2.0 Universe 工作台样式
+   深色 #070808，accent #6de7df。与 dashboard 风格一致。 */
+
+.shell {
+  min-height: 100dvh;
+  padding: 24px;
+  background: #070808;
+  color: #f4f7f8;
+  box-sizing: border-box;
+}
+
+.container {
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+/* 顶部 header */
+.header {
+  margin: 0 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #6de7df;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  max-width: 720px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.fixtureBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: rgba(109, 231, 223, 0.15);
+  color: #6de7df;
+  border: 1px solid rgba(109, 231, 223, 0.3);
+}
+
+/* tab 导航 */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 20px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+}
+
+.tabButton {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tabButton:hover {
+  color: #f4f7f8;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tabButtonActive {
+  background: rgba(109, 231, 223, 0.15);
+  color: #6de7df;
+}
+
+.tabCount {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+}
+
+.tabButtonActive .tabCount {
+  background: rgba(109, 231, 223, 0.25);
+  color: #6de7df;
+}
+
+/* 卡片 */
+.card {
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #f4f7f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardCount {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cardLink {
+  color: #6de7df;
+  font-size: 12px;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cardLink:hover {
+  text-decoration: underline;
+}
+
+/* 网格布局 */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 960px) {
+  .gridTwo {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+  .gridThree {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 列表与行 */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: default;
+}
+
+.rowInteractive {
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.rowInteractive:hover {
+  border-color: rgba(109, 231, 223, 0.3);
+  background: rgba(109, 231, 223, 0.04);
+}
+
+.rowHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rowTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+  margin: 0;
+}
+
+.rowSummary {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.5;
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rowMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 状态徽章 */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+
+.statusCanon {
+  color: #6de7df;
+  background: rgba(109, 231, 223, 0.1);
+}
+
+.statusDraft {
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.statusAlternative {
+  color: #c792ea;
+  background: rgba(199, 146, 234, 0.1);
+}
+
+.statusDeprecated {
+  color: #ff8a8a;
+  background: rgba(255, 138, 138, 0.1);
+}
+
+.statusLocked {
+  color: #6de7df;
+  background: rgba(109, 231, 223, 0.15);
+}
+
+.statusUnlocked {
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* 健康度维度卡 */
+.healthGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.healthCard {
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.healthLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 8px;
+}
+
+.healthValue {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f4f7f8;
+  margin: 0 0 8px;
+}
+
+.healthBar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.healthBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #6de7df, #4fb8b1);
+  transition: width 0.3s;
+}
+
+.healthBarWarn {
+  background: linear-gradient(90deg, #ffd166, #d9a73e);
+}
+
+.healthBarDanger {
+  background: linear-gradient(90deg, #ff8a8a, #d96666);
+}
+
+.healthAction {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #6de7df;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.healthAction:hover {
+  text-decoration: underline;
+}
+
+/* 折叠区段（渐进式展开） */
+.collapsibleTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  color: #f4f7f8;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  gap: 8px;
+}
+
+.collapsibleTrigger:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.collapsibleContent {
+  padding: 12px 14px 4px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.6;
+}
+
+.chevron {
+  transition: transform 0.15s;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* 按钮 */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f7f8;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.buttonPrimary {
+  background: rgba(109, 231, 223, 0.15);
+  border-color: rgba(109, 231, 223, 0.4);
+  color: #6de7df;
+}
+
+.buttonPrimary:hover {
+  background: rgba(109, 231, 223, 0.25);
+  border-color: rgba(109, 231, 223, 0.6);
+}
+
+.buttonDanger {
+  border-color: rgba(255, 138, 138, 0.3);
+  color: #ff8a8a;
+}
+
+.buttonDanger:hover {
+  background: rgba(255, 138, 138, 0.1);
+}
+
+.buttonSmall {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 状态反馈条 */
+.notice {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.noticeSuccess {
+  background: rgba(109, 231, 223, 0.1);
+  border: 1px solid rgba(109, 231, 223, 0.3);
+  color: #6de7df;
+}
+
+.noticeError {
+  background: rgba(255, 138, 138, 0.1);
+  border: 1px solid rgba(255, 138, 138, 0.3);
+  color: #ff8a8a;
+}
+
+.noticeInfo {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 加载/空状态 */
+.loadingState,
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  gap: 12px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 800;
+  color: #f4f7f8;
+}
+
+.emptyHint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  max-width: 400px;
+}
+
+/* SVG 关系图 */
+.graphSvg {
+  width: 100%;
+  height: 420px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.graphNode {
+  cursor: pointer;
+}
+
+.graphNodeCircle {
+  fill: rgba(109, 231, 223, 0.15);
+  stroke: #6de7df;
+  stroke-width: 1.5;
+  transition: fill 0.15s;
+}
+
+.graphNodeCircle:hover {
+  fill: rgba(109, 231, 223, 0.3);
+}
+
+.graphNodeLabel {
+  fill: #f4f7f8;
+  font-size: 12px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+.graphEdge {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.graphEdgeLabel {
+  fill: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+/* 时间线 */
+.timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(109, 231, 223, 0.3);
+}
+
+.timelineItem {
+  position: relative;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.timelineItem::before {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: 18px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6de7df;
+  border: 2px solid #070808;
+}
+
+.timelineWhen {
+  font-size: 11px;
+  color: #6de7df;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.timelineName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+  margin: 0 0 6px;
+}
+
+.timelineDesc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* 影响分析 */
+.impactList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.impactItem {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 209, 102, 0.05);
+  border: 1px solid rgba(255, 209, 102, 0.2);
+}
+
+.impactLabel {
+  font-size: 12px;
+  color: #ffd166;
+  font-weight: 700;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.impactValues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.impactChip {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* 字段差异表 */
+.diffTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.diffTable th,
+.diffTable td {
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.diffTable th {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.diffBefore {
+  color: #ff8a8a;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.diffAfter {
+  color: #6de7df;
+}
+
+/* 批量操作工具条 */
+.bulkBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(109, 231, 223, 0.08);
+  border: 1px solid rgba(109, 231, 223, 0.25);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.bulkCount {
+  font-size: 13px;
+  color: #6de7df;
+  font-weight: 700;
+}
+
+.bulkImpact {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  flex: 1;
+  min-width: 200px;
+}
+
+/* 复选框 */
+.checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #6de7df;
+  cursor: pointer;
+}
+
+/* 工具条（页面级） */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+/* 章节分隔 */
+.sectionTitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* 引导提示 */
+.guideHint {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(109, 231, 223, 0.06);
+  border: 1px dashed rgba(109, 231, 223, 0.3);
+  font-size: 12px;
+  color: rgba(109, 231, 223, 0.85);
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+/* 资产子分组 */
+.assetGroup {
+  margin-bottom: 20px;
+}
+
+.assetGroupTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #f4f7f8;
+  margin: 0 0 10px;
+}
