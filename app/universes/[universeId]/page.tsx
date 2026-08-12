@@ -60,8 +60,19 @@ import {
   type UniverseOverviewData,
 } from "@/components/universe/universe-view-model";
 import styles from "@/components/universe/universe.module.css";
+// K2-T-07：v2 工作台默认渲染，view=v1 回退到 1.0 详情页
+import { UniverseWorkbenchClient } from "@/components/v2/universe/UniverseWorkbenchClient";
 
 type TabKey = "overview" | "assets" | "works" | "canon" | "inbox" | "graph";
+
+// K2-T-07：默认渲染 v2 工作台；URL ?view=v1 回退到 1.0 详情页（保留骨架，不复制第二套同名页面）。
+export default function UniverseDetailPage() {
+  const searchParams = useSearchParams();
+  if (searchParams?.get("view") !== "v1") {
+    return <UniverseWorkbenchClient />;
+  }
+  return <UniverseDetailPageV1 />;
+}
 
 type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
 
@@ -75,7 +86,7 @@ const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: s
 
 const VALID_TABS: TabKey[] = ["overview", "assets", "works", "canon", "inbox", "graph"];
 
-export default function UniverseDetailPage() {
+function UniverseDetailPageV1() {
   const params = useParams<{ universeId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
