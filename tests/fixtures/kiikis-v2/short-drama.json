@@ -1,0 +1,142 @@
+{
+  "contractVersion": "2.0.0-alpha.1",
+  "project": {
+    "id": "proj-drama-ep01",
+    "title": "样板短剧 EP01",
+    "workflowType": "drama",
+    "currentStage": "art",
+    "lastSavedAt": "2026-08-12T16:20:00+08:00"
+  },
+  "universeBinding": {
+    "bound": true,
+    "universeId": "uni-demo",
+    "universeName": "样板宇宙"
+  },
+  "stages": {
+    "script": {
+      "status": "completed",
+      "script": "EP01 海边咖啡馆\n\n林晚坐在窗边，手指摩挲着银色怀表的边缘。苏河推门进来，带进一阵雨气。\n\n林晚：你又迟到了。\n苏河：路上买了点东西。（递过旧信件）这个，我觉得你该看看。\n\n林晚接过信件，怀表在桌上轻轻震动。咖啡馆外，雨夜街角的灯忽明忽暗。",
+      "analysis": {
+        "characters": [
+          { "id": "char-linwan", "name": "林晚", "kind": "character", "summary": "女主角，海边咖啡馆常客，随身携带银色怀表" },
+          { "id": "char-suhe", "name": "苏河", "kind": "character", "summary": "男主角，雨夜到访，带来旧信件" }
+        ],
+        "scenes": [
+          { "id": "scene-cafe", "name": "海边咖啡馆", "kind": "scene", "summary": "窗边位置，雨夜，窗外可见街角灯光" },
+          { "id": "scene-street", "name": "雨夜街角", "kind": "scene", "summary": "咖啡馆外，灯光忽明忽暗" }
+        ],
+        "props": [
+          { "id": "prop-watch", "name": "银色怀表", "kind": "prop", "summary": "林晚随身物品，会轻微震动" },
+          { "id": "prop-letter", "name": "旧信件", "kind": "prop", "summary": "苏河带来的信件" }
+        ]
+      },
+      "confirmed": {
+        "characterIds": ["char-linwan", "char-suhe"],
+        "sceneIds": ["scene-cafe", "scene-street"],
+        "propIds": ["prop-watch", "prop-letter"]
+      }
+    },
+    "art": {
+      "status": "current",
+      "assets": [
+        {
+          "id": "art-linwan",
+          "name": "林晚 角色立绘",
+          "type": "character",
+          "sourceCandidateId": "char-linwan",
+          "versions": [
+            { "id": "art-linwan-v1", "url": "/assets/art/linwan-v1.png", "locked": false },
+            { "id": "art-linwan-v2", "url": "/assets/art/linwan-v2.png", "locked": true }
+          ],
+          "mainVersionId": "art-linwan-v2"
+        },
+        {
+          "id": "art-cafe",
+          "name": "海边咖啡馆 场景",
+          "type": "scene",
+          "sourceCandidateId": "scene-cafe",
+          "versions": [
+            { "id": "art-cafe-v1", "url": "/assets/art/cafe-v1.png", "locked": true }
+          ],
+          "mainVersionId": "art-cafe-v1"
+        },
+        {
+          "id": "art-suhe",
+          "name": "苏河 角色立绘",
+          "type": "character",
+          "sourceCandidateId": "char-suhe",
+          "versions": [
+            { "id": "art-suhe-v1", "url": "/assets/art/suhe-v1.png", "locked": false }
+          ],
+          "mainVersionId": null
+        }
+      ],
+      "pendingConfirm": [
+        { "id": "prop-watch", "name": "银色怀表", "kind": "prop", "summary": "林晚随身物品，会轻微震动" },
+        { "id": "prop-letter", "name": "旧信件", "kind": "prop", "summary": "苏河带来的信件" },
+        { "id": "scene-street", "name": "雨夜街角", "kind": "scene", "summary": "咖啡馆外，灯光忽明忽暗" }
+      ]
+    },
+    "storyboard": {
+      "status": "locked",
+      "frames": [
+        { "id": "frame-001", "sceneRef": "scene-cafe", "shotDescription": "林晚窗边摩挲怀表，窗外雨夜", "confirmed": false },
+        { "id": "frame-002", "sceneRef": "scene-cafe", "shotDescription": "苏河推门进入，带进雨气", "confirmed": false }
+      ]
+    },
+    "video": {
+      "status": "locked",
+      "shots": [
+        { "id": "shot-frame-001", "frameRef": "frame-001", "status": "pending" },
+        { "id": "shot-frame-002", "frameRef": "frame-002", "status": "pending" }
+      ]
+    },
+    "export": {
+      "status": "locked",
+      "packages": []
+    }
+  },
+  "assetFlow": [
+    { "candidateId": "char-linwan", "name": "林晚", "kind": "character", "flow": ["script", "art"] },
+    { "candidateId": "char-suhe", "name": "苏河", "kind": "character", "flow": ["script", "art"] },
+    { "candidateId": "scene-cafe", "name": "海边咖啡馆", "kind": "scene", "flow": ["script", "art"] },
+    { "candidateId": "scene-street", "name": "雨夜街角", "kind": "scene", "flow": ["script"] },
+    { "candidateId": "prop-watch", "name": "银色怀表", "kind": "prop", "flow": ["script"] },
+    { "candidateId": "prop-letter", "name": "旧信件", "kind": "prop", "flow": ["script"] }
+  ],
+  "proposals": [
+    {
+      "id": "prop-proj-drama-ep01-char-linwan",
+      "universeId": "uni-demo",
+      "sourceProjectId": "proj-drama-ep01",
+      "sourceStage": "script",
+      "status": "pending_review",
+      "confidence": 0.8,
+      "fieldDiffs": [
+        { "path": "entities.character.林晚", "before": null, "after": "女主角，海边咖啡馆常客，随身携带银色怀表" }
+      ],
+      "createdAt": "2026-08-12T16:20:00+08:00"
+    },
+    {
+      "id": "prop-proj-drama-ep01-char-suhe",
+      "universeId": "uni-demo",
+      "sourceProjectId": "proj-drama-ep01",
+      "sourceStage": "script",
+      "status": "pending_review",
+      "confidence": 0.8,
+      "fieldDiffs": [
+        { "path": "entities.character.苏河", "before": null, "after": "男主角，雨夜到访，带来旧信件" }
+      ],
+      "createdAt": "2026-08-12T16:20:00+08:00"
+    }
+  ],
+  "recoveryPoint": {
+    "stage": "art",
+    "confirmedAssets": {
+      "characterIds": ["char-linwan", "char-suhe"],
+      "sceneIds": ["scene-cafe", "scene-street"],
+      "propIds": ["prop-watch", "prop-letter"]
+    },
+    "lastSavedAt": "2026-08-12T16:20:00+08:00"
+  }
+}

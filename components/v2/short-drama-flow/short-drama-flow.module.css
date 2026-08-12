@@ -1,0 +1,406 @@
+/* 短剧流组件样式（K2-T-08）。
+   参考 workbench-shell 深色风格：背景 #070808，accent #6de7df。 */
+
+.stageContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stageTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #f4f7f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stageStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stageStatusCurrent {
+  background: rgba(109, 231, 223, 0.12);
+  color: #6de7df;
+}
+
+.stageStatusCompleted {
+  background: rgba(125, 209, 129, 0.14);
+  color: #7dd181;
+}
+
+.stageStatusLocked {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.completionBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(109, 231, 223, 0.06);
+  border: 1px solid rgba(109, 231, 223, 0.2);
+  font-size: 13px;
+  color: #f4f7f8;
+  line-height: 1.5;
+}
+
+.completionBannerWarn {
+  background: rgba(255, 209, 102, 0.08);
+  border-color: rgba(255, 209, 102, 0.25);
+}
+
+.completionBannerDanger {
+  background: rgba(255, 139, 139, 0.08);
+  border-color: rgba(255, 139, 139, 0.25);
+}
+
+.nextGuide {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6de7df;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scriptBox {
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.candidateList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.candidateItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.candidateItemConfirmed {
+  border-color: rgba(109, 231, 223, 0.4);
+  background: rgba(109, 231, 223, 0.06);
+}
+
+.candidateMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.candidateName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4f7f8;
+}
+
+.candidateSummary {
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
+.candidateKind {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: 8px;
+}
+
+.checkbox {
+  margin-top: 2px;
+  accent-color: #6de7df;
+  cursor: pointer;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #6de7df;
+  background: transparent;
+  color: #6de7df;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.button:hover:not(:disabled) {
+  background: rgba(109, 231, 223, 0.1);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: #6de7df;
+  color: #070808;
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: #8aefe8;
+}
+
+.buttonDanger {
+  border-color: #ff8b8b;
+  color: #ff8b8b;
+}
+
+.buttonDanger:hover:not(:disabled) {
+  background: rgba(255, 139, 139, 0.1);
+}
+
+.assetCard {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assetCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assetName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4f7f8;
+}
+
+.versionList {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.versionChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+}
+
+.versionChipLocked {
+  border-color: rgba(109, 231, 223, 0.5);
+  background: rgba(109, 231, 223, 0.1);
+  color: #6de7df;
+}
+
+.versionChipMain {
+  border-color: #6de7df;
+  background: rgba(109, 231, 223, 0.15);
+  color: #6de7df;
+  font-weight: 700;
+}
+
+.frameList,
+.shotList,
+.packageList,
+.proposalList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.frameItem,
+.shotItem,
+.packageItem,
+.proposalItem {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.frameDesc {
+  flex: 1;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.shotStatus {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.shotStatusCompleted {
+  background: rgba(125, 209, 129, 0.14);
+  color: #7dd181;
+}
+
+.shotStatusFailed {
+  background: rgba(255, 139, 139, 0.14);
+  color: #ff8b8b;
+}
+
+.shotStatusPending {
+  background: rgba(255, 209, 102, 0.14);
+  color: #ffd166;
+}
+
+.packageStatus {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.packageStatusReady {
+  background: rgba(125, 209, 129, 0.14);
+  color: #7dd181;
+}
+
+.packageStatusMissing {
+  background: rgba(255, 139, 139, 0.14);
+  color: #ff8b8b;
+}
+
+.packageStatusPartial {
+  background: rgba(255, 209, 102, 0.14);
+  color: #ffd166;
+}
+
+.packageReason {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-left: auto;
+}
+
+.proposalStatus {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(109, 231, 223, 0.12);
+  color: #6de7df;
+}
+
+.emptyState {
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.lockedNotice {
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flowTrace {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  flex-wrap: wrap;
+}
+
+.flowArrow {
+  color: rgba(109, 231, 223, 0.5);
+}
