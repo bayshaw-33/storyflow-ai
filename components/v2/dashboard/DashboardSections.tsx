@@ -27,26 +27,11 @@ import type {
   RunningJobStage,
 } from "@/lib/client/v2/dashboard/types";
 import type { DashboardWorkflowType } from "@/lib/client/v2/dashboard/types";
-
-// 工作台跳转路径：根据 workflowType 映射到 1.0 既有工作台入口。
-function getWorkbenchPath(project: RecentProject): string {
-  const id = encodeURIComponent(project.id);
-  switch (project.workflowType) {
-    case "song":
-      return `/song-workbench?projectId=${id}`;
-    case "viral":
-      return `/viral-workbench?projectId=${id}`;
-    case "storyboard":
-      return `/storyboard-workbench?projectId=${id}`;
-    case "video":
-      return `/video-workbench?projectId=${id}`;
-    case "novel":
-    case "creation":
-    case "continuation":
-    default:
-      return `/novel-workbench?projectId=${id}&mode=screenplay`;
-  }
-}
+import {
+  resolveProjectTarget,
+  fromRecentProject,
+  fromDashboardJob,
+} from "@/lib/client/v2/navigation/resolver";
 
 function formatRelative(iso: string, isZh: boolean): string {
   const ts = new Date(iso).getTime();
@@ -128,9 +113,12 @@ export function ContinueCreatingSection({ projects }: { projects: RecentProject[
         </div>
       ) : (
         <ul className={styles.list}>
-          {projects.map((project) => (
+          {projects.map((project) => {
+            const target = resolveProjectTarget(fromRecentProject(project));
+            if (!target) return null;
+            return (
             <li key={project.id}>
-              <Link href={getWorkbenchPath(project)} className={`${styles.row} ${styles.rowClickable}`}>
+              <Link href={target} className={`${styles.row} ${styles.rowClickable}`}>
                 <div className={styles.rowTop}>
                   <span className={styles.rowTitle}>{project.title}</span>
                   <span className={styles.badge}>{WORKFLOW_LABELS[project.workflowType]}</span>
@@ -156,7 +144,8 @@ export function ContinueCreatingSection({ projects }: { projects: RecentProject[
                 </div>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </section>
@@ -214,7 +203,7 @@ export function PendingConfirmationsSection({ items }: { items: PendingConfirmat
   );
 }
 
-// 运行中任务：点击跳转 /job-center。
+// 运行中任务：点击跳转所属项目工作台（K21-P0-NAV-002）。
 export function RunningJobsSection({ jobs }: { jobs: RunningJob[] }) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -238,11 +227,27 @@ export function RunningJobsSection({ jobs }: { jobs: RunningJob[] }) {
         <ul className={styles.list}>
           {jobs.map((job) => {
             const percent = job.total > 0 ? Math.min(100, Math.round((job.completed / job.total) * 100)) : 0;
+            const target = resolveProjectTarget(fromDashboardJob(job));
+            const handleClick = () => {
+              if (target) {
+                router.push(target);
+              } else {
+                router.push("/job-center");
+              }
+            };
             return (
               <li
                 key={job.id}
                 className={`${styles.row} ${styles.rowClickable}`}
-                onClick={() => router.push("/job-center")}
+                onClick={handleClick}
+                role={target ? "link" : undefined}
+                tabIndex={target ? 0 : undefined}
+                onKeyDown={(e) => {
+                  if (target && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    handleClick();
+                  }
+                }}
               >
                 <div className={styles.rowTop}>
                   <span className={styles.rowTitle}>{job.name}</span>

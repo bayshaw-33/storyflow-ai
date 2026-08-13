@@ -28,6 +28,12 @@ import {
   jobTypeLabel,
   stageLabel,
 } from "@/lib/client/v2/jobs/grouping";
+import {
+  resolveResultTarget,
+  resolveProjectTarget,
+  isResultExternal,
+  fromUnifiedJob,
+} from "@/lib/client/v2/navigation/resolver";
 import { TaskCard } from "./TaskCard";
 import { TaskFilters, type GroupingDimension } from "./TaskFilters";
 
@@ -245,7 +251,16 @@ export function TaskCenter() {
   const handleAction = useCallback(
     async (job: UnifiedJob, action: JobActionType) => {
       if (action === "view_detail") {
-        if (job.resultUrl) router.push(job.resultUrl);
+        // K21-P0-NAV-003：有目标则跳转，无目标则不伪造
+        const target = resolveResultTarget(fromUnifiedJob(job));
+        if (target) {
+          if (isResultExternal(fromUnifiedJob(job))) {
+            // 外部链接用 window.open，不用 router.push
+            window.open(target, "_blank", "noopener,noreferrer");
+          } else {
+            router.push(target);
+          }
+        }
         return;
       }
       setPendingAction({ jobId: job.id, action });
@@ -315,7 +330,7 @@ export function TaskCenter() {
   // 四种状态
   if (!sessionLoaded || (!session && loading)) {
     return (
-      <main style={shellStyle}>
+      <main className="app-shell" style={shellStyle}>
         <style>{`@keyframes tc-spin { to { transform: rotate(360deg); } } .tc-spin { animation: tc-spin 1s linear infinite; }`}</style>
         <header style={headerStyle}>
           <p style={eyebrowStyle}>Kiikis Task Center</p>
@@ -334,7 +349,7 @@ export function TaskCenter() {
 
   if (!session) {
     return (
-      <main style={shellStyle}>
+      <main className="app-shell" style={shellStyle}>
         <header style={headerStyle}>
           <h1 style={titleStyle}>{isZh ? "请先登录" : "Please sign in"}</h1>
           <p style={subtitleStyle}>{isZh ? "正在跳转到登录页..." : "Redirecting to login..."}</p>
@@ -344,7 +359,7 @@ export function TaskCenter() {
   }
 
   return (
-    <main style={shellStyle}>
+    <main className="app-shell" style={shellStyle}>
       <style>{`@keyframes tc-spin { to { transform: rotate(360deg); } } .tc-spin { animation: tc-spin 1s linear infinite; }`}</style>
       <header style={headerStyle}>
         <p style={eyebrowStyle}>Kiikis Task Center</p>

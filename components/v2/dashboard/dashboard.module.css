@@ -1,5 +1,6 @@
 /* Kiikis 2.0 Dashboard 指挥中心样式
-   参考 app/job-center 的深色风格：背景 #070808，accent #6de7df。 */
+   参考 app/job-center 的深色风格：背景 #070808，accent #6de7df。
+   K21-P0-UI-001：769px+ 使用 --workspace-nav-offset 为全局侧栏留白。 */
 
 .shell {
   min-height: 100dvh;
@@ -7,6 +8,13 @@
   background: #070808;
   color: #f4f7f8;
   box-sizing: border-box;
+}
+
+/* 769px 以上：为固定左侧导航栏留出空间 */
+@media (min-width: 769px) {
+  .shell {
+    padding-left: calc(var(--workspace-nav-offset, 128px) + 24px);
+  }
 }
 
 .container {
@@ -117,10 +125,15 @@
 }
 
 .row {
+  display: block;
+  width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+  text-decoration: none;
+  color: inherit;
 }
 
 .rowClickable {
@@ -131,6 +144,12 @@
 .rowClickable:hover {
   border-color: rgba(109, 231, 223, 0.4);
   background: rgba(109, 231, 223, 0.06);
+}
+
+/* K21-P0-UI-004：键盘焦点轮廓完整可见 */
+.rowClickable:focus-visible {
+  outline: 2px solid #6de7df;
+  outline-offset: -2px;
 }
 
 .rowTop {

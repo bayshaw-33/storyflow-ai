@@ -30,6 +30,11 @@ import type {
   UnifiedJob,
 } from "@/lib/client/v2/jobs/types";
 import {
+  resolveResultTarget,
+  isResultExternal,
+  fromUnifiedJob,
+} from "@/lib/client/v2/navigation/resolver";
+import {
   STAGE_COLORS,
   formatElapsed,
   formatEstimatedRemaining,
@@ -234,13 +239,26 @@ function TaskCardComponent({ job, locale, onAction, pendingAction }: TaskCardPro
               : action.type === "cancel"
                 ? "rgba(255,255,255,0.6)"
                 : "#7dd181";
+          // K21-P0-NAV-003：view_detail 无目标时禁用并解释
+          const navTarget =
+            action.type === "view_detail"
+              ? resolveResultTarget(fromUnifiedJob(job))
+              : null;
+          const isDisabled = isBusy || (action.type === "view_detail" && !navTarget);
           return (
             <button
               key={action.type}
               type="button"
               style={actionButtonStyle(actionColor)}
               onClick={() => onAction(job, action.type)}
-              disabled={isBusy}
+              disabled={isDisabled}
+              title={
+                action.type === "view_detail" && !navTarget
+                  ? locale === "zh-CN"
+                    ? "此任务暂无可跳转的目标"
+                    : "No navigable target for this task"
+                  : undefined
+              }
             >
               <Icon size={12} className={isBusy ? "tc-spin" : undefined} />
               {isBusy
@@ -251,21 +269,33 @@ function TaskCardComponent({ job, locale, onAction, pendingAction }: TaskCardPro
             </button>
           );
         })}
-        {job.resultUrl && (
-          <a
-            href={job.resultUrl}
-            style={{
-              ...actionButtonStyle("#6de7df"),
-              textDecoration: "none",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <ExternalLink size={12} />
-            {locale === "zh-CN" ? "查看结果" : "View result"}
-          </a>
-        )}
+        {job.resultUrl && (() => {
+          const target = resolveResultTarget(fromUnifiedJob(job));
+          if (!target) return null;
+          const external = isResultExternal(fromUnifiedJob(job));
+          return (
+            <a
+              href={target}
+              target={external ? "_blank" : undefined}
+              rel={external ? "noopener noreferrer" : undefined}
+              style={{
+                ...actionButtonStyle("#6de7df"),
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <ExternalLink size={12} />
+              {locale === "zh-CN" ? "查看结果" : "View result"}
+              {external && (
+                <span style={{ fontSize: 10, opacity: 0.7 }}>
+                  {locale === "zh-CN" ? "(外部)" : "(ext)"}
+                </span>
+              )}
+            </a>
+          );
+        })()}
       </div>
     </article>
   );
