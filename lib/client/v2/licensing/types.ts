@@ -47,6 +47,34 @@ export const ALL_ORDER_STATUSES: readonly OrderStatus[] = [
 /** 订单激活状态：决定 Grant 是否可激活 */
 export type OrderActivationState = "awaiting_payment" | "activated" | "released";
 
+/**
+ * 使用授权状态（Grant Status）。
+ *
+ * 状态流转：
+ *   pending  -> active              （订单支付成功，授权激活）
+ *   active   -> expired             （授权到期）
+ *   active   -> revoked_for_new_use （撤销新调用，已有调用保留）
+ *   pending  -> cancelled           （订单取消/失败）
+ *   active   -> disputed            （争议中）
+ */
+export type UsageGrantStatus =
+  | "pending"
+  | "active"
+  | "expired"
+  | "revoked_for_new_use"
+  | "cancelled"
+  | "disputed";
+
+/** 全部使用授权状态 */
+export const ALL_USAGE_GRANT_STATUSES: readonly UsageGrantStatus[] = [
+  "pending",
+  "active",
+  "expired",
+  "revoked_for_new_use",
+  "cancelled",
+  "disputed",
+];
+
 // ============================================================
 // 支付与结算
 // ============================================================
