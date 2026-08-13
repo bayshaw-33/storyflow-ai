@@ -1,5 +1,3 @@
-"use client";
-
 // K2-T-10 License Offer 编辑器入口
 // 为资产配置授权条款：模板、用途、可见范围、商业条件、肖像保护（PRD §9.2）。
 
@@ -13,14 +11,15 @@ const fallbackStyle = {
   color: "#f4f7f8",
 } as const;
 
-export default function LicenseOfferPage({
+export default async function LicenseOfferPage({
   params,
 }: {
-  params: { assetId: string };
+  params: Promise<{ assetId: string }>;
 }) {
+  const { assetId } = await params;
   return (
     <Suspense fallback={<main style={fallbackStyle}>加载中...</main>}>
-      <LicenseOfferEditor assetId={params.assetId} />
+      <LicenseOfferEditor assetId={assetId} />
     </Suspense>
   );
 }

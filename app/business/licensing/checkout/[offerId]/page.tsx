@@ -1,5 +1,3 @@
-"use client";
-
 // K2-T-10 下单确认页入口
 // 资产摘要 + 授权范围（下单前可读，PRD §9.3）+ 支付方式 + 创建订单与 Usage Grant。
 // 订单失败不会错误创建 Active Grant（PRD §9.6）。
@@ -14,14 +12,15 @@ const fallbackStyle = {
   color: "#f4f7f8",
 } as const;
 
-export default function CheckoutPage({
+export default async function CheckoutPage({
   params,
 }: {
-  params: { offerId: string };
+  params: Promise<{ offerId: string }>;
 }) {
+  const { offerId } = await params;
   return (
     <Suspense fallback={<main style={fallbackStyle}>加载中...</main>}>
-      <CheckoutConfirm offerId={params.offerId} />
+      <CheckoutConfirm offerId={offerId} />
     </Suspense>
   );
 }
