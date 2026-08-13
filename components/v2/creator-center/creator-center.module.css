@@ -1,0 +1,433 @@
+/* K2-T-10 创建者中心样式
+ * 深色 #070808，accent #6de7df
+ * 人工结算强调：使用 #ffd166 标注，避免被误读为自动到账 */
+
+.shell {
+  min-height: 100dvh;
+  padding: 24px;
+  background: #070808;
+  color: #f4f7f8;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.header {
+  margin: 0 0 18px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #6de7df;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 900;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* ============ 汇总卡 ============ */
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.summaryCard {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.summaryLabel {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summaryValue {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f4f7f8;
+}
+
+.summaryValueAccent {
+  color: #6de7df;
+}
+
+.summaryValueWarning {
+  color: #ffd166;
+}
+
+.summaryValueSuccess {
+  color: #7dd181;
+}
+
+.summaryHint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 6px 0 0;
+}
+
+/* ============ 人工结算标记（PRD §9.6 强制） ============ */
+.manualBanner {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 209, 102, 0.06);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.6;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.manualBanner strong {
+  color: #ffd166;
+}
+
+.manualBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 209, 102, 0.1);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  color: #ffd166;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* ============ 列表 ============ */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+}
+
+.cardSubtitle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.cardMeta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cardMetaItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cardMetaKey {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.cardMetaVal {
+  color: #f4f7f8;
+  font-weight: 600;
+}
+
+.cardMetaValAccent {
+  color: #6de7df;
+}
+
+.cardMetaValWarning {
+  color: #ffd166;
+}
+
+.cardMetaValSuccess {
+  color: #7dd181;
+}
+
+/* ============ 状态标签 ============ */
+.statusTag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.statusPendingManual {
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.08);
+}
+
+.statusProcessing {
+  color: #6de7df;
+  background: rgba(109, 231, 223, 0.08);
+}
+
+.statusCompletedManual {
+  color: #7dd181;
+  background: rgba(125, 209, 129, 0.08);
+}
+
+/* ============ Tab ============ */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.12s ease;
+}
+
+.tab:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tabActive {
+  color: #6de7df;
+  border-bottom-color: #6de7df;
+  font-weight: 700;
+}
+
+.tabCount {
+  margin-left: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+/* ============ chip ============ */
+.filterBar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.chip {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.chip:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #f4f7f8;
+}
+
+.chipActive {
+  background: rgba(109, 231, 223, 0.16);
+  border-color: #6de7df;
+  color: #6de7df;
+}
+
+/* ============ 按钮 ============ */
+.button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #f4f7f8;
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.button:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.buttonPrimary {
+  border-color: #6de7df;
+  color: #6de7df;
+  background: rgba(109, 231, 223, 0.08);
+}
+
+.buttonPrimary:hover {
+  background: rgba(109, 231, 223, 0.16);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============ 加载 / 空 / 错误 ============ */
+.loading {
+  padding: 60px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+.empty {
+  padding: 60px 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+.errorBox {
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(255, 139, 139, 0.08);
+  border: 1px solid rgba(255, 139, 139, 0.3);
+  color: #ff8b8b;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ============ 入口卡片网格 ============ */
+.entryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.entryCard {
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  min-height: 100px;
+}
+
+.entryCard:hover {
+  border-color: rgba(109, 231, 223, 0.3);
+  transform: translateY(-1px);
+}
+
+.entryIcon {
+  color: #6de7df;
+}
+
+.entryTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4f7f8;
+  margin: 0;
+}
+
+.entryDesc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ============ 区块标题 ============ */
+.sectionTitle {
+  margin: 24px 0 12px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #f4f7f8;
+}
+
+.sectionEyebrow {
+  color: #6de7df;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 4px;
+}
+
+.noticeBox {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+  margin-top: 12px;
+}
