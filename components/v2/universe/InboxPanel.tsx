@@ -84,11 +84,11 @@ export function InboxPanel({
     try {
       const result = await applyInboxAction(bundle.universe.id, proposal.id, action);
       if (result.success) {
-        // 本地更新状态：accept → accepted；edit_by_accept → edited_and_accepted；
+        // 本地更新状态：accept → accepted；edit_accept → edited_and_accepted；
         // reject → rejected；defer → deferred。
         const nextStatus: ChangeProposalStatus =
           action === "accept" ? "accepted"
-          : action === "edit_by_accept" ? "edited_and_accepted"
+          : action === "edit_accept" ? "edited_and_accepted"
           : action === "reject" ? "rejected"
           : "deferred";
         setLocalStatus((prev) => ({ ...prev, [proposal.id]: nextStatus }));
@@ -128,7 +128,7 @@ export function InboxPanel({
       const failed = results.filter((r) => !r.success);
       const nextStatus: ChangeProposalStatus =
         action === "accept" ? "accepted"
-        : action === "edit_by_accept" ? "edited_and_accepted"
+        : action === "edit_accept" ? "edited_and_accepted"
         : action === "reject" ? "rejected"
         : "deferred";
       setLocalStatus((prev) => {
@@ -302,7 +302,7 @@ export function InboxPanel({
                       <button
                         type="button"
                         className={`${styles.button} ${styles.buttonSmall}`}
-                        onClick={() => void handleAction(p, "edit_by_accept")}
+                        onClick={() => void handleAction(p, "edit_accept")}
                         disabled={pendingId === p.id}
                       >
                         <Edit3 size={12} />
@@ -358,7 +358,7 @@ export function InboxPanel({
 function actionLabel(action: InboxActionKind): string {
   switch (action) {
     case "accept": return "接受";
-    case "edit_by_accept": return "编辑后接受";
+    case "edit_accept": return "编辑后接受";
     case "reject": return "拒绝";
     case "defer": return "暂缓";
   }
