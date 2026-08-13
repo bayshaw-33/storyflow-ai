@@ -4,9 +4,8 @@
  * 默认 USE_FIXTURE=true 使用内联 fixture 演示数据；后端就绪后通过
  * NEXT_PUBLIC_USE_LICENSING_FIXTURE=false 切换到真实 API。
  *
- * 注意：C-09 订单/账本 API 尚未完成，目前仅 fixture 路径可用。
- * 真实 API 路径占位为 /api/v2/orders / /api/v2/earnings / /api/v2/reports / /api/v2/disputes，
- * 待 C-09 完成后对接。
+ * 注意：C-09 订单/账本 API 已实现，当前默认 fixture 路径可用。
+ * 真实 API 路径：/api/v2/orders / /api/v2/creators/ledger / /api/v2/reports / /api/v2/disputes。
  *
  * 提供：
  * - 订单：fetchOrders / fetchOrderById / requestRefund / cancelOrder / createOrderAndGrant
@@ -48,11 +47,11 @@ import {
 export const USE_FIXTURE =
   process.env.NEXT_PUBLIC_USE_LICENSING_FIXTURE !== "false";
 
-/** 订单 API 基础路径（C-09 完成后对接） */
+/** 订单 API 基础路径（C-09 已实现） */
 const ORDERS_API_BASE = "/api/v2/orders";
 
-/** 收益账本 API 基础路径（C-09 完成后对接） */
-const EARNINGS_API_BASE = "/api/v2/earnings";
+/** 收益账本 API 基础路径（C-09 已实现，路由为 /api/v2/creators/ledger） */
+const EARNINGS_API_BASE = "/api/v2/creators/ledger";
 
 /** 举报 API 基础路径 */
 const REPORTS_API_BASE = "/api/v2/reports";
@@ -424,7 +423,7 @@ export async function cancelOrder(
 /**
  * 拉取创建者收益账本。
  *
- * 真实模式：GET /api/v2/earnings
+ * 真实模式：GET /api/v2/creators/ledger
  * Codex 返回 { success, contractVersion, items: [EarningRecord], summary: EarningsSummary }
  *
  * PRD §9.6 强制：所有结算状态标注为人工（manualSettlement=true）。

@@ -483,11 +483,11 @@ test("真实模式 fetchOrders：GET /api/v2/orders 带 Bearer token", async () 
   delete process.env.NEXT_PUBLIC_USE_LICENSING_FIXTURE;
 });
 
-test("真实模式 fetchEarnings：GET /api/v2/earnings 带 Bearer token", async () => {
+test("真实模式 fetchEarnings：GET /api/v2/creators/ledger 带 Bearer token", async () => {
   process.env.NEXT_PUBLIC_USE_LICENSING_FIXTURE = "false";
   const mod = await import("../../../lib/client/v2/licensing/api.ts?real=2");
   const fetchImpl = makeFetch({
-    "GET /api/v2/earnings": () =>
+    "GET /api/v2/creators/ledger": () =>
       jsonRes({
         success: true,
         contractVersion: CONTRACT_VERSION,
