@@ -78,3 +78,9 @@ export function parseKiikis21Flags(env: EnvLike): Kiikis21Flags {
   }
   return result;
 }
+
+/**
+ * 别名：解析 feature flags。等价于 parseKiikis21Flags。
+ * 保留 resolveKiikis21Flags 名称以兼容现有 API 路由调用方。
+ */
+export const resolveKiikis21Flags = parseKiikis21Flags;

@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Bell, MessageSquare } from "lucide-react";
-import { fetchKkMessages, updateKkSettings } from "@/lib/client/v2/kk/api";
-import { computeStats } from "@/lib/client/v2/kk/filtering";
 import type { KkFrequency, KkMessage, KkSettings, KkStats } from "@/lib/client/v2/kk/types";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { useKkRuntime } from "./useKkRuntime";
 import { KkPanel } from "./KkPanel";
 import styles from "./kk.module.css";
 
 /**
  * KK 全局助手 - 反馈与交互层。
+ *
+ * K21-KK-001 (Phase 3 改造)：
+ *   - 不再自己 fetch；改为从全站唯一 KkRuntimeProvider 读 messages/stats/settings
+ *   - 旧 updateKkSettings 持久化由 Task 3.6 (profile PATCH) 接管，此处只更新本地状态
+ *   - connectionState=offline 时仍可点击打开面板查看历史消息
  *
  * 悬浮入口（FAB）+ 展开面板，推送任务关键消息与待确认提醒。
  * 不遮挡关键操作：右下角固定，z-index 40（低于 modal）。
@@ -20,83 +24,52 @@ export function KkCompanion() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
 
+  const runtime = useKkRuntime();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<KkMessage[]>([]);
-  const [settings, setSettings] = useState<KkSettings>({
+
+  // 旧 settings 持久化由本地状态承担（2.1 不再写服务端）
+  const [localSettings, setLocalSettings] = useState<KkSettings>({
     frequency: "key_only",
     doNotDisturb: false,
     mutedUntil: null,
   });
-  const [stats, setStats] = useState<KkStats>({ total: 0, unread: 0, bySeverity: { info: 0, success: 0, warning: 0, error: 0 } });
-  const [loading, setLoading] = useState(true);
 
-  // 加载消息与设置
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await fetchKkMessages(null);
-      setMessages(result.messages);
-      setSettings(result.settings);
-      setStats(result.stats);
-    } catch {
-      // 静默失败：KK 不应因加载失败阻塞主界面
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // 标记已读
-  const handleRead = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, read: true } : m)),
-    );
-  }, []);
-
-  // 切换频率
-  const handleChangeFrequency = useCallback(
-    async (freq: KkFrequency) => {
-      const next = { ...settings, frequency: freq };
-      setSettings(next);
-      try {
-        await updateKkSettings(next, null);
-      } catch {
-        // 静默失败：本地状态已更新
-      }
+  // 标记已读：调用 runtime 的 markMessageRead
+  const handleRead = useCallback(
+    (id: string) => {
+      runtime.markMessageRead(id);
     },
-    [settings],
+    [runtime],
   );
+
+  // 切换频率（仅本地状态，2.1 通过 useKkRuntime 暴露给 KkPanel）
+  const handleChangeFrequency = useCallback((freq: KkFrequency) => {
+    setLocalSettings((prev) => ({ ...prev, frequency: freq }));
+  }, []);
 
   // 切换勿扰
-  const handleToggleDnd = useCallback(async () => {
-    const next = { ...settings, doNotDisturb: !settings.doNotDisturb };
-    setSettings(next);
-    try {
-      await updateKkSettings(next, null);
-    } catch {
-      // 静默失败
-    }
-  }, [settings]);
+  const handleToggleDnd = useCallback(() => {
+    setLocalSettings((prev) => ({ ...prev, doNotDisturb: !prev.doNotDisturb }));
+  }, []);
 
   // 临时静音 N 分钟
-  const handleMuteMinutes = useCallback(
-    async (minutes: number) => {
-      const until = new Date(Date.now() + minutes * 60_000).toISOString();
-      const next = { ...settings, mutedUntil: until };
-      setSettings(next);
-      try {
-        await updateKkSettings(next, null);
-      } catch {
-        // 静默失败
-      }
-    },
-    [settings],
-  );
+  const handleMuteMinutes = useCallback((minutes: number) => {
+    const until = new Date(Date.now() + minutes * 60_000).toISOString();
+    setLocalSettings((prev) => ({ ...prev, mutedUntil: until }));
+  }, []);
 
-  // 未读数（用于 FAB 徽标）
+  // 强制重拉 runtime（断线恢复时用户主动触发）
+  const handleRefresh = useCallback(() => {
+    void runtime.refresh();
+  }, [runtime]);
+
+  // 兼容 KkPanel 期望的 props（messages/stats/settings/loading）
+  const messages = runtime.messages as KkMessage[];
+  const stats = runtime.stats as KkStats;
+  const settings = localSettings;
+  const loading =
+    runtime.connectionState === "connecting" ||
+    (runtime.connectionState === "reconnecting" && messages.length === 0);
   const unread = stats.unread;
 
   return (
@@ -120,11 +93,14 @@ export function KkCompanion() {
         settings={settings}
         stats={stats}
         loading={loading}
+        connectionState={runtime.connectionState}
+        errorMessage={runtime.error?.message ?? null}
         onClose={() => setOpen(false)}
         onRead={handleRead}
         onChangeFrequency={handleChangeFrequency}
         onToggleDnd={handleToggleDnd}
         onMuteMinutes={handleMuteMinutes}
+        onRefresh={handleRefresh}
       />
     </>
   );
