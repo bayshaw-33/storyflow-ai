@@ -1,0 +1,270 @@
+{
+  "contractVersion": "2.0.0-alpha.1",
+  "orders": [
+    {
+      "id": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grantId": "grt-001",
+      "grantStatus": "active",
+      "amount": 9900,
+      "currency": "CNY",
+      "paymentMethod": "alipay",
+      "status": "paid",
+      "createdAt": "2026-07-15T08:24:00.000Z",
+      "paidAt": "2026-07-15T08:25:12.000Z",
+      "refundedAt": null,
+      "cancelledAt": null,
+      "failedAt": null,
+      "evidence": {
+        "paymentProof": "manual_confirmed",
+        "generatedAt": "2026-07-15T08:25:00.000Z",
+        "manualConfirmedAt": "2026-07-15T08:25:12.000Z"
+      }
+    },
+    {
+      "id": "ord-002",
+      "assetId": "ast-003",
+      "assetName": "霓虹港口夜景",
+      "grantId": "grt-002",
+      "grantStatus": "pending",
+      "amount": 19900,
+      "currency": "CNY",
+      "paymentMethod": "wechat",
+      "status": "pending",
+      "createdAt": "2026-08-01T14:00:00.000Z",
+      "paidAt": null,
+      "refundedAt": null,
+      "cancelledAt": null,
+      "failedAt": null,
+      "evidence": {
+        "paymentProof": "generated",
+        "generatedAt": "2026-08-01T14:00:05.000Z",
+        "manualConfirmedAt": null
+      }
+    },
+    {
+      "id": "ord-003",
+      "assetId": "ast-005",
+      "assetName": "玻璃海奇幻世界观包",
+      "grantId": "grt-003",
+      "grantStatus": "cancelled",
+      "amount": 29900,
+      "currency": "CNY",
+      "paymentMethod": "card",
+      "status": "refunded",
+      "createdAt": "2026-06-20T10:30:00.000Z",
+      "paidAt": "2026-06-20T10:31:00.000Z",
+      "refundedAt": "2026-07-02T09:14:00.000Z",
+      "cancelledAt": null,
+      "failedAt": null,
+      "evidence": {
+        "paymentProof": "manual_confirmed",
+        "generatedAt": "2026-06-20T10:31:00.000Z",
+        "manualConfirmedAt": "2026-06-20T10:31:00.000Z"
+      }
+    },
+    {
+      "id": "ord-004",
+      "assetId": "ast-007",
+      "assetName": "复古胶片质感风格包",
+      "grantId": "grt-004",
+      "grantStatus": "cancelled",
+      "amount": 14900,
+      "currency": "CNY",
+      "paymentMethod": "alipay",
+      "status": "cancelled",
+      "createdAt": "2026-08-05T16:00:00.000Z",
+      "paidAt": null,
+      "refundedAt": null,
+      "cancelledAt": "2026-08-05T16:08:42.000Z",
+      "failedAt": null,
+      "evidence": {
+        "paymentProof": "missing",
+        "generatedAt": null,
+        "manualConfirmedAt": null
+      }
+    },
+    {
+      "id": "ord-005",
+      "assetId": "ast-009",
+      "assetName": "夜行人反派面具",
+      "grantId": "grt-005",
+      "grantStatus": "pending",
+      "amount": 7900,
+      "currency": "CNY",
+      "paymentMethod": "paypal",
+      "status": "failed",
+      "createdAt": "2026-08-10T11:20:00.000Z",
+      "paidAt": null,
+      "refundedAt": null,
+      "cancelledAt": null,
+      "failedAt": "2026-08-10T11:21:30.000Z",
+      "evidence": {
+        "paymentProof": "missing",
+        "generatedAt": null,
+        "manualConfirmedAt": null
+      }
+    }
+  ],
+  "earnings": [
+    {
+      "id": "ern-001",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 9900,
+      "platformFee": 990,
+      "netAmount": 8910,
+      "settlementStatus": "completed_manual",
+      "createdAt": "2026-07-15T08:25:12.000Z",
+      "settledAt": "2026-08-01T10:00:00.000Z"
+    },
+    {
+      "id": "ern-002",
+      "orderId": "ord-003",
+      "assetId": "ast-005",
+      "assetName": "玻璃海奇幻世界观包",
+      "grossAmount": 29900,
+      "platformFee": 2990,
+      "netAmount": 26910,
+      "settlementStatus": "processing",
+      "createdAt": "2026-06-20T10:31:00.000Z",
+      "settledAt": null
+    },
+    {
+      "id": "ern-003",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 9900,
+      "platformFee": 990,
+      "netAmount": 8910,
+      "settlementStatus": "pending_manual",
+      "createdAt": "2026-07-22T08:25:12.000Z",
+      "settledAt": null
+    },
+    {
+      "id": "ern-004",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 14900,
+      "platformFee": 1490,
+      "netAmount": 13410,
+      "settlementStatus": "completed_manual",
+      "createdAt": "2026-07-29T08:25:12.000Z",
+      "settledAt": "2026-08-05T10:00:00.000Z"
+    },
+    {
+      "id": "ern-005",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 19900,
+      "platformFee": 1990,
+      "netAmount": 17910,
+      "settlementStatus": "pending_manual",
+      "createdAt": "2026-08-08T08:25:12.000Z",
+      "settledAt": null
+    }
+  ],
+  "earningsSummary": {
+    "totalGross": 84500,
+    "totalPlatformFee": 8450,
+    "totalNet": 76050,
+    "pendingManualAmount": 26820,
+    "processingAmount": 26910,
+    "completedManualAmount": 22320,
+    "count": 5,
+    "currency": "CNY",
+    "manualSettlement": true
+  },
+  "reports": [
+    {
+      "id": "rpt-001",
+      "type": "portrait_misuse",
+      "assetId": "ast-002",
+      "assetName": "未授权演员形象 A",
+      "reporterId": "u-001",
+      "description": "该资产使用了本人肖像但未取得授权，要求下架并撤销所有授权。",
+      "evidenceCount": 2,
+      "status": "under_review",
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "resolvedAt": null,
+      "adminNote": "已联系双方核实，正在等待被举报方举证。"
+    },
+    {
+      "id": "rpt-002",
+      "type": "infringement",
+      "assetId": "ast-004",
+      "assetName": "抄袭场景 B",
+      "reporterId": "u-002",
+      "description": "该场景资产抄袭本人 2025 年发布的作品。",
+      "evidenceCount": 3,
+      "status": "pending",
+      "createdAt": "2026-08-05T14:30:00.000Z",
+      "resolvedAt": null,
+      "adminNote": null
+    },
+    {
+      "id": "rpt-003",
+      "type": "false_source",
+      "assetId": "ast-006",
+      "assetName": "虚假来源声称 C",
+      "reporterId": "u-003",
+      "description": "创建者声称资产由本人独立创作，实际为他人作品转售。",
+      "evidenceCount": 1,
+      "status": "resolved",
+      "createdAt": "2026-07-10T11:00:00.000Z",
+      "resolvedAt": "2026-07-18T15:00:00.000Z",
+      "adminNote": "经核实证据成立，资产已下架，已撤销相关授权。"
+    }
+  ],
+  "disputes": [
+    {
+      "id": "dsp-001",
+      "grantId": "grt-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "reason": "授权人主张使用者超出允许用途范围使用资产。",
+      "status": "under_review",
+      "createdAt": "2026-08-02T10:00:00.000Z",
+      "resolvedAt": null,
+      "adminActions": [
+        {
+          "at": "2026-08-02T10:30:00.000Z",
+          "summary": "已受理争议，开始审核。"
+        },
+        {
+          "at": "2026-08-03T16:00:00.000Z",
+          "summary": "已联系双方，等待举证。"
+        }
+      ]
+    },
+    {
+      "id": "dsp-002",
+      "grantId": "grt-003",
+      "assetId": "ast-005",
+      "assetName": "玻璃海奇幻世界观包",
+      "reason": "使用者主张授权范围被错误解读，要求退款。",
+      "status": "resolved",
+      "createdAt": "2026-07-01T09:00:00.000Z",
+      "resolvedAt": "2026-07-05T14:00:00.000Z",
+      "adminActions": [
+        {
+          "at": "2026-07-01T09:30:00.000Z",
+          "summary": "已受理争议。"
+        },
+        {
+          "at": "2026-07-03T11:00:00.000Z",
+          "summary": "已联系双方，确认证据。"
+        },
+        {
+          "at": "2026-07-05T14:00:00.000Z",
+          "summary": "争议已结案，订单已退款，Grant 已撤销。"
+        }
+      ]
+    }
+  ]
+}
