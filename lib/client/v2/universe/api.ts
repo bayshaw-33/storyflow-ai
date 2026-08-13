@@ -587,7 +587,7 @@ export async function fetchImpactAnalysis(
 // Inbox 写入操作的状态反馈类型（组件层用）。
 export type InboxActionKind =
   | "accept"
-  | "edit_and_accept"
+  | "edit_accept"
   | "reject"
   | "defer";
 

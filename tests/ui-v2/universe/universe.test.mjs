@@ -278,3 +278,23 @@ test("recentActivity 至少有一条记录（概览页需要）", () => {
     assert.equal(typeof a.at, "string");
   }
 });
+
+test("Inbox 编辑后接受动作与服务端契约保持 edit_accept 一致", () => {
+  const panelSource = fs.readFileSync(
+    path.join(process.cwd(), "components/v2/universe/InboxPanel.tsx"),
+    "utf-8",
+  );
+  const clientSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/client/v2/universe/api.ts"),
+    "utf-8",
+  );
+  const serverSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/server/v2/proposals/index.ts"),
+    "utf-8",
+  );
+
+  assert.match(panelSource, /handleAction\(p, "edit_accept"\)/);
+  assert.match(clientSource, /\| "edit_accept"/);
+  assert.match(serverSource, /"edit_accept"/);
+  assert.doesNotMatch(panelSource + clientSource, /edit_by_accept|edit_and_accept/);
+});

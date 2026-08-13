@@ -132,6 +132,17 @@ export function getStageStatusList(stages: ShortDramaStages): {
   return STAGE_ORDER.map((id) => ({ id, status: stages[id].status }));
 }
 
+function setStageStatus(
+  stages: ShortDramaStages,
+  stageId: ShortDramaStageId,
+  status: ShortDramaStageStatus,
+): ShortDramaStages {
+  return {
+    ...stages,
+    [stageId]: { ...stages[stageId], status },
+  };
+}
+
 /**
  * 推进阶段：将当前阶段标记为 completed，下一阶段变为 current。
  * 仅纯计算，返回新的 stages 对象（不修改入参）。
@@ -142,12 +153,8 @@ export function advanceStage(stages: ShortDramaStages): ShortDramaStages {
   if (current === null) return stages;
   const idx = getStageIndex(current);
   const next = idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : null;
-  const nextStages = { ...stages };
-  nextStages[current] = { ...stages[current], status: "completed" };
-  if (next !== null) {
-    nextStages[next] = { ...stages[next], status: "current" };
-  }
-  return nextStages;
+  const nextStages = setStageStatus(stages, current, "completed");
+  return next === null ? nextStages : setStageStatus(nextStages, next, "current");
 }
 
 // 判断某阶段是否已完成。
@@ -340,19 +347,19 @@ export function restoreFromRecoveryPoint(
   stages: ShortDramaStages,
   recovery: RecoveryPoint,
 ): ShortDramaStages {
-  const next: ShortDramaStages = { ...stages };
+  let next: ShortDramaStages = { ...stages };
   const targetIdx = getStageIndex(recovery.stage);
   for (let i = 0; i < STAGE_ORDER.length; i++) {
     const id = STAGE_ORDER[i];
     if (i < targetIdx) {
-      next[id] = { ...stages[id], status: "completed" };
+      next = setStageStatus(next, id, "completed");
     } else if (i === targetIdx) {
       // 恢复点阶段：若已 completed 则保持，否则设为 current
-      next[id] = { ...stages[id], status: stages[id].status === "completed" ? "completed" : "current" };
+      next = setStageStatus(next, id, stages[id].status === "completed" ? "completed" : "current");
     } else {
       // 后续阶段：前置若未完成则锁定
       const prevCompleted = next[STAGE_ORDER[i - 1]].status === "completed";
-      next[id] = { ...stages[id], status: prevCompleted ? stages[id].status : "locked" };
+      next = setStageStatus(next, id, prevCompleted ? stages[id].status : "locked");
     }
   }
   return next;
