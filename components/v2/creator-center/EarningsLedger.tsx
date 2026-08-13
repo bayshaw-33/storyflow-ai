@@ -23,16 +23,16 @@ import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
-  fetchEarnings,
+  fetchCreatorEarnings,
   isUnauthenticatedError,
-} from "@/lib/client/v2/licensing/api";
+} from "@/lib/client/v2/creator-center/api";
 import type {
   EarningRecord,
   EarningsSummary,
   LicensingStatus,
   SettlementStatus,
-} from "@/lib/client/v2/licensing/types";
-import { ALL_SETTLEMENT_STATUSES } from "@/lib/client/v2/licensing/types";
+} from "@/lib/client/v2/creator-center/types";
+import { ALL_SETTLEMENT_STATUSES } from "@/lib/client/v2/creator-center/types";
 import {
   formatAmount,
   formatTime,
@@ -84,7 +84,7 @@ export function EarningsLedger() {
     setStatus("loading");
     setErrorMsg("");
     try {
-      const result = await fetchEarnings(session?.access_token || null);
+      const result = await fetchCreatorEarnings(session?.access_token || null);
       setEarnings(result.earnings);
       setSummary(result.summary);
       setStatus(result.earnings.length === 0 ? "empty" : "ready");

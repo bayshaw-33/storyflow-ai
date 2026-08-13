@@ -1,0 +1,97 @@
+{
+  "contractVersion": "2.0.0-alpha.1",
+  "profile": {
+    "id": "creator-001",
+    "displayName": "Mara Studios",
+    "avatarUrl": null,
+    "bio": "独立数字艺术家，专注于赛博朋克与奇幻世界观创作。",
+    "totalAssets": 12,
+    "totalSales": 8,
+    "joinedAt": "2026-01-15T00:00:00.000Z"
+  },
+  "earnings": [
+    {
+      "id": "ern-cc-001",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 10000,
+      "platformFee": 1500,
+      "netAmount": 8500,
+      "settlementStatus": "completed_manual",
+      "createdAt": "2026-07-15T08:25:12.000Z",
+      "settledAt": "2026-08-01T10:00:00.000Z"
+    },
+    {
+      "id": "ern-cc-002",
+      "orderId": "ord-003",
+      "assetId": "ast-005",
+      "assetName": "玻璃海奇幻世界观包",
+      "grossAmount": 20000,
+      "platformFee": 3000,
+      "netAmount": 17000,
+      "settlementStatus": "processing",
+      "createdAt": "2026-06-20T10:31:00.000Z",
+      "settledAt": null
+    },
+    {
+      "id": "ern-cc-003",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 15000,
+      "platformFee": 2250,
+      "netAmount": 12750,
+      "settlementStatus": "pending_manual",
+      "createdAt": "2026-07-22T08:25:12.000Z",
+      "settledAt": null
+    },
+    {
+      "id": "ern-cc-004",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 8000,
+      "platformFee": 1200,
+      "netAmount": 6800,
+      "settlementStatus": "completed_manual",
+      "createdAt": "2026-07-29T08:25:12.000Z",
+      "settledAt": "2026-08-05T10:00:00.000Z"
+    },
+    {
+      "id": "ern-cc-005",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 30000,
+      "platformFee": 4500,
+      "netAmount": 25500,
+      "settlementStatus": "pending_manual",
+      "createdAt": "2026-08-08T08:25:12.000Z",
+      "settledAt": null
+    },
+    {
+      "id": "ern-cc-006",
+      "orderId": "ord-001",
+      "assetId": "ast-001",
+      "assetName": "Mara 赛博女侦探",
+      "grossAmount": 12000,
+      "platformFee": 1800,
+      "netAmount": 10200,
+      "settlementStatus": "processing",
+      "createdAt": "2026-08-10T08:25:12.000Z",
+      "settledAt": null
+    }
+  ],
+  "earningsSummary": {
+    "totalGross": 95000,
+    "totalPlatformFee": 14250,
+    "totalNet": 80750,
+    "pendingManualAmount": 38250,
+    "processingAmount": 27200,
+    "completedManualAmount": 15300,
+    "count": 6,
+    "currency": "CNY",
+    "manualSettlement": true
+  }
+}
