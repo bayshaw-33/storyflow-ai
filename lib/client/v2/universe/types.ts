@@ -6,10 +6,11 @@
 import type {
   ChangeProposalStatus,
   UniverseObjectStatus,
+  UniverseVisibility,
 } from "@/lib/contracts/v2/index";
 
 // 重新导出，便于组件层单一来源引用。
-export type { ChangeProposalStatus, UniverseObjectStatus };
+export type { ChangeProposalStatus, UniverseObjectStatus, UniverseVisibility };
 
 // 与 lib/contracts/v2/index.ts 的 CONTRACT_VERSION 一致。
 export const CONTRACT_VERSION = "2.0.0-alpha.1";
@@ -39,6 +40,11 @@ export interface UniverseInfo {
   createdAt: string;
   updatedAt: string;
   owner: string;
+  // 以下为 Codex API 详情端点返回的扩展字段（真实 API 模式下填充）。
+  // fixture 模式下缺省，UI 不强依赖，只增不删以保持向后兼容。
+  status?: UniverseObjectStatus;
+  visibility?: UniverseVisibility;
+  currentVersion?: string;
 }
 
 // 世界规则（Bible 页），同时复用为概念/法则类资产。
@@ -189,6 +195,12 @@ export interface ImpactAnalysisEntry {
 export interface UniverseBundleV2 {
   contractVersion: string;
   universe: UniverseInfo;
+  // Codex API 详情端点返回的世界圣经摘要（真实 API 模式下填充，fixture 模式缺省）。
+  bible?: {
+    summary?: string;
+    genre?: string;
+    tags?: string[];
+  };
   healthSummary: UniverseHealthSummary;
   rules: WorldRule[];
   characters: CharacterAsset[];
