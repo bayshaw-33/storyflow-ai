@@ -60,11 +60,15 @@ export interface RunningJobEstimate {
   confidence: number;
 }
 
-// 运行中任务卡片：点击跳转 /job-center。
+// 运行中任务卡片：点击跳转所属项目工作台。
 export interface RunningJob {
   id: string;
   name: string;
   projectName: string;
+  /** 项目 ID，用于导航到项目工作台 */
+  projectId?: string;
+  /** 工作台类型，用于导航到具体工作台 */
+  workbenchType?: string;
   stage: RunningJobStage;
   completed: number;
   total: number;
