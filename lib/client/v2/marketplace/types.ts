@@ -325,3 +325,136 @@ export function assertContractVersion(version: string): void {
     );
   }
 }
+
+// ============================================================
+// Codex API DTO（K2-I-04 适配层内部使用）
+//
+// 对齐 Codex v2 服务端 toAsset / toAssetVersion / toOffer / toGrant
+// 返回的扁平结构，用于 api.ts 的 DTO 映射函数。不对外暴露给 UI 组件。
+// ============================================================
+
+/** Codex 资产类型（服务端 AssetKind） */
+export type CodexAssetKind =
+  | "character"
+  | "scene"
+  | "prop"
+  | "style"
+  | "universe_package";
+
+/** Codex 真人肖像权利状态（服务端 rightsState） */
+export type CodexRightsState =
+  | "ai_generated"
+  | "portrait_confirmed"
+  | "portrait_pending";
+
+/** Codex 授权模板（服务端 LICENSE_TEMPLATES） */
+export type CodexLicenseTemplate =
+  | "platform_free"
+  | "non_commercial"
+  | "single_project"
+  | "team_internal"
+  | "commercial"
+  | "custom";
+
+/** Codex 授权条款（对齐 contracts/v2 LicenseOfferTerms） */
+export interface CodexLicenseOfferTerms {
+  commercial: boolean;
+  scope: "platform_free" | "non_commercial" | "single_project" | "team_internal" | "custom";
+  territory?: string[];
+  durationDays?: number | null;
+  modificationAllowed?: boolean;
+}
+
+/** Codex Asset DTO（服务端 toAsset 返回结构） */
+export interface CodexAssetDTO {
+  id: string;
+  kind: CodexAssetKind;
+  name: string;
+  status: AssetStatus;
+  currentVersionId: string | null;
+  createdAt: string;
+  actorId: string | null;
+  rightsState: CodexRightsState | null;
+  projectId: string | null;
+  metadata: Record<string, unknown>;
+}
+
+/** Codex AssetVersion DTO（服务端 toAssetVersion 返回结构） */
+export interface CodexAssetVersionDTO {
+  id: string;
+  assetId: string;
+  parentVersionId: string | null;
+  sourceProjectId: string;
+  previewUrl: string | null;
+  createdAt: string;
+  sourceAssetId: string | null;
+  sourceStep: string;
+  modelKey: string | null;
+  generationJobId: string | null;
+  selectedByUserId: string | null;
+  changeDescription: string;
+  storageBucket: string;
+  storagePath: string;
+  previewStorageBucket: string | null;
+  previewStoragePath: string | null;
+  metadata: Record<string, unknown>;
+  createdBy: string;
+}
+
+/** Codex LicenseOffer DTO（服务端 toOffer 返回结构） */
+export interface CodexLicenseOfferDTO {
+  id: string;
+  assetId: string;
+  assetVersionId: string;
+  terms: CodexLicenseOfferTerms;
+  priceCents: number;
+  currency: string;
+  template: CodexLicenseTemplate;
+  status: string;
+  createdAt: string;
+}
+
+/** Codex UsageGrant DTO（服务端 toGrant 返回结构） */
+export interface CodexUsageGrantDTO {
+  id: string;
+  offerId: string;
+  assetVersionId: string;
+  projectId: string;
+  status: string;
+  expiresAt: string | null;
+  assetId: string;
+  licensorId: string;
+  licenseeId: string;
+  targetProjectId: string;
+  createdAt: string;
+}
+
+/** Codex 错误响应结构 */
+export interface CodexErrorResponse {
+  success: false;
+  error: string;
+  code: "unauthenticated" | "forbidden" | "not_found" | "conflict" | "validation_failed" | "service_unavailable";
+}
+
+// ============================================================
+// 写操作输入类型（K2-I-04）
+// ============================================================
+
+/** 发布资产输入（POST /api/v2/assets body） */
+export interface PublishAssetInput {
+  kind: CodexAssetKind;
+  name: string;
+  projectId?: string;
+  actorId?: string;
+  rightsState?: CodexRightsState;
+  metadata?: Record<string, unknown>;
+}
+
+/** 创建授权要约输入（POST /api/v2/assets/[assetId]/license-offers body） */
+export interface CreateLicenseOfferInput {
+  assetVersionId: string;
+  template: CodexLicenseTemplate;
+  terms: CodexLicenseOfferTerms;
+  priceCents?: number;
+  currency?: string;
+}
