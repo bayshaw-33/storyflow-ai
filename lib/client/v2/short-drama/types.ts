@@ -230,4 +230,74 @@ export interface ShortDramaDraft {
   savedAt: string;
   // 显式标记：仅本地草稿，不等同于云端已同步。
   cloudSynced: false;
+  // 可选：关联的继承快照 id（若恢复时尝试云端快照优先，记录所用快照 id）。
+  // 缺失时表示该草稿从未关联云端快照。保持向后兼容：旧草稿无此字段。
+  snapshotId?: string | null;
+}
+
+// ─── 端到端接线（K2-I-03）补充 DTO ───
+
+// Universe 继承快照 payload 内的实体条目（对齐 C-03 服务端 toSnapshotDto 输出）。
+// 注意：inheritance snapshot 用 type 字段（不是 kind），对齐 entity.type。
+export interface SnapshotEntity {
+  id: string;
+  type: string;
+  name: string;
+  summary: string;
+  status: string;
+  updatedAt: string;
+}
+
+// Universe 继承快照 payload（C-03 GET /universe/snapshot 返回的 snapshot.payload）。
+export interface ShortDramaSnapshotPayload {
+  entities: SnapshotEntity[];
+}
+
+// 继承快照（C-03 GET /universe/snapshot 返回的 snapshot 字段）。
+export interface InheritanceSnapshotBundle {
+  id: string;
+  projectId: string;
+  universeId: string;
+  universeVersion: string;
+  includedObjectIds: string[];
+  createdAt: string;
+  payload: ShortDramaSnapshotPayload;
+}
+
+// C-03 快照 diff 返回的 fields 项（对齐 diffInheritanceSnapshot 输出）。
+export interface SnapshotDiffField {
+  path: string;
+  before: unknown;
+  after: unknown;
+  impact: "added" | "changed" | "removed";
+}
+
+// C-03 快照 diff 响应（GET /universe/snapshot/diff 返回）。
+export interface SnapshotDiffResult {
+  snapshot: InheritanceSnapshotBundle;
+  fields: SnapshotDiffField[];
+  upgradeRequired: boolean;
+  impacts: Array<{ path: string; reason: string }>;
+}
+
+// C-04 提交回流的 ProposalInput（对齐 lib/server/v2/proposals ProposalInput）。
+export interface ProposalSubmitInput {
+  sourceProjectId: string;
+  sourceStep: string;
+  originalText?: string;
+  sourceAssetId?: string;
+  sourceReference?: { kind: "text" | "asset" | "decision"; label: string };
+  confidence: number;
+  fieldDiffs: { path: string; before: unknown; after: unknown }[];
+  suggestedAction: string;
+  idempotencyKey: string;
+  target: { objectType: string; objectId?: string };
+  proposedPayload: Record<string, unknown>;
+  currentPayload?: Record<string, unknown>;
+}
+
+// buildExportAndSubmitPayload 输出：回流提交 payload + 证据引用。
+export interface ExportAndSubmitPayload {
+  inputs: ProposalSubmitInput[];
+  evidenceRefs: string[];
 }

@@ -16,13 +16,18 @@ import type {
   ArtAsset,
   AssetFlowRecord,
   ConfirmedAssets,
+  ExportAndSubmitPayload,
+  InheritanceSnapshotBundle,
+  ProposalSubmitInput,
   RecoveryPoint,
   ScriptCandidate,
   ShortDramaData,
   ShortDramaProposal,
+  ShortDramaSnapshotPayload,
   ShortDramaStageId,
   ShortDramaStageStatus,
   ShortDramaStages,
+  SnapshotEntity,
 } from "./types.ts";
 import { STAGE_ORDER } from "./types.ts";
 
@@ -454,3 +459,171 @@ export function deriveShotsFromStoryboard(storyboard: ShortDramaStages["storyboa
 
 // 暴露 STAGE_ORDER 供外部引用。
 export { STAGE_ORDER };
+
+// ─── 端到端编排（K2-I-03） ───
+//
+// 以下三个纯函数用于把"剧本→导出→回流 Universe"端到端流程接起来：
+// 1. buildScriptCandidatesFromSnapshot：从继承快照 payload 提取角色/场景/道具候选
+// 2. buildExportAndSubmitPayload：根据已完成数据生成回流 payload + 证据引用
+// 3. isE2EComplete：判断端到端流程是否完成
+//
+// 关键约束：
+// - Universe 继承快照 payload.entities 用 type 字段（非 kind），对齐 C-03 服务端 toSnapshotDto
+// - entity.type="character" → characters；"location" → scenes；"object" → props
+// - 回流是候选（Change Proposal），suggestedAction 不直接 accept，由 Universe Inbox 审核
+// - 证据引用必须是稳定引用（相对路径或内联标识），不依赖临时 URL
+
+// Universe entity.type → 短剧候选 kind 映射。
+// character/location/object 是 C-03 服务端落库的 type 字面值。
+function entityKindToCandidateKind(type: string): "character" | "scene" | "prop" | null {
+  switch (type) {
+    case "character":
+      return "character";
+    case "location":
+      return "scene";
+    case "object":
+      return "prop";
+    default:
+      return null;
+  }
+}
+
+// 把单个 Universe entity 映射为 ScriptCandidate（无法识别的 type 返回 null）。
+function mapEntityToCandidate(entity: SnapshotEntity): ScriptCandidate | null {
+  const kind = entityKindToCandidateKind(entity.type);
+  if (kind === null) return null;
+  return {
+    id: entity.id,
+    name: entity.name,
+    kind,
+    summary: entity.summary,
+  };
+}
+
+/**
+ * 从继承快照 payload.entities 提取角色/场景/道具候选。
+ * 用于 fetchShortDramaFlow 把云端继承快照映射到剧本阶段 analysis。
+ *
+ * 映射规则（对齐 C-03 toSnapshotDto 输出，payload.entities[].type）：
+ * - type="character" → characters
+ * - type="location"  → scenes
+ * - type="object"    → props
+ * - 其他 type 忽略（不视为剧本候选）
+ *
+ * 接受 InheritanceSnapshotBundle（完整快照）或 ShortDramaSnapshotPayload（仅 payload）。
+ */
+export function buildScriptCandidatesFromSnapshot(
+  snapshotOrPayload: InheritanceSnapshotBundle | ShortDramaSnapshotPayload | null | undefined,
+): { characters: ScriptCandidate[]; scenes: ScriptCandidate[]; props: ScriptCandidate[] } {
+  const result = {
+    characters: [] as ScriptCandidate[],
+    scenes: [] as ScriptCandidate[],
+    props: [] as ScriptCandidate[],
+  };
+  if (!snapshotOrPayload) return result;
+  // 兼容完整快照与裸 payload 两种入参。
+  const entities: SnapshotEntity[] =
+    "payload" in snapshotOrPayload
+      ? (snapshotOrPayload.payload?.entities ?? [])
+      : (snapshotOrPayload.entities ?? []);
+  for (const entity of entities) {
+    const candidate = mapEntityToCandidate(entity);
+    if (!candidate) continue;
+    switch (candidate.kind) {
+      case "character":
+        result.characters.push(candidate);
+        break;
+      case "scene":
+        result.scenes.push(candidate);
+        break;
+      case "prop":
+        result.props.push(candidate);
+        break;
+    }
+  }
+  return result;
+}
+
+/**
+ * 根据已完成的 ShortDramaData 生成回流 payload（proposals → C-04 ProposalInput）+ 证据引用。
+ *
+ * 返回结构供 submitProposalsToUniverse 使用：
+ * - inputs：每个 ShortDramaProposal 转成一个 ProposalSubmitInput（含 idempotencyKey / target / proposedPayload）
+ * - evidenceRefs：从导出包 contentRef 提取稳定证据引用（不依赖临时 URL）
+ *
+ * 关键约束：
+ * - suggestedAction 固定 "review"（候选进入 Inbox 审核，不自动 accept）
+ * - idempotencyKey 用 proposal.id + sourceProjectId 派生，确保重试幂等
+ * - target.objectType 对齐候选 kind（character/scene/prop），objectId 用候选 id
+ * - proposedPayload 写入候选 summary 与来源阶段，供 Inbox 展示
+ * - 仅收集 status=ready 的导出包作为证据，partial/missing 不进证据链
+ */
+export function buildExportAndSubmitPayload(data: ShortDramaData): ExportAndSubmitPayload {
+  const proposals = generateProposals(data);
+  const inputs: ProposalSubmitInput[] = proposals.map((p) =>
+    proposalToSubmitInput(p, data.project.id),
+  );
+  // 证据引用：仅 ready 导出包的 contentRef（已由 buildExportPackages 保证不依赖临时 URL）。
+  const evidenceRefs: string[] = data.stages.export.packages
+    .filter((pkg) => pkg.status === "ready")
+    .map((pkg) => pkg.contentRef);
+  return { inputs, evidenceRefs };
+}
+
+// 把 ShortDramaProposal 转成 C-04 ProposalSubmitInput。
+function proposalToSubmitInput(
+  proposal: ShortDramaProposal,
+  projectId: string,
+): ProposalSubmitInput {
+  // 从 fieldDiffs 推断目标 object type：path 形如 entities.character.林晚 或 evidence.shots.xxx
+  const firstPath = proposal.fieldDiffs[0]?.path ?? "";
+  let objectType = "entity";
+  if (firstPath.startsWith("entities.character")) objectType = "character";
+  else if (firstPath.startsWith("entities.scene")) objectType = "scene";
+  else if (firstPath.startsWith("entities.prop")) objectType = "prop";
+  else if (firstPath.startsWith("evidence.")) objectType = "evidence";
+
+  // proposedPayload：写入候选 after 值与来源阶段，供 Inbox 审核展示。
+  const afterValue = proposal.fieldDiffs[0]?.after ?? null;
+  const proposedPayload: Record<string, unknown> = {
+    sourceStage: proposal.sourceStage,
+    value: afterValue,
+    confidence: proposal.confidence,
+  };
+  if (objectType !== "evidence") {
+    proposedPayload.name = firstPath.split(".").pop() ?? "";
+  }
+
+  return {
+    sourceProjectId: projectId,
+    sourceStep: proposal.sourceStage,
+    originalText: typeof afterValue === "string" ? afterValue : "",
+    sourceReference: {
+      kind: objectType === "evidence" ? "asset" : "text",
+      label: `${proposal.sourceStage} 阶段候选 ${proposal.id}`,
+    },
+    confidence: proposal.confidence,
+    fieldDiffs: proposal.fieldDiffs,
+    // 候选进入 Inbox 审核，不自动 accept。
+    suggestedAction: "review",
+    // 用 proposal.id + projectId 派生幂等 key，重试同一候选不会重复创建。
+    idempotencyKey: `short-drama:${projectId}:${proposal.id}`,
+    target: { objectType, objectId: proposal.id },
+    proposedPayload,
+    // currentPayload 留空：候选为新增实体，无前置 payload 需要对比。
+  };
+}
+
+/**
+ * 判断端到端流程是否完成：
+ * - 5 阶段全部 completed（isFlowCompleted）
+ * - proposals 已生成（回流候选就绪，等待 submitProposalsToUniverse 提交）
+ *
+ * 注意：本函数只判断"端到端数据是否齐备"，不判断 proposals 是否已提交到云端
+ * （是否已提交由 submitProposalsToUniverse 的返回值承载，调用方自行追踪）。
+ */
+export function isE2EComplete(data: ShortDramaData): boolean {
+  if (!isFlowCompleted(data.stages)) return false;
+  if (!Array.isArray(data.proposals) || data.proposals.length === 0) return false;
+  return true;
+}
