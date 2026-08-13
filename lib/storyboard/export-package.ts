@@ -502,3 +502,22 @@ function guessVideoExt(contentType: string): string {
   if (ct.includes("quicktime") || ct.includes("mov")) return "mov";
   return "mp4";
 }
+
+// ---------------------------------------------------------------------------
+// KIIKIS 2.1 Phase 2 — 动态宫格分镜导出 (Task 2.7) 单一入口
+// ---------------------------------------------------------------------------
+
+// 重新导出动态宫格分镜的确定性导出能力，使本模块成为 storyboard 导出的统一入口。
+// 实现见 export-dynamic-grid.ts / render-team-markdown.ts。
+export {
+  buildDynamicGridPackage,
+  exportDynamicGridJson,
+  exportDynamicGridCsv,
+  buildDynamicGridReadme,
+  sha256Hex as sha256HexDynamicGrid,
+  DYNAMIC_GRID_CSV_COLUMNS,
+  type DynamicGridExportInput,
+  type DynamicGridExportBundle,
+  type DynamicGridExportEntry,
+} from "./export-dynamic-grid.ts";
+export { renderTeamMarkdown, renderFrameMarkdown, renderSceneMarkdown } from "./render-team-markdown.ts";

@@ -1,0 +1,468 @@
+/* DynamicGridEditor — 动态宫格分镜编辑器
+ *
+ * 设计原则:
+ *   - 复用 ProductionWorkbench 的 CSS 变量, 保持暗色风格一致
+ *   - 4/6/9/12 宫格按 gridCount 自适应布局
+ *   - 每 frame 一张卡片, 显示编号/景别/运镜/描述/锁定状态
+ *   - 冲突时弹出 DynamicGridDiffDialog
+ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 28px 40px;
+  color: var(--ink-primary);
+}
+
+.sceneBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.sceneSelect {
+  background: var(--bg-deep);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  color: var(--ink-primary);
+  padding: 8px 12px;
+  font-size: 14px;
+  min-width: 200px;
+}
+
+.continuityBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.continuityBadgeNew {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.continuityBadgeContinuous {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple, #a855f7);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.gridCountBadge {
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-deep);
+  border: 1px solid var(--divider);
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.gridRationale {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-left: 4px;
+}
+
+.metaPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-deep);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metaLabel {
+  color: var(--ink-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metaValue {
+  color: var(--ink-primary);
+  font-size: 13px;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+}
+
+.grid4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid6 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid9 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid12 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 768px) {
+  .grid4, .grid6, .grid9, .grid12 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.frameCard {
+  position: relative;
+  background: var(--bg-deep);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 9 / 16;
+  min-height: 280px;
+}
+
+.frameCardLocked {
+  border-color: var(--accent-amber, #f59e0b);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+}
+
+.frameCardUserEdited {
+  border-color: var(--accent-green, #10b981);
+}
+
+.frameHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--divider);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.frameOrder {
+  font-weight: 700;
+  color: var(--ink-secondary);
+}
+
+.frameLockBtn {
+  background: transparent;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.frameLockBtn:hover {
+  color: var(--ink-primary);
+  border-color: var(--ink-secondary);
+}
+
+.frameLockBtnActive {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--accent-amber, #f59e0b);
+  color: var(--accent-amber, #f59e0b);
+}
+
+.frameAspect {
+  background: var(--bg-void);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 120px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  text-align: center;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.frameAspectText {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.frameBody {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.frameShotSize {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.frameCamera {
+  color: var(--ink-secondary);
+}
+
+.frameDescription {
+  color: var(--ink-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  min-height: 32px;
+}
+
+.frameDialogue {
+  color: var(--ink-muted);
+  font-style: italic;
+  border-left: 2px solid var(--divider);
+  padding-left: 6px;
+}
+
+.actionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.saveBtn {
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.saveBtn:hover {
+  opacity: 0.9;
+}
+
+.saveBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.historyBtn {
+  background: transparent;
+  color: var(--ink-secondary);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.historyBtn:hover {
+  color: var(--ink-primary);
+  border-color: var(--ink-secondary);
+}
+
+.notice {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: var(--accent-blue);
+}
+
+.noticeError {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red, #ef4444);
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  gap: 8px;
+}
+
+/* ---------- Diff Dialog ---------- */
+
+.diffOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.diffDialog {
+  background: var(--bg-deep);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-lg);
+  max-width: 900px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.diffHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.diffTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.diffKind {
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-red, #ef4444);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.diffBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.diffSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diffSectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.diffFrameList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diffFrameRow {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-void);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+
+.diffFrameId {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.diffCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diffFieldLabel {
+  color: var(--ink-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.diffOldValue {
+  color: var(--accent-red, #ef4444);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.diffNewValue {
+  color: var(--accent-green, #10b981);
+}
+
+.diffActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--divider);
+}
+
+.diffBtn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.diffBtnPrimary {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.diffBtnSecondary {
+  background: transparent;
+  color: var(--ink-secondary);
+  border-color: var(--divider);
+}

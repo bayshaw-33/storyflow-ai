@@ -1,0 +1,190 @@
+{
+  "projectTitle": "EP25 凌晨密室",
+  "handoffId": "handoff-ep25-001",
+  "scenes": [
+    {
+      "schemaVersion": "kiikis.dynamic-grid-storyboard/1",
+      "handoffId": "handoff-ep25-001",
+      "sceneId": "scene-25-01",
+      "continuityMode": "NEW",
+      "gridCount": 4,
+      "gridRationale": "开场建立空间，低密度单人场景",
+      "spatialPlan": {
+        "axis": "180-degree",
+        "entrances": ["left"],
+        "screenDirections": ["left-to-right"]
+      },
+      "sharedCinematography": "冷蓝色调，低调照明",
+      "negativePrompt": "text, watermark, subtitle, burned-in caption",
+      "frames": [
+        {
+          "id": "frame-25-01-1",
+          "order": 1,
+          "aspectRatio": "9:16",
+          "visualDescription": "Dark room, moonlight through window, empty chair",
+          "characterIds": [],
+          "shotSize": "wide",
+          "cameraMovement": "slow dolly forward toward window",
+          "emotion": "",
+          "dialogue": "",
+          "action": "Establishing empty room",
+          "timecode": "00:00:01",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-01-2",
+          "order": 2,
+          "aspectRatio": "9:16",
+          "visualDescription": "Isa enters from left, back to camera",
+          "characterIds": ["char-isa"],
+          "shotSize": "medium",
+          "cameraMovement": "static, slight tilt up",
+          "emotion": "tense",
+          "dialogue": "Did anyone follow you?",
+          "action": "Isa looks around",
+          "timecode": "00:00:04",
+          "locked": true,
+          "userEdited": true
+        },
+        {
+          "id": "frame-25-01-3",
+          "order": 3,
+          "aspectRatio": "9:16",
+          "visualDescription": "Close-up of Isa's hand on door lock",
+          "characterIds": ["char-isa"],
+          "shotSize": "close-up",
+          "cameraMovement": "static",
+          "emotion": "anxious",
+          "dialogue": "",
+          "action": "Locks the door",
+          "timecode": "00:00:07",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-01-4",
+          "order": 4,
+          "aspectRatio": "9:16",
+          "visualDescription": "Wide of room, Isa sits in chair, moonlight on face",
+          "characterIds": ["char-isa"],
+          "shotSize": "wide",
+          "cameraMovement": "slow push-in",
+          "emotion": "weary",
+          "dialogue": "We have ten minutes.",
+          "action": "Sits down",
+          "timecode": "00:00:10",
+          "locked": false,
+          "userEdited": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": "kiikis.dynamic-grid-storyboard/1",
+      "handoffId": "handoff-ep25-001",
+      "sceneId": "scene-25-02",
+      "continuityMode": "CONTINUOUS",
+      "gridCount": 6,
+      "gridRationale": "对话升温，多角度切换",
+      "spatialPlan": {
+        "axis": "180-degree",
+        "entrances": ["right"],
+        "screenDirections": ["right-to-left"]
+      },
+      "sharedCinematography": "冷蓝色调，低调照明",
+      "negativePrompt": "text, watermark, subtitle",
+      "frames": [
+        {
+          "id": "frame-25-02-1",
+          "order": 1,
+          "aspectRatio": "9:16",
+          "visualDescription": "Over-shoulder of Isa looking toward door",
+          "characterIds": ["char-isa"],
+          "shotSize": "over-shoulder",
+          "cameraMovement": "static",
+          "emotion": "alert",
+          "dialogue": "",
+          "action": "Listens for footsteps",
+          "timecode": "00:00:15",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-02-2",
+          "order": 2,
+          "aspectRatio": "9:16",
+          "visualDescription": "Close-up of Isa's eyes, darting",
+          "characterIds": ["char-isa"],
+          "shotSize": "close-up",
+          "cameraMovement": "static",
+          "emotion": "fearful",
+          "dialogue": "Too late.",
+          "action": "Whispers",
+          "timecode": "00:00:18",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-02-3",
+          "order": 3,
+          "aspectRatio": "9:16",
+          "visualDescription": "Medium, Isa stands up abruptly",
+          "characterIds": ["char-isa"],
+          "shotSize": "medium",
+          "cameraMovement": "quick tilt down",
+          "emotion": "decisive",
+          "dialogue": "",
+          "action": "Stands up",
+          "timecode": "00:00:20",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-02-4",
+          "order": 4,
+          "aspectRatio": "9:16",
+          "visualDescription": "Wide, Isa moves to window",
+          "characterIds": ["char-isa"],
+          "shotSize": "wide",
+          "cameraMovement": "lateral dolly right",
+          "emotion": "urgent",
+          "dialogue": "",
+          "action": "Walks to window",
+          "timecode": "00:00:22",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-02-5",
+          "order": 5,
+          "aspectRatio": "9:16",
+          "visualDescription": "Close-up of curtain being pulled",
+          "characterIds": [],
+          "shotSize": "close-up",
+          "cameraMovement": "static",
+          "emotion": "",
+          "dialogue": "",
+          "action": "Pulls curtain",
+          "timecode": "00:00:24",
+          "locked": false,
+          "userEdited": false
+        },
+        {
+          "id": "frame-25-02-6",
+          "order": 6,
+          "aspectRatio": "9:16",
+          "visualDescription": "Medium, Isa peeks through curtain gap",
+          "characterIds": ["char-isa"],
+          "shotSize": "medium",
+          "cameraMovement": "slow push-in",
+          "emotion": "tense",
+          "dialogue": "I see them.",
+          "action": "Peeks outside",
+          "timecode": "00:00:27",
+          "locked": true,
+          "userEdited": true
+        }
+      ]
+    }
+  ]
+}
