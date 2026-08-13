@@ -76,9 +76,10 @@ import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
 import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
+import { DynamicGridEditor } from "./DynamicGridEditor";
 import styles from "./ProductionWorkbench.module.css";
 
-type Tab = "script" | "table" | "assets" | "frames";
+type Tab = "script" | "table" | "assets" | "frames" | "grid";
 
 type StoryboardAssets = {
   characters: StoryboardAssetUsage[];
@@ -90,6 +91,7 @@ const tabLabels: Array<{ id: Tab; label: string }> = [
   { id: "script", label: "剧本" },
   { id: "assets", label: "美术" },
   { id: "table", label: "分镜" },
+  { id: "grid", label: "动态分镜" },
   { id: "frames", label: "视频" },
 ];
 
@@ -105,6 +107,7 @@ export function ProductionWorkbench() {
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient | null>(null);
   const [projectId, setProjectId] = useState<string>("");
   const [sourceUnitId, setSourceUnitId] = useState<string>("");
+  const [handoffId, setHandoffId] = useState<string>("");
   const [projectTitle, setProjectTitle] = useState<string>("");
   const [manuscript, setManuscript] = useState<string>("");
   const [sourceFiles, setSourceFiles] = useState<ProductionSourceFile[]>([]);
@@ -193,6 +196,7 @@ export function ProductionWorkbench() {
   useEffect(() => {
     const urlProjectId = searchParams.get("projectId");
     const urlSourceUnitId = searchParams.get("sourceUnitId");
+    const urlHandoffId = searchParams.get("handoffId") || "";
     const setup = searchParams.get("setup");
     const mode = searchParams.get("mode") || "planning";
 
@@ -234,6 +238,7 @@ export function ProductionWorkbench() {
     setIsEmptyState(false);
     setProjectId(urlProjectId);
     setSourceUnitId(urlSourceUnitId);
+    setHandoffId(urlHandoffId);
     setHydrationPhase("loading_local");
 
     // 优先 handoff
@@ -1548,6 +1553,15 @@ export function ProductionWorkbench() {
         ) : null}
         {activeTab === "assets" ? (
           <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} />
+        ) : null}
+        {activeTab === "grid" ? (
+          handoffId ? (
+            <DynamicGridEditor handoffId={handoffId} />
+          ) : (
+            <div style={{ padding: "40px 28px", color: "var(--ink-muted)", textAlign: "center" }}>
+              请先在剧本工作台「定稿并进入分镜」以生成 handoff,再回到此 tab 编辑动态宫格分镜。
+            </div>
+          )
         ) : null}
         {activeTab === "frames" ? (
           <ShotFramesPanel
