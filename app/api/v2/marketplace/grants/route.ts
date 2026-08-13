@@ -1,0 +1,9 @@
+import { NextRequest, NextResponse } from "next/server";
+import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { createUsageGrant, listUsageGrants, LicensingError } from "@/lib/server/v2/licensing";
+import { licensingErrorResponse } from "@/lib/server/v2/licensing/http";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export async function GET(request: NextRequest) { try { const user = await authenticateRequest(request); if (!hasServiceRoleConfig()) throw new LicensingError("service_unavailable", "Cloud data service is not configured."); const result = await listUsageGrants({ fetcher: serviceFetch, userId: user.id, status: request.nextUrl.searchParams.get("status") }); return NextResponse.json({ success: true, contractVersion: "2.0.0-alpha.1", ...result }); } catch (error) { return routeError(error, "Unable to read usage grants."); } }
+export async function POST(request: NextRequest) { try { const user = await authenticateRequest(request); if (!hasServiceRoleConfig()) throw new LicensingError("service_unavailable", "Cloud data service is not configured."); const result = await createUsageGrant({ fetcher: serviceFetch, userId: user.id, input: await request.json() }); return NextResponse.json({ success: true, contractVersion: "2.0.0-alpha.1", ...result }, { status: 201 }); } catch (error) { return routeError(error, "Unable to create usage grant."); } }
+function routeError(error: unknown, fallback: string) { if (error instanceof Error && (error.message.includes("MISSING_AUTH_TOKEN") || error.message.includes("INVALID_AUTH_TOKEN"))) return NextResponse.json({ success: false, error: "Authentication is required.", code: "unauthenticated" }, { status: 401 }); return licensingErrorResponse(error, fallback); }
