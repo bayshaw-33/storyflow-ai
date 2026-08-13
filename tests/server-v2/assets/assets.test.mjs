@@ -192,4 +192,6 @@ test("C-07 migration defines lifecycle, durable version storage, and lineage tab
   assert.match(sql, /source_project_id/);
   assert.match(sql, /source_step/);
   assert.match(sql, /storyflow_v2_asset_usages/i);
+  assert.match(sql, /enforce_storyflow_v2_asset_status_transition/i);
+  assert.match(sql, /storyflow_v2_asset_status_transition/i);
 });

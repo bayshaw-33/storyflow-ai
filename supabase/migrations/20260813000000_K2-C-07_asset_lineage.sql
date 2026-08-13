@@ -57,6 +57,27 @@ ALTER TABLE public.storyflow_v2_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.storyflow_v2_asset_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.storyflow_v2_asset_usages ENABLE ROW LEVEL SECURITY;
 
+CREATE OR REPLACE FUNCTION public.enforce_storyflow_v2_asset_status_transition()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.status = NEW.status THEN RETURN NEW; END IF;
+  IF NOT (
+    (OLD.status = 'draft' AND NEW.status IN ('ready', 'archived')) OR
+    (OLD.status = 'ready' AND NEW.status IN ('published', 'suspended', 'archived')) OR
+    (OLD.status = 'published' AND NEW.status IN ('suspended', 'archived')) OR
+    (OLD.status = 'suspended' AND NEW.status IN ('published', 'archived'))
+  ) THEN
+    RAISE EXCEPTION 'invalid asset status transition: % -> %', OLD.status, NEW.status;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS storyflow_v2_asset_status_transition ON public.storyflow_v2_assets;
+CREATE TRIGGER storyflow_v2_asset_status_transition
+  BEFORE UPDATE OF status ON public.storyflow_v2_assets
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_storyflow_v2_asset_status_transition();
+
 CREATE POLICY storyflow_v2_assets_owner_all ON public.storyflow_v2_assets
   FOR ALL USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
 CREATE POLICY storyflow_v2_asset_versions_owner_all ON public.storyflow_v2_asset_versions
