@@ -7,6 +7,8 @@ import { GlobalSideNav } from "@/components/layout/GlobalSideNav";
 import { ThemeTimeSync } from "@/components/layout/ThemeTimeSync";
 import { DevBridge } from "@/components/dev/DevBridge";
 import { WorkspaceModalProvider } from "@/components/modal/workspace-modal-provider";
+import { KkRuntimeProvider } from "@/components/v2/kk/KkRuntimeProvider";
+import { KkCompanion } from "@/components/v2/kk/KkCompanion";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -49,10 +51,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <LanguageProvider>
           <OSProvider>
             <WorkspaceModalProvider>
-              <ThemeTimeSync />
-              {children}
-              <GlobalSideNav />
-              <DevBridge />
+              <KkRuntimeProvider allowFixtureFallback>
+                <ThemeTimeSync />
+                {children}
+                <GlobalSideNav />
+                <KkCompanion />
+                <DevBridge />
+              </KkRuntimeProvider>
             </WorkspaceModalProvider>
           </OSProvider>
         </LanguageProvider>

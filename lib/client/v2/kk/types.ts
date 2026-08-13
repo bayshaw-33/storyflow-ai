@@ -130,3 +130,103 @@ export function assertContractVersion(version: string): void {
     );
   }
 }
+
+// ============================================================
+// KIIKIS 2.1 Phase 3 — KK runtime 契约 (K21-KK-001..007, 010..014, 020..024)
+// ============================================================
+
+/**
+ * KK 连接状态机 (K21-KK-003/004)。
+ * connecting → live → (断线) → reconnecting → (失败 N 次) → polling → (长时间) → offline
+ */
+export type KkConnectionState =
+  | "connecting"
+  | "live"
+  | "reconnecting"
+  | "polling"
+  | "offline";
+
+export const ALL_KK_CONNECTION_STATES: readonly KkConnectionState[] = [
+  "connecting",
+  "live",
+  "reconnecting",
+  "polling",
+  "offline",
+];
+
+/**
+ * KK 允许的 action (K21-KK-006)。
+ * 复用统一目标解析器 + 服务端 action。
+ */
+export const ALL_KK_ACTIONS = [
+  "open_task",          // 跳转到任务
+  "open_project",       // 跳转到项目
+  "open_universe",      // 跳转到 Universe
+  "propose_action",    // 提议高风险动作 (K21-KK-012)
+  "confirm_action",    // 确认高风险动作
+  "cancel_action",     // 取消高风险动作
+  "equip_item",        // 装备外观 (K21-KK-022)
+  "unequip_item",      // 卸下外观
+  "update_profile",    // 更新档案 (K21-KK-020)
+  "update_privacy",    // 更新隐私 (K21-KK-022)
+  "export_memory",    // 导出记忆 (K21-KK-014)
+  "delete_memory",     // 删除记忆 (K21-KK-014)
+] as const;
+export type KkActionId = (typeof ALL_KK_ACTIONS)[number];
+
+/** 类型守卫：字符串是否为合法 KkActionId */
+export function isKkAction(value: string): value is KkActionId {
+  return (ALL_KK_ACTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * KK 任务投影 (K21-KK-005)。
+ * 只显示服务端可验证的真实进度；不可量化任务只显示阶段。
+ */
+export interface KkTaskProjection {
+  readonly queued: number;
+  readonly running: number;
+  readonly ingesting: number;
+  readonly completed: number;
+  readonly failed: number;
+}
+
+/**
+ * KK 待确认 (K21-KK-012)。
+ */
+export interface KkPendingConfirmation {
+  readonly actionId: string;
+  readonly actionType: string;
+  readonly summary: string;
+  readonly expiresAt: string;
+}
+
+/**
+ * KK runtime 启动响应 (GET /api/v2/kk)。
+ */
+export interface KkRuntimeResponse {
+  readonly contractVersion: string;
+  readonly profile: unknown;
+  readonly entitlements: ReadonlyArray<unknown>;
+  readonly serverCursor: number;
+  readonly taskProjection: KkTaskProjection;
+  readonly pendingConfirmations: ReadonlyArray<KkPendingConfirmation>;
+  readonly allowedActions: ReadonlyArray<KkActionId>;
+  readonly featureFlags: unknown;
+  readonly source: "api" | "fixture";
+}
+
+/**
+ * KK 事件流 entry (K21-KK-003)。
+ * 从 GET /api/v2/kk/events?afterSequence=N 获取增量事件。
+ */
+export interface KkEventEntry {
+  readonly id: string;
+  readonly sequence: number;
+  readonly eventType: string;
+  readonly resourceType: string;
+  readonly resourceId: string;
+  readonly taskId: string | null;
+  readonly occurredAt: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+}

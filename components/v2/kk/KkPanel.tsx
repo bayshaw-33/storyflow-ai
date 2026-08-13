@@ -1,7 +1,12 @@
 "use client";
 
-import { BellOff, VolumeX, X } from "lucide-react";
-import type { KkMessage, KkSettings, KkStats } from "@/lib/client/v2/kk/types";
+import { BellOff, RefreshCw, VolumeX, X, WifiOff } from "lucide-react";
+import type {
+  KkConnectionState,
+  KkMessage,
+  KkSettings,
+  KkStats,
+} from "@/lib/client/v2/kk/types";
 import { ALL_FREQUENCIES, type KkFrequency } from "@/lib/client/v2/kk/types";
 import { frequencyLabel, isMuted } from "@/lib/client/v2/kk/filtering";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -14,11 +19,17 @@ interface KkPanelProps {
   settings: KkSettings;
   stats: KkStats;
   loading: boolean;
+  /** K21-KK-003 连接状态（Phase 3 新增；不传时视为 live） */
+  connectionState?: KkConnectionState;
+  /** K21-KK-002 启动错误信息（offline 时展示给用户） */
+  errorMessage?: string | null;
   onClose: () => void;
   onRead: (id: string) => void;
   onChangeFrequency: (freq: KkFrequency) => void;
   onToggleDnd: () => void;
   onMuteMinutes: (minutes: number) => void;
+  /** 用户主动触发重连（断线恢复后） */
+  onRefresh?: () => void;
 }
 
 export function KkPanel({
@@ -27,15 +38,22 @@ export function KkPanel({
   settings,
   stats,
   loading,
+  connectionState = "live",
+  errorMessage,
   onClose,
   onRead,
   onChangeFrequency,
   onToggleDnd,
   onMuteMinutes,
+  onRefresh,
 }: KkPanelProps) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const muted = isMuted(settings);
+
+  // K21-KK-003: 根据 connectionState 显示状态条
+  const showOfflineBar = connectionState === "offline" || connectionState === "reconnecting";
+  const showPollingBar = connectionState === "polling";
 
   return (
     <div
@@ -66,6 +84,40 @@ export function KkPanel({
           <X size={16} />
         </button>
       </div>
+
+      {/* 连接状态条 */}
+      {showOfflineBar && (
+        <div className={styles.connectionBar} role="status">
+          <WifiOff size={12} />
+          <span>
+            {connectionState === "offline"
+              ? (isZh ? "KK 服务离线" : "KK offline")
+              : (isZh ? "正在重连..." : "Reconnecting...")}
+          </span>
+          {errorMessage && (
+            <span className={styles.connectionError} title={errorMessage}>
+              {isZh ? "（点击刷新重试）" : " (click refresh to retry)"}
+            </span>
+          )}
+          {onRefresh && (
+            <button
+              type="button"
+              className={styles.refreshBtn}
+              onClick={onRefresh}
+              aria-label={isZh ? "刷新" : "Refresh"}
+              title={isZh ? "重新拉取 KK runtime" : "Re-fetch KK runtime"}
+            >
+              <RefreshCw size={12} />
+            </button>
+          )}
+        </div>
+      )}
+      {showPollingBar && (
+        <div className={`${styles.connectionBar} ${styles.connectionBarPolling}`} role="status">
+          <RefreshCw size={12} />
+          <span>{isZh ? "实时断线，正在轮询补拉..." : "Realtime offline, polling..."}</span>
+        </div>
+      )}
 
       {/* 设置栏：频率 / 勿扰 / 静音 */}
       <div className={styles.settings}>
@@ -116,7 +168,9 @@ export function KkPanel({
           </div>
         ) : messages.length === 0 ? (
           <div className={styles.empty}>
-            {isZh ? "暂无消息" : "No messages"}
+            {connectionState === "offline" && errorMessage
+              ? (isZh ? "KK 服务暂不可用" : "KK service unavailable")
+              : (isZh ? "暂无消息" : "No messages")}
           </div>
         ) : (
           messages.map((msg) => (

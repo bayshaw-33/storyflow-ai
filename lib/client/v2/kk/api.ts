@@ -1,11 +1,17 @@
 /**
- * KK 反馈层 API 适配器。
+ * KIIKIS 2.1 Phase 3 — KK runtime API 客户端 (Task 3.2)
  *
- * 默认 USE_FIXTURE=true 使用内联 fixture 演示数据；后端就绪后通过
- * NEXT_PUBLIC_USE_KK_FIXTURE=false 切换到真实 API。
+ * K21-KK-002: production/staging 默认禁用 fixture。
+ * - development: USE_FIXTURE 默认 true (向后兼容)
+ * - production/staging: 默认 false，缺服务端配置时显示明确不可用
  *
- * 提供 fetchKkMessages / fetchKkSettings / updateKkSettings 三个接口。
- * KK 是只读反馈层：不提供"代为确认结果"或"修改 Canon"的接口。
+ * 新增接口 (Phase 3)：
+ *   - fetchKkRuntime: 启动数据 (profile/entitlements/cursor/taskProjection/pendingConfirmations/actions)
+ *   - fetchKkEvents: 增量事件流 (K21-KK-003/004)
+ *   - updateKkProfile: 更新 profile (K21-KK-020)
+ *   - equipKkItem: 装备 (K21-KK-022)
+ *   - listEquipment: 装备历史 + 净持有
+ *   - listMemory / addMemory / deleteMemory: 陪伴上下文 + 导出/删除 (K21-KK-010/014)
  */
 import {
   fixtureContractVersion,
@@ -19,9 +25,11 @@ import {
   type KkMessage,
   type KkSettings,
   type KkStats,
+  type KkRuntimeResponse,
+  type KkEventEntry,
 } from "./types.ts";
 
-/** 是否使用 fixture 演示数据（默认开启） */
+/** 是否使用 fixture 演示数据（向后兼容） */
 export const USE_FIXTURE =
   process.env.NEXT_PUBLIC_USE_KK_FIXTURE !== "false";
 
@@ -39,6 +47,252 @@ function buildHeaders(token: string | null): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+// ============================================================
+// Phase 3 新增 — KK runtime API
+// ============================================================
+
+export class KkRuntimeClientError extends Error {
+  readonly code: string;
+  readonly status: number;
+  constructor(code: string, message: string, status: number) {
+    super(message);
+    this.name = "KkRuntimeClientError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+/**
+ * 获取 KK runtime 启动数据 (K21-KK-001..007, 020..024)。
+ * production/staging 缺服务端配置时抛 KkRuntimeClientError(code=service_unavailable)，
+ * 不静默切 fixture (K21-KK-002)。
+ */
+export async function fetchKkRuntime(accessToken: string | null): Promise<KkRuntimeResponse> {
+  const response = await fetch(API_BASE, {
+    headers: buildHeaders(accessToken),
+  });
+  if (response.status === 503) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      "KK service not configured in production-like environment (K21-KK-002).",
+      503,
+    );
+  }
+  if (response.status === 401) {
+    throw new KkRuntimeClientError("unauthenticated", "Authentication required.", 401);
+  }
+  if (!response.ok) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      `KK runtime fetch failed: ${response.status}`,
+      response.status,
+    );
+  }
+  const payload = await response.json();
+  if (!payload?.success) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      payload?.error || "KK runtime fetch failed.",
+      response.status,
+    );
+  }
+  return {
+    contractVersion: payload.contractVersion,
+    profile: payload.profile,
+    entitlements: payload.entitlements ?? [],
+    serverCursor: payload.serverCursor ?? 0,
+    taskProjection: payload.taskProjection ?? { queued: 0, running: 0, ingesting: 0, completed: 0, failed: 0 },
+    pendingConfirmations: payload.pendingConfirmations ?? [],
+    allowedActions: payload.allowedActions ?? [],
+    featureFlags: payload.featureFlags ?? {},
+    source: "api",
+  };
+}
+
+/**
+ * 获取增量事件流 (K21-KK-003/004)。
+ * Realtime 断线后通过此接口补拉。
+ */
+export async function fetchKkEvents(
+  accessToken: string | null,
+  options: { afterSequence: number; limit?: number } = { afterSequence: 0 },
+): Promise<{ events: KkEventEntry[]; nextCursor: number }> {
+  const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
+  const url = `${API_BASE}/events?afterSequence=${options.afterSequence}&limit=${limit}`;
+  const response = await fetch(url, { headers: buildHeaders(accessToken) });
+  if (!response.ok) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      `KK events fetch failed: ${response.status}`,
+      response.status,
+    );
+  }
+  const payload = await response.json();
+  if (!payload?.success) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      payload?.error || "KK events fetch failed.",
+      response.status,
+    );
+  }
+  return {
+    events: payload.events ?? [],
+    nextCursor: payload.nextCursor ?? options.afterSequence,
+  };
+}
+
+/**
+ * 更新 KK profile (K21-KK-020)。
+ * growth_* 字段不可直接更新。
+ */
+export async function updateKkProfile(
+  accessToken: string | null,
+  patch: {
+    displayName?: string;
+    profileDisplay?: boolean;
+    communityDisplay?: boolean;
+    recentProjectId?: string;
+    recentUniverseId?: string;
+  },
+): Promise<KkRuntimeResponse["profile"]> {
+  const response = await fetch(API_BASE + "/profile", {
+    method: "PATCH",
+    headers: buildHeaders(accessToken),
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      payload?.error || `KK profile update failed: ${response.status}`,
+      response.status,
+    );
+  }
+  const payload = await response.json();
+  return payload.profile;
+}
+
+/**
+ * 装备 item (K21-KK-022)。
+ * 服务端校验 ledger 净持有。
+ */
+export async function equipKkItem(
+  accessToken: string | null,
+  itemId: string,
+  itemVersion: string,
+): Promise<void> {
+  const response = await fetch(API_BASE + "/equipment", {
+    method: "POST",
+    headers: buildHeaders(accessToken),
+    body: JSON.stringify({ itemId, itemVersion }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new KkRuntimeClientError(
+      "equip_denied",
+      payload?.error || `Equip failed: ${response.status}`,
+      response.status,
+    );
+  }
+}
+
+/**
+ * 获取装备历史 + 净持有 (K21-KK-022)。
+ */
+export async function listEquipment(
+  accessToken: string | null,
+  options: { limit?: number } = {},
+): Promise<{ entitlements: unknown[]; equipmentHistory: unknown[] }> {
+  const limit = options.limit ?? 50;
+  const response = await fetch(`${API_BASE}/equipment?limit=${limit}`, {
+    headers: buildHeaders(accessToken),
+  });
+  if (!response.ok) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      `Equipment fetch failed: ${response.status}`,
+      response.status,
+    );
+  }
+  const payload = await response.json();
+  return {
+    entitlements: payload.entitlements ?? [],
+    equipmentHistory: payload.equipmentHistory ?? [],
+  };
+}
+
+/**
+ * 列出陪伴上下文记忆 (K21-KK-010)。
+ */
+export async function listMemory(
+  accessToken: string | null,
+  options: { factType?: string; limit?: number } = {},
+): Promise<unknown[]> {
+  const params = new URLSearchParams();
+  if (options.factType) params.set("factType", options.factType);
+  if (options.limit) params.set("limit", String(options.limit));
+  const url = `${API_BASE}/memory${params.toString() ? "?" + params.toString() : ""}`;
+  const response = await fetch(url, { headers: buildHeaders(accessToken) });
+  if (!response.ok) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      `Memory fetch failed: ${response.status}`,
+      response.status,
+    );
+  }
+  const payload = await response.json();
+  return payload.facts ?? [];
+}
+
+/**
+ * 添加陪伴上下文记忆 (K21-KK-010)。
+ */
+export async function addMemory(
+  accessToken: string | null,
+  fact: {
+    factType: string;
+    factKey: string;
+    factValue: Record<string, unknown>;
+    isSensitive?: boolean;
+  },
+): Promise<unknown> {
+  const response = await fetch(API_BASE + "/memory", {
+    method: "POST",
+    headers: buildHeaders(accessToken),
+    body: JSON.stringify(fact),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      payload?.error || `Memory add failed: ${response.status}`,
+      response.status,
+    );
+  }
+  const payload = await response.json();
+  return payload.fact;
+}
+
+/**
+ * 删除陪伴上下文记忆 (K21-KK-014)。
+ */
+export async function deleteMemory(
+  accessToken: string | null,
+  id: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/memory?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: buildHeaders(accessToken),
+  });
+  if (!response.ok) {
+    throw new KkRuntimeClientError(
+      "service_unavailable",
+      `Memory delete failed: ${response.status}`,
+      response.status,
+    );
+  }
 }
 
 async function parseJsonSafely(response: Response): Promise<unknown> {
