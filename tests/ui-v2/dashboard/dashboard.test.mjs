@@ -14,6 +14,11 @@ import {
   DashboardFixtureError,
   loadDashboardFixture,
 } from "../../../lib/client/v2/dashboard/fixtures.ts";
+import {
+  dashboardEmptyFixture,
+  dashboardErrorFixture,
+  dashboardFixture,
+} from "../../../lib/client/v2/dashboard/fixture-data.ts";
 
 const FIXTURE_DIR = path.join(process.cwd(), "tests/fixtures/kiikis-v2");
 
@@ -166,4 +171,32 @@ test("Universe 健康度六维度齐全（对齐 PRD §7.8）", () => {
       `Universe ${u.id} 健康度维度不齐`,
     );
   }
+});
+
+// 防数据漂移：TS 内联数据必须与 tests/fixtures/kiikis-v2/*.json 完全一致。
+// 这样 JSON 文件作为 K2-I-01 集成校验依据、TS 模块作为浏览器运行时数据源，两者不会脱节。
+test("TS 内联 dashboardFixture 与 dashboard.json 一致（防数据漂移）", () => {
+  const json = readFixture("dashboard");
+  assert.deepEqual(JSON.parse(JSON.stringify(dashboardFixture)), json);
+});
+
+test("TS 内联 dashboardEmptyFixture 与 dashboard-empty.json 一致（防数据漂移）", () => {
+  const json = readFixture("dashboard-empty");
+  assert.deepEqual(JSON.parse(JSON.stringify(dashboardEmptyFixture)), json);
+});
+
+test("TS 内联 dashboardErrorFixture 与 dashboard-error.json 一致（防数据漂移）", () => {
+  const json = readFixture("dashboard-error");
+  assert.deepEqual(JSON.parse(JSON.stringify(dashboardErrorFixture)), json);
+});
+
+test("loadDashboardFixture 未知 fixture 名抛错", async () => {
+  await assert.rejects(
+    () => loadDashboardFixture("nonexistent"),
+    (err) => {
+      assert.ok(err instanceof DashboardFixtureError);
+      assert.equal(err.code, "DASHBOARD_FIXTURE_NOT_FOUND");
+      return true;
+    },
+  );
 });
