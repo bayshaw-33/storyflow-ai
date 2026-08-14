@@ -135,3 +135,341 @@ async function query<T>(fetcher: InheritanceFetcher, path: string, init?: Reques
   try { return await fetcher<T>(path, init); }
   catch (error) { if (error instanceof InheritanceError) throw error; throw new InheritanceError("service_unavailable", error instanceof Error ? error.message : "Inheritance service unavailable."); }
 }
+
+// ===========================================================================
+// V2.2 Work-level Universe Inheritance (Phase 2 Task 2.2)
+//
+// The legacy functions above (bindUniverse, unbindUniverse,
+// createInheritanceSnapshot, readInheritanceSnapshot, diffInheritanceSnapshot)
+// handle project-level binding and remain unchanged. The functions below
+// handle the newer Work-level binding introduced in K22-P2, going through the
+// SECURITY DEFINER RPC `bind_work_to_universe_v22` for atomicity.
+// ===========================================================================
+
+export class InheritanceV22Error extends Error {
+  readonly code: "unauthenticated" | "forbidden" | "not_found" | "conflict" | "validation_failed" | "service_unavailable";
+
+  constructor(code: InheritanceV22Error["code"], message: string) {
+    super(`${code}: ${message}`);
+    this.name = "InheritanceV22Error";
+    this.code = code;
+  }
+}
+
+export interface WorkInheritanceManifestV22Row {
+  id: string;
+  workId: string;
+  universeId: string;
+  universeVersionId: string;
+  relation: string;
+  timelineAnchorId: string | null;
+  canonPolicy: string;
+  includedEntityVersionIds: string[];
+  includedFactVersionIds: string[];
+  includedRelationshipVersionIds: string[];
+  includedTimelineEventVersionIds: string[];
+  includedAssetVersionIds: string[];
+  isActive: boolean;
+  supersededBy: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface UniverseVersionV22Row {
+  id: string;
+  universeId: string;
+  versionNo: number;
+  contentHash: string;
+  objectIndex: Record<string, string[]>;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface WorkInheritanceSnapshotV22Row {
+  id: string;
+  manifestId: string;
+  workId: string;
+  universeVersionId: string;
+  snapshotHash: string;
+  objectSnapshot: Record<string, unknown>;
+  createdAt: string;
+}
+
+const V22_WORK_RELATIONS = new Set([
+  "canon_continuation",
+  "prequel",
+  "sequel",
+  "spinoff",
+  "adaptation",
+  "parallel",
+]);
+
+const V22_CANON_POLICIES = new Set(["strict", "flexible", "reference_only"]);
+
+const V22_MANIFEST_SELECT =
+  "id,work_id,universe_id,universe_version_id,relation,timeline_anchor_id,canon_policy,included_entity_version_ids,included_fact_version_ids,included_relationship_version_ids,included_timeline_event_version_ids,included_asset_version_ids,is_active,superseded_by,created_by,created_at";
+
+const V22_VERSION_SELECT = "id,universe_id,version_no,content_hash,object_index,created_by,created_at";
+
+const V22_SNAPSHOT_SELECT = "id,manifest_id,work_id,universe_version_id,snapshot_hash,object_snapshot,created_at";
+
+/**
+ * Bind a Work to a Universe atomically via the `bind_work_to_universe_v22` RPC.
+ *
+ * The RPC validates ownership, object membership, finds-or-creates a Universe
+ * Version, and inserts the Manifest + Snapshot in a single transaction. This
+ * function adds input validation, idempotency (returns the existing active
+ * manifest if bind params match), and error mapping on top of the RPC.
+ */
+export async function bindWorkToUniverseV22(input: {
+  fetcher: InheritanceFetcher;
+  ownerId: string;
+  workId: string;
+  universeId: string;
+  relation: "canon_continuation" | "prequel" | "sequel" | "spinoff" | "adaptation" | "parallel";
+  canonPolicy: "strict" | "flexible" | "reference_only";
+  timelineAnchorId?: string | null;
+  includedEntityIds?: string[];
+  includedFactIds?: string[];
+  includedRelationshipIds?: string[];
+  includedTimelineEventIds?: string[];
+  includedAssetIds?: string[];
+}): Promise<WorkInheritanceManifestV22Row> {
+  if (!input.ownerId) throw new InheritanceV22Error("unauthenticated", "ownerId is required.");
+  if (!input.workId) throw new InheritanceV22Error("validation_failed", "workId is required.");
+  if (!input.universeId) throw new InheritanceV22Error("validation_failed", "universeId is required.");
+  if (!V22_WORK_RELATIONS.has(input.relation)) {
+    throw new InheritanceV22Error("validation_failed", `Unsupported relation: ${input.relation}`);
+  }
+  if (!V22_CANON_POLICIES.has(input.canonPolicy)) {
+    throw new InheritanceV22Error("validation_failed", `Unsupported canonPolicy: ${input.canonPolicy}`);
+  }
+
+  // Idempotency: if there is already an active manifest with identical bind
+  // params, return it without calling the RPC. The RPC always supersedes, so
+  // this guard makes duplicate binds (e.g. from-Universe pre-bind retry) a
+  // no-op instead of creating a redundant supersession chain.
+  const existing = await readActiveManifestV22(input.fetcher, input.workId);
+  if (existing && isSameBindParams(existing, input)) {
+    return existing;
+  }
+
+  const rpcBody = {
+    p_work_id: input.workId,
+    p_universe_id: input.universeId,
+    p_relation: input.relation,
+    p_canon_policy: input.canonPolicy,
+    p_timeline_anchor_id: input.timelineAnchorId ?? null,
+    p_included_entity_ids: input.includedEntityIds ?? [],
+    p_included_fact_ids: input.includedFactIds ?? [],
+    p_included_relationship_ids: input.includedRelationshipIds ?? [],
+    p_included_timeline_event_ids: input.includedTimelineEventIds ?? [],
+    p_included_asset_ids: input.includedAssetIds ?? [],
+    p_caller_id: input.ownerId,
+  };
+
+  let row: unknown;
+  try {
+    row = await input.fetcher("/rest/v1/rpc/bind_work_to_universe_v22", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify(rpcBody),
+    });
+  } catch (error) {
+    throw mapRpcError(error);
+  }
+
+  if (!row || typeof row !== "object") {
+    throw new InheritanceV22Error("service_unavailable", "Bind RPC returned no manifest.");
+  }
+  return toManifestV22Row(row as Record<string, unknown>);
+}
+
+/**
+ * Read the current active inheritance for a Work.
+ *
+ * Returns `{ manifest: null, universeVersion: null, snapshot: null }` when the
+ * Work is not bound. When bound, validates work ownership before returning the
+ * manifest + universe version + snapshot.
+ */
+export async function readWorkInheritanceV22(input: {
+  fetcher: InheritanceFetcher;
+  ownerId: string;
+  workId: string;
+}): Promise<{
+  manifest: WorkInheritanceManifestV22Row | null;
+  universeVersion: UniverseVersionV22Row | null;
+  snapshot: WorkInheritanceSnapshotV22Row | null;
+}> {
+  if (!input.ownerId) throw new InheritanceV22Error("unauthenticated", "ownerId is required.");
+  if (!input.workId) throw new InheritanceV22Error("validation_failed", "workId is required.");
+
+  const manifest = await readActiveManifestV22(input.fetcher, input.workId);
+  if (!manifest) {
+    return { manifest: null, universeVersion: null, snapshot: null };
+  }
+
+  // Validate work ownership before returning manifest data. The service-role
+  // fetcher bypasses RLS, so we must enforce ownership here.
+  await assertWorkOwnerV22(input.fetcher, input.workId, input.ownerId);
+
+  const [universeVersion, snapshot] = await Promise.all([
+    readUniverseVersionV22(input.fetcher, manifest.universeVersionId),
+    readSnapshotV22(input.fetcher, manifest.id),
+  ]);
+
+  return { manifest, universeVersion, snapshot };
+}
+
+// ---------------------------------------------------------------------------
+// V2.2 internal helpers
+// ---------------------------------------------------------------------------
+
+async function readActiveManifestV22(
+  fetcher: InheritanceFetcher,
+  workId: string,
+): Promise<WorkInheritanceManifestV22Row | null> {
+  const rows = await query<unknown[]>(fetcher, `/rest/v1/storyflow_work_inheritance_manifests?work_id=eq.${encodeURIComponent(workId)}&is_active=eq.true&select=${V22_MANIFEST_SELECT}&limit=1`);
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  if (!row || typeof row !== "object") return null;
+  return toManifestV22Row(row as Record<string, unknown>);
+}
+
+async function assertWorkOwnerV22(fetcher: InheritanceFetcher, workId: string, ownerId: string): Promise<void> {
+  const rows = await query<Array<{ id: string; owner_id?: string | null }>>(fetcher, `/rest/v1/storyflow_works?id=eq.${encodeURIComponent(workId)}&select=id,owner_id&limit=1`);
+  const work = rows?.[0];
+  if (!work) throw new InheritanceV22Error("not_found", "Work not found.");
+  if (work.owner_id !== ownerId) throw new InheritanceV22Error("forbidden", "Work access denied.");
+}
+
+async function readUniverseVersionV22(fetcher: InheritanceFetcher, versionId: string): Promise<UniverseVersionV22Row | null> {
+  const rows = await query<unknown[]>(fetcher, `/rest/v1/storyflow_universe_versions?id=eq.${encodeURIComponent(versionId)}&select=${V22_VERSION_SELECT}&limit=1`);
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  if (!row || typeof row !== "object") return null;
+  return toUniverseVersionV22Row(row as Record<string, unknown>);
+}
+
+async function readSnapshotV22(fetcher: InheritanceFetcher, manifestId: string): Promise<WorkInheritanceSnapshotV22Row | null> {
+  const rows = await query<unknown[]>(fetcher, `/rest/v1/storyflow_work_inheritance_snapshots?manifest_id=eq.${encodeURIComponent(manifestId)}&select=${V22_SNAPSHOT_SELECT}&limit=1`);
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  if (!row || typeof row !== "object") return null;
+  return toSnapshotV22Row(row as Record<string, unknown>);
+}
+
+function isSameBindParams(
+  manifest: WorkInheritanceManifestV22Row,
+  input: {
+    universeId: string;
+    relation: string;
+    canonPolicy: string;
+    timelineAnchorId?: string | null;
+    includedEntityIds?: string[];
+    includedFactIds?: string[];
+    includedRelationshipIds?: string[];
+    includedTimelineEventIds?: string[];
+    includedAssetIds?: string[];
+  },
+): boolean {
+  if (manifest.universeId !== input.universeId) return false;
+  if (manifest.relation !== input.relation) return false;
+  if (manifest.canonPolicy !== input.canonPolicy) return false;
+  if ((manifest.timelineAnchorId ?? null) !== (input.timelineAnchorId ?? null)) return false;
+  if (!stringArrayEq(manifest.includedEntityVersionIds, input.includedEntityIds ?? [])) return false;
+  if (!stringArrayEq(manifest.includedFactVersionIds, input.includedFactIds ?? [])) return false;
+  if (!stringArrayEq(manifest.includedRelationshipVersionIds, input.includedRelationshipIds ?? [])) return false;
+  if (!stringArrayEq(manifest.includedTimelineEventVersionIds, input.includedTimelineEventIds ?? [])) return false;
+  if (!stringArrayEq(manifest.includedAssetVersionIds, input.includedAssetIds ?? [])) return false;
+  return true;
+}
+
+function stringArrayEq(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
+}
+
+function mapRpcError(error: unknown): InheritanceV22Error {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg.includes("MISSING_CALLER")) return new InheritanceV22Error("unauthenticated", "Missing caller.");
+  if (msg.includes("FORBIDDEN")) return new InheritanceV22Error("forbidden", "Work access denied.");
+  if (msg.includes("UNIVERSE_ACCESS_DENIED")) return new InheritanceV22Error("forbidden", "Universe access denied.");
+  if (msg.includes("WORK_NOT_FOUND")) return new InheritanceV22Error("not_found", "Work not found.");
+  if (msg.includes("UNIVERSE_NOT_FOUND")) return new InheritanceV22Error("not_found", "Universe not found.");
+  if (
+    msg.includes("ENTITY_NOT_IN_UNIVERSE") ||
+    msg.includes("FACT_NOT_IN_UNIVERSE") ||
+    msg.includes("RELATIONSHIP_NOT_IN_UNIVERSE") ||
+    msg.includes("TIMELINE_EVENT_NOT_IN_UNIVERSE") ||
+    msg.includes("ASSET_NOT_FOUND")
+  ) {
+    return new InheritanceV22Error("validation_failed", "One or more included objects do not belong to the Universe.");
+  }
+  if (msg.includes("INVALID_RELATION") || msg.includes("INVALID_CANON_POLICY")) {
+    return new InheritanceV22Error("validation_failed", "Invalid relation or canon policy.");
+  }
+  if (error instanceof InheritanceV22Error) return error;
+  return new InheritanceV22Error("service_unavailable", msg || "Bind RPC failed.");
+}
+
+function toManifestV22Row(row: Record<string, unknown>): WorkInheritanceManifestV22Row {
+  return {
+    id: String(row.id),
+    workId: String(row.work_id),
+    universeId: String(row.universe_id),
+    universeVersionId: String(row.universe_version_id),
+    relation: String(row.relation),
+    timelineAnchorId: row.timeline_anchor_id != null ? String(row.timeline_anchor_id) : null,
+    canonPolicy: String(row.canon_policy),
+    includedEntityVersionIds: asStringArray(row.included_entity_version_ids),
+    includedFactVersionIds: asStringArray(row.included_fact_version_ids),
+    includedRelationshipVersionIds: asStringArray(row.included_relationship_version_ids),
+    includedTimelineEventVersionIds: asStringArray(row.included_timeline_event_version_ids),
+    includedAssetVersionIds: asStringArray(row.included_asset_version_ids),
+    isActive: Boolean(row.is_active),
+    supersededBy: row.superseded_by != null ? String(row.superseded_by) : null,
+    createdBy: String(row.created_by),
+    createdAt: String(row.created_at),
+  };
+}
+
+function toUniverseVersionV22Row(row: Record<string, unknown>): UniverseVersionV22Row {
+  const rawIndex = row.object_index;
+  const objectIndex: Record<string, string[]> = {};
+  if (rawIndex && typeof rawIndex === "object") {
+    for (const [key, value] of Object.entries(rawIndex as Record<string, unknown>)) {
+      objectIndex[key] = asStringArray(value);
+    }
+  }
+  return {
+    id: String(row.id),
+    universeId: String(row.universe_id),
+    versionNo: Number(row.version_no),
+    contentHash: String(row.content_hash),
+    objectIndex,
+    createdBy: String(row.created_by),
+    createdAt: String(row.created_at),
+  };
+}
+
+function toSnapshotV22Row(row: Record<string, unknown>): WorkInheritanceSnapshotV22Row {
+  const rawSnapshot = row.object_snapshot;
+  const objectSnapshot: Record<string, unknown> =
+    rawSnapshot && typeof rawSnapshot === "object"
+      ? (rawSnapshot as Record<string, unknown>)
+      : {};
+  return {
+    id: String(row.id),
+    manifestId: String(row.manifest_id),
+    workId: String(row.work_id),
+    universeVersionId: String(row.universe_version_id),
+    snapshotHash: String(row.snapshot_hash),
+    objectSnapshot,
+    createdAt: String(row.created_at),
+  };
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((v) => String(v));
+}
