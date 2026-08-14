@@ -29,6 +29,12 @@ export async function GET(request: NextRequest) {
     }
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
+    if (status && !isAppealStatus(status)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid status: ${status}`, code: "validation_failed" },
+        { status: 400 },
+      );
+    }
     const isMod = await hasModeratorRole(serviceFetch, user.id);
     // CM-009: 审核员可看所有 (传 all=true); 普通用户只看自己的
     const items = await listAppeals(serviceFetch, user.id, {

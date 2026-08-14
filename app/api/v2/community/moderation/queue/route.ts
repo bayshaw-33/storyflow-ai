@@ -39,6 +39,18 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
     const targetType = url.searchParams.get("targetType");
+    if (status && !isModerationStatus(status)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid status: ${status}`, code: "validation_failed" },
+        { status: 400 },
+      );
+    }
+    if (targetType && !isReportTargetType(targetType)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid targetType: ${targetType}`, code: "validation_failed" },
+        { status: 400 },
+      );
+    }
     const items = await listModerationQueue(serviceFetch, {
       status: status && isModerationStatus(status) ? status : undefined,
       targetType: targetType && isReportTargetType(targetType) ? targetType : undefined,

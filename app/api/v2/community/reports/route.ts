@@ -26,6 +26,12 @@ export async function GET(request: NextRequest) {
     }
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
+    if (status && !isReportStatus(status)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid status: ${status}`, code: "validation_failed" },
+        { status: 400 },
+      );
+    }
     const items = await listReportsByReporter(serviceFetch, user.id, {
       status: status && isReportStatus(status) ? status : undefined,
       limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
