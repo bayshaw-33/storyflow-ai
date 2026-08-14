@@ -689,7 +689,9 @@ test("CO-007: markNotificationRead 已读的去重不重复标记", async () => 
   let patchCalled = false;
   const fetcher = makeMockFetcher([
     {
-      match: (p) => p.includes("/rest/v1/storyflow_creative_events?id=") && p.includes("Accept"),
+      match: (p, init) =>
+        p.includes("/rest/v1/storyflow_creative_events?id=") &&
+        init?.headers?.Accept?.includes("pgrst"),
       respond: () => ({ payload: { read: true } }), // 已读
     },
     {
@@ -708,7 +710,9 @@ test("CO-007: markNotificationRead 未读的调用 PATCH", async () => {
   let patchCalled = false;
   const fetcher = makeMockFetcher([
     {
-      match: (p) => p.includes("Accept") && p.includes("/rest/v1/storyflow_creative_events?id="),
+      match: (p, init) =>
+        p.includes("/rest/v1/storyflow_creative_events?id=") &&
+        init?.headers?.Accept?.includes("pgrst"),
       respond: () => ({ payload: { read: false, body: "B" } }),
     },
     {

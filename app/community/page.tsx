@@ -1,4 +1,3 @@
-import { resolveKiikis21Flags } from "@/lib/server/v2/feature-flags";
 import { hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { listDiscoveryFeed } from "@/lib/server/v2/community/discovery";
 import { CommunityServiceError } from "@/lib/server/v2/community/publications";
@@ -10,20 +9,13 @@ export const dynamic = "force-dynamic";
 /**
  * /community — IP 资产社区发现页 (Phase 5, CM-002)
  *
- * CM-010: 受 feature flag `communityBeta` 保护。
- * Gate 4 未通过前，非邀请用户访问显示占位。
+ * Phase 7 (CM-010 解除): feature flag 限制已移除。
+ * /community 现在对所有用户公开可访问 (匿名用户受 RLS 限制，只能浏览 public)。
  *
  * CM-002: 发现页只查询允许公开访问的 publication 投影，不查私有资源表。
  * 匿名用户可浏览 public；认证用户额外可查询自己发布的。
  */
 export default async function CommunityPage() {
-  const flags = resolveKiikis21Flags(process.env);
-
-  // CM-010: feature flag 未启用 → 占位
-  if (!flags.communityBeta) {
-    return <CommunityPlaceholderClient />;
-  }
-
   // 服务未配置 → 占位 (不静默切 fixture)
   if (!hasServiceRoleConfig()) {
     return <CommunityPlaceholderClient />;

@@ -150,11 +150,13 @@ export interface MilestoneServiceOptions {
 export class MilestoneService {
   private readonly rateLimiter: MilestoneRateLimiter;
   private readonly allowUnknown: boolean;
+  private readonly fetcher: KkProfileFetcher;
 
   constructor(
-    private readonly fetcher: KkProfileFetcher,
+    fetcher: KkProfileFetcher,
     options: MilestoneServiceOptions = {},
   ) {
+    this.fetcher = fetcher;
     this.rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
     this.allowUnknown = options.allowUnknownMilestones === true;
   }
@@ -179,14 +181,37 @@ export class MilestoneService {
     let validated: GrantMilestoneFromEventInput;
     try {
       validated = validateGrantFromEventInput(input);
-    } catch {
-      return {
-        inserted: false,
-        reason: "invalid_input",
-        milestoneId: input.milestoneId ?? "",
-        xp: 0,
-        levelDelta: 0,
-      };
+    } catch (err: unknown) {
+      // 契约层 isKnownMilestone 检查可能抛 unknown_milestone，服务层根据 allowUnknown 决定
+      const isUnknownMilestone =
+        err instanceof Error &&
+        err.name === "MilestoneValidationError" &&
+        (err as { code?: string }).code === "unknown_milestone";
+      if (isUnknownMilestone && this.allowUnknown) {
+        // allowUnknown 放行：使用原始 input 继续（其他字段已在契约层通过）
+        validated = {
+          ownerId: input.ownerId ?? "",
+          milestoneId: input.milestoneId ?? "",
+          sourceId: input.sourceId ?? "",
+          occurredAt: input.occurredAt ?? "",
+        };
+      } else if (isUnknownMilestone) {
+        return {
+          inserted: false,
+          reason: "unknown_milestone",
+          milestoneId: input.milestoneId ?? "",
+          xp: 0,
+          levelDelta: 0,
+        };
+      } else {
+        return {
+          inserted: false,
+          reason: "invalid_input",
+          milestoneId: input.milestoneId ?? "",
+          xp: 0,
+          levelDelta: 0,
+        };
+      }
     }
 
     // 2. milestone 定义检查

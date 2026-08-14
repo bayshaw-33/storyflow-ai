@@ -7,7 +7,7 @@
  *   1. milestone 由 Creative Event 幂等授予 (idempotency_key 防重)
  *   2. 批量垃圾生成不能刷成长 (反刷量窗口)
  *   3. milestone 必须是已定义的 "有意义事件"，不接受任意 milestoneId
- *   4. milestone 不可直接购买/兑换 (K21-KK-024 禁止 paid_draw)
+ *   4. milestone 不可直接购买/兑换 (K21-KK-024 禁止付费解锁)
  *
  * 与 kk-profile.ts 的关系：
  *   - milestone 授予最终调用 grant_milestone RPC，更新 kk_profile.growth_xp/level

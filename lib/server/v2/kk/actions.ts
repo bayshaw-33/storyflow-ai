@@ -282,7 +282,8 @@ export async function proposeAction(
 
   const actionType = input.actionType as KkActionType;
   const risk = resolveRisk(actionType);
-  const ttlMs = Math.min(Math.max(input.ttlMs ?? 5 * 60_000, 10_000), 60 * 60_000);
+  // 默认 5 分钟；最小 1ms (允许测试用短 TTL 验证过期机制)，最大 1 小时
+  const ttlMs = Math.min(Math.max(input.ttlMs ?? 5 * 60_000, 1), 60 * 60_000);
   const now = new Date();
   const actionId = input.idempotencyKey ?? generateActionId();
 
