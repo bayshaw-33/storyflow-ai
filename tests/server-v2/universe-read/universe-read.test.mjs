@@ -16,7 +16,7 @@ import {
 } from "../../../lib/server/v2/universe/index.ts";
 import {
   computeUniverseVersionContentHash,
-} from "../../../lib/contracts/v2/universe-inheritance-v22.ts";
+} from "../../../lib/contracts/v2/universe-inheritance-v22-hash.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures: DB rows

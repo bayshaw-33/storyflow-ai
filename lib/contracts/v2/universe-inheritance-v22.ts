@@ -12,12 +12,11 @@
  * stay in server adapters and never cross the v2.2 API boundary.
  */
 
-import {
-  canonicalJson,
-  sha256Hex,
-  utf8Bytes,
-} from "../../compliance/manifest.ts";
 import { KIIKIS_22_CONTRACT_VERSION } from "./work-history.ts";
+
+// NOTE: `computeUniverseVersionContentHash` lives in
+// `./universe-inheritance-v22-hash.ts` to keep this contract module free of
+// `node:crypto` so it can be safely imported by client bundles.
 
 export { KIIKIS_22_CONTRACT_VERSION };
 
@@ -154,87 +153,6 @@ export function isCanonPolicy(value: unknown): value is CanonPolicy {
     typeof value === "string" &&
     (CANON_POLICIES as readonly string[]).includes(value)
   );
-}
-
-// ---------------------------------------------------------------------------
-// Universe Version content hash
-// ---------------------------------------------------------------------------
-
-const CANON_TYPE_ORDER: readonly CanonObjectInput["type"][] = [
-  "entity",
-  "fact",
-  "relationship",
-  "timeline_event",
-  "asset",
-];
-
-/**
- * Compute a deterministic SHA-256 content hash for a set of Canon objects.
- *
- * Rules (PRD Task 2.1 Step 2):
- *   - Objects are grouped by type, then sorted by stable `id` within each group.
- *   - Groups are concatenated in CANON_TYPE_ORDER.
- *   - Only `id`, `versionId`, and `content` fields contribute to the hash;
- *     `updatedAt` and other non-content metadata are excluded.
- *   - The same object set and version order always produces the same hash,
- *     regardless of input order or timestamp.
- */
-export function computeUniverseVersionContentHash(
-  objects: readonly CanonObjectInput[],
-): string {
-  if (!Array.isArray(objects)) {
-    throw new UniverseInheritanceContractError(
-      "validation_failed",
-      "objects must be an array",
-      "objects",
-    );
-  }
-
-  // Group by type.
-  const groups = new Map<CanonObjectInput["type"], CanonObjectInput[]>();
-  for (const obj of objects) {
-    if (!obj || typeof obj !== "object") {
-      throw new UniverseInheritanceContractError(
-        "validation_failed",
-        "each object must be an object",
-        "objects",
-      );
-    }
-    if (!obj.id || typeof obj.id !== "string") {
-      throw new UniverseInheritanceContractError(
-        "validation_failed",
-        "object id must be a non-empty string",
-        "objects",
-      );
-    }
-    if (!obj.versionId || typeof obj.versionId !== "string") {
-      throw new UniverseInheritanceContractError(
-        "validation_failed",
-        "object versionId must be a non-empty string",
-        "objects",
-      );
-    }
-    if (!CANON_TYPE_ORDER.includes(obj.type)) {
-      throw new UniverseInheritanceContractError(
-        "validation_failed",
-        `Unsupported object type: ${String(obj.type)}`,
-        "type",
-      );
-    }
-    const list = groups.get(obj.type) || [];
-    list.push(obj);
-    groups.set(obj.type, list);
-  }
-
-  // Sort each group by stable id, then build canonical payload.
-  const orderedGroups = CANON_TYPE_ORDER.map((type) => {
-    const list = (groups.get(type) || []).slice().sort((a, b) =>
-      a.id.localeCompare(b.id)
-    );
-    return { type, items: list.map((o) => ({ id: o.id, versionId: o.versionId, content: o.content })) };
-  });
-
-  return sha256Hex(utf8Bytes(canonicalJson(orderedGroups)));
 }
 
 // ---------------------------------------------------------------------------

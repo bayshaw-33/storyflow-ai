@@ -698,3 +698,179 @@
   }
 }
 
+/* ============================================================
+   Phase 2 Task 2.5: Universe 常驻状态 + 绑定对话框
+   ============================================================ */
+
+.universeStatusGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.universeAction {
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.universeAction:hover:not(:disabled) {
+  border-color: rgba(109, 231, 223, 0.4);
+}
+
+.universeAction:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.universeVersionBadge {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+.universeRelationBadge {
+  background: rgba(199, 146, 234, 0.12);
+  color: #c792ea;
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+/* 绑定对话框（复用 .dialog 容器，补充表单元素） */
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.dialogField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dialogLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dialogInput,
+.dialogSelect {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f7f8;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.dialogInput:focus,
+.dialogSelect:focus {
+  outline: none;
+  border-color: rgba(109, 231, 223, 0.5);
+}
+
+.dialogSelect option {
+  background: #0d0f0f;
+  color: #f4f7f8;
+}
+
+.dialogError {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 139, 139, 0.1);
+  border: 1px solid rgba(255, 139, 139, 0.3);
+  color: #ff8b8b;
+  font-size: 12px;
+}
+
+.dialogFooter {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.dialogCancelBtn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #f4f7f8;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.dialogCancelBtn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.dialogCancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialogConfirmBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #6de7df;
+  background: #6de7df;
+  color: #070808;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.dialogConfirmBtn:hover:not(:disabled) {
+  background: #8aefe8;
+}
+
+.dialogConfirmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .universeStatusGroup {
+    gap: 4px;
+  }
+  .universeAction {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+}
+

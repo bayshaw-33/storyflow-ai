@@ -248,3 +248,126 @@ export const HEALTH_DIMENSION_KEYS = [
   "conflicts",
 ] as const;
 export type HealthDimensionKey = (typeof HEALTH_DIMENSION_KEYS)[number];
+
+// ============================================================
+// V2.2 Universe Inheritance client-side types (Phase 2 Task 2.5)
+// ============================================================
+//
+// These mirror the server V22 contracts in
+// lib/contracts/v2/universe-inheritance-v22.ts but are shaped as
+// API response DTOs (camelCase, envelope-stripped) for direct use
+// in React components and the workbench shell.
+
+// Re-export V22 relation/policy enums so UI has a single import source.
+// 先 import 再 export，确保同文件内的 interface 能引用这些类型。
+import {
+  WORK_RELATIONS as V22_WORK_RELATIONS,
+  CANON_POLICIES as V22_CANON_POLICIES,
+  type WorkRelation as V22WorkRelation,
+  type CanonPolicy as V22CanonPolicy,
+} from "../../../contracts/v2/universe-inheritance-v22.ts";
+export { V22_WORK_RELATIONS, V22_CANON_POLICIES };
+export type { V22WorkRelation, V22CanonPolicy };
+
+// Universe Version summary returned by inheritance read endpoints.
+export interface UniverseVersionSummaryV22 {
+  id: string;
+  universeId: string;
+  versionNo: number;
+  contentHash: string;
+  createdAt: string;
+}
+
+// Work inheritance manifest (camelCase API DTO).
+export interface WorkInheritanceManifestV22 {
+  id: string;
+  workId: string;
+  universeId: string;
+  universeVersionId: string;
+  universeVersionNo: number;
+  relation: V22WorkRelation;
+  canonPolicy: V22CanonPolicy;
+  timelineAnchorId: string | null;
+  includedEntityVersionIds: string[];
+  includedFactVersionIds: string[];
+  includedRelationshipVersionIds: string[];
+  includedTimelineEventVersionIds: string[];
+  includedAssetVersionIds: string[];
+  isActive: boolean;
+  supersededBy: string | null;
+  createdAt: string;
+}
+
+// Full inheritance read result: manifest + current universe version + stale flag.
+export interface WorkInheritanceStateV22 {
+  manifest: WorkInheritanceManifestV22 | null;
+  universeVersion: UniverseVersionSummaryV22 | null;
+  latestUniverseVersion: UniverseVersionSummaryV22 | null;
+  isStale: boolean;
+}
+
+// Object-level diff item (mirrors server UniverseObjectDiff).
+export type InheritanceDiffImpact = "added" | "changed" | "deprecated" | "conflict";
+
+export interface InheritanceObjectDiff {
+  diffId: string;
+  objectId: string;
+  objectType: "entity" | "fact" | "relationship" | "timeline_event" | "asset";
+  oldVersionId: string | null;
+  newVersionId: string | null;
+  impact: InheritanceDiffImpact;
+  fieldPath: string | null;
+  before: unknown;
+  after: unknown;
+}
+
+export interface InheritanceDiffResultV22 {
+  workId: string;
+  currentManifestId: string;
+  currentUniverseVersionId: string;
+  latestUniverseVersionId: string;
+  isStale: boolean;
+  diffs: InheritanceObjectDiff[];
+}
+
+// Adopt result: new manifest + idempotent flag.
+export interface AdoptResultV22 {
+  manifest: WorkInheritanceManifestV22;
+  idempotent: boolean;
+}
+
+// Context packet reference (source-attributed object reference).
+export interface ContextPacketReference {
+  type: "entity" | "fact" | "relationship" | "timeline_event" | "asset";
+  id: string;
+  versionId: string;
+  reason: "selected" | "timeline_adjacent" | "related" | "canon_default";
+  relevanceScore: number;
+}
+
+export interface ContextPacketV22 {
+  workId: string;
+  workVersionId: string;
+  universeVersionId: string;
+  references: ContextPacketReference[];
+  totalBytes: number;
+  budgetBytes: number;
+}
+
+// Binding request input (POST /api/v2/works/:workId/universe/bind).
+export interface BindWorkToUniverseInput {
+  universeId: string;
+  relation: V22WorkRelation;
+  canonPolicy: V22CanonPolicy;
+  timelineAnchorId?: string | null;
+  includedEntityIds?: string[];
+  includedFactIds?: string[];
+  includedRelationshipIds?: string[];
+  includedTimelineEventIds?: string[];
+  includedAssetIds?: string[];
+}
+
+// Adopt request input (POST /api/v2/works/:workId/inheritance/adopt).
+export interface AdoptDiffsInput {
+  diffIds: string[];
+}

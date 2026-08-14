@@ -18,6 +18,14 @@ import {
   type WorkLink,
   type ChangeProposalEntry,
   type UniverseObjectStatus,
+  type WorkInheritanceStateV22,
+  type WorkInheritanceManifestV22,
+  type InheritanceDiffResultV22,
+  type AdoptResultV22,
+  type ContextPacketV22,
+  type BindWorkToUniverseInput,
+  type AdoptDiffsInput,
+  type UniverseVersionSummaryV22,
 } from "./types.ts";
 
 // 全局开关：环境变量 NEXT_PUBLIC_USE_UNIVERSE_FIXTURE 控制。
@@ -680,5 +688,185 @@ export function isUnauthenticatedError(err: unknown): boolean {
   return (
     err instanceof UniverseApiError &&
     err.code === UNIVERSE_API_ERROR_CODES.UNAUTHENTICATED
+  );
+}
+
+// ============================================================
+// V2.2 Universe Inheritance client API (Phase 2 Task 2.5)
+// ============================================================
+//
+// 这些函数调用 Phase 2 Task 2.2/2.3/2.4 创建的服务端 API routes，
+// 返回 camelCase DTO（已剥离 envelope），供 WorkbenchShell 常驻组件使用。
+// 所有写操作（bind/adopt）都需要登录态；读操作（diff/context-packet/inheritance）
+// 在未登录时抛 UNIVERSE_API_ERROR_CODES.UNAUTHENTICATED。
+
+// V2.2 Works API 基础路径。
+const WORKS_API_PATH = "/api/v2/works";
+
+// 解析 V2.2 API 响应 envelope { success, data, error, code }。
+// 成功返回 data；失败抛 UniverseApiError。
+async function parseV22Envelope<T>(
+  res: Response,
+  fallbackCode: string,
+  fallbackMsg: string,
+): Promise<T> {
+  if (res.status === 401) {
+    throw new UniverseApiError(UNIVERSE_API_ERROR_CODES.UNAUTHENTICATED, "登录已过期，请重新登录。");
+  }
+  if (res.status === 403) {
+    throw new UniverseApiError(UNIVERSE_API_ERROR_CODES.FORBIDDEN, "无访问权限。");
+  }
+  if (res.status === 404) {
+    throw new UniverseApiError(UNIVERSE_API_ERROR_CODES.NOT_FOUND, "资源不存在或无访问权限。");
+  }
+  let body: { success?: boolean; data?: T; error?: string; code?: string } | null = null;
+  try {
+    body = (await res.json()) as { success?: boolean; data?: T; error?: string; code?: string };
+  } catch {
+    body = null;
+  }
+  if (!res.ok || !body || body.success === false) {
+    const code = body?.code || fallbackCode;
+    const msg = body?.error || fallbackMsg;
+    throw new UniverseApiError(code, `${msg}（${res.status}）`);
+  }
+  return body.data as T;
+}
+
+// 把服务端 snake_case manifest 行映射为 camelCase DTO。
+function toManifestDto(row: Record<string, unknown>): WorkInheritanceManifestV22 {
+  return {
+    id: String(row.id),
+    workId: String(row.work_id),
+    universeId: String(row.universe_id),
+    universeVersionId: String(row.universe_version_id),
+    universeVersionNo: Number(row.universe_version_no),
+    relation: row.relation as WorkInheritanceManifestV22["relation"],
+    canonPolicy: row.canon_policy as WorkInheritanceManifestV22["canonPolicy"],
+    timelineAnchorId: (row.timeline_anchor_id as string | null) ?? null,
+    includedEntityVersionIds: (row.included_entity_version_ids as string[]) ?? [],
+    includedFactVersionIds: (row.included_fact_version_ids as string[]) ?? [],
+    includedRelationshipVersionIds: (row.included_relationship_version_ids as string[]) ?? [],
+    includedTimelineEventVersionIds: (row.included_timeline_event_version_ids as string[]) ?? [],
+    includedAssetVersionIds: (row.included_asset_version_ids as string[]) ?? [],
+    isActive: Boolean(row.is_active),
+    supersededBy: (row.superseded_by as string | null) ?? null,
+    createdAt: String(row.created_at),
+  };
+}
+
+function toVersionSummary(row: Record<string, unknown>): UniverseVersionSummaryV22 {
+  return {
+    id: String(row.id),
+    universeId: String(row.universe_id),
+    versionNo: Number(row.version_no),
+    contentHash: String(row.content_hash),
+    createdAt: String(row.created_at),
+  };
+}
+
+// 读取 Work 的继承状态（manifest + 当前版本 + 最新版本 + stale）。
+// GET /api/v2/works/:workId/inheritance
+export async function fetchWorkInheritanceState(
+  workId: string,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<WorkInheritanceStateV22> {
+  const fetchImpl = options.fetchImpl || fetch;
+  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance`, {
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+  const data = await parseV22Envelope<{
+    manifest: WorkInheritanceManifestV22 | null;
+    universeVersion: UniverseVersionSummaryV22 | null;
+    latestUniverseVersion: UniverseVersionSummaryV22 | null;
+    isStale: boolean;
+  }>(res, UNIVERSE_API_ERROR_CODES.SERVICE_UNAVAILABLE, "继承状态加载失败。");
+  return data;
+}
+
+// 绑定 Work 到 Universe（原子操作，创建 manifest + snapshot）。
+// POST /api/v2/works/:workId/universe/bind
+export async function bindWorkToUniverse(
+  workId: string,
+  input: BindWorkToUniverseInput,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<WorkInheritanceManifestV22> {
+  const fetchImpl = options.fetchImpl || fetch;
+  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/universe/bind`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(input),
+  });
+  const data = await parseV22Envelope<Record<string, unknown>>(
+    res,
+    UNIVERSE_API_ERROR_CODES.VALIDATION_FAILED,
+    "Universe 绑定失败。",
+  );
+  return toManifestDto(data);
+}
+
+// 查询 Work 与最新 Universe Version 的对象级 diff + stale 标记。
+// GET /api/v2/works/:workId/inheritance/diff
+export async function fetchInheritanceDiff(
+  workId: string,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<InheritanceDiffResultV22> {
+  const fetchImpl = options.fetchImpl || fetch;
+  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/diff`, {
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+  return parseV22Envelope<InheritanceDiffResultV22>(
+    res,
+    UNIVERSE_API_ERROR_CODES.SERVICE_UNAVAILABLE,
+    "继承差异加载失败。",
+  );
+}
+
+// 逐项采用 diff（产生新 manifest + checkpoint）。
+// POST /api/v2/works/:workId/inheritance/adopt
+export async function adoptInheritanceDiffs(
+  workId: string,
+  input: AdoptDiffsInput,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<AdoptResultV22> {
+  const fetchImpl = options.fetchImpl || fetch;
+  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/adopt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(input),
+  });
+  const data = await parseV22Envelope<{ manifest: Record<string, unknown>; idempotent: boolean }>(
+    res,
+    UNIVERSE_API_ERROR_CODES.VALIDATION_FAILED,
+    "采用变更失败。",
+  );
+  return {
+    manifest: toManifestDto(data.manifest),
+    idempotent: Boolean(data.idempotent),
+  };
+}
+
+// 拉取 Work 的 Context Packet（高信号上下文包，来源可见）。
+// GET /api/v2/works/:workId/context-packet
+export async function fetchContextPacket(
+  workId: string,
+  options: { fetchImpl?: typeof fetch; workVersionId?: string } = {},
+): Promise<ContextPacketV22> {
+  const fetchImpl = options.fetchImpl || fetch;
+  const qs = options.workVersionId
+    ? `?workVersionId=${encodeURIComponent(options.workVersionId)}`
+    : "";
+  const res = await fetchImpl(
+    `${WORKS_API_PATH}/${encodeURIComponent(workId)}/context-packet${qs}`,
+    { headers: { Accept: "application/json" }, credentials: "same-origin" },
+  );
+  return parseV22Envelope<ContextPacketV22>(
+    res,
+    UNIVERSE_API_ERROR_CODES.SERVICE_UNAVAILABLE,
+    "Context Packet 加载失败。",
   );
 }

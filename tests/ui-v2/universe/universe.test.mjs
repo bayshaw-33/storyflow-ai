@@ -298,3 +298,138 @@ test("Inbox 编辑后接受动作与服务端契约保持 edit_accept 一致", (
   assert.match(serverSource, /"edit_accept"/);
   assert.doesNotMatch(panelSource + clientSource, /edit_by_accept|edit_and_accept/);
 });
+
+// ============================================================
+// Phase 2 Task 2.5 — V2.2 Universe Inheritance client types & API
+// ============================================================
+
+import {
+  V22_WORK_RELATIONS,
+  V22_CANON_POLICIES,
+} from "../../../lib/client/v2/universe/types.ts";
+import {
+  WORK_RELATIONS as SERVER_WORK_RELATIONS,
+  CANON_POLICIES as SERVER_CANON_POLICIES,
+} from "../../../lib/contracts/v2/universe-inheritance-v22.ts";
+
+test("V22_WORK_RELATIONS 与服务端契约一致（6 种关系）", () => {
+  assert.deepEqual([...V22_WORK_RELATIONS].sort(), [...SERVER_WORK_RELATIONS].sort());
+  assert.equal(V22_WORK_RELATIONS.length, 6);
+  for (const r of ["canon_continuation", "prequel", "sequel", "spinoff", "adaptation", "parallel"]) {
+    assert.ok(V22_WORK_RELATIONS.includes(r), `缺少关系: ${r}`);
+  }
+});
+
+test("V22_CANON_POLICIES 与服务端契约一致（3 种策略）", () => {
+  assert.deepEqual([...V22_CANON_POLICIES].sort(), [...SERVER_CANON_POLICIES].sort());
+  assert.equal(V22_CANON_POLICIES.length, 3);
+  for (const p of ["strict", "flexible", "reference_only"]) {
+    assert.ok(V22_CANON_POLICIES.includes(p), `缺少策略: ${p}`);
+  }
+});
+
+test("V2.2 client API 导出 5 个继承函数", () => {
+  const apiSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/client/v2/universe/api.ts"),
+    "utf-8",
+  );
+  // Phase 2 Task 2.5 Step B: 5 个 V22 client 函数。
+  assert.match(apiSource, /export async function fetchWorkInheritanceState/);
+  assert.match(apiSource, /export async function bindWorkToUniverse/);
+  assert.match(apiSource, /export async function fetchInheritanceDiff/);
+  assert.match(apiSource, /export async function adoptInheritanceDiffs/);
+  assert.match(apiSource, /export async function fetchContextPacket/);
+});
+
+test("V2.2 client API 调用正确的服务端路由", () => {
+  const apiSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/client/v2/universe/api.ts"),
+    "utf-8",
+  );
+  // bind → POST /api/v2/works/:workId/universe/bind
+  assert.match(apiSource, /\/universe\/bind/);
+  // diff → GET /api/v2/works/:workId/inheritance/diff
+  assert.match(apiSource, /\/inheritance\/diff/);
+  // adopt → POST /api/v2/works/:workId/inheritance/adopt
+  assert.match(apiSource, /\/inheritance\/adopt/);
+  // context-packet → GET /api/v2/works/:workId/context-packet
+  assert.match(apiSource, /\/context-packet/);
+  // inheritance state → GET /api/v2/works/:workId/inheritance
+  assert.match(apiSource, /\/inheritance`/);
+});
+
+test("UniverseStatus 组件存在且处理 bound/unbound 两种态", () => {
+  const statusSource = fs.readFileSync(
+    path.join(process.cwd(), "components/v2/workbench-shell/UniverseStatus.tsx"),
+    "utf-8",
+  );
+  // standalone: 创建/绑定入口
+  assert.match(statusSource, /创建 Universe|Create universe/);
+  assert.match(statusSource, /绑定已有|Bind existing/);
+  // bound: 打开/查看继承/同步
+  assert.match(statusSource, /打开 Universe|Open universe/);
+  assert.match(statusSource, /查看继承|View inheritance/);
+  assert.match(statusSource, /同步|Sync/);
+  // stale 标记
+  assert.match(statusSource, /isStale/);
+  // 版本号显示
+  assert.match(statusSource, /boundVersionNo/);
+});
+
+test("UniverseBindingDialog 存在且包含关系/策略选择", () => {
+  const dialogSource = fs.readFileSync(
+    path.join(process.cwd(), "components/v2/workbench-shell/UniverseBindingDialog.tsx"),
+    "utf-8",
+  );
+  // 关系选项（6 种）
+  for (const r of V22_WORK_RELATIONS) {
+    assert.ok(dialogSource.includes(r), `Dialog 缺少关系选项: ${r}`);
+  }
+  // 策略选项（3 种）
+  for (const p of V22_CANON_POLICIES) {
+    assert.ok(dialogSource.includes(p), `Dialog 缺少策略选项: ${p}`);
+  }
+  // 不自动弹窗约束：open 为 false 时返回 null
+  assert.match(dialogSource, /if \(!open\) return null/);
+});
+
+test("WorkbenchShell 集成 UniverseStatus 与 BindingDialog", () => {
+  const shellSource = fs.readFileSync(
+    path.join(process.cwd(), "components/v2/workbench-shell/WorkbenchShell.tsx"),
+    "utf-8",
+  );
+  assert.match(shellSource, /import.*UniverseBindingDialog/);
+  assert.match(shellSource, /bindingDialogOpen/);
+  assert.match(shellSource, /handleBindUniverse/);
+  assert.match(shellSource, /onCreateUniverse/);
+  assert.match(shellSource, /onBindExisting/);
+  // 绑定入口仅在 hasWorkId 时可用
+  assert.match(shellSource, /hasWorkId \? \(\) => setBindingDialogOpen/);
+});
+
+test("WorksPanel 包含从 Universe 创建 Work 入口", () => {
+  const worksSource = fs.readFileSync(
+    path.join(process.cwd(), "components/v2/universe/WorksPanel.tsx"),
+    "utf-8",
+  );
+  assert.match(worksSource, /从 Universe 创建 Work/);
+  // 跳转 project-start 携带绑定参数
+  assert.match(worksSource, /\/project-start/);
+  assert.match(worksSource, /universeId/);
+  assert.match(worksSource, /relation/);
+  assert.match(worksSource, /canonPolicy/);
+  assert.match(worksSource, /workType/);
+});
+
+test("TopBar 用 UniverseStatus 替换原简单 badge", () => {
+  const topBarSource = fs.readFileSync(
+    path.join(process.cwd(), "components/v2/workbench-shell/TopBar.tsx"),
+    "utf-8",
+  );
+  assert.match(topBarSource, /import.*UniverseStatus/);
+  assert.match(topBarSource, /<UniverseStatus/);
+  // V22 回调 props
+  assert.match(topBarSource, /onCreateUniverse/);
+  assert.match(topBarSource, /onBindExisting/);
+  assert.match(topBarSource, /onSyncUniverse/);
+});

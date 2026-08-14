@@ -9,11 +9,11 @@ import {
   CloudOff,
   Loader2,
   ListTodo,
-  Globe,
   type LucideIcon,
 } from "lucide-react";
 import type { SaveStatus, UniverseBinding, WorkbenchProject } from "@/lib/client/v2/workbench/types";
 import { getSaveStatusLabel } from "@/lib/client/v2/workbench/unsaved-guard";
+import { UniverseStatus } from "./UniverseStatus";
 import styles from "./workbench-shell.module.css";
 
 export interface TopBarProps {
@@ -23,6 +23,12 @@ export interface TopBarProps {
   locale: string;
   onOpenLeftPanel?: () => void;
   onOpenRightPanel?: () => void;
+  // Phase 2 Task 2.5: Universe 常驻动作回调。
+  onCreateUniverse?: () => void;
+  onBindExisting?: () => void;
+  onOpenUniverse?: () => void;
+  onViewInheritance?: () => void;
+  onSyncUniverse?: () => void;
 }
 
 const SAVE_ICON: Record<SaveStatus, LucideIcon> = {
@@ -44,6 +50,11 @@ function TopBarComponent({
   locale,
   onOpenLeftPanel,
   onOpenRightPanel,
+  onCreateUniverse,
+  onBindExisting,
+  onOpenUniverse,
+  onViewInheritance,
+  onSyncUniverse,
 }: TopBarProps) {
   const isZh = locale === "zh-CN";
   const SaveIcon = SAVE_ICON[saveStatus];
@@ -60,22 +71,16 @@ function TopBarComponent({
           </button>
         )}
         <h1 className={styles.projectTitle} title={project.title}>{project.title}</h1>
-        {/* Universe 绑定状态 */}
-        {universeBinding.bound ? (
-          <span className={`${styles.badge} ${styles.badgeAccent}`} title={universeBinding.universeName}>
-            <Globe size={11} />
-            {universeBinding.universeName ?? (isZh ? "已绑定" : "Bound")}
-          </span>
-        ) : (
-          <span className={`${styles.badge} ${styles.badgeWarn}`}>
-            <CloudOff size={11} />
-            {universeBinding.suggestion === "bind_new"
-              ? isZh ? "建议绑定新 Universe" : "Bind new universe"
-              : universeBinding.suggestion === "bind_existing"
-                ? isZh ? "建议绑定 Universe" : "Bind universe"
-                : isZh ? "未绑定" : "Unbound"}
-          </span>
-        )}
+        {/* Phase 2 Task 2.5: Universe 常驻状态（七类 Work 复用同一组件） */}
+        <UniverseStatus
+          binding={universeBinding}
+          locale={locale}
+          onCreateUniverse={onCreateUniverse}
+          onBindExisting={onBindExisting}
+          onOpenUniverse={onOpenUniverse}
+          onViewInheritance={onViewInheritance}
+          onSync={onSyncUniverse}
+        />
         {/* 保存状态 */}
         <span className={`${styles.badge} ${saveBadgeClass}`}>
           <SaveIcon size={11} className={saveStatus === "saving" ? "tc-spin" : undefined} />

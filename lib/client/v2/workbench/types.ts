@@ -39,11 +39,24 @@ export interface WorkbenchProject {
 }
 
 // Universe 绑定状态
+// Phase 2 Task 2.5: 扩展为 V22 完整状态——含版本号、关系、stale 标记。
+// 旧字段（bound/universeId/universeName/suggestion）保持向后兼容；
+// 新字段为可选，V22 绑定后由 WorkbenchAdapter 填充。
 export interface UniverseBinding {
   bound: boolean;
   universeId?: string;
   universeName?: string;
   suggestion?: UniverseBindingSuggestion;
+  // V22: 绑定的 Universe Version 编号（来自 contentHash 链，非时间戳）。
+  boundVersionNo?: number;
+  // V22: Work 与 Universe 的关系（canon_continuation/prequel/sequel/...）。
+  relation?: import("../../../contracts/v2/universe-inheritance-v22.ts").WorkRelation;
+  // V22: Universe 已发布新版本，Work 当前 Manifest 指向旧版本。
+  isStale?: boolean;
+  // V22: 最新 Universe Version 编号（用于显示 "v3 可用"）。
+  latestVersionNo?: number;
+  // V22: 当前 Manifest ID（查看继承 / 同步时使用）。
+  manifestId?: string;
 }
 
 // 生产步骤

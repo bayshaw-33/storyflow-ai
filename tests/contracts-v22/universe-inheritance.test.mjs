@@ -16,13 +16,13 @@ import test from "node:test";
 import {
   INHERITANCE_MANIFEST_V1_SCHEMA,
   KIIKIS_22_CONTRACT_VERSION,
-  computeUniverseVersionContentHash,
   assertUniverseVersionV22,
   assertInheritanceManifestV1,
   isWorkRelation,
   isCanonPolicy,
   UniverseInheritanceContractError,
 } from "../../lib/contracts/v2/universe-inheritance-v22.ts";
+import { computeUniverseVersionContentHash } from "../../lib/contracts/v2/universe-inheritance-v22-hash.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures

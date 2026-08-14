@@ -757,3 +757,81 @@
   color: #f4f7f8;
   margin: 0 0 10px;
 }
+
+/* ============================================================
+   Phase 2 Task 2.5: WorksPanel 从 Universe 创建 Work
+   ============================================================ */
+
+.createWorkToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #6de7df;
+  background: transparent;
+  color: #6de7df;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.createWorkToggle:hover {
+  background: rgba(109, 231, 223, 0.1);
+}
+
+.createWorkToggle[aria-expanded="true"] {
+  background: rgba(109, 231, 223, 0.12);
+}
+
+.createWorkForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  background: rgba(109, 231, 223, 0.05);
+  border: 1px solid rgba(109, 231, 223, 0.15);
+}
+
+.createWorkField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.createWorkField select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f7f8;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.createWorkField select:focus {
+  outline: none;
+  border-color: rgba(109, 231, 223, 0.5);
+}
+
+.createWorkConfirm {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid #6de7df;
+  background: #6de7df;
+  color: #070808;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.createWorkConfirm:hover {
+  background: #8aefe8;
+}
