@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { createAppeal, listAppeals, CommunityServiceError } from "@/lib/server/v2/community/moderation";
 import { hasModeratorRole } from "@/lib/server/v2/community/permissions";
+import { isAppealStatus } from "@/lib/contracts/v2/moderation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,11 +28,12 @@ export async function GET(request: NextRequest) {
       );
     }
     const url = new URL(request.url);
+    const status = url.searchParams.get("status");
     const isMod = await hasModeratorRole(serviceFetch, user.id);
     // CM-009: 审核员可看所有 (传 all=true); 普通用户只看自己的
     const items = await listAppeals(serviceFetch, user.id, {
       all: isMod,
-      status: url.searchParams.get("status") ?? undefined,
+      status: status && isAppealStatus(status) ? status : undefined,
       limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
       offset: url.searchParams.get("offset") ? Number(url.searchParams.get("offset")) : 0,
     });

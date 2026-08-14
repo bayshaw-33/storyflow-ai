@@ -56,6 +56,10 @@ export class InMemoryCheckpointStore implements CheckpointStore {
       processedIds: [...checkpoint.processedIds],
     });
   }
+
+  clear(): void {
+    this.state.clear();
+  }
 }
 
 /** 消费结果摘要。 */
@@ -199,6 +203,5 @@ const defaultStore = new InMemoryCheckpointStore();
 
 /** 重置默认内存 store (仅测试用)。 */
 export function __resetDefaultStoreForTests(): void {
-  // 重新创建实例，丢弃所有状态
-  (defaultStore as { state: Map<string, ConsumerCheckpoint> }).state.clear();
+  defaultStore.clear();
 }

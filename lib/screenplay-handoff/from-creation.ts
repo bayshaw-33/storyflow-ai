@@ -75,7 +75,11 @@ function convertScene(
   }
 
   // continuityMode 推断：场景标题含 CONTINUOUS 或承接前一场
-  const headingUpper = scene.heading.toUpperCase();
+  const sourceHeading = (scene as ScreenplayScene & { heading?: unknown }).heading;
+  const heading = typeof sourceHeading === "string" && sourceHeading.trim().length > 0
+    ? sourceHeading
+    : `${scene.interiorExterior}. ${scene.location} - ${scene.timeOfDay}`;
+  const headingUpper = heading.toUpperCase();
   const continuityMode = headingUpper.includes("CONTINUOUS") ||
     (scene.interiorExterior === "INT" && headingUpper.includes("CONTINUOUS"))
     ? "CONTINUOUS"
@@ -101,7 +105,7 @@ function convertScene(
   const handoffScene: HandoffScene = {
     id: scene.id,
     sceneNo: scene.sceneNo,
-    heading: scene.heading,
+    heading,
     location: scene.location,
     interiorExterior: scene.interiorExterior,
     timeOfDay: scene.timeOfDay,

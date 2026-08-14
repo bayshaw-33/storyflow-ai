@@ -244,6 +244,18 @@ export function isReportTargetType(v: string): v is ReportTargetType {
   return REPORT_TARGET_TYPES.includes(v as ReportTargetType);
 }
 
+export function isReportStatus(v: string): v is ReportStatus {
+  return REPORT_STATUS.includes(v as ReportStatus);
+}
+
+export function isModerationStatus(v: string): v is ModerationStatus {
+  return MODERATION_STATUS.includes(v as ModerationStatus);
+}
+
+export function isAppealStatus(v: string): v is AppealStatus {
+  return APPEAL_STATUS.includes(v as AppealStatus);
+}
+
 export function isReportReasonType(v: string): v is ReportReasonType {
   return REPORT_REASON_TYPES.includes(v as ReportReasonType);
 }

@@ -18,6 +18,8 @@ import {
 } from "../../../contracts/v2/community.ts";
 import { CommunityServiceError, type CommunityFetcher } from "./publications.ts";
 
+export { CommunityServiceError } from "./publications.ts";
+
 // ============================================================
 // Follow (CM-003)
 // ============================================================

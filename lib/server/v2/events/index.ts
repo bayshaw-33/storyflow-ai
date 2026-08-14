@@ -37,7 +37,7 @@ export class CreativeEventsError extends Error {
 /** 写入事件入参 (id 由服务端生成，不在入参中)。 */
 export type AppendCreativeEventInput = Omit<
   CreativeEventInput,
-  "id" | "createdAt"
+  "id" | "sequence" | "createdAt"
 > & {
   occurredAt?: string;
 };
@@ -133,8 +133,8 @@ export async function appendCreativeEvent(params: {
   try {
     parsed = parseCreativeEvent({
       id: crypto.randomUUID(),
-      sequence: 1,
       ...input,
+      sequence: 1,
       createdAt: input.occurredAt ?? new Date().toISOString(),
     });
   } catch (err) {

@@ -147,6 +147,7 @@ export async function createHandoff(params: {
     parsed = parseScreenplayHandoffV1({
       ...handoffPayload,
       sourceHash: "placeholder", // hash 还没算
+      confirmedBy: null,
       createdAt: new Date().toISOString(),
     });
   } catch (err) {

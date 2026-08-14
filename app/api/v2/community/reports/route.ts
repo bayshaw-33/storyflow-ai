@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { createReport, listReportsByReporter, CommunityServiceError } from "@/lib/server/v2/community/moderation";
-import { isReportTargetType, isReportReasonType } from "@/lib/contracts/v2/moderation";
+import { isReportTargetType, isReportReasonType, isReportStatus } from "@/lib/contracts/v2/moderation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,8 +25,9 @@ export async function GET(request: NextRequest) {
       );
     }
     const url = new URL(request.url);
+    const status = url.searchParams.get("status");
     const items = await listReportsByReporter(serviceFetch, user.id, {
-      status: url.searchParams.get("status") ?? undefined,
+      status: status && isReportStatus(status) ? status : undefined,
       limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
       offset: url.searchParams.get("offset") ? Number(url.searchParams.get("offset")) : 0,
     });

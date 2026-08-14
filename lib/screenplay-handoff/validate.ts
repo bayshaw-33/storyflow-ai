@@ -78,7 +78,7 @@ export function validateHandoff(input: unknown): HandoffValidationResult {
       if (!isNonEmptyString(scene.location)) {
         errors.push({ field: `scenes[${i}].location`, message: "must be a non-empty string" });
       }
-      if (!HANDOFF_CONTINUITY_MODES.includes(scene.continuityMode as string)) {
+      if (!HANDOFF_CONTINUITY_MODES.includes(scene.continuityMode as "NEW" | "CONTINUOUS")) {
         errors.push({ field: `scenes[${i}].continuityMode`, message: `must be one of ${HANDOFF_CONTINUITY_MODES.join(", ")}` });
       }
       // character 引用必须存在于 canon

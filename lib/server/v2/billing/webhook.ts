@@ -247,7 +247,7 @@ async function handleCheckoutCompleted(
   fetcher: BillingFetcher,
   event: StripeEvent,
 ): Promise<void> {
-  const obj = event.data.object as StripeCheckoutObject;
+  const obj = event.data.object as unknown as StripeCheckoutObject;
   const userId = obj.metadata?.kiikis_user_id || obj.client_reference_id;
   if (!userId) {
     throw new Error("checkout missing user_id metadata");
@@ -268,7 +268,7 @@ async function handleSubscriptionUpdated(
   fetcher: BillingFetcher,
   event: StripeEvent,
 ): Promise<void> {
-  const obj = event.data.object as StripeSubscriptionObject;
+  const obj = event.data.object as unknown as StripeSubscriptionObject;
   const userId = obj.metadata?.kiikis_user_id;
   if (!userId) {
     // 从 customer 反查 user (需要额外查询, 简化: 跳过)
@@ -313,7 +313,7 @@ async function handleSubscriptionDeleted(
   fetcher: BillingFetcher,
   event: StripeEvent,
 ): Promise<void> {
-  const obj = event.data.object as StripeSubscriptionObject;
+  const obj = event.data.object as unknown as StripeSubscriptionObject;
   const userId = obj.metadata?.kiikis_user_id;
   if (!userId) return;
 
@@ -343,7 +343,7 @@ async function handleInvoicePaid(
   fetcher: BillingFetcher,
   event: StripeEvent,
 ): Promise<void> {
-  const obj = event.data.object as StripeInvoiceObject;
+  const obj = event.data.object as unknown as StripeInvoiceObject;
   // invoice 不直接改订阅状态, 只确认 (订阅状态由 subscription 事件处理)
   // 记录到 creative_events 由 BI-010 处理
 }
@@ -353,7 +353,7 @@ async function handleChargeRefunded(
   fetcher: BillingFetcher,
   event: StripeEvent,
 ): Promise<void> {
-  const obj = event.data.object as StripeChargeObject;
+  const obj = event.data.object as unknown as StripeChargeObject;
   // 退款不直接改订阅状态, 由 subscription 事件处理
   // 记录到 creative_events 由 BI-010 处理
 }

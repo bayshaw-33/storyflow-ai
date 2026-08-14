@@ -19,13 +19,12 @@ import {
   type ResourceGrant,
   type ResourceGrantRow,
 } from "../../../contracts/v2/grants.ts";
-import type { GrantFetcher, GrantServiceError } from "./store.ts";
-
-// 错误类型别名（与 store.ts 共享）
-type InviteServiceError = InstanceType<typeof GrantServiceErrorClass>;
+import type { GrantFetcher } from "./store.ts";
 
 // 避免 import cycle: 用 local alias
 import { GrantServiceError as GrantServiceErrorClass } from "./store.ts";
+
+export { GrantServiceErrorClass as GrantServiceError };
 
 // ============================================================
 // token 哈希 (RG-002: 不存明文)

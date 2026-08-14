@@ -81,7 +81,7 @@ export function computeTaskProjection(
     taskState.set(taskId, finalState);
   }
 
-  const result: KkTaskProjection = { ...ZERO_TASK_PROJECTION };
+  const result = { ...ZERO_TASK_PROJECTION };
   for (const state of taskState.values()) {
     switch (state) {
       case "queued":
@@ -130,7 +130,7 @@ export function applyEventsToProjection(
     if (!e.taskId) continue;
     taskState.set(e.taskId, e.eventType.replace("task_", "") as TaskFinalState);
   }
-  const result: KkTaskProjection = { ...ZERO_TASK_PROJECTION };
+  const result = { ...ZERO_TASK_PROJECTION };
   for (const state of taskState.values()) {
     switch (state) {
       case "queued":

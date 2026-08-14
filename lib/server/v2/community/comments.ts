@@ -20,6 +20,8 @@ import {
 } from "../../../contracts/v2/comments.ts";
 import { CommunityServiceError, type CommunityFetcher } from "./publications.ts";
 
+export { CommunityServiceError } from "./publications.ts";
+
 /**
  * CM-004: 创建评论 (服务端注入 authorId)
  */

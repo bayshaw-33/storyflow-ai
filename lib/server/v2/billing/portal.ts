@@ -135,7 +135,7 @@ export async function cancelSubscriptionAtPeriodEnd(
     );
   }
 
-  const result = await stripeFetchSubscriptionCancel(
+  const result = await stripeFetchSubscriptionCancel<StripeSubscriptionCancelResult>(
     `/subscriptions/${encodeURIComponent(stripeSubscriptionId)}`,
     { cancel_at_period_end: "true" },
   );
@@ -201,7 +201,6 @@ export async function recordBillingEvent(
       fetcher,
       userId: input.userId,
       input: {
-        sequence: 1, // 占位, DB 端生成真实 sequence
         eventType: input.eventType,
         schemaVersion: 1,
         actorType: "user",
@@ -209,6 +208,8 @@ export async function recordBillingEvent(
         ownerId: input.userId,
         resourceType: input.resourceType,
         resourceId: input.resourceId,
+        resourceVersion: null,
+        taskId: null,
         idempotencyKey,
         visibility: input.visibility ?? "private",
         payload: input.payload as Record<string, unknown>,

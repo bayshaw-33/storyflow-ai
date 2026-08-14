@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     let path = `/rest/v1/storyflow_kk_memory_facts?owner_id=eq.${encodeURIComponent(user.id)}&deleted_at=is.null&order=created_at.desc&limit=${limit}`;
     if (factType) {
-      if (!KK_MEMORY_FACT_TYPES.includes(factType)) {
+      if (!KK_MEMORY_FACT_TYPES.includes(factType as KkMemoryFactType)) {
         return NextResponse.json(
           { success: false, error: `Invalid factType: ${factType}`, code: "validation_failed" },
           { status: 422 },

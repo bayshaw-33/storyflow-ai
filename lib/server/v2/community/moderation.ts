@@ -38,6 +38,8 @@ import {
 } from "../../../contracts/v2/moderation.ts";
 import { CommunityServiceError, type CommunityFetcher } from "./publications.ts";
 
+export { CommunityServiceError } from "./publications.ts";
+
 // ============================================================
 // Report (CM-007)
 // ============================================================

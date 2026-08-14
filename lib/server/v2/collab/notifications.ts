@@ -14,6 +14,7 @@ import {
 } from "../../../contracts/v2/collab.ts";
 import { CollabServiceError } from "./index.ts";
 import type { CollabFetcher } from "./comments.ts";
+import { isResourceType } from "../../../contracts/v2/grants.ts";
 
 /** CO-007: 创建通知 (通过 creative_events 事件流) */
 export async function sendNotification(
@@ -114,7 +115,10 @@ export async function listNotifications(
     type: r.event_type.replace(/^notification:/, "") as NotificationType,
     title: r.payload?.title ?? "",
     body: r.payload?.body ?? "",
-    resourceType: r.payload?.resource_type ?? null,
+    resourceType:
+      r.payload?.resource_type && isResourceType(r.payload.resource_type)
+        ? r.payload.resource_type
+        : null,
     resourceId: r.payload?.resource_id ?? null,
     read: r.payload?.read ?? false,
     readAt: null,
