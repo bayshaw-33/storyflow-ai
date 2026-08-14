@@ -1098,3 +1098,50 @@ test("CM-008: 隐藏 publication 不影响源资源 — 源字段保留", async 
   assert.equal(hiddenPub.sourceId, "u-1");
   assert.equal(hiddenPub.sourceVersion, "v1.0");
 });
+
+// ============================================================
+// Phase 7 — CM-010 解除: /community 公开访问 (不再受 communityBeta 限制)
+// ============================================================
+
+test("Phase 7 CM-010 解除: app/community/page.tsx 不再引用 communityBeta", () => {
+  const src = fs.readFileSync(
+    path.join(process.cwd(), "app/community/page.tsx"),
+    "utf-8",
+  );
+  // 不应 import feature-flags
+  assert.equal(
+    src.includes("resolveKiikis21Flags"),
+    false,
+    "page.tsx 不应 import resolveKiikis21Flags (CM-010 已解除限制)",
+  );
+  // 不应检查 communityBeta
+  assert.equal(
+    src.includes("communityBeta"),
+    false,
+    "page.tsx 不应引用 communityBeta (CM-010 已解除限制)",
+  );
+  // 不应在 communityBeta=false 时返回占位
+  assert.equal(
+    src.includes("CommunityPlaceholderClient"),
+    true,
+    "page.tsx 仍应保留服务未配置时的占位渲染",
+  );
+});
+
+test("Phase 7 CM-010 解除: 匿名用户可访问 /community (无登录态要求)", () => {
+  const src = fs.readFileSync(
+    path.join(process.cwd(), "app/community/page.tsx"),
+    "utf-8",
+  );
+  // page.tsx 不应要求登录态 (无 auth redirect, 无 session 检查)
+  assert.equal(
+    src.includes("redirect"),
+    false,
+    "page.tsx 不应有 redirect 调用 (匿名可访问)",
+  );
+  assert.equal(
+    src.includes("requireAuth"),
+    false,
+    "page.tsx 不应调用 requireAuth",
+  );
+});

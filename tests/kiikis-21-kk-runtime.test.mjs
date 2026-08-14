@@ -20,7 +20,6 @@ import path from "node:path";
 import {
   ALL_KK_ACTIONS,
   ALL_KK_CONNECTION_STATES,
-  type KkConnectionState,
 } from "../lib/client/v2/kk/types.ts";
 import {
   parseKiikis21Flags,
@@ -69,7 +68,7 @@ test("test 文件本身存在", () => {
 test("KkRuntimeProvider.tsx — 导出 Provider + Context + DEFAULT_KK_RUNTIME_CONTEXT", () => {
   const src = readFile("components/v2/kk/KkRuntimeProvider.tsx");
   assert.match(src, /export function KkRuntimeProvider/);
-  assert.match(src, /export const KkRuntimeContext/);
+  assert.match(src, /export (const |{ )KkRuntimeContext/);
   assert.match(src, /DEFAULT_KK_RUNTIME_CONTEXT/);
   assert.match(src, /export interface KkRuntimeContextValue/);
 });

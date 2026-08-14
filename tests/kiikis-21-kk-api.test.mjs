@@ -38,7 +38,7 @@ import {
 // Mock fetch 工具
 // ============================================================
 
-function makeMockResponse(body: unknown, init: { status?: number; ok?: boolean } = {}) {
+function makeMockResponse(body, init = {}) {
   const status = init.status ?? 200;
   return {
     status,

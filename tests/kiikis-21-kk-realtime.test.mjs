@@ -28,7 +28,6 @@ import {
   applyEventsToProjection,
   computeCompletionRate,
 } from "../lib/client/v2/kk/task-projection.ts";
-import type { KkEventEntry } from "../lib/client/v2/kk/types.ts";
 
 const ROOT = process.cwd();
 function exists(p) { return fs.existsSync(path.join(ROOT, p)); }
