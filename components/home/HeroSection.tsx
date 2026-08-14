@@ -38,8 +38,8 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
         </h1>
         <p>
           {isZh
-            ? "写小说 × 构剧本 × 画分镜 × 剪视频 × 作曲子。都在一个宇宙里，由你来建造。"
-            : "Write the novel. Shape the script. Frame the storyboard. Cut the video. Compose the song. All in one Universe — yours to build."}
+            ? "从故事到影像，让创作彼此相连，让成果持续积累。"
+            : "From story to screen, every step connects—and every creation builds on the last."}
         </p>
         <div className="hero-actions">
           <button className="kk-primary-cta" type="button" onClick={onStartCreating}>
