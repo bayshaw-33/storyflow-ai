@@ -617,3 +617,84 @@
     padding: 12px;
   }
 }
+
+/* ============================================================
+   Phase 1 Task 1.5: Version bar + Evidence actions + blocking error
+   ============================================================ */
+
+.versionBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 6px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+}
+
+.versionActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.evidenceActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.versionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #f4f7f8;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.versionButton:hover:not(:disabled) {
+  background: rgba(109, 231, 223, 0.12);
+  border-color: rgba(109, 231, 223, 0.3);
+}
+
+.versionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.finalizeConfirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #ffd166;
+}
+
+.blockingError {
+  padding: 16px 20px;
+  background: rgba(255, 139, 139, 0.1);
+  border-bottom: 1px solid rgba(255, 139, 139, 0.3);
+  color: #ff8b8b;
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .versionBar {
+    padding: 6px 12px;
+    gap: 6px;
+  }
+  .versionButton {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+}
+

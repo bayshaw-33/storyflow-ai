@@ -13,6 +13,7 @@ import type {
   GenerationRequestSnapshotV22,
   GenerationCandidateV22,
 } from "@/lib/contracts/v2/work-history";
+import type { EvidenceManifestV2 } from "@/lib/contracts/v2/evidence-manifest-v2";
 
 export interface WorkHistoryClient {
   listVersions(workId: string): Promise<WorkVersionV22[]>;
@@ -23,6 +24,22 @@ export interface WorkHistoryClient {
   appendMessage(workId: string, threadId: string, input: AppendMessageInput): Promise<ConversationMessageV22>;
   createGenerationRequest(workId: string, input: CreateRequestInput): Promise<GenerationRequestSnapshotV22>;
   applyCandidate(workId: string, candidateId: string, input: ApplyCandidateInput): Promise<ApplyCandidateResult>;
+  getEvidenceManifest(workId: string): Promise<EvidenceManifestV2>;
+  createEvidencePackage(workId: string): Promise<EvidencePackageResult>;
+  downloadEvidencePackage(packageId: string): Promise<EvidenceDownloadResult>;
+}
+
+export interface EvidencePackageResult {
+  packageId: string;
+  status: string;
+  manifestHash: string;
+  idempotent: boolean;
+}
+
+export interface EvidenceDownloadResult {
+  downloadUrl: string;
+  expiresIn: number;
+  packageId: string;
 }
 
 export interface AppendVersionInput {
@@ -164,6 +181,33 @@ export function createWorkHistoryClient(baseUrl = ""): WorkHistoryClient {
         candidateId: json.candidateId,
         newVersionId: json.newVersionId,
         idempotentReplay: json.idempotentReplay,
+      };
+    },
+
+    async getEvidenceManifest(workId: string): Promise<EvidenceManifestV2> {
+      const res = await fetch(`${baseUrl}/api/v2/works/${workId}/evidence`);
+      const json = await parseJson(res);
+      return json.manifest;
+    },
+
+    async createEvidencePackage(workId: string): Promise<EvidencePackageResult> {
+      const res = await fetch(`${baseUrl}/api/v2/works/${workId}/evidence`, { method: "POST" });
+      const json = await parseJson(res);
+      return {
+        packageId: json.packageId,
+        status: json.status,
+        manifestHash: json.manifestHash,
+        idempotent: json.idempotent,
+      };
+    },
+
+    async downloadEvidencePackage(packageId: string): Promise<EvidenceDownloadResult> {
+      const res = await fetch(`${baseUrl}/api/v2/evidence/packages/${packageId}/download`);
+      const json = await parseJson(res);
+      return {
+        downloadUrl: json.downloadUrl,
+        expiresIn: json.expiresIn,
+        packageId: json.packageId,
       };
     },
   };

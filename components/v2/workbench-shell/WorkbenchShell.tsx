@@ -17,6 +17,8 @@ import { RightPanel } from "./RightPanel";
 import { TaskBar } from "./TaskBar";
 import { ContentArea } from "./ContentArea";
 import { UnsavedConfirmDialog } from "./UnsavedConfirmDialog";
+import { VersionActions } from "./VersionActions";
+import { EvidenceActions } from "./EvidenceActions";
 import styles from "./workbench-shell.module.css";
 
 export interface WorkbenchShellProps {
@@ -129,6 +131,9 @@ export function WorkbenchShell({ adapter }: WorkbenchShellProps) {
     );
   };
 
+  // Phase 1 Task 1.5: 无 workId 时显示阻断错误，禁止本地假保存
+  const hasWorkId = Boolean(adapter.workId);
+
   return (
     <div className={styles.shell}>
       <style>{`@keyframes tc-spin { to { transform: rotate(360deg); } } .tc-spin { animation: tc-spin 1s linear infinite; }`}</style>
@@ -140,6 +145,31 @@ export function WorkbenchShell({ adapter }: WorkbenchShellProps) {
         onOpenLeftPanel={() => setLeftDrawerOpen(true)}
         onOpenRightPanel={() => setRightDrawerOpen(true)}
       />
+      {hasWorkId && (
+        <div className={styles.versionBar}>
+          <VersionActions
+            workId={adapter.workId}
+            currentVersionId={adapter.currentVersionId}
+            latestCheckpointId={adapter.latestCheckpointId}
+            finalizedVersionId={adapter.finalizedVersionId}
+            locale={locale}
+            onCreateCheckpoint={adapter.onCreateCheckpoint}
+            onFinalize={adapter.onFinalize}
+          />
+          <EvidenceActions
+            workId={adapter.workId}
+            locale={locale}
+            onDownloadEvidence={adapter.onDownloadEvidence}
+          />
+        </div>
+      )}
+      {!hasWorkId && (
+        <div className={styles.blockingError} role="alert">
+          {isZh
+            ? "当前作品未关联 Work 身份，无法保存或生成。请从工作流入口重新进入。"
+            : "This work has no Work identity. Saving and generation are blocked. Please re-enter from the workflow entry."}
+        </div>
+      )}
       <div className={styles.body}>
         <LeftPanel
           steps={adapter.steps}

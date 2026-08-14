@@ -124,6 +124,9 @@ export function assertContractVersion(version: string): void {
  * 各工作台（novel/script/art/production/video/song）实现此接口后，
  * 把工作台主体内容作为 workbenchContent 传入，外壳负责统一呈现顶部栏、
  * 左侧步骤/资产、右侧 AI 面板、底部任务浮层。
+ *
+ * Phase 1 Task 1.5: workId 和版本指针是 Work 身份会话恢复的基础。
+ * 当 workId 缺失时，外壳显示阻断错误而非本地假保存。
  */
 export interface WorkbenchAdapter {
   // 工作台类型标识，如 "novel" | "script" | "art" | "production" | "video" | "song"
@@ -152,4 +155,18 @@ export interface WorkbenchAdapter {
   onSave: () => Promise<void> | void;
   // 切换步骤回调
   onStepChange: (stepId: string) => Promise<void> | void;
+  // Phase 1 Task 1.5: Work 身份（缺失时外壳显示阻断错误）
+  workId?: string | null;
+  // 当前版本指针（来自 storyflow_works）
+  currentVersionId?: string | null;
+  // 最新 checkpoint 版本 ID
+  latestCheckpointId?: string | null;
+  // 已定稿版本 ID
+  finalizedVersionId?: string | null;
+  // Checkpoint 回调（创建不可变快照）
+  onCreateCheckpoint?: () => Promise<void> | void;
+  // Finalize 回调（定稿当前版本，不可逆）
+  onFinalize?: () => Promise<void> | void;
+  // Evidence 包下载回调
+  onDownloadEvidence?: () => Promise<void> | void;
 }
