@@ -766,7 +766,8 @@ def render_page(
 
     if layout in {"problem", "actor", "neutral", "customers"}:
         y = draw_body(pdf, page, y, fonts, palette, 445)
-        draw_cards(pdf, page["cards"], min(y - 12, 408), fonts, palette)
+        columns = 2 if len(page["cards"]) == 4 else 3
+        draw_cards(pdf, page["cards"], min(y - 12, 408), fonts, palette, columns=columns)
     elif layout == "statement":
         draw_statement(pdf, page, y, fonts, palette)
     elif layout == "layers":
