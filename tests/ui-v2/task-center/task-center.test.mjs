@@ -217,3 +217,46 @@ test("computeStats 对空数组返回 0 计数", () => {
   for (const stage of VALID_STAGES) assert.equal(empty.byStatus[stage], 0);
   for (const type of VALID_TYPES) assert.equal(empty.byType[type], 0);
 });
+
+// ============================================================
+// Phase 0 Task 0.3: code inspection — no deleted resolver refs
+// ============================================================
+
+test("TaskCenter.tsx does not reference deleted resolver functions", () => {
+  const src = readFileSync("components/v2/task-center/TaskCenter.tsx", "utf8");
+  assert.ok(!/resolveResultTarget/.test(src), "TaskCenter must not reference resolveResultTarget");
+  assert.ok(!/resolveProjectTarget/.test(src), "TaskCenter must not reference resolveProjectTarget");
+  assert.ok(!/isResultExternal/.test(src), "TaskCenter must not reference isResultExternal");
+  assert.ok(!/fromUnifiedJob/.test(src), "TaskCenter must not reference fromUnifiedJob");
+});
+
+test("TaskCard.tsx does not reference deleted resolver functions", () => {
+  const src = readFileSync("components/v2/task-center/TaskCard.tsx", "utf8");
+  assert.ok(!/resolveResultTarget/.test(src), "TaskCard must not reference resolveResultTarget");
+  assert.ok(!/isResultExternal/.test(src), "TaskCard must not reference isResultExternal");
+  assert.ok(!/fromUnifiedJob/.test(src), "TaskCard must not reference fromUnifiedJob");
+});
+
+test("TaskCenter.tsx references resolveJobDetailUrl (new resolver API)", () => {
+  const src = readFileSync("components/v2/task-center/TaskCenter.tsx", "utf8");
+  assert.ok(/resolveJobDetailUrl/.test(src), "TaskCenter must reference resolveJobDetailUrl");
+});
+
+test("TaskCard.tsx references resolveJobResultUrl (new resolver API)", () => {
+  const src = readFileSync("components/v2/task-center/TaskCard.tsx", "utf8");
+  assert.ok(/resolveJobResultUrl/.test(src), "TaskCard must reference resolveJobResultUrl");
+});
+
+test("TaskCenter view_detail always navigates to /job-center/:jobId via resolveJobDetailUrl", () => {
+  const src = readFileSync("components/v2/task-center/TaskCenter.tsx", "utf8");
+  // view_detail should call resolveJobDetailUrl(job.id) and router.push
+  assert.ok(/resolveJobDetailUrl\s*\(\s*job\.id\s*\)/.test(src), "view_detail must use resolveJobDetailUrl(job.id)");
+  // No conditional disabling of view_detail based on target
+  assert.ok(!/view_detail.*!.*navTarget/.test(src), "view_detail must not be disabled based on navTarget");
+});
+
+test("TaskCard view_detail button is never disabled for missing target", () => {
+  const src = readFileSync("components/v2/task-center/TaskCard.tsx", "utf8");
+  // The isDisabled should not include view_detail && !navTarget condition
+  assert.ok(!/view_detail.*navTarget/.test(src), "TaskCard must not reference navTarget for view_detail");
+});

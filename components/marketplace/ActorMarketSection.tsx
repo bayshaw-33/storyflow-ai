@@ -25,7 +25,9 @@ type Props = {
  * - ActorMarketCard 网格（4 列）
  * - 加载更多按钮
  *
- * 数据源：GET /api/actors/market（公开端点）
+ * Phase 0 Task 0.5：数据源改为 GET /api/actors/platform（真实端点）。
+ * 旧 /api/actors/market 端点不存在，会被 [actorId] 动态路由误命中（actorId=market）。
+ * platform 端点返回 {actors, total}（page/pageSize 分页），此处做响应映射。
  */
 export function ActorMarketSection({ viewerToken }: Props) {
   const { locale, t } = useI18n();
@@ -39,23 +41,51 @@ export function ActorMarketSection({ viewerToken }: Props) {
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("latest");
 
+  const PAGE_SIZE = 12;
+
   const fetchPage = useCallback(
     async (nextCursor: string | null) => {
       setLoading(true);
       setError("");
       try {
-        const params = new URLSearchParams({ limit: "12" });
-        if (priceFilter !== "all") params.set("price", priceFilter);
-        params.set("sort", sortKey);
-        if (nextCursor) params.set("cursor", nextCursor);
+        // Phase 0 Task 0.5：使用真实 /api/actors/platform 端点（page/pageSize 分页）。
+        // cursor 存储下一页页码（字符串）；首页为 null → page=1。
+        const page = nextCursor ? Number(nextCursor) : 1;
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(PAGE_SIZE),
+        });
+        if (sortKey === "popular") params.set("sort", "popular");
         const headers: Record<string, string> = {};
         if (viewerToken) headers.Authorization = `Bearer ${viewerToken}`;
-        const response = await fetch(`/api/actors/market?${params.toString()}`, { headers });
+        const response = await fetch(`/api/actors/platform?${params.toString()}`, { headers });
         const json = await response.json();
         if (!response.ok || !json.success) {
           throw new Error(json.error || (isZh ? "市场加载失败" : "Failed to load marketplace"));
         }
-        return json;
+        // 映射 platform 响应 → MarketActorCard 列表
+        const platformActors: Array<{
+          actor: { id: string; name: string; bio?: string | null; avatar_url?: string | null };
+          creator_display_name: string | null;
+          usage_count: number;
+        }> = json.actors || [];
+        const mapped: MarketActorCard[] = platformActors.map((entry) => ({
+          id: entry.actor.id,
+          name: entry.actor.name,
+          tagline: entry.actor.bio ?? null,
+          primary_asset_url: entry.actor.avatar_url ?? null,
+          // platform 共享演员目前免费使用，无上架价格
+          listing_price_kk: null,
+          owner: {
+            user_id: "",
+            username: null,
+            display_name: entry.creator_display_name,
+            avatar_url: null,
+          },
+        }));
+        const total: number = json.total ?? mapped.length;
+        const nextPage = page * PAGE_SIZE < total ? String(page + 1) : null;
+        return { items: mapped, nextCursor: nextPage, hasMore: nextPage !== null };
       } catch (issue) {
         setError(issue instanceof Error ? issue.message : isZh ? "市场加载失败" : "Failed to load marketplace");
         return null;
@@ -63,7 +93,7 @@ export function ActorMarketSection({ viewerToken }: Props) {
         setLoading(false);
       }
     },
-    [priceFilter, sortKey, viewerToken, isZh],
+    [sortKey, viewerToken, isZh],
   );
 
   // 首屏 + 切筛选时重新拉取

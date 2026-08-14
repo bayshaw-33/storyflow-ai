@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { mapLegacyJob, listUnifiedJobs, readUnifiedJob, V2JobsError } = await import("../../../lib/server/v2/jobs/index.ts");
+const { mapLegacyJob, listUnifiedJobs, readUnifiedJob, transitionJob, V2JobsError } = await import("../../../lib/server/v2/jobs/index.ts");
 
 test("maps legacy video sub-states to the frozen v2 lifecycle", () => {
   assert.equal(mapLegacyJob({ id: "1", owner_id: "u-1", job_type: "video", status: "queued", created_at: "2026-08-12T00:00:00Z" }).status, "queued");
@@ -47,4 +47,189 @@ test("missing jobs are distinguishable from service errors", async () => {
   await assert.rejects(readUnifiedJob({ fetcher: emptyFetcher, userId: "u-1", jobId: "missing" }), (error) => error instanceof V2JobsError && error.code === "not_found");
   const failingFetcher = async () => { throw new Error("network down"); };
   await assert.rejects(listUnifiedJobs({ fetcher: failingFetcher, userId: "u-1" }), (error) => error instanceof V2JobsError && error.code === "service_unavailable");
+});
+
+// ============================================================
+// Phase 0 Task 0.3: transitionJob state machine (PRD §6.3)
+// ============================================================
+
+/**
+ * Mock fetcher that simulates Supabase REST for transitionJob tests.
+ * - GET (no init.method): returns `row` from the jobs table when id + owner match.
+ * - PATCH (init.method === "PATCH"): records the call and returns [] (success).
+ */
+function makeTransitionFetcher({ row, ownerId }) {
+  const patches = [];
+  const fetcher = async (path, init) => {
+    if (init && init.method === "PATCH") {
+      patches.push({ path, body: init.body });
+      return [];
+    }
+    // GET: readUnifiedJob queries 3 tables filtered by id + owner/user
+    if (!row) return [];
+    const encOwner = encodeURIComponent(ownerId);
+    const ownerMatch = path.includes(`owner_id=eq.${encOwner}`) || path.includes(`user_id=eq.${encOwner}`);
+    if (!ownerMatch) return [];
+    const encId = encodeURIComponent(row.id);
+    if (!path.includes(`id=eq.${encId}`)) return [];
+    // Return the row from the jobs table (primary source for media jobs)
+    return [row];
+  };
+  fetcher.patches = patches;
+  return fetcher;
+}
+
+test("transitionJob cancel: queued → cancelled", async () => {
+  const row = { id: "job-q1", owner_id: "u-1", project_id: "p-1", job_type: "video", status: "queued", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  const result = await transitionJob({ fetcher, userId: "u-1", jobId: "job-q1", action: "cancel" });
+  assert.equal(result.job.status, "cancelled");
+  assert.equal(result.job.phase, "cancelled");
+  assert.ok(result.job.completedAt, "completedAt should be set after cancel");
+  assert.ok(result.job.actions.includes("view_details"));
+  assert.ok(!result.job.actions.includes("cancel"), "cancelled job should not offer cancel");
+  // PATCH was sent to all 3 tables
+  assert.ok(fetcher.patches.length >= 3, "should PATCH all 3 tables");
+  // jobs table PATCH includes cancelRequested metadata
+  const jobsPatch = fetcher.patches.find((p) => p.path.includes("storyflow_generation_jobs"));
+  assert.ok(jobsPatch, "should PATCH the jobs table");
+  const jobsBody = JSON.parse(jobsPatch.body);
+  assert.equal(jobsBody.status, "cancelled");
+  assert.deepEqual(jobsBody.result_metadata, { cancelRequested: true });
+});
+
+test("transitionJob cancel: running → cancelled", async () => {
+  const row = { id: "job-r1", owner_id: "u-1", job_type: "image", status: "running", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  const result = await transitionJob({ fetcher, userId: "u-1", jobId: "job-r1", action: "cancel" });
+  assert.equal(result.job.status, "cancelled");
+});
+
+test("transitionJob cancel: result_ingesting → cancelled", async () => {
+  const row = { id: "job-i1", owner_id: "u-1", job_type: "video", status: "result_ingesting", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  const result = await transitionJob({ fetcher, userId: "u-1", jobId: "job-i1", action: "cancel" });
+  assert.equal(result.job.status, "cancelled");
+});
+
+test("transitionJob cancel: completed cannot be cancelled", async () => {
+  const row = { id: "job-c1", owner_id: "u-1", job_type: "video", status: "completed", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-c1", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob cancel: failed cannot be cancelled", async () => {
+  const row = { id: "job-f1", owner_id: "u-1", job_type: "video", status: "failed", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-f1", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob cancel: cancelled cannot be re-cancelled", async () => {
+  const row = { id: "job-x1", owner_id: "u-1", job_type: "video", status: "cancelled", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-x1", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob retry: failed → queued", async () => {
+  const row = { id: "job-f2", owner_id: "u-1", project_id: "p-1", job_type: "video", status: "failed", created_at: "2026-08-14T00:00:00Z", error: "timeout" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  const result = await transitionJob({ fetcher, userId: "u-1", jobId: "job-f2", action: "retry" });
+  assert.equal(result.job.status, "queued");
+  assert.equal(result.job.phase, "queued");
+  assert.equal(result.job.completedAt, null, "completedAt should be cleared after retry");
+  assert.equal(result.job.failedItemCount, 0, "failedItemCount should be cleared after retry");
+  assert.ok(result.job.actions.includes("cancel"), "queued job should offer cancel");
+  assert.ok(result.job.actions.includes("view_details"));
+  // PATCH was sent with status=queued
+  const jobsPatch = fetcher.patches.find((p) => p.path.includes("storyflow_generation_jobs"));
+  const jobsBody = JSON.parse(jobsPatch.body);
+  assert.equal(jobsBody.status, "queued");
+  assert.equal(jobsBody.error, null, "error should be cleared on retry");
+});
+
+test("transitionJob retry: partial_failure → queued", async () => {
+  const row = { id: "job-pf1", owner_id: "u-1", job_type: "image", status: "partial_failure", created_at: "2026-08-14T00:00:00Z", result_metadata: { completedCount: 2, totalCount: 3 } };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  const result = await transitionJob({ fetcher, userId: "u-1", jobId: "job-pf1", action: "retry" });
+  assert.equal(result.job.status, "queued");
+});
+
+test("transitionJob retry: completed cannot be retried", async () => {
+  const row = { id: "job-c2", owner_id: "u-1", job_type: "video", status: "completed", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-c2", action: "retry" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob retry: cancelled cannot be retried", async () => {
+  const row = { id: "job-x2", owner_id: "u-1", job_type: "video", status: "cancelled", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-x2", action: "retry" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob retry: queued cannot be retried", async () => {
+  const row = { id: "job-q2", owner_id: "u-1", job_type: "video", status: "queued", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-q2", action: "retry" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob retry: running cannot be retried", async () => {
+  const row = { id: "job-r2", owner_id: "u-1", job_type: "video", status: "running", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "job-r2", action: "retry" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob validates owner: mismatched userId → not_found", async () => {
+  const row = { id: "job-o1", owner_id: "u-1", job_type: "video", status: "queued", created_at: "2026-08-14T00:00:00Z" };
+  // Fetcher only returns the row when ownerId matches "u-1".
+  // Calling with userId "u-2" means the owner filter won't match → empty → not_found.
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-2", jobId: "job-o1", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "not_found",
+  );
+});
+
+test("transitionJob: missing jobId → validation_failed", async () => {
+  const fetcher = makeTransitionFetcher({ row: null, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "validation_failed",
+  );
+});
+
+test("transitionJob: missing userId → unauthenticated", async () => {
+  const fetcher = makeTransitionFetcher({ row: null, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "", jobId: "job-1", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "unauthenticated",
+  );
+});
+
+test("transitionJob: job not found in any table → not_found", async () => {
+  const fetcher = makeTransitionFetcher({ row: null, ownerId: "u-1" });
+  await assert.rejects(
+    transitionJob({ fetcher, userId: "u-1", jobId: "nonexistent", action: "cancel" }),
+    (error) => error instanceof V2JobsError && error.code === "not_found",
+  );
 });

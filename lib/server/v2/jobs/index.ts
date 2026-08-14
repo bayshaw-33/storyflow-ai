@@ -1,9 +1,14 @@
 import type { GenerationJob, GenerationJobStatus, JobAction, JobTiming } from "@/lib/contracts/v2";
 
-export type JobsFetcher = <T = unknown>(path: string) => Promise<T>;
+/**
+ * Fetcher for Supabase REST. The optional `init` makes the fetcher capable of
+ * PATCH (used by transitionJob) while staying backward compatible with
+ * GET-only callers (serviceFetch and existing mocks accept `(path)`).
+ */
+export type JobsFetcher = <T = unknown>(path: string, init?: { method?: string; body?: string; headers?: Record<string, string> }) => Promise<T>;
 
 export class V2JobsError extends Error {
-  readonly code: "unauthenticated" | "forbidden" | "not_found" | "service_unavailable" | "validation_failed";
+  readonly code: "unauthenticated" | "forbidden" | "not_found" | "conflict" | "service_unavailable" | "validation_failed";
 
   constructor(code: V2JobsError["code"], message: string) {
     super(`${code}: ${message}`);
@@ -127,4 +132,106 @@ function numberValue(value: unknown): number | null {
 async function query<T>(fetcher: JobsFetcher, path: string): Promise<T> {
   try { return await fetcher<T>(path); }
   catch (error) { if (error instanceof V2JobsError) throw error; throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable."); }
+}
+
+/**
+ * Compute the actions available for a job status (PRD §6.3).
+ * Extracted so transitionJob can recompute after a state change without a
+ * second read.
+ */
+function actionsForStatus(status: GenerationJobStatus): JobAction[] {
+  if (status === "failed" || status === "partial_failure") return ["retry", "view_details"];
+  if (status === "completed") return ["view_results", "view_details"];
+  if (status === "cancelled") return ["view_details"];
+  return ["cancel", "view_details"];
+}
+
+/**
+ * Transition a job's state via cancel or retry (PRD §6.3 K22-JOB-004).
+ *
+ * State machine:
+ * - cancel: only queued/running/result_ingesting → cancelled. Records
+ *   cancelRequested in metadata so provider cancellation is tracked even when
+ *   the provider task can't be truly stopped. completed/failed/cancelled are
+ *   not cancellable.
+ * - retry: only failed/partial_failure → queued (error cleared).
+ *   completed/cancelled/queued/running are not retryable.
+ *
+ * Owner is validated by readUnifiedJob (queries filter by user_id/owner_id, so
+ * a mismatch yields not_found). The PATCH is sent to all three legacy tables;
+ * only the table that actually holds the row will update.
+ */
+export async function transitionJob(params: {
+  fetcher: JobsFetcher;
+  userId: string;
+  jobId: string;
+  action: "cancel" | "retry";
+  now?: Date;
+}): Promise<{ job: GenerationJob }> {
+  if (!params.userId) throw new V2JobsError("unauthenticated", "Authentication is required.");
+  if (!params.jobId) throw new V2JobsError("validation_failed", "Job id is required.");
+
+  // Read current job — validates owner (filtered by user_id/owner_id) and existence.
+  const { job } = await readUnifiedJob({
+    fetcher: params.fetcher,
+    userId: params.userId,
+    jobId: params.jobId,
+    now: params.now,
+  });
+
+  const nowIso = (params.now || new Date()).toISOString();
+  const encJobId = encodeURIComponent(params.jobId);
+  const encUserId = encodeURIComponent(params.userId);
+
+  if (params.action === "cancel") {
+    if (job.status !== "queued" && job.status !== "running" && job.status !== "result_ingesting") {
+      throw new V2JobsError(
+        "validation_failed",
+        `Cannot cancel job in status "${job.status}". Only queued, running, or result_ingesting jobs can be cancelled.`,
+      );
+    }
+    // PATCH all three legacy tables; only the one holding the row updates.
+    // jobs table also records cancelRequested in result_metadata.
+    const taskBody = JSON.stringify({ status: "cancelled", completed_at: nowIso });
+    const jobBody = JSON.stringify({ status: "cancelled", completed_at: nowIso, result_metadata: { cancelRequested: true } });
+    const exportBody = JSON.stringify({ status: "cancelled", completed_at: nowIso });
+    await Promise.all([
+      patchRow(params.fetcher, `/rest/v1/storyflow_generation_tasks?id=eq.${encJobId}&user_id=eq.${encUserId}`, taskBody),
+      patchRow(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encJobId}&owner_id=eq.${encUserId}`, jobBody),
+      patchRow(params.fetcher, `/rest/v1/storyflow_exports?id=eq.${encJobId}&user_id=eq.${encUserId}`, exportBody),
+    ]);
+    const nextStatus: GenerationJobStatus = "cancelled";
+    return { job: { ...job, status: nextStatus, phase: nextStatus, completedAt: nowIso, actions: actionsForStatus(nextStatus) } };
+  }
+
+  if (params.action === "retry") {
+    if (job.status !== "failed" && job.status !== "partial_failure") {
+      throw new V2JobsError(
+        "validation_failed",
+        `Cannot retry job in status "${job.status}". Only failed or partial_failure jobs can be retried.`,
+      );
+    }
+    const taskBody = JSON.stringify({ status: "queued", error_message: null, completed_at: null });
+    const jobBody = JSON.stringify({ status: "queued", error: null, completed_at: null });
+    const exportBody = JSON.stringify({ status: "queued", completed_at: null });
+    await Promise.all([
+      patchRow(params.fetcher, `/rest/v1/storyflow_generation_tasks?id=eq.${encJobId}&user_id=eq.${encUserId}`, taskBody),
+      patchRow(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encJobId}&owner_id=eq.${encUserId}`, jobBody),
+      patchRow(params.fetcher, `/rest/v1/storyflow_exports?id=eq.${encJobId}&user_id=eq.${encUserId}`, exportBody),
+    ]);
+    const nextStatus: GenerationJobStatus = "queued";
+    return { job: { ...job, status: nextStatus, phase: nextStatus, completedAt: null, failedItemCount: 0, actions: actionsForStatus(nextStatus) } };
+  }
+
+  throw new V2JobsError("validation_failed", `Unknown action "${params.action}". Use "cancel" or "retry".`);
+}
+
+/** PATCH helper that wraps the fetcher and converts errors to V2JobsError. */
+async function patchRow(fetcher: JobsFetcher, path: string, body: string): Promise<void> {
+  try {
+    await fetcher(path, { method: "PATCH", body, headers: { "Content-Type": "application/json" } });
+  } catch (error) {
+    if (error instanceof V2JobsError) throw error;
+    throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable.");
+  }
 }

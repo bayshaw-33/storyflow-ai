@@ -288,6 +288,21 @@
   background: rgba(109, 231, 223, 0.12);
 }
 
+/* Phase 0 Task 0.4: 有 actionLabel 但无合法同源 actionUrl 时展示的禁用态 */
+.msgActionDisabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  white-space: nowrap;
+  cursor: not-allowed;
+}
+
 .unreadDot {
   width: 7px;
   height: 7px;

@@ -87,8 +87,13 @@ export interface KkMessage {
   createdAt: string;
   /** 跳转动作标签，如"查看结果"/"去确认" */
   actionLabel?: string;
-  /** 跳转目标 URL，指向 /job-center 或对应结果页 */
+  /** 跳转目标 URL，指向 /job-center 或对应结果页（必须同源） */
   actionUrl?: string;
+  /**
+   * Phase 0 Task 0.4：当动作存在但目标不可用时的禁用原因。
+   * 有 actionLabel 但无合法同源 actionUrl 时必须填写，禁止只显示进度文本。
+   */
+  actionDisabledReason?: string;
   /** 关联的任务中心任务 ID */
   relatedJobId?: string;
   /** 关联的 Change Proposal ID */

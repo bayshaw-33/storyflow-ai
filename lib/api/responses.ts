@@ -4,8 +4,23 @@ export function ok<T>(payload: T) {
   return NextResponse.json({ success: true, ...payload });
 }
 
+/**
+ * Phase 0 Task 0.5：生成短 correlationId，用于错误响应追踪。
+ */
+function generateCorrelationId(): string {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+      return globalThis.crypto.randomUUID().slice(0, 8);
+    }
+  } catch {
+    /* fall through */
+  }
+  return Date.now().toString(16).slice(-4) + Math.random().toString(16).slice(2, 6);
+}
+
 export function apiError(error: unknown, fallback = "请求失败。", status = 400) {
   const message = error instanceof Error ? error.message : "";
+  const correlationId = generateCorrelationId();
   const authError = message.includes("MISSING_AUTH_TOKEN") || message.includes("INVALID_AUTH_TOKEN");
   const projectForbidden = message.includes("PROJECT_FORBIDDEN");
   // 约定：所有 *_FORBIDDEN 后缀的业务错误（PROJECT_/TEAM_/ACTOR_…）一律映射 403
@@ -38,6 +53,7 @@ export function apiError(error: unknown, fallback = "请求失败。", status = 
               : serviceError
                 ? "云端数据服务暂时不可用，请检查 Supabase 表结构和权限。"
                 : fallback,
+      correlationId,
     },
     { status: authError ? 401 : forbidden ? 403 : notFound ? 404 : unknownColumn && serviceError ? 500 : status },
   );

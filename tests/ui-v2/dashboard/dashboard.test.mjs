@@ -200,3 +200,20 @@ test("loadDashboardFixture 未知 fixture 名抛错", async () => {
     },
   );
 });
+
+// ============================================================
+// Phase 0 Task 0.3: code inspection — DashboardSections & DashboardClient
+// ============================================================
+
+test("DashboardSections.tsx does not reference deleted resolver functions", () => {
+  const src = fs.readFileSync(path.resolve("components/v2/dashboard/DashboardSections.tsx"), "utf8");
+  assert.ok(!/resolveProjectTarget/.test(src), "DashboardSections must not reference resolveProjectTarget");
+  assert.ok(!/fromRecentProject/.test(src), "DashboardSections must not reference fromRecentProject");
+  assert.ok(!/fromDashboardJob/.test(src), "DashboardSections must not reference fromDashboardJob");
+});
+
+test("DashboardSections RunningJobsSection uses resolveJobDetailUrl for navigation", () => {
+  const src = fs.readFileSync(path.resolve("components/v2/dashboard/DashboardSections.tsx"), "utf8");
+  assert.ok(/resolveJobDetailUrl/.test(src), "DashboardSections must reference resolveJobDetailUrl");
+  assert.ok(/resolveJobDetailUrl\s*\(\s*job\.id\s*\)/.test(src), "RunningJobsSection must use resolveJobDetailUrl(job.id)");
+});

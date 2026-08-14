@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasServiceRoleConfig, serviceFetch, getViewerFromCookies } from "@/lib/supabase/server";
 import { listDiscoveryFeed, listByPublisher } from "@/lib/server/v2/community/discovery";
-import { CommunityServiceError } from "@/lib/server/v2/community/publications";
+import { CommunityServiceError, isSchemaError } from "@/lib/server/v2/community/publications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,14 +72,45 @@ export async function GET(request: NextRequest) {
 }
 
 function communityErrorResponse(error: unknown, fallback: string) {
+  // Phase 0 Task 0.5：输出 correlationId，识别 schema 错误，不吞 DB 错误类别。
   if (error instanceof CommunityServiceError) {
+    // 检查 cause 是否为 schema 错误（PGRST204/42703/42P01/PGRST205）
+    const schema = isSchemaError(error.cause) || isSchemaError(error.message);
     return NextResponse.json(
-      { success: false, error: error.message, code: error.code },
-      { status: error.status },
+      {
+        success: false,
+        error: schema
+          ? `数据库 schema 缺失列或表，请联系管理员核对迁移：${error.message.slice(0, 200)}`
+          : error.message,
+        code: schema ? "schema_error" : error.code,
+        correlationId: error.correlationId,
+      },
+      { status: schema ? 500 : error.status },
     );
   }
+  // 非 CommunityServiceError：可能是 fetcher 抛出的原始 DB 错误，也要识别 schema 类别
+  const schema = isSchemaError(error);
+  const correlationId = generateRouteCorrelationId();
   return NextResponse.json(
-    { success: false, error: fallback, code: "service_unavailable" },
-    { status: 503 },
+    {
+      success: false,
+      error: schema
+        ? `数据库 schema 缺失列或表，请联系管理员核对迁移：${(error instanceof Error ? error.message : String(error)).slice(0, 200)}`
+        : fallback,
+      code: schema ? "schema_error" : "service_unavailable",
+      correlationId,
+    },
+    { status: schema ? 500 : 503 },
   );
+}
+
+function generateRouteCorrelationId(): string {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+      return globalThis.crypto.randomUUID().slice(0, 8);
+    }
+  } catch {
+    /* fall through */
+  }
+  return Date.now().toString(16).slice(-4) + Math.random().toString(16).slice(2, 6);
 }

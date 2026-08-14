@@ -28,9 +28,7 @@ import type {
 } from "@/lib/client/v2/dashboard/types";
 import type { DashboardWorkflowType } from "@/lib/client/v2/dashboard/types";
 import {
-  resolveProjectTarget,
-  fromRecentProject,
-  fromDashboardJob,
+  resolveJobDetailUrl,
 } from "@/lib/client/v2/navigation/resolver";
 
 function formatRelative(iso: string, isZh: boolean): string {
@@ -114,8 +112,7 @@ export function ContinueCreatingSection({ projects }: { projects: RecentProject[
       ) : (
         <ul className={styles.list}>
           {projects.map((project) => {
-            const target = resolveProjectTarget(fromRecentProject(project));
-            if (!target) return null;
+            const target = `/projects/${encodeURIComponent(project.id)}`;
             return (
             <li key={project.id}>
               <Link href={target} className={`${styles.row} ${styles.rowClickable}`}>
@@ -227,23 +224,19 @@ export function RunningJobsSection({ jobs }: { jobs: RunningJob[] }) {
         <ul className={styles.list}>
           {jobs.map((job) => {
             const percent = job.total > 0 ? Math.min(100, Math.round((job.completed / job.total) * 100)) : 0;
-            const target = resolveProjectTarget(fromDashboardJob(job));
+            const target = resolveJobDetailUrl(job.id);
             const handleClick = () => {
-              if (target) {
-                router.push(target);
-              } else {
-                router.push("/job-center");
-              }
+              router.push(target);
             };
             return (
               <li
                 key={job.id}
                 className={`${styles.row} ${styles.rowClickable}`}
                 onClick={handleClick}
-                role={target ? "link" : undefined}
-                tabIndex={target ? 0 : undefined}
+                role="link"
+                tabIndex={0}
                 onKeyDown={(e) => {
-                  if (target && (e.key === "Enter" || e.key === " ")) {
+                  if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     handleClick();
                   }
@@ -401,7 +394,7 @@ export function RecentWorksSection({ works }: { works: RecentWork[] }) {
   );
 }
 
-// 快速开始：新建项目跳转 /projects/new（2.0 创建流程）。
+// 快速开始：新建项目跳转 /projects/new-v2（Phase 0 七模块入口方格）。
 export function QuickStartSection() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -415,11 +408,11 @@ export function QuickStartSection() {
       </div>
       <p className={styles.rowDesc} style={{ marginTop: 0, marginBottom: 12 }}>
         {isZh
-          ? "从一个想法、一份剧本或一个制作任务开始，系统会自动建立或绑定 Universe。"
-          : "Start from an idea, a script, or a production task. Universe is auto-created or bound."}
+          ? "选择一个创作模块，系统会原子性地建立项目与对应工作台，Universe 可以后续绑定。"
+          : "Pick a module — a project and its workbench are created atomically. Universe can be bound later."}
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Link href="/projects/new" className={`${styles.button} ${styles.buttonPrimary}`}>
+        <Link href="/projects/new-v2" className={`${styles.button} ${styles.buttonPrimary}`}>
           <Plus size={14} />
           {isZh ? "新建项目" : "New project"}
         </Link>

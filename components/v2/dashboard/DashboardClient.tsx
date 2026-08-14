@@ -161,7 +161,7 @@ export function DashboardClient() {
   if (status === "empty" || !data) {
     return (
       <main className={styles.shell}>
-        <EmptyDashboard onCreate={() => router.push("/projects/new")} />
+        <EmptyDashboard onCreate={() => router.push("/projects/new-v2")} />
         <KKEntrySection />
       </main>
     );
@@ -185,7 +185,7 @@ export function DashboardClient() {
             <button
               type="button"
               className={`${styles.button} ${styles.buttonPrimary}`}
-              onClick={() => router.push("/projects/new")}
+              onClick={() => router.push("/projects/new-v2")}
             >
               {isZh ? "新建项目" : "New project"}
             </button>

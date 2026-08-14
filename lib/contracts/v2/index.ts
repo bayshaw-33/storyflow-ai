@@ -221,6 +221,15 @@ export interface GenerationJob {
   actions?: JobAction[];
   createdAt: string;
   completedAt?: string | null;
+  // Phase 0 Task 0.3: optional target/result metadata for dashboard & job
+  // detail navigation. All optional for backward compatibility with existing
+  // rows that don't carry these fields yet.
+  workId?: string | null;
+  workbenchType?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  detailUrl?: string | null;
+  resultUrl?: string | null;
 }
 
 export interface ModelDecision {

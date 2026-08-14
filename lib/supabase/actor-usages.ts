@@ -170,17 +170,19 @@ export async function listPlatformActors(params: {
   if (!actors.length) return { actors: [], total };
 
   // 3. 批量查询创建者昵称（不查邮箱）
+  // Phase 0 Task 0.5：不再 .catch(() => []) 吞没 DB 错误，让 schema/RLS 错误透传到 route 层。
   const ownerIds = [...new Set(actors.map((a) => a.owner_id))];
   const profiles = await serviceFetch<{ user_id: string; display_name: string | null }[]>(
     `/rest/v1/storyflow_profiles?user_id=in.(${ownerIds.map(encodeURIComponent).join(",")})&select=user_id,display_name`,
-  ).catch(() => []);
+  );
   const profileMap = new Map(profiles.map((p) => [p.user_id, p.display_name]));
 
   // 4. 批量查询使用次数
+  // Phase 0 Task 0.5：同上，不再吞没 DB 错误。
   const actorIds = actors.map((a) => a.id);
   const usageCounts = await serviceFetch<{ actor_id: string }[]>(
     `/rest/v1/storyflow_actor_usages?actor_id=in.(${actorIds.map(encodeURIComponent).join(",")})&select=actor_id`,
-  ).catch(() => []);
+  );
   const usageCountMap = new Map<string, number>();
   for (const u of usageCounts) {
     usageCountMap.set(u.actor_id, (usageCountMap.get(u.actor_id) || 0) + 1);

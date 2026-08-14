@@ -1,263 +1,373 @@
-// K2-T-03 渐进式项目创建 · 单元测试
-// 参考 tests/creation-state.test.mjs 写法，使用 node:test + node:assert/strict
-
+/**
+ * tests/ui-v2/project-start/project-start.test.mjs
+ * KIIKIS 2.2 Phase 0 — Task 0.2 entry flow contract tests (no DOM).
+ *
+ * Covers the project-start client API and helpers that the entry grid consumes:
+ *   - startProject returns ProjectStartResult and surfaces server errors
+ *   - client never sends owner_id; auth token drives identity
+ *   - workbenchRoute from server response is used as-is (no client override)
+ *   - DEFAULT_WORK_TITLES used for card label fallback
+ *   - WORK_TYPE_CARDS: exactly 7 modules in canonical order, no novel
+ *   - No fixture fallback: startProject always hits /api/v2/project-start
+ */
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
 
 import {
-  loadProjectStartFixture,
-  filterUniverseOptions,
-  validateContractVersion,
-  buildProjectStartRequest,
-  resolveWorkbenchRoute,
-} from "../../../lib/client/v2/project-start/fixtures.ts";
-import { CONTRACT_VERSION } from "../../../lib/client/v2/project-start/types.ts";
+  WORK_TYPES,
+  DEFAULT_WORK_TITLES,
+  WORK_CONTRACT_VERSION,
+} from "../../../lib/contracts/v2/work.ts";
+import {
+  startProject,
+  ProjectStartClientError,
+} from "../../../lib/client/v2/project-start/api.ts";
+import {
+  WORK_TYPE_CARDS,
+  getWorkTypeCard,
+  defaultTitleFor,
+} from "../../../lib/client/v2/project-start/helpers.ts";
 
-// ===== 1. Fixture 数据结构 =====
+// ============================================================
+// Task 0.2 RED: 7-module entry grid contract (K22-ENTRY-001..006)
+// ============================================================
 
-test("fixture 文件可加载且包含必需字段", () => {
-  const fixture = loadProjectStartFixture();
-  assert.ok(fixture, "fixture 不应为空");
-  assert.equal(typeof fixture.contractVersion, "string");
-  assert.ok(Array.isArray(fixture.contentTypeOptions));
-  assert.ok(Array.isArray(fixture.startModes));
-  assert.ok(Array.isArray(fixture.universeOptions));
-});
-
-test("fixture contractVersion 等于 2.0.0-alpha.1", () => {
-  const fixture = loadProjectStartFixture();
-  assert.equal(fixture.contractVersion, "2.0.0-alpha.1");
-  assert.equal(fixture.contractVersion, CONTRACT_VERSION);
-});
-
-test("contentTypeOptions 包含全部 5 种内容类型", () => {
-  const fixture = loadProjectStartFixture();
-  const expected = ["drama", "novel", "song", "storyboard", "video"];
-  assert.deepEqual(fixture.contentTypeOptions.sort(), expected.sort());
-});
-
-test("startModes 包含全部 3 种开始方式", () => {
-  const fixture = loadProjectStartFixture();
-  const expected = ["idea", "script", "material"];
-  assert.deepEqual(fixture.startModes.sort(), expected.sort());
-});
-
-test("每个 universeOption 含完整字段且类型正确", () => {
-  const fixture = loadProjectStartFixture();
-  assert.ok(fixture.universeOptions.length >= 3, "至少 3 个 universe 选项用于测试");
-  for (const opt of fixture.universeOptions) {
-    assert.equal(typeof opt.id, "string", `id 应为 string: ${JSON.stringify(opt)}`);
-    assert.equal(typeof opt.name, "string", `name 应为 string`);
-    assert.equal(typeof opt.summary, "string", `summary 应为 string`);
-    assert.equal(typeof opt.characterCount, "number", `characterCount 应为 number`);
-    assert.equal(typeof opt.ruleCount, "number", `ruleCount 应为 number`);
-    assert.equal(typeof opt.lastActivityAt, "string", `lastActivityAt 应为 string`);
-    assert.equal(typeof opt.healthScore, "number", `healthScore 应为 number`);
-    assert.ok(opt.healthScore >= 0 && opt.healthScore <= 100, "healthScore 应在 0-100 之间");
-  }
-});
-
-test("universeOption 的 lastActivityAt 是合法 ISO 时间", () => {
-  const fixture = loadProjectStartFixture();
-  for (const opt of fixture.universeOptions) {
-    const d = new Date(opt.lastActivityAt);
-    assert.ok(!isNaN(d.getTime()), `lastActivityAt 应为合法 ISO: ${opt.lastActivityAt}`);
-  }
-});
-
-// ===== 2. contract_version 校验 =====
-
-test("validateContractVersion 对当前版本返回 true", () => {
-  assert.equal(validateContractVersion(CONTRACT_VERSION), true);
-  assert.equal(validateContractVersion("2.0.0-alpha.1"), true);
-});
-
-test("validateContractVersion 对错误版本返回 false", () => {
-  assert.equal(validateContractVersion("1.0.0"), false);
-  assert.equal(validateContractVersion("2.0.0"), false);
-  assert.equal(validateContractVersion(""), false);
-  assert.equal(validateContractVersion("2.0.0-alpha.2"), false);
-});
-
-// ===== 3. Universe 搜索/过滤逻辑 =====
-
-test("空查询返回全部 Universe", () => {
-  const fixture = loadProjectStartFixture();
-  const result = filterUniverseOptions(fixture.universeOptions, "");
-  assert.equal(result.length, fixture.universeOptions.length);
-});
-
-test("空白查询返回全部 Universe", () => {
-  const fixture = loadProjectStartFixture();
-  const result = filterUniverseOptions(fixture.universeOptions, "   ");
-  assert.equal(result.length, fixture.universeOptions.length);
-});
-
-test("按名称关键词过滤（大小写不敏感）", () => {
-  const fixture = loadProjectStartFixture();
-  const result = filterUniverseOptions(fixture.universeOptions, "aurora");
-  assert.equal(result.length, 1);
-  assert.equal(result[0].id, "universe-aurora");
-});
-
-test("按摘要中文关键词过滤", () => {
-  const fixture = loadProjectStartFixture();
-  const result = filterUniverseOptions(fixture.universeOptions, "宇宙");
-  assert.ok(result.length >= 1, "至少匹配一项含「宇宙」的摘要");
-  for (const opt of result) {
-    assert.ok(opt.summary.includes("宇宙"), `结果应包含关键词: ${opt.name}`);
-  }
-});
-
-test("无匹配时返回空数组", () => {
-  const fixture = loadProjectStartFixture();
-  const result = filterUniverseOptions(fixture.universeOptions, "zzz_no_match_xxx");
-  assert.equal(result.length, 0);
-});
-
-test("同时匹配名称或摘要", () => {
-  const fixture = loadProjectStartFixture();
-  // "iron" 匹配名称 "Iron Hymn"
-  const byName = filterUniverseOptions(fixture.universeOptions, "iron");
-  assert.ok(byName.length >= 1);
-  assert.ok(byName.some((o) => o.id === "universe-iron-hymn"));
-  // "群岛" 匹配摘要
-  const bySummary = filterUniverseOptions(fixture.universeOptions, "群岛");
-  assert.ok(bySummary.length >= 1);
-  assert.ok(bySummary.some((o) => o.id === "universe-tidewatch"));
-});
-
-// ===== 4. 项目创建请求组装 =====
-
-test("buildProjectStartRequest 正常组装请求", () => {
-  const request = buildProjectStartRequest({
-    contentType: "drama",
-    startMode: "idea",
-    title: "霓虹之夜",
-    universeAction: "create_new",
-  });
-  assert.equal(request.contentType, "drama");
-  assert.equal(request.startMode, "idea");
-  assert.equal(request.title, "霓虹之夜");
-  assert.equal(request.universeAction, "create_new");
-  assert.equal(request.universeId, undefined);
-  assert.equal(request.contractVersion, CONTRACT_VERSION);
-});
-
-test("buildProjectStartRequest 标题会被 trim", () => {
-  const request = buildProjectStartRequest({
-    contentType: "novel",
-    startMode: "script",
-    title: "  带空格的标题  ",
-    universeAction: "skip",
-  });
-  assert.equal(request.title, "带空格的标题");
-});
-
-test("buildProjectStartRequest 空标题抛错", () => {
-  assert.throws(
-    () => buildProjectStartRequest({
-      contentType: "drama",
-      startMode: "idea",
-      title: "   ",
-      universeAction: "skip",
-    }),
-    /title is required/i,
+test("WORK_TYPE_CARDS exposes exactly 7 modules in canonical order", () => {
+  assert.equal(WORK_TYPE_CARDS.length, 7);
+  assert.deepEqual(
+    WORK_TYPE_CARDS.map((c) => c.workType),
+    ["script", "song", "art", "storyboard", "video", "voice", "editing"],
   );
 });
 
-test("buildProjectStartRequest bind_existing 时必须提供 universeId", () => {
-  assert.throws(
-    () => buildProjectStartRequest({
-      contentType: "drama",
-      startMode: "idea",
-      title: "测试",
-      universeAction: "bind_existing",
-    }),
-    /universeId is required/i,
+test("WORK_TYPE_CARDS never includes novel", () => {
+  assert.ok(!WORK_TYPE_CARDS.some((c) => c.workType === "novel"));
+});
+
+test("WORK_TYPE_CARDS: every card has icon + zh/en title + zh/en desc", () => {
+  for (const card of WORK_TYPE_CARDS) {
+    assert.equal(typeof card.icon, "string");
+    assert.ok(card.icon.length > 0);
+    assert.equal(typeof card.titleZh, "string");
+    assert.ok(card.titleZh.length > 0);
+    assert.equal(typeof card.titleEn, "string");
+    assert.ok(card.titleEn.length > 0);
+    assert.equal(typeof card.descZh, "string");
+    assert.ok(card.descZh.length > 0);
+    assert.equal(typeof card.descEn, "string");
+    assert.ok(card.descEn.length > 0);
+  }
+});
+
+test("getWorkTypeCard returns the card for each WorkType", () => {
+  for (const t of WORK_TYPES) {
+    const card = getWorkTypeCard(t);
+    assert.equal(card.workType, t);
+  }
+});
+
+test("getWorkTypeCard throws for unknown workType", () => {
+  assert.throws(() => getWorkTypeCard("novel"));
+  assert.throws(() => getWorkTypeCard("podcast"));
+});
+
+test("defaultTitleFor returns DEFAULT_WORK_TITLES[t] for every WorkType", () => {
+  for (const t of WORK_TYPES) {
+    assert.equal(defaultTitleFor(t), DEFAULT_WORK_TITLES[t]);
+  }
+});
+
+test("ProjectStartFlow.tsx no longer references K2-T-03 fixture/createProject/ContentType/StartMode", () => {
+  const filePath = path.resolve(
+    "components/v2/project-start/ProjectStartFlow.tsx",
+  );
+  const src = fs.readFileSync(filePath, "utf8");
+  assert.ok(
+    !/from ['"]@\/lib\/client\/v2\/project-start\/(fixtures|api|helpers|types)['"][^]*createProject/.test(src),
+    "ProjectStartFlow must not import createProject from K2-T-03 api",
+  );
+  assert.ok(
+    !/createProject\s*\(/.test(src),
+    "ProjectStartFlow must not call createProject (use startProject)",
+  );
+  assert.ok(
+    !/\bContentType\b/.test(src),
+    "ProjectStartFlow must not reference ContentType (K2-T-03 legacy)",
+  );
+  assert.ok(
+    !/\bStartMode\b/.test(src),
+    "ProjectStartFlow must not reference StartMode (K2-T-03 legacy)",
+  );
+  assert.ok(
+    !/\bUniverseAction\b/.test(src),
+    "ProjectStartFlow must not reference UniverseAction (K2-T-03 legacy)",
+  );
+  assert.ok(
+    !/fetchUniverseOptions/.test(src),
+    "ProjectStartFlow must not call fetchUniverseOptions",
+  );
+  assert.ok(
+    !/filterUniverseOptions/.test(src),
+    "ProjectStartFlow must not call filterUniverseOptions",
+  );
+  assert.ok(
+    !/buildProjectStartRequest/.test(src),
+    "ProjectStartFlow must not call buildProjectStartRequest",
+  );
+  assert.ok(
+    /startProject/.test(src),
+    "ProjectStartFlow must call startProject (Phase 0 Task 0.1 API)",
+  );
+  assert.ok(
+    /WORK_TYPE_CARDS/.test(src),
+    "ProjectStartFlow must render WORK_TYPE_CARDS (7-module grid)",
   );
 });
 
-test("buildProjectStartRequest bind_existing 时带 universeId 正常", () => {
-  const request = buildProjectStartRequest({
-    contentType: "drama",
-    startMode: "idea",
-    title: "测试",
-    universeAction: "bind_existing",
-    universeId: "universe-aurora",
-  });
-  assert.equal(request.universeAction, "bind_existing");
-  assert.equal(request.universeId, "universe-aurora");
+test("ProjectStartFlow.tsx has no free-text input, no upload button, no novel option", () => {
+  const filePath = path.resolve(
+    "components/v2/project-start/ProjectStartFlow.tsx",
+  );
+  const src = fs.readFileSync(filePath, "utf8");
+  // No <input type="text"> for free-text story description.
+  assert.ok(
+    !/placeholder=\{[^}]*描述你的故事/.test(src),
+    "ProjectStartFlow must not contain '描述你的故事' free-text placeholder",
+  );
+  // No novel card.
+  assert.ok(
+    !/workType:\s*["']novel["']/.test(src),
+    "ProjectStartFlow must not contain a novel card",
+  );
+  // No file upload.
+  assert.ok(
+    !/<input[^>]*type=["']file["']/.test(src),
+    "ProjectStartFlow must not contain a file upload input",
+  );
 });
 
-test("buildProjectStartRequest skip 时 universeId 被忽略", () => {
-  const request = buildProjectStartRequest({
-    contentType: "video",
-    startMode: "material",
-    title: "测试",
-    universeAction: "skip",
-    universeId: "universe-aurora",
-  });
-  assert.equal(request.universeAction, "skip");
-  assert.equal(request.universeId, undefined);
+test("ProjectStartFlow.tsx uses startProject's server-returned workbenchRoute (no client-side route construction)", () => {
+  const filePath = path.resolve(
+    "components/v2/project-start/ProjectStartFlow.tsx",
+  );
+  const src = fs.readFileSync(filePath, "utf8");
+  // The component must not build a workbench route itself; it must use the one
+  // returned by startProject.
+  assert.ok(
+    !/WORKBENCH_ROUTES\[/.test(src),
+    "ProjectStartFlow must not access WORKBENCH_ROUTES directly — use server-returned workbenchRoute",
+  );
 });
 
-test("buildProjectStartRequest create_new 时 universeId 被忽略", () => {
-  const request = buildProjectStartRequest({
-    contentType: "song",
-    startMode: "idea",
-    title: "测试",
-    universeAction: "create_new",
-    universeId: "universe-aurora",
-  });
-  assert.equal(request.universeAction, "create_new");
-  assert.equal(request.universeId, undefined);
-});
-
-test("所有 contentType 与 startMode 组合都能组装请求", () => {
-  const fixture = loadProjectStartFixture();
-  for (const contentType of fixture.contentTypeOptions) {
-    for (const startMode of fixture.startModes) {
-      const request = buildProjectStartRequest({
-        contentType,
-        startMode,
-        title: `组合测试-${contentType}-${startMode}`,
-        universeAction: "skip",
-      });
-      assert.equal(request.contentType, contentType);
-      assert.equal(request.startMode, startMode);
-      assert.equal(request.contractVersion, CONTRACT_VERSION);
+test("lib/client/v2/project-start/fixtures.ts is removed or no longer imported by any source file", () => {
+  // fixtures.ts is K2-T-03 legacy; Phase 0 removes its consumers.
+  const fixturesPath = path.resolve(
+    "lib/client/v2/project-start/fixtures.ts",
+  );
+  if (fs.existsSync(fixturesPath)) {
+    // If file still exists, no source under components/ or app/ may import it.
+    const componentsDir = path.resolve("components");
+    const appDir = path.resolve("app");
+    function walk(dir, list = []) {
+      if (!fs.existsSync(dir)) return list;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full, list);
+        else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) list.push(full);
+      }
+      return list;
+    }
+    const files = [...walk(componentsDir), ...walk(appDir)];
+    for (const f of files) {
+      const src = fs.readFileSync(f, "utf8");
+      assert.ok(
+        !/from ['"]@?\/?lib\/client\/v2\/project-start\/fixtures['"]/.test(src) &&
+        !/from ['"]\.\/fixtures['"]/.test(src),
+        `${f} must not import project-start/fixtures (K2-T-03 legacy)`,
+      );
     }
   }
 });
 
-// ===== 5. 工作台路由解析 =====
-
-test("resolveWorkbenchRoute 短剧跳转到 novel-workbench", () => {
-  assert.equal(resolveWorkbenchRoute("drama"), "/novel-workbench");
+test("DashboardClient 'new project' button opens the entry selector (/projects/new-v2) instead of navigating directly into a workbench", () => {
+  const filePath = path.resolve("components/v2/dashboard/DashboardClient.tsx");
+  const src = fs.readFileSync(filePath, "utf8");
+  // Dashboard must route the "new project" action to the entry selector page,
+  // not directly to a specific workbench.
+  assert.ok(
+    /\/projects\/new-v2/.test(src),
+    "DashboardClient must open /projects/new-v2 (Phase 0 entry selector)",
+  );
 });
 
-test("resolveWorkbenchRoute 小说跳转到 novel-workbench", () => {
-  assert.equal(resolveWorkbenchRoute("novel"), "/novel-workbench");
+function makeMockResponse(body, init) {
+  const status = (init && init.status) || 200;
+  return {
+    status,
+    ok: (init && init.ok) || (status >= 200 && status < 300),
+    json: async () => body,
+    text: async () =>
+      typeof body === "string" ? body : JSON.stringify(body),
+  };
+}
+
+function installMockFetch(impl) {
+  const original = globalThis.fetch;
+  globalThis.fetch = impl;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
+test("startProject posts to /api/v2/project-start with auth header and Idempotency-Key", async () => {
+  let captured = {};
+  const restore = installMockFetch(async (url, init) => {
+    captured = { url, init };
+    return makeMockResponse({
+      success: true,
+      contractVersion: WORK_CONTRACT_VERSION,
+      projectId: "p1",
+      work: { id: "w1", workType: "script", title: "未命名剧本" },
+      workbenchRoute: "/script-workbench?projectId=p1&workId=w1",
+    });
+  });
+  try {
+    const result = await startProject({
+      workType: "script",
+      authToken: "tok-1",
+      idempotencyKey: "k-1",
+    });
+    assert.equal(result.contractVersion, WORK_CONTRACT_VERSION);
+    assert.equal(result.projectId, "p1");
+    assert.equal(result.work.id, "w1");
+    assert.equal(
+      result.workbenchRoute,
+      "/script-workbench?projectId=p1&workId=w1",
+    );
+    assert.match(String(captured.url), /\/api\/v2\/project-start$/);
+    const headers = new Headers(captured.init.headers);
+    assert.equal(headers.get("Authorization"), "Bearer tok-1");
+    assert.equal(headers.get("Idempotency-Key"), "k-1");
+    const body = JSON.parse(String(captured.init.body));
+    assert.equal(body.workType, "script");
+    assert.equal(body.ownerId, undefined, "client must NOT send ownerId");
+    assert.equal(
+      body.title,
+      undefined,
+      "client must NOT send title unless user typed one",
+    );
+  } finally {
+    restore();
+  }
 });
 
-test("resolveWorkbenchRoute 歌曲跳转到 song-workbench", () => {
-  assert.equal(resolveWorkbenchRoute("song"), "/song-workbench");
+test("startProject propagates optional user title when provided", async () => {
+  let captured = {};
+  const restore = installMockFetch(async (url, init) => {
+    captured = { url, init };
+    return makeMockResponse({
+      success: true,
+      contractVersion: WORK_CONTRACT_VERSION,
+      projectId: "p1",
+      work: { id: "w1", workType: "script", title: "我的剧本" },
+      workbenchRoute: "/script-workbench?projectId=p1&workId=w1",
+    });
+  });
+  try {
+    await startProject({
+      workType: "script",
+      authToken: "tok-1",
+      idempotencyKey: "k-1",
+      title: "我的剧本",
+    });
+    const body = JSON.parse(String(captured.init.body));
+    assert.equal(body.title, "我的剧本");
+  } finally {
+    restore();
+  }
 });
 
-test("resolveWorkbenchRoute 分镜跳转到 production planning", () => {
-  assert.equal(resolveWorkbenchRoute("storyboard"), "/production?mode=planning");
+test("startProject rejects when workType is novel (client-side guard)", async () => {
+  const restore = installMockFetch(async () => makeMockResponse({ success: true }));
+  try {
+    await assert.rejects(
+      () =>
+        startProject({
+          workType: "novel",
+          authToken: "tok-1",
+          idempotencyKey: "k-1",
+        }),
+      (err) =>
+        err instanceof ProjectStartClientError &&
+        err.code === "validation_failed",
+    );
+  } finally {
+    restore();
+  }
 });
 
-test("resolveWorkbenchRoute 视频跳转到 production editor", () => {
-  assert.equal(resolveWorkbenchRoute("video"), "/production?mode=editor");
+test("startProject throws ProjectStartClientError on 401 (unauthenticated)", async () => {
+  const restore = installMockFetch(async () =>
+    makeMockResponse(
+      {
+        success: false,
+        error: "Authentication is required.",
+        code: "unauthenticated",
+      },
+      { status: 401 },
+    ),
+  );
+  try {
+    await assert.rejects(
+      () =>
+        startProject({
+          workType: "script",
+          authToken: "tok-bad",
+          idempotencyKey: "k-1",
+        }),
+      (err) =>
+        err instanceof ProjectStartClientError &&
+        err.code === "unauthenticated",
+    );
+  } finally {
+    restore();
+  }
 });
 
-test("所有 contentType 都有对应的工作台路由", () => {
-  const fixture = loadProjectStartFixture();
-  for (const contentType of fixture.contentTypeOptions) {
-    const route = resolveWorkbenchRoute(contentType);
-    assert.ok(route.startsWith("/"), `路由应以 / 开头: ${route}`);
-    assert.ok(route.length > 1, `路由不应为空: ${route}`);
+test("startProject throws ProjectStartClientError on 503 (service_unavailable) and keeps correlationId", async () => {
+  const restore = installMockFetch(async () =>
+    makeMockResponse(
+      {
+        success: false,
+        error: "Cloud data service unavailable.",
+        code: "service_unavailable",
+        correlationId: "corr-1",
+      },
+      { status: 503 },
+    ),
+  );
+  try {
+    await assert.rejects(
+      () =>
+        startProject({
+          workType: "script",
+          authToken: "tok-1",
+          idempotencyKey: "k-1",
+        }),
+      (err) =>
+        err instanceof ProjectStartClientError &&
+        err.code === "service_unavailable" &&
+        err.correlationId === "corr-1",
+    );
+  } finally {
+    restore();
+  }
+});
+
+test("DEFAULT_WORK_TITLES used for card label fallback (no network)", () => {
+  for (const t of WORK_TYPES) {
+    assert.ok(DEFAULT_WORK_TITLES[t]);
   }
 });

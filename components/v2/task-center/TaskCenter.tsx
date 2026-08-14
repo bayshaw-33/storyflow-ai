@@ -29,10 +29,7 @@ import {
   stageLabel,
 } from "@/lib/client/v2/jobs/grouping";
 import {
-  resolveResultTarget,
-  resolveProjectTarget,
-  isResultExternal,
-  fromUnifiedJob,
+  resolveJobDetailUrl,
 } from "@/lib/client/v2/navigation/resolver";
 import { TaskCard } from "./TaskCard";
 import { TaskFilters, type GroupingDimension } from "./TaskFilters";
@@ -251,24 +248,33 @@ export function TaskCenter() {
   const handleAction = useCallback(
     async (job: UnifiedJob, action: JobActionType) => {
       if (action === "view_detail") {
-        // K21-P0-NAV-003：有目标则跳转，无目标则不伪造
-        const target = resolveResultTarget(fromUnifiedJob(job));
-        if (target) {
-          if (isResultExternal(fromUnifiedJob(job))) {
-            // 外部链接用 window.open，不用 router.push
-            window.open(target, "_blank", "noopener,noreferrer");
-          } else {
-            router.push(target);
-          }
-        }
+        // Task 0.3: always navigate to the stable job detail page
+        router.push(resolveJobDetailUrl(job.id));
         return;
       }
       setPendingAction({ jobId: job.id, action });
       try {
-        if (action === "cancel") {
-          await cancelJob(job.id, session?.access_token ?? null);
-        } else if (action === "retry") {
-          await retryJob(job.id, session?.access_token ?? null);
+        if (USE_FIXTURE) {
+          // fixture mode: keep legacy local functions
+          if (action === "cancel") {
+            await cancelJob(job.id, session?.access_token ?? null);
+          } else if (action === "retry") {
+            await retryJob(job.id, session?.access_token ?? null);
+          }
+        } else {
+          // real mode: PATCH /api/v2/jobs/:id with { action }
+          const response = await fetch(`/api/v2/jobs/${encodeURIComponent(job.id)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ action }),
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || (isZh ? "操作失败。" : "Action failed."));
+          }
         }
         await refresh();
       } catch (err) {

@@ -1,72 +1,94 @@
-// K2-T-03 纯函数辅助 · 浏览器安全（无 Node.js 内置模块依赖）
-// fixtures.ts 会 re-export 这些函数，供 Node.js 测试使用。
+/**
+ * KIIKIS V2.2 project-start UI helpers.
+ *
+ * Card metadata for the 7-module entry grid (PRD §5.1). No fixture, no novel.
+ * Browser-safe pure functions.
+ */
 
-import {
-  CONTRACT_VERSION,
-  type ContentType,
-  type ProjectStartRequest,
-  type StartMode,
-  type UniverseAction,
-  type UniverseOption,
-} from "./types.ts";
+import type { WorkType } from "../../../contracts/v2/work.ts";
+import { DEFAULT_WORK_TITLES, WORK_TYPES } from "../../../contracts/v2/work.ts";
 
-/** 按关键词过滤 Universe 列表（名称 + 摘要，大小写不敏感） */
-export function filterUniverseOptions(
-  options: UniverseOption[],
-  query: string,
-): UniverseOption[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return options;
-  return options.filter((opt) => {
-    return (
-      opt.name.toLowerCase().includes(q) ||
-      opt.summary.toLowerCase().includes(q)
-    );
-  });
+export interface WorkTypeCardMeta {
+  workType: WorkType;
+  /** Lucide icon name; the component maps this to the actual icon component. */
+  icon: string;
+  titleZh: string;
+  titleEn: string;
+  descZh: string;
+  descEn: string;
 }
 
-/** 校验 contract_version 是否匹配当前领域契约 */
-export function validateContractVersion(version: string): boolean {
-  return version === CONTRACT_VERSION;
+/**
+ * The 7 V2.2 top-level creation modules in canonical order (PRD §5.1).
+ * Universe / actor library / community / task center are NOT in this grid.
+ */
+export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
+  {
+    workType: "script",
+    icon: "FileText",
+    titleZh: "剧本",
+    titleEn: "Script",
+    descZh: "从想法、世界观或已有 Universe 开始创作剧本。",
+    descEn: "Start a script from an idea, world, or existing Universe.",
+  },
+  {
+    workType: "song",
+    icon: "Music",
+    titleZh: "歌曲",
+    titleEn: "Song",
+    descZh: "歌词、翻译、风格提示词与参考文件。",
+    descEn: "Lyrics, translations, style prompts and references.",
+  },
+  {
+    workType: "art",
+    icon: "Palette",
+    titleZh: "美术",
+    titleEn: "Art",
+    descZh: "角色、场景、道具统一在美术中管理。",
+    descEn: "Characters, scenes and props, all in one place.",
+  },
+  {
+    workType: "storyboard",
+    icon: "LayoutGrid",
+    titleZh: "分镜",
+    titleEn: "Storyboard",
+    descZh: "镜头表、4/6/9/12 宫格与视频提示词。",
+    descEn: "Shot list, 4/6/9/12 grids and video prompts.",
+  },
+  {
+    workType: "video",
+    icon: "Video",
+    titleZh: "视频",
+    titleEn: "Video",
+    descZh: "从确认分镜生成视频，结果持久保存。",
+    descEn: "Generate video from confirmed shots, persisted.",
+  },
+  {
+    workType: "voice",
+    icon: "Mic",
+    titleZh: "配音",
+    titleEn: "Voice",
+    descZh: "角色与台词配音，关联 Voice Identity。",
+    descEn: "Character and dialogue voice, linked to Voice Identity.",
+  },
+  {
+    workType: "editing",
+    icon: "Scissors",
+    titleZh: "剪辑",
+    titleEn: "Editing",
+    descZh: "轻量 Timeline 编辑与导出。",
+    descEn: "Lightweight timeline editing and export.",
+  },
+];
+
+export function getWorkTypeCard(workType: WorkType): WorkTypeCardMeta {
+  const card = WORK_TYPE_CARDS.find((c) => c.workType === workType);
+  if (!card) throw new Error(`No card meta for workType: ${workType}`);
+  return card;
 }
 
-/** 组装项目创建请求，附带业务规则校验 */
-export function buildProjectStartRequest(params: {
-  contentType: ContentType;
-  startMode: StartMode;
-  title: string;
-  universeAction: UniverseAction;
-  universeId?: string;
-}): ProjectStartRequest {
-  const title = params.title.trim();
-  if (!title) {
-    throw new Error("title is required");
-  }
-  if (params.universeAction === "bind_existing" && !params.universeId) {
-    throw new Error("universeId is required when universeAction is bind_existing");
-  }
-  return {
-    contentType: params.contentType,
-    startMode: params.startMode,
-    title,
-    universeAction: params.universeAction,
-    universeId:
-      params.universeAction === "bind_existing" ? params.universeId : undefined,
-    contractVersion: CONTRACT_VERSION,
-  };
+export function defaultTitleFor(workType: WorkType): string {
+  return DEFAULT_WORK_TITLES[workType];
 }
 
-/** 根据 contentType 决定创建后跳转的工作台路由 */
-export function resolveWorkbenchRoute(contentType: ContentType): string {
-  switch (contentType) {
-    case "drama":
-    case "novel":
-      return "/novel-workbench";
-    case "storyboard":
-      return "/production?mode=planning";
-    case "video":
-      return "/production?mode=editor";
-    case "song":
-      return "/song-workbench";
-  }
-}
+export { WORK_TYPES, DEFAULT_WORK_TITLES };
