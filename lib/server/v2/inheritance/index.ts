@@ -321,6 +321,25 @@ export async function readWorkInheritanceV22(input: {
   return { manifest, universeVersion, snapshot };
 }
 
+/**
+ * Read the latest Universe Version for a Universe (highest version_no).
+ *
+ * Used by the diff/adopt service (Phase 2 Task 2.4) to determine whether a
+ * Work's bound snapshot is stale. Returns null if no versions exist.
+ */
+export async function readLatestUniverseVersionV22(
+  fetcher: InheritanceFetcher,
+  universeId: string,
+): Promise<UniverseVersionV22Row | null> {
+  const rows = await query<unknown[]>(
+    fetcher,
+    `/rest/v1/storyflow_universe_versions?universe_id=eq.${encodeURIComponent(universeId)}&select=${V22_VERSION_SELECT}&order=version_no.desc&limit=1`,
+  );
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  if (!row || typeof row !== "object") return null;
+  return toUniverseVersionV22Row(row as Record<string, unknown>);
+}
+
 // ---------------------------------------------------------------------------
 // V2.2 internal helpers
 // ---------------------------------------------------------------------------

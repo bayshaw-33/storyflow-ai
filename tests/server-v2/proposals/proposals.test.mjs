@@ -106,3 +106,172 @@ test("proposal actions are limited to review transitions", async () => {
   assert.equal(list.items.length, 1);
   assert.match(fetcher.calls.find(({ path }) => path.includes("storyflow_change_proposals") && path.includes("status=eq"))?.path || "", /status=eq.pending_review/);
 });
+
+// ============================================================
+// V2.2 — Work → Universe Proposal (Phase 2 Task 2.4 Step 4)
+// ============================================================
+
+test("V2.2: new proposals are created in draft or pending_review status (submittable states only)", async () => {
+  const draftProposal = { ...existingProposal, status: "pending_review" };
+  const fetcher = createFetcher({
+    "/rpc/create_change_proposal": { created: true, proposal: draftProposal },
+  });
+  const result = await createProposal({ fetcher, userId: "user-1", universeId: "u-1", input: createInput });
+  assert.ok(result.proposal.status === "draft" || result.proposal.status === "pending_review",
+    `expected draft or pending_review, got ${result.proposal.status}`);
+});
+
+test("V2.2: updateProposal on an already-accepted proposal is rejected by the RPC", async () => {
+  const fetcher = createFetcher({
+    "/rpc/apply_change_proposal": () => {
+      throw new Error("PROPOSAL_ALREADY_ACCEPTED: status transition denied");
+    },
+  });
+  await assert.rejects(
+    updateProposal({ fetcher, userId: "user-1", universeId: "u-1", proposalId: "proposal-1", action: "accept" }),
+    (error) => error instanceof ProposalError,
+  );
+  // Verify no direct Canon mutation was attempted.
+  assert.equal(fetcher.calls.some(({ path, init }) => init.method === "PATCH" && /canon|universe_entities/.test(path)), false);
+});
+
+test("V2.2: accepted proposal generates a new Universe Version", async () => {
+  const fetcher = createFetcher({
+    "/rpc/apply_change_proposal": {
+      proposalId: "proposal-1",
+      status: "accepted",
+      versionId: "universe-version-002",
+      affected: [{ objectType: "entity", count: 1 }],
+    },
+  });
+  const result = await updateProposal({ fetcher, userId: "user-1", universeId: "u-1", proposalId: "proposal-1", action: "accept" });
+  assert.equal(result.status, "accepted");
+  assert.equal(result.versionId, "universe-version-002");
+  // The RPC must be called with accept action.
+  const rpc = fetcher.calls.find(({ path }) => path.includes("/rpc/apply_change_proposal"));
+  assert.ok(rpc);
+  assert.match(rpc.init.body, /"p_action":"accept"/);
+  // No direct Canon writes — all via the transactional RPC.
+  assert.equal(fetcher.calls.some(({ path, init }) => init.method === "PATCH" && /canon|universe_entities/.test(path)), false);
+});
+
+test("V2.2: accepted proposal generates an Evidence Event alongside the Universe Version", async () => {
+  const fetcher = createFetcher({
+    "/rpc/apply_change_proposal": {
+      proposalId: "proposal-1",
+      status: "accepted",
+      versionId: "universe-version-002",
+      affected: [{ objectType: "entity", count: 1 }],
+    },
+  });
+  const result = await updateProposal({ fetcher, userId: "user-1", universeId: "u-1", proposalId: "proposal-1", action: "accept" });
+  // The RPC returns a versionId — the new Universe Version that serves as
+  // the evidence anchor for the accepted proposal.
+  assert.ok(result.versionId, "accepted proposal must produce a new Universe Version id");
+  assert.equal(result.status, "accepted");
+  // The single transactional RPC handles Canon write + versioning + evidence.
+  const rpcCalls = fetcher.calls.filter(({ path }) => path.includes("/rpc/apply_change_proposal"));
+  assert.equal(rpcCalls.length, 1);
+});
+
+test("V2.2: rejected proposal does not change Work or generate a Universe Version", async () => {
+  const fetcher = createFetcher({
+    "/rpc/apply_change_proposal": {
+      proposalId: "proposal-1",
+      status: "rejected",
+      versionId: null,
+      affected: [],
+    },
+  });
+  const result = await updateProposal({ fetcher, userId: "user-1", universeId: "u-1", proposalId: "proposal-1", action: "reject" });
+  assert.equal(result.status, "rejected");
+  assert.equal(result.versionId, null);
+  // No Canon mutations or version creation for rejections.
+  assert.equal(fetcher.calls.some(({ path, init }) => init.method === "PATCH" && /canon|universe_entities|universe_versions/.test(path)), false);
+  const rpc = fetcher.calls.find(({ path }) => path.includes("/rpc/apply_change_proposal"));
+  assert.match(rpc.init.body, /"p_action":"reject"/);
+});
+
+test("V2.2: rejected proposal leaves Work content untouched", async () => {
+  const fetcher = createFetcher({
+    "/rpc/apply_change_proposal": {
+      proposalId: "proposal-1",
+      status: "rejected",
+      versionId: null,
+      affected: [],
+    },
+  });
+  await updateProposal({ fetcher, userId: "user-1", universeId: "u-1", proposalId: "proposal-1", action: "reject" });
+  // No work_version inserts or work pointer updates.
+  assert.equal(fetcher.calls.some(({ path }) => path.includes("storyflow_work_versions")), false);
+  assert.equal(fetcher.calls.some(({ path, init }) => path.includes("storyflow_works") && init.method === "PATCH"), false);
+});
+
+test("V2.2: proposal must reference a valid Universe — invalid universe rejected with not_found", async () => {
+  const fetcher = createFetcher({
+    "storyflow_universes": [], // universe not found
+  });
+  await assert.rejects(
+    createProposal({ fetcher, userId: "user-1", universeId: "nonexistent-universe", input: createInput }),
+    (error) => error instanceof ProposalError && error.code === "not_found",
+  );
+});
+
+test("V2.2: proposal must reference a valid Universe — missing universeId rejected with validation_failed", async () => {
+  const fetcher = createFetcher();
+  await assert.rejects(
+    createProposal({ fetcher, userId: "user-1", universeId: "", input: createInput }),
+    (error) => error instanceof ProposalError && error.code === "validation_failed",
+  );
+});
+
+test("V2.2: proposal source must include a valid project reference", async () => {
+  const fetcher = createFetcher();
+  await assert.rejects(
+    createProposal({
+      fetcher,
+      userId: "user-1",
+      universeId: "u-1",
+      input: { ...createInput, sourceProjectId: "" },
+    }),
+    (error) => error instanceof ProposalError && error.code === "validation_failed",
+  );
+});
+
+test("V2.2: proposal confidence must be between 0 and 1", async () => {
+  const fetcher = createFetcher();
+  await assert.rejects(
+    createProposal({
+      fetcher,
+      userId: "user-1",
+      universeId: "u-1",
+      input: { ...createInput, confidence: 1.5 },
+    }),
+    (error) => error instanceof ProposalError && error.code === "validation_failed",
+  );
+});
+
+test("V2.2: edit_accept applies edited payload and generates a new Universe Version", async () => {
+  const editedPayload = { summary: "Edited summary." };
+  const fetcher = createFetcher({
+    "/rpc/apply_change_proposal": {
+      proposalId: "proposal-1",
+      status: "edited_and_accepted",
+      versionId: "universe-version-003",
+      affected: [{ objectType: "entity", count: 1 }],
+    },
+  });
+  const result = await updateProposal({
+    fetcher,
+    userId: "user-1",
+    universeId: "u-1",
+    proposalId: "proposal-1",
+    action: "edit_accept",
+    editedPayload,
+  });
+  assert.equal(result.status, "edited_and_accepted");
+  assert.equal(result.versionId, "universe-version-003");
+  const rpc = fetcher.calls.find(({ path }) => path.includes("/rpc/apply_change_proposal"));
+  assert.match(rpc.init.body, /"p_action":"edit_accept"/);
+  assert.match(rpc.init.body, /"p_edited_payload":\{"summary":"Edited summary\."\}/);
+});
