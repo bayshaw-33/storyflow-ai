@@ -277,24 +277,6 @@
       "createdAt": "2026-08-12T02:35:00.000Z"
     },
     {
-      "id": "job-016",
-      "name": "章节大纲生成",
-      "type": "text",
-      "projectName": "星河彼端",
-      "projectId": "p-106",
-      "workbenchType": "novel",
-      "stage": "completed",
-      "completed": 12,
-      "total": 12,
-      "elapsedMs": 1200000,
-      "currentResult": "已生成 12 章大纲",
-      "actions": [
-        { "type": "view_detail", "label": "查看结果" }
-      ],
-      "createdAt": "2026-08-11T08:00:00.000Z",
-      "resultUrl": "/projects/p-106/novel?view=outline"
-    },
-    {
       "id": "job-017",
       "name": "道具图标草稿",
       "type": "image",

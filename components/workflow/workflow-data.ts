@@ -1,9 +1,8 @@
 "use client";
 
-import { BookOpen, Clapperboard, Film, Flame, Music2, Palette, PanelsTopLeft, Mic, Scissors, type LucideIcon } from "lucide-react";
+import { Clapperboard, Film, Flame, Music2, Palette, PanelsTopLeft, Mic, Scissors, type LucideIcon } from "lucide-react";
 
 export type WorkflowEntryId =
-  | "novel"
   | "script"
   | "song"
   | "art"
@@ -36,23 +35,13 @@ export type WorkflowEntryPoint = {
 export const WORKFLOW_ENTRY_POINTS: WorkflowEntryPoint[] = [
   // ---------- 我要原创 ----------
   {
-    id: "novel",
-    category: "create",
-    title: "Novel",
-    titleZh: "小说",
-    description: "AI-assisted serialized fiction grounded in your Universe lore.",
-    descriptionZh: "AI 辅助连载小说，章节、弧线与角色之声锚定宇宙设定。",
-    href: "/novel-workbench?new=1&setup=1",
-    icon: BookOpen,
-  },
-  {
     id: "script",
     category: "create",
     title: "Screenplay",
     titleZh: "剧本",
     description: "Skip the wizard, jump straight into the Screenplay tab.",
     descriptionZh: "跳过创建向导，直达创作工作台剧本 Tab。",
-    href: "/novel-workbench?new=1&setup=1&mode=screenplay",
+    href: "/projects/new-v2",
     icon: Clapperboard,
   },
   {
@@ -147,8 +136,8 @@ export const WORKFLOW_CATEGORIES: WorkflowCategoryDef[] = [
     id: "create",
     title: "Create Original",
     titleZh: "我要原创",
-    subtitle: "Start from a blank page — novel, screenplay, or song.",
-    subtitleZh: "从零开始——小说、剧本或歌曲。",
+    subtitle: "Start from a blank page — screenplay or song.",
+    subtitleZh: "从零开始——剧本或歌曲。",
   },
   {
     id: "produce",

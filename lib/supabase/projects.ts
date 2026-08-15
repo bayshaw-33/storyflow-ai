@@ -3,6 +3,7 @@ import {
   DramaProject,
   WorkflowType,
   normalizeStoredProject,
+  isRetiredNovelProject,
   readProjectGroupsFromStorage,
   saveProjectGroupsToStorage,
   saveProjectsToStorage,
@@ -32,6 +33,7 @@ type ProjectRow = {
   created_at: string | null;
   updated_at: string | null;
   data: Partial<DramaProject>;
+  content_type?: string | null;
 };
 
 type GroupRow = {
@@ -50,9 +52,10 @@ export function isSupabaseConfigured() {
 }
 
 export async function syncProjectsWithSupabase(localProjects: DramaProject[], options: SupabaseSyncOptions = {}) {
+  const visibleLocalProjects = localProjects.filter((project) => !isRetiredNovelProject(project));
   if (!isSupabaseConfigured() || !options.accessToken) {
     return {
-      projects: localProjects,
+      projects: visibleLocalProjects,
       groups: readProjectGroupsFromStorage(),
       enabled: false,
       error: "",
@@ -64,7 +67,7 @@ export async function syncProjectsWithSupabase(localProjects: DramaProject[], op
       readProjectsFromSupabase(options),
       readProjectGroupsFromSupabase(options),
     ]);
-    const mergedProjects = mergeProjects(localProjects, cloudProjects);
+    const mergedProjects = mergeProjects(visibleLocalProjects, cloudProjects);
     const groups = mergeGroups([
       ...readProjectGroupsFromStorage(),
       ...cloudGroups,
@@ -104,7 +107,7 @@ export async function readProjectsFromSupabase(options: SupabaseSyncOptions = {}
     options,
   );
 
-  return rows.map(rowToProject);
+  return rows.filter((row) => !isRetiredNovelProjectRow(row)).map(rowToProject);
 }
 
 export async function readProjectFromSupabase(id: string, options: SupabaseSyncOptions = {}): Promise<DramaProject | null> {
@@ -115,10 +118,11 @@ export async function readProjectFromSupabase(id: string, options: SupabaseSyncO
     {},
     options,
   );
-  return rows[0] ? rowToProject(rows[0]) : null;
+  return rows[0] && !isRetiredNovelProjectRow(rows[0]) ? rowToProject(rows[0]) : null;
 }
 
 export async function upsertProjectToSupabase(project: DramaProject, options: SupabaseSyncOptions = {}) {
+  if (isRetiredNovelProject(project)) return;
   if (!isSupabaseConfigured() || !options.accessToken) return;
 
   try {
@@ -275,6 +279,10 @@ function rowToProject(row: ProjectRow): DramaProject {
   });
 }
 
+export function isRetiredNovelProjectRow(row: Partial<ProjectRow>): boolean {
+  return [row.workflow_type, row.mode, row.content_type].some((value) => value === "novel") || isRetiredNovelProject(row.data || {});
+}
+
 function normalizeWorkflowType(value: unknown): WorkflowType {
   if (value === "continuation" || value === "song" || value === "viral" || value === "novel") return value;
   return "creation";
@@ -283,7 +291,7 @@ function normalizeWorkflowType(value: unknown): WorkflowType {
 function mergeProjects(localProjects: DramaProject[], cloudProjects: DramaProject[]) {
   const byId = new Map<string, DramaProject>();
 
-  for (const project of [...cloudProjects, ...localProjects]) {
+  for (const project of [...cloudProjects, ...localProjects].filter((item) => !isRetiredNovelProject(item))) {
     const existing = byId.get(project.id);
     if (!existing || project.updatedAt.localeCompare(existing.updatedAt) > 0) {
       byId.set(project.id, project);

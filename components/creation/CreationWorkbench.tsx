@@ -1169,7 +1169,7 @@ export function CreationWorkbench() {
             creation_character_bible: requestWorkspace.documents.characterBible.content,
             creation_plot_outline: requestWorkspace.documents.plotOutline.content,
           },
-          byoApi: readByoApiConfig("novel"),
+          byoApi: readByoApiConfig("script"),
         }),
       });
       const payload = await response.json();

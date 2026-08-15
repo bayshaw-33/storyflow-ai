@@ -13,7 +13,7 @@ export const dashboardFixture: DashboardData = {
     {
       id: "proj-umbral-pact",
       title: "Umbral Pact EP06-EP10",
-      workflowType: "novel",
+      workflowType: "creation",
       currentStage: "剧本定稿",
       lastSavedAt: "2026-08-12T15:42:00+08:00",
       universeBound: true,

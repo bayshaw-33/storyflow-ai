@@ -1,6 +1,6 @@
 {
   "contractVersion": "2.0.0-alpha.1",
-  "contentTypeOptions": ["drama", "novel", "song", "storyboard", "video"],
+  "contentTypeOptions": ["drama", "song", "storyboard", "video"],
   "startModes": ["idea", "script", "material"],
   "universeOptions": [
     {

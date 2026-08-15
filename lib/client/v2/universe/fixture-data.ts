@@ -493,7 +493,7 @@ export const universeFixture: UniverseBundleV2 = {
     {
       id: "proj-umbral-pact",
       title: "Umbral Pact EP06-EP10",
-      type: "novel",
+      type: "script",
       relationship: "inherited",
       snapshotId: "snap-umbral-2026-08-12",
     },

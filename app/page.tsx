@@ -89,8 +89,8 @@ export default function LandingPage() {
         kicker={isZh ? "创作链" : "CREATIVE PIPELINE"}
         titleZh="不是一排工具，而是一条完整的创作链。"
         titleEn="Not a collection of tools. One connected creative pipeline."
-        subtitleZh="小说、剧本、美术、分镜、视频与音乐共享同一个项目。前一步确认的成果，直接成为下一步创作的起点。"
-        subtitleEn="Novels, scripts, art, storyboards, video, and music share one project. Every approved result becomes the starting point for what comes next."
+        subtitleZh="剧本、美术、分镜、视频、歌曲与配音共享同一个项目。前一步确认的成果，直接成为下一步创作的起点。"
+        subtitleEn="Scripts, art, storyboards, video, songs, and voice share one project. Every approved result becomes the starting point for what comes next."
         bgImageZh={heroBg("HERO_SECTION_3")}
         bgImageEn={heroBg("HERO_SECTION_3")}
         align="left"

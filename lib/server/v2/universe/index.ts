@@ -206,7 +206,7 @@ function toProjectDto(row: ProjectRow | undefined, link: LinkRow): Project {
 }
 
 function mapContentType(value: string | null | undefined): Project["contentType"] {
-  if (value === "novel" || value === "script" || value === "song" || value === "storyboard" || value === "video") return value;
+  if (value === "script" || value === "song" || value === "storyboard" || value === "video") return value;
   return value === "production" ? "short_drama" : "other";
 }
 

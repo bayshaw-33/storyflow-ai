@@ -8,7 +8,7 @@
  *   (owner_id, project_id, source_unit_id) 三元组唯一标识一份分镜状态。
  *
  * 跳转方向与判定：
- *   - creation → production：要求"项目已存在 + 当前有激活的剧本/小说单元"
+ *   - creation → production：要求"项目已存在 + 当前有激活的剧本单元"
  *   - production → creation：要求"项目非草稿 + sourceUnitId 存在"
  *
  * 不引入运行时副作用（不读 localStorage、不调 RPC），只做纯函数判断。
@@ -120,5 +120,5 @@ export function buildCreationJumpUrl(ctx: JumpContext): string {
   const params = new URLSearchParams();
   params.set("projectId", projectId);
   if (sourceUnit) params.set("sourceUnitId", sourceUnit);
-  return `/novel-workbench?${params.toString()}`;
+  return `/script-workbench?${params.toString()}`;
 }
