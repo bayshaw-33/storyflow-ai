@@ -3,7 +3,7 @@ import type { ByoApiConfig } from "@/lib/ai/prompts";
 const BYO_API_STORAGE_KEY = "kiikis_byo_api_config";
 const WORKFLOW_MODEL_ROUTING_KEY = "kiikis_workflow_model_routing";
 
-export type WorkflowModelRoute = "novel" | "script" | "song" | "viral" | "storyboard" | "video";
+export type WorkflowModelRoute = "script" | "song" | "viral" | "storyboard" | "video";
 export type WorkflowModelRouting = Partial<Record<WorkflowModelRoute, string>>;
 
 export function readByoApiConfig(workflow?: WorkflowModelRoute): ByoApiConfig | undefined {
@@ -38,7 +38,9 @@ export function readWorkflowModelRouting(): WorkflowModelRouting {
   if (typeof window === "undefined") return {};
   try {
     const parsed = JSON.parse(window.localStorage.getItem(WORKFLOW_MODEL_ROUTING_KEY) || "{}") as WorkflowModelRouting;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    const { novel: _retiredNovelRoute, ...activeRoutes } = parsed as WorkflowModelRouting & { novel?: string };
+    return activeRoutes;
   } catch {
     return {};
   }

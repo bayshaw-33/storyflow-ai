@@ -4,8 +4,8 @@
  * 剧本工作台入口 — Phase 3 Task 3.3.
  *
  * V2.2 Work（带 workId 参数）渲染 ScreenplayStudio（三栏剧本室）；
- * 旧 projectId 通过适配器解析 primary Work 后进入；无参数时保留旧的
- * 重定向行为（novel-workbench 兼容入口）。旧线性向导不再恢复。
+ * 旧 projectId 通过适配器解析 primary Work 后进入；无参数时回到
+ * V2.2 七模块入口。旧线性向导和小说工作台不再恢复。
  */
 
 import { Suspense, useEffect, useState } from "react";
@@ -58,8 +58,8 @@ function ScriptWorkbenchInner() {
       </main>
     );
   }
-  // 无参数：保持旧入口兼容（novel-workbench 是剧本 Tab 的历史承载页）
-  router.replace("/novel-workbench?new=1&setup=1&mode=screenplay");
+  // 无参数：统一进入 V2.2 七模块入口，由用户选择剧本模块。
+  router.replace("/projects/new-v2");
   return <main className="cosmic-page" />;
 }
 

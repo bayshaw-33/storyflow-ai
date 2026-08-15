@@ -83,7 +83,6 @@ const ATLAS_LLM_MODEL_OPTIONS = [
 ];
 
 const workflowRouteOptions: Array<{ id: WorkflowModelRoute; zh: string; en: string }> = [
-  { id: "novel", zh: "小说创作", en: "Novel Creation" },
   { id: "script", zh: "剧本创作", en: "Script Creation" },
   { id: "storyboard", zh: "分镜创作", en: "Storyboard" },
   { id: "video", zh: "视频创作", en: "Video" },
@@ -332,7 +331,6 @@ export default function SettingsApiPage() {
       setApiLabel("");
       setWorkflowRouting((current) => {
         const next = { ...current };
-        if (!next.novel) next.novel = payload.connection.id;
         writeWorkflowModelRouting(next);
         return next;
       });

@@ -2201,7 +2201,7 @@ export default function SongWorkbenchPage() {
                       </select>
                     </label>
                   ) : (
-                    <p className="subtle">{isZh ? "暂无可用 Universe。可先从小说、剧本或分镜创建。" : "No Universe yet. Create one from novel, script, or storyboard first."}</p>
+                    <p className="subtle">{isZh ? "暂无可用 Universe。可先从剧本或分镜创建。" : "No Universe yet. Create one from script or storyboard first."}</p>
                   )}
 
                   {/* §7.2 步骤 2：选择歌曲角色 */}

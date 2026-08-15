@@ -58,7 +58,6 @@ function formatElapsed(ms: number, isZh: boolean): string {
 const WORKFLOW_LABELS: Record<DashboardWorkflowType, string> = {
   creation: "原创剧本",
   continuation: "续作剧本",
-  novel: "小说",
   song: "歌曲",
   viral: "短视频改编",
   storyboard: "分镜",

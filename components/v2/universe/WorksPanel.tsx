@@ -33,7 +33,6 @@ const V22_RELATION_LABELS: Record<V22WorkRelation, string> = {
 // 可创建的 Work 类型（对齐 WorkbenchAdapter.workbenchType）。
 const WORK_TYPE_OPTIONS = [
   { value: "script", label: "剧本" },
-  { value: "novel", label: "小说" },
   { value: "art", label: "美术" },
   { value: "production", label: "制片" },
   { value: "video", label: "视频" },

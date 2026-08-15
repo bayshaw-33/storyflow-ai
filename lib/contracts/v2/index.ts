@@ -79,7 +79,7 @@ export type V2ErrorCode = (typeof V2_ERROR_CODES)[number];
 
 export type UniverseObjectStatus = "draft" | "canon" | "alternative" | "deprecated";
 export type UniverseVisibility = "private" | "team" | "shared";
-export type ProjectContentType = "novel" | "script" | "short_drama" | "song" | "storyboard" | "video" | "other";
+export type ProjectContentType = "script" | "short_drama" | "song" | "storyboard" | "video" | "other";
 export type ProjectProductionStage = "idea" | "structure" | "script" | "art" | "storyboard" | "video" | "exported";
 
 export interface Universe {

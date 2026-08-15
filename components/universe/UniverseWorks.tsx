@@ -256,7 +256,7 @@ export function UniverseWorks({ universeId, accessToken, isZh, fallbackLinks }: 
                 </div>
 
                 <div className={styles.drawerActions}>
-                  <Link className={styles.primaryButton} href={`/novel-workbench?projectId=${encodeURIComponent(drawer.project.id)}`}>
+                  <Link className={styles.primaryButton} href={`/script-workbench?projectId=${encodeURIComponent(drawer.project.id)}`}>
                     {copy.works.enterCreation}
                   </Link>
                   <Link className={styles.secondaryButton} href={`/production?projectId=${encodeURIComponent(drawer.project.id)}`}>

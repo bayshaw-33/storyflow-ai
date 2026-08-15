@@ -706,7 +706,7 @@ export function readProjectsFromStorage(): DramaProject[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as LegacyProject[]) : [];
-    const projects = parsed.map(normalizeProject);
+    const projects = parsed.map(normalizeProject).filter((project) => !isRetiredNovelProject(project));
     saveProjectsToStorage(projects);
     return projects;
   } catch {
@@ -716,7 +716,23 @@ export function readProjectsFromStorage(): DramaProject[] {
 
 export function saveProjectsToStorage(projects: DramaProject[]) {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects.filter((project) => !isRetiredNovelProject(project))));
+}
+
+/**
+ * 小说已经从产品中退役。只认结构化工作流字段，不按标题或正文猜测，
+ * 以免误删剧本、歌曲或其他工作流项目。
+ */
+export function isRetiredNovelProject(project: Partial<DramaProject>): boolean {
+  const record = project as Record<string, unknown>;
+  return [
+    record.workflowType,
+    record.contentType,
+    record.workType,
+    record.workflow_type,
+    record.content_type,
+    record.work_type,
+  ].some((value) => value === "novel");
 }
 
 export function normalizeStoredProject(project: Partial<DramaProject>): DramaProject {
@@ -744,6 +760,7 @@ export function saveProjectGroupsToStorage(groups: string[]) {
 }
 
 export function upsertProject(project: DramaProject) {
+  if (isRetiredNovelProject(project)) return;
   const projects = readProjectsFromStorage();
   const exists = projects.some((item) => item.id === project.id);
   const next = exists

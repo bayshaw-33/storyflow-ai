@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import {
   createContinuationProject,
-  createNovelProject,
   createProject,
   readProjectsFromStorage,
   upsertProject,
@@ -74,11 +73,10 @@ export default function UniverseDetailPage() {
   return <UniverseDetailPageV1 />;
 }
 
-type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation">;
+type UniverseCreateWorkflow = Exclude<WorkflowType, "viral" | "creation" | "novel">;
 
 const UNIVERSE_CREATE_WORKFLOWS: Array<{ value: UniverseCreateWorkflow; label: string }> = [
   { value: "continuation", label: "Script Creation" },
-  { value: "novel", label: "Novel Creation" },
   { value: "song", label: "Song Creation" },
   { value: "storyboard", label: "Storyboard Creation" },
   { value: "video", label: "Video Creation" },
@@ -1090,29 +1088,6 @@ function buildProjectFromUniverse(input: {
     idea: inheritanceSummary,
   };
 
-  if (input.workflowType === "novel") {
-    return createNovelProject({
-      ...shared,
-      novelBible: [
-        `# ${input.bundle.universe.name}`,
-        input.bundle.universe.description,
-        "",
-        "## Canon",
-        input.bundle.canonFacts.slice(0, 20).map((fact) => `- ${fact.fact_text}`).join("\n"),
-        "",
-        "## Characters",
-        input.bundle.entities
-          .filter((entity) => entity.type === "character")
-          .slice(0, 12)
-          .map((entity) => `- ${entity.name}: ${entity.summary}`)
-          .join("\n"),
-      ].join("\n"),
-      novelBrief: inheritanceSummary,
-      novelStyleGuide: input.bundle.universe.tone || bible.languageStyle,
-      status: "draft",
-    });
-  }
-
   if (input.workflowType === "song") {
     return createProject({
       ...shared,
@@ -1162,11 +1137,10 @@ function buildProjectFromUniverse(input: {
 }
 
 function routeForCreatedProject(project: DramaProject) {
-  if (project.workflowType === "novel") return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
   if (project.workflowType === "storyboard") return `/production?projectId=${encodeURIComponent(project.id)}&mode=planning`;
   if (project.workflowType === "video") return `/production?projectId=${encodeURIComponent(project.id)}&mode=editor`;
-  return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
+  return `/script-workbench?projectId=${encodeURIComponent(project.id)}`;
 }
 
 function buildUniverseInheritanceSummary(bundle: UniverseBundle) {
@@ -1324,5 +1298,5 @@ function mergeProjectsForUniverseDetail(localProjects: DramaProject[], cloudProj
 }
 
 function getUniverseSourceProjects(projects: DramaProject[]) {
-  return projects.filter((project) => project.workflowType !== "viral");
+  return projects.filter((project) => project.workflowType !== "viral" && project.workflowType !== "novel");
 }

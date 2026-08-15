@@ -52,7 +52,6 @@ function getProgress(completed: number, total: number) {
 function getWorkflowBadge(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
-  if (project.workflowType === "novel") return isZh ? "小说" : "Novel";
   if (project.workflowType === "storyboard") return isZh ? "分镜" : "Storyboard";
   if (project.workflowType === "video") return isZh ? "视频" : "Video";
   return isZh ? "短剧" : "Drama";
@@ -62,7 +61,6 @@ function getWorkflowDetail(project: DramaProject, isZh: boolean) {
   if (project.workflowType === "continuation") return isZh ? "续写" : "Continuation";
   if (project.workflowType === "song") return isZh ? "歌曲" : "Song";
   if (project.workflowType === "viral") return isZh ? "爆款" : "Viral";
-  if (project.workflowType === "novel") return isZh ? "小说创作" : "Novel Creation";
   if (project.workflowType === "storyboard") return isZh ? "分镜创作" : "Storyboard Creation";
   if (project.workflowType === "video") return isZh ? "视频创作" : "Video Creation";
   return isZh ? "原创" : "Original";
@@ -76,8 +74,7 @@ function getProjectHref(project: DramaProject) {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${encodeURIComponent(project.id)}`;
   }
-  if (project.workflowType === "novel") return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
-  return `/novel-workbench?projectId=${encodeURIComponent(project.id)}`;
+  return `/script-workbench?projectId=${encodeURIComponent(project.id)}`;
 }
 
 function formatUpdatedAt(value: string) {

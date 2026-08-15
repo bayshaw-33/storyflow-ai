@@ -886,7 +886,7 @@ export default function StoryboardWorkbenchPage() {
               </select>
             </label>
             <label className="studio-field">
-              {isZh ? "来源剧本 / 小说" : "Source script / novel"}
+              {isZh ? "来源剧本" : "Source script"}
               <select value={sourceProjectId} onChange={(event) => setSourceProjectId(event.target.value)}>
                 <option value="">{isZh ? "选择已保存项目" : "Select saved project"}</option>
                 {scriptSourceProjects.map((project) => (

@@ -43,7 +43,7 @@ export const FIXTURE_MODELS: ModelDescriptor[] = [
     },
     status: "available",
     costEstimate: { min: 0.02, max: 0.15, unit: "千字" },
-    suitableTasks: ["novel_chapter", "creation_doc", "storyboard_script", "localization"],
+    suitableTasks: ["script_unit", "creation_doc", "storyboard_script", "localization"],
     limitations: ["不支持图像输入", "单次最大 16K tokens"],
   },
   {
@@ -315,7 +315,7 @@ export const FIXTURE_RECOMMENDATIONS: ModelRecommendation[] = [
       "分镜脚本属于长文本结构化输出，DeepSeek 在中文剧本理解与 JSON 结构化上表现稳定，成本低、速度快，是创作文档任务的首选。",
     estimatedSpeed: "fast",
     costLevel: "low",
-    suitableFor: "分镜脚本、剧本大纲、小说章节、本地化翻译",
+    suitableFor: "分镜脚本、剧本大纲、本地化翻译",
     limitations: "不支持图像输入；单次最大 16K tokens，超长剧本需按集拆分",
   },
   {

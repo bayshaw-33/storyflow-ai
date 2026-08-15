@@ -134,7 +134,7 @@ export function assertContractVersion(version: string): void {
  * 工作台适配器接口：各工作台实现后注入外壳。
  *
  * 这是 K2-T-08 短剧流接入的基础，接口需保持稳定。
- * 各工作台（novel/script/art/production/video/song）实现此接口后，
+ * 各工作台（script/art/production/video/song/voice/editing）实现此接口后，
  * 把工作台主体内容作为 workbenchContent 传入，外壳负责统一呈现顶部栏、
  * 左侧步骤/资产、右侧 AI 面板、底部任务浮层。
  *
@@ -142,7 +142,7 @@ export function assertContractVersion(version: string): void {
  * 当 workId 缺失时，外壳显示阻断错误而非本地假保存。
  */
 export interface WorkbenchAdapter {
-  // 工作台类型标识，如 "novel" | "script" | "art" | "production" | "video" | "song"
+  // 工作台类型标识，如 "script" | "art" | "production" | "video" | "song"
   workbenchType: string;
   // 当前项目元数据
   project: WorkbenchProject;

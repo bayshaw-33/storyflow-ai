@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
-import { createNovelProject, createProject, upsertProject } from "@/lib/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
 
 const templates = [
@@ -16,16 +15,6 @@ const templates = [
     steps: "9 steps",
     difficulty: "Focused",
     idea: "A high-stakes short drama built around betrayal, reversal, and a strong episode hook.",
-  },
-  {
-    id: "novel",
-    title: "Novel Creation",
-    titleZh: "小说创作",
-    description: "Serialized arcs, chapter plans, world logic, and character continuity.",
-    descriptionZh: "连载弧线、章节规划、世界逻辑和角色连续性。",
-    steps: "8 steps",
-    difficulty: "Deep",
-    idea: "A serialized fiction world with a long arc, recurring characters, and chapter momentum.",
   },
   {
     id: "viral_creation",
@@ -61,39 +50,8 @@ export default function TemplatesPage() {
       return;
     }
 
-    if (template.id === "novel") {
-      const project = createNovelProject({
-        title: `${template.title} World`,
-        genre: template.titleZh,
-        idea: template.idea,
-        novelBrief: template.idea,
-      });
-      upsertProject(project);
-      router.push(`/novel-workbench?projectId=${encodeURIComponent(project.id)}`);
-      return;
-    }
-
-    const project = createProject({
-      title: `${template.title} World`,
-      genre: template.title,
-      idea: template.idea,
-      storyBible: {
-        logline: "",
-        sellingPoint: "",
-        targetMarket: "Global",
-        genreType: template.title,
-        world: "",
-        mainConflict: "",
-        characterRelationships: "",
-        lockedCanon: "",
-        languageStyle: "Clean, cinematic, high-retention storytelling.",
-        pacingRules: "Open with a hook, escalate through reversals, end each episode with a clear reason to continue.",
-        confirmedFacts: `Workflow template: ${template.id}`,
-      },
-    });
-
-    upsertProject(project);
-    router.push(`/novel-workbench?projectId=${encodeURIComponent(project.id)}&mode=screenplay&template=${encodeURIComponent(template.id)}`);
+    // 模板页只负责选择入口；项目与 Work 由最新 V2.2 入口原子创建。
+    router.push("/projects/new-v2");
   }
 
   return (

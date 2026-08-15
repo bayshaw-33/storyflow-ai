@@ -14,7 +14,6 @@ type Tab = "rules" | "tasks" | "overrides";
 
 const TASK_GROUPS: Record<string, string[]> = {
   "剧本工作台": ["market_analysis","script_import","brief","characters","structure_model","beat_cards","series_outline","existing_script","chinese_script","continuation_script","translation","localization","test_script","quality_evaluation","final_script","format_check","storyboard_script","final_delivery"],
-  "小说工作台": ["novel_development_chat","novel_brief","novel_bible","novel_characters","novel_volume_outline","novel_chapter_outline","novel_chapter_draft","novel_revision","novel_export"],
   "歌曲工作台": ["song_workbench","song_development_chat"],
   "创作工作台": ["creation_development_chat","creation_background_world","creation_character_bible","creation_plot_outline","creation_novel_unit","creation_screenplay_unit","creation_episode_plan","creation_translate_unit","creation_localize_unit"],
   "爆款工作台": ["viral_video_analysis","viral_structure_remake","viral_export_package"],

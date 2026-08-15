@@ -10,7 +10,6 @@ export type DashboardWorkflowType =
   | "continuation"
   | "song"
   | "viral"
-  | "novel"
   | "storyboard"
   | "video";
 

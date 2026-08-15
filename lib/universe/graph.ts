@@ -106,7 +106,7 @@ export function buildUniverseGraph(projects: DramaProject[]): UniverseGraph {
       x: clampPct(pos.x),
       y: clampPct(pos.y),
       scale: 0.95,
-      href: `/novel-workbench?projectId=${encodeURIComponent(project.id)}`,
+      href: `/script-workbench?projectId=${encodeURIComponent(project.id)}`,
       connections: ["flagship"],
     });
     flagship.connections.push(worldId);
@@ -121,7 +121,7 @@ export function buildUniverseGraph(projects: DramaProject[]): UniverseGraph {
         x: clampPct(pos.x + 7),
         y: clampPct(pos.y + 9),
         scale: 0.7,
-        href: `/novel-workbench?projectId=${encodeURIComponent(project.id)}`,
+      href: `/script-workbench?projectId=${encodeURIComponent(project.id)}`,
         connections: [worldId],
       });
       edges.push({ from: worldId, to: storyId, type: "dependency" });

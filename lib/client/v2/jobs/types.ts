@@ -59,7 +59,7 @@ export interface UnifiedJob {
   type: JobType;
   projectName: string;
   projectId: string;
-  /** 工作台类型，如 novel / script / art / production / video / song 等 */
+  /** 工作台类型，如 script / art / production / video / song 等 */
   workbenchType: string;
   stage: JobStage;
   /** 已完成数量（真实计数，非百分比） */
