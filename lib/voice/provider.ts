@@ -71,6 +71,20 @@ export async function resolveTTSProvider(): Promise<TTSProvider> {
     return mod.createOpenAITTSProvider();
   }
 
+  // CosyVoice HTTP adapter（Phase 5 Task 5.4）：服务地址/凭证仅服务端环境变量
+  if (name === "cosyvoice") {
+    const mod = await import("./providers/cosyvoice");
+    const baseUrl = process.env.COSYVOICE_BASE_URL || "";
+    if (!baseUrl) {
+      return (await import("./providers/placeholder")).createPlaceholderProvider();
+    }
+    return mod.createCosyVoiceProvider({
+      baseUrl,
+      token: process.env.COSYVOICE_API_TOKEN,
+      model: process.env.COSYVOICE_MODEL,
+    }) as unknown as TTSProvider;
+  }
+
   // 默认 placeholder
   const mod = await import("./providers/placeholder");
   return mod.createPlaceholderProvider();
@@ -85,6 +99,9 @@ export function isTTSProviderAvailable(): boolean {
   if (name === "placeholder" || !name) return false;
   if (name === "openai") {
     return Boolean(process.env.OPENAI_API_KEY || process.env.OPENAI_TTS_API_KEY);
+  }
+  if (name === "cosyvoice") {
+    return Boolean(process.env.COSYVOICE_BASE_URL);
   }
   return false;
 }

@@ -678,3 +678,128 @@ function mapLineRow(row: VoiceLineRow): VoiceLineDTO {
     completedAt: row.completed_at,
   };
 }
+
+/**
+ * KIIKIS V2.2 配音显式关系 + 真人声音保护 — Phase 5 Task 5.4.
+ * 角色声音绑定 Character → Voice Identity；台词绑定 Scene / Dialogue Line /
+ * Text Version；替换配音 append-only，不改变已定稿剪辑。
+ * voice clone 缺授权：仅私有试用，不可公开/商业（服务端 enforce）。
+ */
+
+export interface VoiceUsageLinkDraft {
+  sourceWorkId: string;
+  sourceWorkVersionId: string;
+  targetProjectId: string;
+  targetWorkId: string;
+  usageRole: "character_voice" | "narration" | "dialogue_line";
+  targetEntityType: string | null;
+  targetEntityId: string | null;
+  voiceIdentityId?: string;
+  dialogueLineId?: string;
+  textVersionId?: string;
+}
+
+export interface BuildVoiceUsageInput {
+  sourceWorkId: string;
+  sourceWorkVersionId: string;
+  targetProjectId: string;
+  targetWorkId: string;
+  characterId?: string | null;
+  voiceIdentityId?: string | null;
+  sceneId?: string | null;
+  dialogueLineId?: string | null;
+  textVersionId?: string | null;
+  narration?: boolean;
+}
+
+/** 角色声音 / 旁白 / 台词 → WorkUsageLink 草稿（usage roles 对应 Task 5.1）。 */
+export function buildVoiceUsageLinks(input: BuildVoiceUsageInput): VoiceUsageLinkDraft[] {
+  const links: VoiceUsageLinkDraft[] = [];
+  if (input.characterId) {
+    links.push({
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "character_voice",
+      targetEntityType: "character",
+      targetEntityId: input.characterId,
+      voiceIdentityId: input.voiceIdentityId ?? undefined,
+    });
+  }
+  if (input.narration) {
+    links.push({
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "narration",
+      targetEntityType: null,
+      targetEntityId: null,
+      voiceIdentityId: input.voiceIdentityId ?? undefined,
+    });
+  }
+  if (input.sceneId && input.dialogueLineId) {
+    links.push({
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "dialogue_line",
+      targetEntityType: "scene",
+      targetEntityId: input.sceneId,
+      dialogueLineId: input.dialogueLineId,
+      textVersionId: input.textVersionId ?? undefined,
+    });
+  }
+  return links;
+}
+
+export interface ReplaceDubbingResult {
+  finalizedEditingVersion: { id: string; versionNo: number; finalizedAt: string; dubbingId: string };
+  newDubbingLink: {
+    sourceDubbingId: string;
+    finalizedEditingVersionId: string | null;
+  };
+}
+
+/** 替换配音：append 新 link；已定稿剪辑版本与配音引用原样保留。 */
+export function replaceDubbing(input: {
+  editingWorkId: string;
+  finalizedEditingVersion: { id: string; versionNo: number; finalizedAt: string; dubbingId: string };
+  newDubbingId: string;
+}): ReplaceDubbingResult {
+  return {
+    finalizedEditingVersion: { ...input.finalizedEditingVersion },
+    newDubbingLink: {
+      sourceDubbingId: input.newDubbingId,
+      finalizedEditingVersionId: null, // 新配音永不指向已定稿版本
+    },
+  };
+}
+
+export interface VoiceTrialPolicy {
+  voiceIdentityId: string;
+  canUsePrivately: boolean;
+  canPublish: boolean;
+  canCommercial: boolean;
+  reason: string;
+}
+
+/** 真人声音保护（服务端 enforce）：clone 缺授权 → 仅私有试用。 */
+export function privateTrialOnly(input: {
+  voiceIdentityId: string;
+  isRealPerson: boolean;
+  cloneAuthorized: boolean;
+}): VoiceTrialPolicy {
+  const needsAuth = input.isRealPerson && !input.cloneAuthorized;
+  return {
+    voiceIdentityId: input.voiceIdentityId,
+    canUsePrivately: true,
+    canPublish: !needsAuth,
+    canCommercial: !needsAuth,
+    reason: needsAuth
+      ? "真人声音克隆缺少授权：仅可在私有范围试听，不可公开、不可商业使用。"
+      : "",
+  };
+}

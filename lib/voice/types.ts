@@ -5,6 +5,7 @@
  */
 
 export type VoiceProviderName =
+  | "cosyvoice"
   | "placeholder"
   | "openai"
   | "elevenlabs"
