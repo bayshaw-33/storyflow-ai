@@ -1,12 +1,11 @@
 /**
- * Phase 3 Task 3.3 — free navigation & soft gates.
+ * KIIKIS V2.2 — trilogy checkpoints and downstream gates.
  *
  * Verifies:
  *   - any unit node is openable regardless of upstream finalized state
- *   - empty content shows suggestions but “继续创作” stays available
- *   - only formal actions (batch production / publish / license / delivery)
- *     check Finalized; draft try-outs (art/storyboard/voice) auto-freeze a
- *     source Checkpoint instead of blocking
+ *   - existing units remain openable for revision
+ *   - new downstream work requires usable upstream checkpoints
+ *   - similarity review belongs to the outline stage
  *
  * Run: node --test tests/ui-v2/screenplay-studio/navigation.test.mjs
  */
@@ -18,6 +17,9 @@ import {
   formalActionRequiresFinalized,
   draftTryoutPolicy,
   emptyUnitSuggestion,
+  canCreateUnit,
+  isUsableCheckpoint,
+  similarityReviewBelongsTo,
 } from "../../../lib/client/v2/screenplay-studio/types.ts";
 
 // ============================================================
@@ -36,6 +38,32 @@ test("any unit can be opened regardless of upstream finalized state", () => {
   }
   // Even nonexistent upstream content never blocks opening a node.
   assert.equal(canOpenUnit({ type: "episode", readiness: "empty", dependencyState: "stale" }), true);
+});
+
+test("downstream creation waits for usable trilogy checkpoints", () => {
+  const empty = [];
+  assert.equal(canCreateUnit("world", empty), true);
+  assert.equal(canCreateUnit("character", empty), false);
+
+  const world = [{ type: "world", readiness: "checkpoint", finalizedVersionId: "wv-1" }];
+  assert.equal(canCreateUnit("character", world), true);
+  assert.equal(canCreateUnit("outline", world), false);
+
+  const trilogy = [
+    ...world,
+    { type: "character", readiness: "finalized", finalizedVersionId: "cv-1" },
+    { type: "outline", readiness: "checkpoint", finalizedVersionId: "ov-1" },
+  ];
+  assert.equal(canCreateUnit("episode", trilogy), true);
+  assert.equal(canCreateUnit("scene", trilogy), false);
+  assert.equal(canCreateUnit("scene", [...trilogy, { type: "episode", readiness: "checkpoint", finalizedVersionId: "ev-1" }]), true);
+});
+
+test("usable checkpoint means user-confirmed checkpoint or finalized version", () => {
+  assert.equal(isUsableCheckpoint({ readiness: "checkpoint", finalizedVersionId: null }), true);
+  assert.equal(isUsableCheckpoint({ readiness: "finalized", finalizedVersionId: "v1" }), true);
+  assert.equal(isUsableCheckpoint({ readiness: "draft", finalizedVersionId: null }), false);
+  assert.equal(similarityReviewBelongsTo, "outline");
 });
 
 // ============================================================
@@ -61,12 +89,13 @@ test("formal actions require finalized; draft try-outs never block", () => {
 // 3. Empty unit suggestions (soft onboarding, never a gate)
 // ============================================================
 
-test("empty units show suggestions while 继续创作 stays available", () => {
+test("empty units show focused suggestions while 继续创作 stays available", () => {
   const suggestion = emptyUnitSuggestion("scene");
   assert.ok(Array.isArray(suggestion.hints) && suggestion.hints.length > 0);
   assert.equal(suggestion.canContinue, true);
   for (const type of ["world", "character", "outline", "episode", "scene"]) {
     const s = emptyUnitSuggestion(type);
     assert.equal(s.canContinue, true, `${type} continue must stay available`);
+    assert.equal(s.hints.some((hint) => /跳过|直接开写|边写正文/.test(hint)), false, `${type} must not suggest bypassing the workflow`);
   }
 });

@@ -105,6 +105,7 @@ export class ScreenplayUnitsService {
     parentId: string | null;
     order: number;
     legacyId?: string;
+    allowIncomplete?: boolean;
   }): Promise<{ unit: ScreenplayUnitDto }> {
     await this.assertWorkOwner(params.ownerId, params.workId);
     if (!isScreenplayUnitType(params.type)) {
@@ -112,6 +113,12 @@ export class ScreenplayUnitsService {
     }
     if (typeof params.order !== "number" || !Number.isInteger(params.order) || params.order < 0) {
       throw new ScreenplayUnitsError("validation_failed", "order must be a non-negative integer.");
+    }
+    if (!params.allowIncomplete) {
+      const existing = await this.readUnits(params.workId);
+      if (!canCreateUnitAfter(existing, params.type)) {
+        throw new ScreenplayUnitsError("validation_failed", creationGateMessage(params.type));
+      }
     }
     if (params.parentId) {
       const parent = await this.readUnit(params.workId, params.parentId);
@@ -268,10 +275,7 @@ export class ScreenplayUnitsService {
 
   async listUnits(params: { ownerId: string; workId: string }): Promise<{ units: ScreenplayUnitDto[] }> {
     await this.assertWorkOwner(params.ownerId, params.workId);
-    const rows = await get<UnitRow[]>(
-      this.fetcher,
-      `/rest/v1/storyflow_screenplay_units?work_id=eq.${encodeURIComponent(params.workId)}&order=order_index.asc&select=${UNIT_COLUMNS}&limit=2000`,
-    );
+    const rows = await this.readUnits(params.workId);
     return { units: (rows ?? []).map(toUnitDto) };
   }
 
@@ -362,6 +366,7 @@ export class ScreenplayUnitsService {
         parentId,
         order: item.order,
         legacyId: item.legacyId,
+        allowIncomplete: true,
       });
       idByLegacy.set(item.legacyId, unit.id);
       createdCount += 1;
@@ -408,6 +413,13 @@ export class ScreenplayUnitsService {
     return row;
   }
 
+  private async readUnits(workId: string): Promise<UnitRow[]> {
+    return get<UnitRow[]>(
+      this.fetcher,
+      `/rest/v1/storyflow_screenplay_units?work_id=eq.${encodeURIComponent(workId)}&order=order_index.asc&select=${UNIT_COLUMNS}&limit=2000`,
+    );
+  }
+
   private async readVersion(workId: string, unitId: string, versionId: string): Promise<UnitVersionRow> {
     const rows = await get<UnitVersionRow[]>(
       this.fetcher,
@@ -442,6 +454,27 @@ function toVersionDto(row: UnitVersionRow): UnitVersionDto {
     contentHash: row.content_hash,
     createdAt: row.created_at,
   };
+}
+
+function isUsableCheckpoint(row: Pick<UnitRow, "readiness" | "finalized_version_id">): boolean {
+  return row.readiness === "checkpoint" || (row.readiness === "finalized" && Boolean(row.finalized_version_id));
+}
+
+function canCreateUnitAfter(units: UnitRow[], type: string): boolean {
+  const hasUsable = (unitType: ScreenplayUnitType) => units.some((unit) => unit.type === unitType && isUsableCheckpoint(unit));
+  if (type === "world") return true;
+  if (type === "character") return hasUsable("world");
+  if (type === "outline") return hasUsable("world") && hasUsable("character");
+  if (type === "episode") return hasUsable("world") && hasUsable("character") && hasUsable("outline");
+  return hasUsable("world") && hasUsable("character") && hasUsable("outline") && hasUsable("episode");
+}
+
+function creationGateMessage(type: string): string {
+  if (type === "character") return "请先确认世界观为可用版本，再创建角色圣经。";
+  if (type === "outline") return "请先确认世界观和角色圣经为可用版本，再创建剧情及大纲。";
+  if (type === "episode") return "请先完成三部曲并确认可用版本，再创建分集计划。";
+  if (type === "scene") return "请先完成三部曲和分集计划，并确认可用版本，再创建剧本正文。";
+  return "请先完成当前工作流的前置可用版本。";
 }
 
 async function get<T>(fetcher: UnitsFetcher, path: string): Promise<T> {

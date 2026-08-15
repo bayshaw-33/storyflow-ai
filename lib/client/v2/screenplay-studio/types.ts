@@ -19,10 +19,10 @@ export interface StudioNavGroup {
 
 export const SCREENPLAY_STUDIO_NAV_GROUPS: StudioNavGroup[] = [
   { id: "world", label: "世界观", types: ["world"] },
-  { id: "character", label: "角色", types: ["character"] },
-  { id: "outline", label: "大纲", types: ["outline"] },
-  { id: "episode", label: "分集", types: ["episode"] },
-  { id: "scene", label: "正文（场）", types: ["scene"] },
+  { id: "character", label: "角色圣经", types: ["character"] },
+  { id: "outline", label: "剧情及大纲", types: ["outline"] },
+  { id: "episode", label: "分集计划", types: ["episode"] },
+  { id: "scene", label: "剧本正文（场）", types: ["scene"] },
 ];
 
 export interface StudioWorkflowStage {

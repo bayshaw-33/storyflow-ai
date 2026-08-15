@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * 左栏导航树 — Phase 3 Task 3.3.
- * 世界观/角色/大纲/分集/正文（场）分组树。任一节点可打开（自由导航，
- * 不检查上游 finalized）；空组显示“新建”入口而不是禁用。
+ * 左栏工作流导航树。
+ * 三部曲按“用户确认可用版本”推进；已存在节点始终可以打开并返回修改。
+ * 雷同审查作为剧情及大纲的子步骤出现，不独立制造新的创作入口。
  */
 
 import { useMemo } from "react";
@@ -11,6 +11,8 @@ import type { ScreenplayUnitClientDto } from "@/lib/client/v2/screenplay-studio/
 import {
   SCREENPLAY_STUDIO_NAV_GROUPS,
   NAV_GROUP_OF_TYPE,
+  canCreateUnit,
+  isUsableCheckpoint,
 } from "@/lib/client/v2/screenplay-studio/types";
 import styles from "./ScreenplayStudio.module.css";
 
@@ -27,9 +29,19 @@ export interface UnitNavigatorProps {
   staleDownstreamUnitIds: Set<string>;
   onOpenUnit: (unitId: string) => void;
   onCreateUnit: (type: "world" | "character" | "outline" | "episode" | "scene", parentId: string | null) => void;
+  onOpenSimilarity?: () => void;
+  similarityReviewed?: boolean;
 }
 
-export function UnitNavigator({ units, activeUnitId, staleDownstreamUnitIds, onOpenUnit, onCreateUnit }: UnitNavigatorProps) {
+export function UnitNavigator({
+  units,
+  activeUnitId,
+  staleDownstreamUnitIds,
+  onOpenUnit,
+  onCreateUnit,
+  onOpenSimilarity,
+  similarityReviewed = false,
+}: UnitNavigatorProps) {
   const grouped = useMemo(() => {
     const byGroup = new Map<string, ScreenplayUnitClientDto[]>();
     for (const group of SCREENPLAY_STUDIO_NAV_GROUPS) byGroup.set(group.id, []);
@@ -45,21 +57,35 @@ export function UnitNavigator({ units, activeUnitId, staleDownstreamUnitIds, onO
     <nav aria-label="剧本结构导航" className={styles.tabBody}>
       {SCREENPLAY_STUDIO_NAV_GROUPS.map((group) => {
         const list = grouped.get(group.id) ?? [];
+        const type = group.types[0];
+        const usable = list.some((unit) => isUsableCheckpoint(unit));
+        const status = usable ? "已确认可用" : list.length ? "创作中" : "未开始";
+        const canCreate = canCreateUnit(type, units);
         return (
           <div key={group.id} className={styles.navGroup} data-group={group.id}>
             <div className={styles.navGroupTitle}>
-              <span>{group.label}</span>
+              <span>
+                <span className={styles.stageIndex}>{SCREENPLAY_STUDIO_NAV_GROUPS.indexOf(group) + 1}</span>
+                {group.label}
+              </span>
               <button
                 type="button"
                 className={styles.navGroupAdd}
                 aria-label={`新建${group.label}`}
                 onClick={() => onCreateUnit(group.id, null)}
+                disabled={!canCreate}
+                title={canCreate ? `新建${group.label}` : "请先确认上一阶段可用"}
               >
                 ＋
               </button>
             </div>
+            <div className={`${styles.stageStatus} ${usable ? styles.stageStatusReady : ""}`}>
+              {status}
+            </div>
             {list.length === 0 ? (
-              <div className={styles.placeholder}>还没有内容，点 ＋ 直接创建</div>
+              <div className={styles.placeholder}>
+                {canCreate ? "还没有内容，点 ＋ 开始" : "完成上一阶段并确认可用后继续"}
+              </div>
             ) : (
               list.map((unit) => (
                 <button
@@ -80,6 +106,17 @@ export function UnitNavigator({ units, activeUnitId, staleDownstreamUnitIds, onO
                 </button>
               ))
             )}
+            {group.id === "outline" ? (
+              <button
+                type="button"
+                className={`${styles.subStageItem} ${similarityReviewed ? styles.subStageReady : ""}`}
+                onClick={() => onOpenSimilarity?.()}
+              >
+                <span className={styles.subStageMark}>{similarityReviewed ? "✓" : "◇"}</span>
+                <span>雷同审查</span>
+                <span className={styles.subStageHint}>{similarityReviewed ? "已查验" : "待查验"}</span>
+              </button>
+            ) : null}
           </div>
         );
       })}

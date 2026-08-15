@@ -153,15 +153,19 @@ export function KkScreenplayRoom({
   }, [workId, pendingCandidate, onCandidateChange]);
 
   return (
-    <div data-testid="kk-screenplay-room">
-      <div className={styles.tabBody}>
+    <div className={styles.kkConversation} data-testid="kk-screenplay-room">
+      <div className={styles.kkTranscript}>
         {messages.length === 0 ? (
-          <div className={styles.placeholder}>和 KK 聊聊这场戏。“聊一聊”只讨论不改稿；“生成修改方案”会给出可审阅的修改块。</div>
+          <div className={styles.kkWelcome}>
+            <div className={styles.kkWelcomeEyebrow}>KK · AI 剧本伙伴</div>
+            <h2>从你的意图开始，和剧本一起长出来。</h2>
+            <p>可以先讨论世界观、角色和剧情，也可以让 KK 生成逐块可审阅的修改方案。对话不会静默改动正文。</p>
+          </div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} style={{ marginBottom: 10 }}>
-              <div className={styles.placeholder}>{m.role === "user" ? "我" : "KK"}</div>
-              <div>{m.content}</div>
+            <div key={m.id} className={`${styles.kkMessage} ${m.role === "user" ? styles.kkMessageUser : styles.kkMessageAssistant}`}>
+              <div className={styles.kkMessageRole}>{m.role === "user" ? "我" : "KK"}</div>
+              <div className={styles.kkMessageContent}>{m.content}</div>
             </div>
           ))
         )}
@@ -184,6 +188,8 @@ export function KkScreenplayRoom({
             </div>
           </div>
         ) : null}
+      </div>
+      <div className={styles.kkComposer}>
         <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
           <button
             type="button"
@@ -204,7 +210,7 @@ export function KkScreenplayRoom({
         </div>
         <textarea
           className={styles.editorTextarea}
-          style={{ minHeight: 80 }}
+          style={{ minHeight: 128 }}
           value={input}
           aria-label="KK 输入"
           onChange={(e) => setInput(e.target.value)}

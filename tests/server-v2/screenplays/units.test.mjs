@@ -1,8 +1,8 @@
 /**
  * Phase 3 Task 3.2 — Screenplay unit identity, versions, dependency state.
  *
- * Verifies (PRD Task 3.2 Step 1 RED):
- *   - create units freely in any type (free entry, no gate)
+ * Verifies:
+ *   - new units follow the trilogy checkpoint gate
  *   - unit content lives in immutable unit versions; title/order are identity
  *     fields and can be updated without new versions
  *   - opening any unit never checks upstream finalized
@@ -113,16 +113,31 @@ async function makeService() {
 }
 
 // ============================================================
-// 1. Free creation & identity
+// 1. Ordered creation & identity
 // ============================================================
 
-test("creates units freely in any type without upstream gates", async () => {
+test("creates new units in trilogy order after usable checkpoints", async () => {
   const { service } = await makeService();
   const world = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "世界观", parentId: null, order: 1 });
-  const ep = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "episode", title: "第1集", parentId: null, order: 1 });
-  // 场景可以在世界观/角色/大纲都为空时直接创建（自由进入，无门禁）
+  await assert.rejects(
+    () => service.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "主角", parentId: null, order: 1 }),
+    (error) => error instanceof ScreenplayUnitsError && error.code === "validation_failed",
+  );
+  const worldVersion = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: world.unit.id, content: { body: "世界规则" }, baseVersionId: null });
+  await service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: world.unit.id, versionId: worldVersion.version.id });
+  const character = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "主角", parentId: null, order: 1 });
+  const characterVersion = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: character.unit.id, content: { body: "人物圣经" }, baseVersionId: null });
+  await service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: character.unit.id, versionId: characterVersion.version.id });
+  const outline = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "outline", title: "剧情及大纲", parentId: null, order: 1 });
+  const outlineVersion = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: outline.unit.id, content: { body: "主线和转折" }, baseVersionId: null });
+  await service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: outline.unit.id, versionId: outlineVersion.version.id });
+  const ep = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "episode", title: "第1集", parentId: outline.unit.id, order: 1 });
+  const epVersion = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: ep.unit.id, content: { body: "第一集计划" }, baseVersionId: null });
+  await service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: ep.unit.id, versionId: epVersion.version.id });
   const scene = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "scene", title: "第一场", parentId: ep.unit.id, order: 1 });
   assert.equal(world.unit.type, "world");
+  assert.equal(character.unit.type, "character");
+  assert.equal(outline.unit.type, "outline");
   assert.equal(scene.unit.type, "scene");
 });
 

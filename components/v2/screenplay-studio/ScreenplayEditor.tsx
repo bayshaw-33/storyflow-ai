@@ -1,10 +1,8 @@
 "use client";
 
 /**
- * 中栏编辑器 — Phase 3 Task 3.3.
- * 当前 unit 的文档编辑器。空内容显示建议（软引导），但“继续创作”始终
- * 可用；保存创建 Unit Version（CAS baseVersionId），409 冲突显示处置条
- * 而不是覆盖。
+ * 当前文档抽屉。保存创建 Unit Version（CAS baseVersionId），409 冲突显示
+ * 处置条而不是覆盖；确认可用版本只是一个可回退的工作流 checkpoint。
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -20,9 +18,21 @@ export interface ScreenplayEditorProps {
   onContentChange: (body: string) => void;
   onTitleChange: (title: string) => void;
   onSave: () => void;
+  onConfirmUsable: () => void;
+  confirming: boolean;
 }
 
-export function ScreenplayEditor({ unit, content, saving, conflict, onContentChange, onTitleChange, onSave }: ScreenplayEditorProps) {
+export function ScreenplayEditor({
+  unit,
+  content,
+  saving,
+  conflict,
+  onContentChange,
+  onTitleChange,
+  onSave,
+  onConfirmUsable,
+  confirming,
+}: ScreenplayEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [caret, setCaret] = useState(0);
 
@@ -63,7 +73,7 @@ export function ScreenplayEditor({ unit, content, saving, conflict, onContentCha
           placeholder="节点标题"
           aria-label="节点标题"
         />
-        <span className={styles.placeholder}>{unit.readiness}</span>
+        <span className={styles.readinessLabel}>{unit.readiness === "finalized" ? "已确认可用" : unit.readiness}</span>
       </div>
       <div className={styles.editorBody}>
         {isEmpty ? (
@@ -104,14 +114,23 @@ export function ScreenplayEditor({ unit, content, saving, conflict, onContentCha
           onBlur={() => {
             if (unit) (unit as unknown as { __caret?: number }).__caret = caret;
           }}
-          placeholder="直接开写，写完再改。"
+          placeholder="把想法写在这里，或回到上方和 KK 对话…"
           style={isEmpty ? { position: "absolute", left: -9999, top: 0 } : undefined}
         />
       </div>
       <div className={styles.editorFooter}>
-        <span>{saving ? "保存中…" : "已保存至草稿"}</span>
+        <span>{saving ? "保存中…" : unit.finalizedVersionId ? "可随时返回修改" : "草稿版本"}</span>
         <button type="button" className={styles.saveBtn} onClick={onSave} disabled={saving} data-testid="save-unit">
           {saving ? "保存中" : "保存版本"}
+        </button>
+        <button
+          type="button"
+          className={styles.confirmBtn}
+          onClick={onConfirmUsable}
+          disabled={saving || confirming || !unit.currentVersionId || Boolean(unit.finalizedVersionId)}
+          data-testid="confirm-usable"
+        >
+          {confirming ? "确认中…" : unit.finalizedVersionId ? "已确认可用" : "确认可用版本"}
         </button>
       </div>
       {conflict ? (

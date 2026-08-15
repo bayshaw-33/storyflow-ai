@@ -113,10 +113,18 @@ async function makeServices() {
 
 async function seedEpisodeWithScene(services) {
   const { units } = services;
+  const world = await units.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "世界观", parentId: null, order: 1 });
+  const worldV1 = await units.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: world.unit.id, content: { body: "世界规则" }, baseVersionId: null });
+  await units.markFinalized({ ownerId: OWNER, workId: WORK, unitId: world.unit.id, versionId: worldV1.version.id });
+  const character = await units.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "主角", parentId: null, order: 1 });
+  const characterV1 = await units.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: character.unit.id, content: { body: "角色圣经" }, baseVersionId: null });
+  await units.markFinalized({ ownerId: OWNER, workId: WORK, unitId: character.unit.id, versionId: characterV1.version.id });
   const outline = await units.createUnit({ ownerId: OWNER, workId: WORK, type: "outline", title: "总大纲", parentId: null, order: 1 });
   const outlineV1 = await units.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: outline.unit.id, content: { body: "三幕结构" }, baseVersionId: null, references: [{ unitId: null, unitVersionId: null }] });
+  await units.markFinalized({ ownerId: OWNER, workId: WORK, unitId: outline.unit.id, versionId: outlineV1.version.id });
   const ep = await units.createUnit({ ownerId: OWNER, workId: WORK, type: "episode", title: "第1集", parentId: outline.unit.id, order: 1 });
   const epV1 = await units.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: ep.unit.id, content: { body: "第一集梗概" }, baseVersionId: null, references: [{ unitId: outline.unit.id, unitVersionId: outlineV1.version.id }] });
+  await units.markFinalized({ ownerId: OWNER, workId: WORK, unitId: ep.unit.id, versionId: epV1.version.id });
   const scene = await units.createUnit({ ownerId: OWNER, workId: WORK, type: "scene", title: "开场", parentId: ep.unit.id, order: 1 });
   const sceneV1 = await units.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: scene.unit.id, content: { body: "夜。废墟。" }, baseVersionId: null, references: [{ unitId: ep.unit.id, unitVersionId: epV1.version.id }] });
   return { outline, outlineV1, ep, epV1, scene, sceneV1 };
