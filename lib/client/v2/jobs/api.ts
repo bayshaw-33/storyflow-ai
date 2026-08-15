@@ -1,8 +1,7 @@
 /**
  * 任务中心 API 适配器。
  *
- * 默认 USE_FIXTURE=true 使用 fixture 演示数据；后端就绪后通过
- * NEXT_PUBLIC_USE_JOB_FIXTURE=false 切换到真实 API。
+ * 默认不使用 fixture；仅显式 NEXT_PUBLIC_USE_JOB_FIXTURE=true 时加载演示数据。
  *
  * 真实模式对接 Codex 的 GET /api/v2/jobs（统一任务列表），
  * Codex GenerationJob DTO 在此映射为 TRAE UnifiedJob。
@@ -17,9 +16,9 @@
 import { computeStats } from "./grouping.ts";
 import { CONTRACT_VERSION, type JobAction, type JobFilters, type JobStats, type UnifiedJob } from "./types.ts";
 
-/** 是否使用 fixture 演示数据（默认开启） */
+/** 是否使用 fixture 演示数据（生产环境 fail-closed） */
 export const USE_FIXTURE =
-  process.env.NEXT_PUBLIC_USE_JOB_FIXTURE !== "false";
+  process.env.NEXT_PUBLIC_USE_JOB_FIXTURE === "true";
 
 export interface JobsResult {
   jobs: UnifiedJob[];

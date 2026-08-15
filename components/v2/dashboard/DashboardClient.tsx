@@ -24,6 +24,7 @@ import {
   ErrorDashboard,
   UnauthenticatedDashboard,
 } from "./DashboardStates";
+import { ProjectManagement } from "./ProjectManagement";
 import styles from "./dashboard.module.css";
 
 const VALID_FIXTURES: FixtureName[] = ["dashboard", "dashboard-empty", "dashboard-error"];
@@ -52,6 +53,7 @@ export function DashboardClient() {
   const isZh = locale === "zh-CN";
   const preview = searchParams.get("preview") === "1";
   const fixtureParam = resolveFixtureParam(searchParams.get("fixture"));
+  const previewMode = preview || Boolean(fixtureParam);
 
   const [session, setSession] = useState<Session | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
@@ -111,12 +113,17 @@ export function DashboardClient() {
   // 登录态或 fixture 参数变化后触发加载。
   useEffect(() => {
     if (!sessionLoaded) return;
-    if (!preview && !session) {
+    if (!previewMode && !session) {
       setStatus("unauthenticated");
       return;
     }
+    if (!previewMode) {
+      setData(null);
+      setStatus("ready");
+      return;
+    }
     void load();
-  }, [session, sessionLoaded, preview, load]);
+  }, [session, sessionLoaded, previewMode, load]);
 
   const accountName = useMemo(() => {
     const meta = session?.user?.user_metadata as Record<string, unknown> | undefined;
@@ -155,6 +162,11 @@ export function DashboardClient() {
         <KKEntrySection />
       </main>
     );
+  }
+
+  // 正常工作区使用真实项目库；fixture 只服务显式预览模式。
+  if (!previewMode) {
+    return <ProjectManagement accessToken={session?.access_token || ""} />;
   }
 
   // 空数据：首次使用引导。

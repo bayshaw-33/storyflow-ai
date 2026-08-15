@@ -447,3 +447,387 @@
     gap: 4px;
   }
 }
+
+/* 项目管理：项目方格是主内容，任务与待确认事项采用紧凑表格。 */
+.projectManagementHeader {
+  margin: 0 0 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.projectToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.projectSearch {
+  min-width: min(360px, 100%);
+  flex: 1 1 280px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.projectSearch input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f4f7f8;
+  font: inherit;
+  font-size: 13px;
+}
+
+.projectSearch input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.filterControl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 8px 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.filterControl select {
+  min-width: 94px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f4f7f8;
+  font: inherit;
+  font-size: 12px;
+}
+
+.filterControl option {
+  color: #111;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.projectLibrarySection {
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.projectSectionHeader,
+.tableHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sectionKicker {
+  margin: 0 0 4px;
+  color: #6de7df;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+}
+
+.projectGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.projectCard {
+  min-height: 202px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.projectCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(109, 231, 223, 0.46);
+  background: rgba(109, 231, 223, 0.06);
+}
+
+.projectCard:focus-visible {
+  outline: 2px solid #6de7df;
+  outline-offset: 2px;
+}
+
+.projectCardTop,
+.projectCardMeta,
+.projectCardAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.projectType {
+  color: #6de7df;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.statusBadge,
+.tableStatus {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.status_ready {
+  background: rgba(125, 209, 129, 0.14);
+  color: #7dd181;
+}
+
+.status_generating {
+  background: rgba(109, 231, 223, 0.14);
+  color: #6de7df;
+}
+
+.status_error {
+  background: rgba(255, 139, 139, 0.14);
+  color: #ff8b8b;
+}
+
+.projectCardTitle {
+  margin: 22px 0 4px;
+  overflow: hidden;
+  color: #f4f7f8;
+  font-size: 17px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectCardStage {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+}
+
+.projectCardMeta {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: auto;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.projectCardMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.projectCardProgress {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10px;
+}
+
+.progressTrack {
+  display: block;
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.progressTrack i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #6de7df;
+}
+
+.projectCardAction {
+  justify-content: flex-start;
+  margin-top: 12px;
+  color: #6de7df;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.secondaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.tableCard {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tableHeaderLink,
+.tableAction,
+.inlineButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: #6de7df;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+}
+
+.dataTable th,
+.dataTable td {
+  padding: 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.58);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dataTable th {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tablePrimary {
+  color: #f4f7f8;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tablePrimary:hover,
+.tableAction:hover,
+.tableHeaderLink:hover,
+.inlineButton:hover {
+  text-decoration: underline;
+}
+
+.tableEmpty {
+  padding: 20px 6px !important;
+  color: rgba(255, 255, 255, 0.42) !important;
+  text-align: center !important;
+}
+
+.libraryNotice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 126px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 13px;
+  text-align: center;
+}
+
+.syncNotice {
+  margin: 12px 0 0;
+  color: #ffd166;
+  font-size: 11px;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@media (max-width: 1100px) {
+  .projectGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .projectManagementHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .projectGrid,
+  .secondaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .projectToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .projectSearch,
+  .filterControl,
+  .filterControl select {
+    width: 100%;
+  }
+
+  .projectSearch {
+    flex-basis: auto;
+  }
+
+  .dataTable {
+    min-width: 540px;
+  }
+
+  .tableCard {
+    overflow-x: auto;
+  }
+}

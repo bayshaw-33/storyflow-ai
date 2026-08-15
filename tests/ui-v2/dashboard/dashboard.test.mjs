@@ -217,3 +217,18 @@ test("DashboardSections RunningJobsSection uses resolveJobDetailUrl for navigati
   assert.ok(/resolveJobDetailUrl/.test(src), "DashboardSections must reference resolveJobDetailUrl");
   assert.ok(/resolveJobDetailUrl\s*\(\s*job\.id\s*\)/.test(src), "RunningJobsSection must use resolveJobDetailUrl(job.id)");
 });
+
+test("dashboard project management uses real project data and card-plus-table layout", () => {
+  const clientSrc = fs.readFileSync(path.resolve("components/v2/dashboard/DashboardClient.tsx"), "utf8");
+  const managementSrc = fs.readFileSync(path.resolve("components/v2/dashboard/ProjectManagement.tsx"), "utf8");
+  assert.match(clientSrc, /ProjectManagement/);
+  assert.match(managementSrc, /readProjectsFromSupabase/);
+  assert.match(managementSrc, /projectGrid/);
+  assert.match(managementSrc, /<table/);
+  assert.match(managementSrc, /getProjectWorkbenchHref/);
+});
+
+test("production job list is fail-closed by default instead of fixture-on", () => {
+  const src = fs.readFileSync(path.resolve("lib/client/v2/jobs/api.ts"), "utf8");
+  assert.match(src, /NEXT_PUBLIC_USE_JOB_FIXTURE\s*===\s*["']true["']/);
+});
