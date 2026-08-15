@@ -211,3 +211,37 @@ export type RevisionConflict = {
   code: "REVISION_CONFLICT";
   currentRevision: number;
 };
+
+// ---------------------------------------------------------------------------
+// Phase 5 Task 5.3 — 分镜合并概念
+// 顶级入口只保留“分镜”；旧“动态分镜”不再显示顶级 Tab，URL 仅兼容重定向。
+// ---------------------------------------------------------------------------
+
+export const STORYBOARD_ENTRY = {
+  id: "storyboard",
+  label: "分镜",
+  labelEn: "Storyboard",
+} as const;
+
+export const STORYBOARD_WORKBENCH_TABS = [
+  { id: "shots", label: "镜头表" },
+  { id: "grid", label: "宫格" },
+  { id: "motion", label: "运动预览" },
+  { id: "video_prompt", label: "视频提示词" },
+  { id: "diff", label: "版本 Diff" },
+] as const;
+
+export function isDynamicGridTab(tabId: string): boolean {
+  return tabId === "dynamic-storyboard";
+}
+
+/**
+ * 旧动态分镜 URL 兼容重定向：保留 storyboard 目标，去掉 view=dynamic，
+ * 落在单一分镜页。非永久（302 语义），不恢复独立顶级入口。
+ */
+export function legacyDynamicStoryboardRedirect(url: string): { target: string; permanent: boolean } {
+  const urlObj = new URL(url, "https://kiikis.local");
+  urlObj.searchParams.delete("view");
+  const target = `${urlObj.pathname}${urlObj.search}${urlObj.hash}`;
+  return { target: target || "/storyboard-workbench", permanent: false };
+}

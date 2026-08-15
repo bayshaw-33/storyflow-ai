@@ -1,7 +1,7 @@
-import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
+import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts.ts";
 import { normalizeCreationWorkspace } from "./creation/state.ts";
 import type { CreationWorkspaceV2 } from "./creation/types.ts";
-import { isRetiredNovelRecord } from "./v2/retired-novel";
+import { isRetiredNovelRecord } from "./v2/retired-novel.ts";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel" | "storyboard" | "video";

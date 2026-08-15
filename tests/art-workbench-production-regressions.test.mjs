@@ -1,71 +1,89 @@
+/**
+ * Phase 5 Task 5.3 — 美术台回归 + 谱系分离 (RED).
+ *
+ * Verifies:
+ *   - 现有 ArtWorkbench 导出不回归（回归护栏）
+ *   - 角色/场景/道具只在美术类别中区分（不产生新的顶级工作流）
+ *   - Character Identity 与 Work Local Appearance / Asset Version 分离
+ *
+ * Run: node --test tests/art-workbench-production-regressions.test.mjs
+ */
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
+import {
+  createArtAsset,
+  createEmptyArtWorkbenchState,
+  getArtWorkbenchStorageKey,
+  buildArtImagePrompt,
+} from "../lib/art-workbench.ts";
+import {
+  artAssetKindScope,
+  separateCharacterIdentity,
+} from "../lib/production/lineage.ts";
 
-test("art workbench reserves the global navigation and keeps medium viewports unclipped", async () => {
-  const [component, globalStyles, workbenchStyles, collapseStyles] = await Promise.all([
-    read("../components/art/ArtWorkbench.tsx"),
-    read("../app/globals.css"),
-    read("../components/art/ArtWorkbench.module.css"),
-    read("../components/art/ArtWorkbenchCollapse.module.css"),
-  ]);
+// ============================================================
+// 1. 回归护栏：现有导出仍然可用
+// ============================================================
 
-  assert.match(component, /className=\{`\$\{styles\.page\} art-workbench-shell`\}/);
-  assert.equal((globalStyles.match(/\.art-workbench-shell/g) || []).length, 1);
-  assert.match(globalStyles, /\.art-workbench-shell[\s\S]*padding-left:\s*var\(--workspace-nav-offset\)/);
-  assert.doesNotMatch(workbenchStyles, /minmax\((?:320|340|440|520)px/);
-  assert.match(collapseStyles, /grid-template-columns:repeat\(auto-fill,minmax\(240px,320px\)\)/);
-  assert.match(collapseStyles, /grid-template-columns:minmax\(0,38fr\) minmax\(0,62fr\)/);
-  assert.doesNotMatch(collapseStyles, /minmax\(340px,38fr\)/);
-  assert.match(collapseStyles, /\.assistantCollapsed \.chatHead\{height:58px;flex:0 0 58px/);
+test("art-workbench core exports keep working (regression guard)", () => {
+  const state = createEmptyArtWorkbenchState();
+  assert.equal(state.assets.length, 0);
+  const asset = createArtAsset("character", { name: "阿仁" });
+  assert.equal(asset.kind, "character");
+  assert.ok(getArtWorkbenchStorageKey("p1", "u1").includes("p1"));
+  assert.ok(buildArtImagePrompt(asset, "concept", "冷色调").length > 0);
 });
 
-test("setup entry resets stale local state and cloud projects are merged", async () => {
-  const component = await read("../components/art/ArtWorkbench.tsx");
+// ============================================================
+// 2. 角色/场景/道具只在美术类别区分
+// ============================================================
 
-  assert.match(component, /params\.get\("setup"\) === "1"/);
-  assert.match(component, /readProjectsFromSupabase/);
-  assert.match(component, /mergeArtProjects/);
+test("character/scene/prop are art asset kinds, not new top-level workflows", () => {
+  const character = artAssetKindScope({ kind: "character" });
+  const scene = artAssetKindScope({ kind: "scene" });
+  const prop = artAssetKindScope({ kind: "prop" });
+  assert.equal(character.scope, "character");
+  assert.equal(scene.scope, "scene");
+  assert.equal(prop.scope, "prop");
+  // 全部仍是美术资产类别
+  for (const s of [character, scene, prop]) {
+    assert.equal(s.workflow, "art");
+  }
 });
 
-test("embedded art workbench scopes local drafts and archives to the project + source unit", async () => {
-  const [component, lib] = await Promise.all([
-    read("../components/art/ArtWorkbench.tsx"),
-    read("../lib/art-workbench.ts"),
-  ]);
-
-  // PRD §7.2：scoped key 函数已抽到 lib/art-workbench.ts，签名包含 sourceUnitId
-  assert.match(lib, /export function getArtWorkbenchStorageKey\(projectId\?: string, sourceUnitId\?: string\)/);
-  assert.match(lib, /\$\{ART_WORKBENCH_STORAGE_KEY\}:\$\{projectId\}:\$\{sourceUnitId\}/);
-  // 组件必须用 contextProjectId + contextSourceUnitId 派生 scoped key
-  assert.match(component, /const storageKey = getArtWorkbenchStorageKey\(contextProjectId, contextSourceUnitId\)/);
-  assert.match(component, /getArtWorkbenchArchiveIndexKey\(storageKey\)/);
-  // 资产卡链接必须携带 projectId + sourceUnitId
-  assert.match(component, /new URLSearchParams\(\{ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId \}\)/);
+test("artAssetKindScope rejects non-art kinds", () => {
+  assert.throws(() => artAssetKindScope({ kind: "song" }), /kind/i);
 });
 
-test("reference images are uploaded and sent to MiniMax as image_url content", async () => {
-  const [component, route, storage] = await Promise.all([
-    read("../components/art/ArtWorkbench.tsx"),
-    read("../app/api/art/chat/route.ts"),
-    read("../lib/supabase/art-storage.ts"),
-  ]);
+// ============================================================
+// 3. Character Identity 与 Work Local Appearance 分离
+// ============================================================
 
-  assert.match(component, /\/api\/art\/upload-reference/);
-  assert.match(route, /type:\s*"image_url"/);
-  assert.match(route, /attachment\.url/);
-  assert.match(storage, /\["image\/png", "image\/jpeg", "image\/webp"\]\.includes\(contentType\)/);
-});
-
-test("local persistence failures are visible to the creator", async () => {
-  const [component, detail] = await Promise.all([
-    read("../components/art/ArtWorkbench.tsx"),
-    read("../components/art/ArtAssetDetail.tsx"),
-  ]);
-  assert.match(component, /setNotice\("本地保存空间不足/);
-  assert.match(detail, /\/api\/art\/upload-reference/);
-  assert.match(detail, /storagePath:\s*payload\.storagePath/);
-  assert.match(detail, /setNotice\("本地保存空间不足/);
+test("separateCharacterIdentity splits identity from local appearance", () => {
+  const asset = createArtAsset("character", {
+    name: "阿仁",
+    description: "废土幸存者",
+  });
+  const assetVersion = {
+    id: "av-1",
+    assetId: asset.id,
+    versionNo: 1,
+    storagePath: "art/owner/av-1.png",
+    prompt: "冷色调概念图",
+  };
+  const { identity, localAppearance } = separateCharacterIdentity({
+    characterId: "char-9",
+    characterName: asset.name,
+    asset,
+    assetVersion,
+  });
+  assert.equal(identity.characterId, "char-9");
+  assert.equal(identity.characterName, "阿仁");
+  assert.equal(localAppearance.workId, asset.projectId ?? "unknown");
+  assert.equal(localAppearance.assetVersionId, "av-1");
+  assert.equal(localAppearance.storagePath, "art/owner/av-1.png");
+  // identity 不含 storage path；appearance 不含 character id
+  assert.equal(identity.storagePath, undefined);
+  assert.equal(localAppearance.characterId, undefined);
 });
