@@ -1,6 +1,6 @@
 # Phase 3 Handoff：最好用的剧本室
 
-> 分支：`autoclaw/K22-P3-screenplay-studio`
+> 分支：`feat/K22-P3-screenplay-studio`
 > 基线：`origin/main` @ `a33defdf`（Phase 2 合并后）
 > 契约版本：`2.2.0-alpha.1`（兼容 `2.0.0-alpha.1`）
 > 交付日期：2026-08-15
@@ -107,7 +107,7 @@ pnpm build
 
 ## 回滚方式
 
-- 分支级：`git checkout main && git branch -D autoclaw/K22-P3-screenplay-studio`（未合并前）
+- 分支级：`git checkout main && git branch -D feat/K22-P3-screenplay-studio`（未合并前）
 - migration 级：两个新增表族相互独立，可按 `supabase/migrations/rollback/` 惯例单独 DROP（不触碰 Phase 0-2 表）
 - 代码级：五个 commit 均为新增文件为主，`git revert <sha>` 无冲突风险
 
