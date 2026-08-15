@@ -222,7 +222,8 @@ test("dashboard project management uses real project data and card-plus-table la
   const clientSrc = fs.readFileSync(path.resolve("components/v2/dashboard/DashboardClient.tsx"), "utf8");
   const managementSrc = fs.readFileSync(path.resolve("components/v2/dashboard/ProjectManagement.tsx"), "utf8");
   assert.match(clientSrc, /ProjectManagement/);
-  assert.match(managementSrc, /readProjectsFromSupabase/);
+  assert.match(managementSrc, /fetchProjectLibrary/);
+  assert.match(managementSrc, /deleteProjectFromLibrary/);
   assert.match(managementSrc, /projectGrid/);
   assert.match(managementSrc, /<table/);
   assert.match(managementSrc, /getProjectWorkbenchHref/);

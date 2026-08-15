@@ -12,14 +12,16 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 
 import { fetchJobs } from "@/lib/client/v2/jobs/api";
 import type { UnifiedJob } from "@/lib/client/v2/jobs/types";
 import { fetchKkRuntime } from "@/lib/client/v2/kk/api";
 import type { KkPendingConfirmation } from "@/lib/client/v2/kk/types";
-import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
-import { readProjectsFromSupabase } from "@/lib/supabase/projects";
+import { deleteProject, readProjectsFromStorage } from "@/lib/projects";
+import { deleteProjectFromLibrary, fetchProjectLibrary } from "@/lib/client/v2/project-library/api";
+import { asProjectLibraryRecord, type ProjectLibraryProject } from "@/lib/client/v2/project-library/types";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
   filterAndSortProjects,
@@ -75,15 +77,16 @@ const JOB_STAGE_LABELS: Record<string, string> = {
   cancelled: "已取消",
 };
 
-function mergeProjects(localProjects: DramaProject[], cloudProjects: DramaProject[]) {
-  const byId = new Map<string, DramaProject>();
+function mergeProjects(localProjects: ProjectLibraryProject[], cloudProjects: ProjectLibraryProject[]) {
+  const byKey = new Map<string, ProjectLibraryProject>();
   for (const project of [...localProjects, ...cloudProjects]) {
-    const current = byId.get(project.id);
+    const key = project.libraryKey || `${project.source || "project"}:${project.id}`;
+    const current = byKey.get(key);
     if (!current || new Date(project.updatedAt).getTime() >= new Date(current.updatedAt).getTime()) {
-      byId.set(project.id, project);
+      byKey.set(key, project);
     }
   }
-  return Array.from(byId.values());
+  return Array.from(byKey.values());
 }
 
 function formatDate(value: string) {
@@ -97,7 +100,7 @@ function formatJobProgress(job: UnifiedJob) {
   return "处理中";
 }
 
-function projectStage(project: DramaProject) {
+function projectStage(project: ProjectLibraryProject) {
   if (project.finalScript?.trim()) return "剧本定稿";
   if (project.episodes?.trim()) return "分集与场景";
   if (project.outline?.trim()) return "故事大纲";
@@ -115,7 +118,8 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [filters, setFilters] = useState<ProjectLibraryFilters>(EMPTY_FILTERS);
-  const [projects, setProjects] = useState<DramaProject[]>([]);
+  const [projects, setProjects] = useState<ProjectLibraryProject[]>([]);
+  const [deletingProjectKey, setDeletingProjectKey] = useState<string | null>(null);
   const [jobs, setJobs] = useState<UnifiedJob[]>([]);
   const [confirmations, setConfirmations] = useState<ReadonlyArray<KkPendingConfirmation>>([]);
   const [status, setStatus] = useState<LoadStatus>("loading");
@@ -126,9 +130,9 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
     setStatus("loading");
     setProjectError("");
     setSecondaryNotice("");
-    const localProjects = readProjectsFromStorage();
+    const localProjects = readProjectsFromStorage().map(asProjectLibraryRecord);
     const [cloudResult, jobsResult, kkResult] = await Promise.allSettled([
-      readProjectsFromSupabase({ accessToken }),
+      fetchProjectLibrary(accessToken),
       fetchJobs(accessToken),
       fetchKkRuntime(accessToken),
     ]);
@@ -139,7 +143,7 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
       setProjects(localProjects);
       setProjectError(localProjects.length > 0
         ? "云端项目暂时无法读取，当前显示本地缓存。"
-        : "项目数据暂时无法读取，请重试。\n");
+        : "项目数据暂时无法读取，请重试。");
     }
 
     if (jobsResult.status === "fulfilled" && jobsResult.value.source === "api") {
@@ -171,6 +175,25 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
 
   function setFilter<K extends keyof ProjectLibraryFilters>(key: K, value: ProjectLibraryFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleDeleteProject(event: React.MouseEvent<HTMLButtonElement>, project: ProjectLibraryProject) {
+    event.preventDefault();
+    event.stopPropagation();
+    const confirmed = window.confirm(`确认删除项目“${project.title || "未命名项目"}”？删除后无法在项目管理中恢复。`);
+    if (!confirmed) return;
+    const key = project.libraryKey || `${project.source || "project"}:${project.id}`;
+    setDeletingProjectKey(key);
+    setProjectError("");
+    try {
+      await deleteProjectFromLibrary(accessToken, project);
+      if (!project.source || project.source === "project") deleteProject(project.id);
+      setProjects((current) => current.filter((item) => (item.libraryKey || `${item.source || "project"}:${item.id}`) !== key));
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "项目删除失败，请稍后重试。");
+    } finally {
+      setDeletingProjectKey(null);
+    }
   }
 
   return (
@@ -263,26 +286,39 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
             <div className={styles.projectGrid}>
               {visibleProjects.map((project) => {
                 const progress = getProjectProgress(project);
+                const projectKey = project.libraryKey || `${project.source || "project"}:${project.id}`;
                 return (
-                  <Link key={project.id} href={getProjectWorkbenchHref(project)} className={styles.projectCard}>
-                    <div className={styles.projectCardTop}>
-                      <span className={styles.projectType}>{WORKFLOW_LABELS[project.workflowType] || project.workflowType}</span>
-                      <span className={`${styles.statusBadge} ${styles[`status_${project.status}`] || ""}`}>
-                        {STATUS_LABELS[project.status] || project.status}
-                      </span>
-                    </div>
-                    <h3 className={styles.projectCardTitle}>{project.title || "未命名项目"}</h3>
-                    <p className={styles.projectCardStage}>{projectStage(project)}</p>
-                    <div className={styles.projectCardMeta}>
-                      <span>{project.universeId ? <><Globe2 size={13} />已绑定 Universe</> : "未绑定 Universe"}</span>
-                      <span><Clock3 size={13} />{formatDate(project.updatedAt)}</span>
-                    </div>
-                    <div className={styles.projectCardProgress}>
-                      <span>{progress === null ? "暂无可计算进度" : `${progress}% 已完成`}</span>
-                      {progress !== null ? <span className={styles.progressTrack}><i style={{ width: `${progress}%` }} /></span> : null}
-                    </div>
-                    <span className={styles.projectCardAction}>打开项目 <ArrowRight size={14} /></span>
-                  </Link>
+                  <article key={projectKey} className={styles.projectCard}>
+                    <Link href={getProjectWorkbenchHref(project)} className={styles.projectCardLink}>
+                      <div className={styles.projectCardTop}>
+                        <span className={styles.projectType}>{WORKFLOW_LABELS[project.workflowType] || project.workflowType}</span>
+                        <span className={`${styles.statusBadge} ${styles[`status_${project.status}`] || ""}`}>
+                          {STATUS_LABELS[project.status] || project.status}
+                        </span>
+                      </div>
+                      <h3 className={styles.projectCardTitle}>{project.title || "未命名项目"}</h3>
+                      <p className={styles.projectCardStage}>{projectStage(project)}</p>
+                      <div className={styles.projectCardMeta}>
+                        <span>{project.universeId ? <><Globe2 size={13} />已绑定 Universe</> : "未绑定 Universe"}</span>
+                        <span><Clock3 size={13} />{formatDate(project.updatedAt)}</span>
+                      </div>
+                      <div className={styles.projectCardProgress}>
+                        <span>{progress === null ? "暂无可计算进度" : `${progress}% 已完成`}</span>
+                        {progress !== null ? <span className={styles.progressTrack}><i style={{ width: `${progress}%` }} /></span> : null}
+                      </div>
+                      <span className={styles.projectCardAction}>打开项目 <ArrowRight size={14} /></span>
+                    </Link>
+                    <button
+                      type="button"
+                      className={styles.projectCardDelete}
+                      onClick={(event) => void handleDeleteProject(event, project)}
+                      disabled={deletingProjectKey === projectKey}
+                      aria-label={`删除项目 ${project.title || "未命名项目"}`}
+                    >
+                      {deletingProjectKey === projectKey ? <Loader2 size={13} className={styles.spin} /> : <Trash2 size={13} />}
+                      删除
+                    </button>
+                  </article>
                 );
               })}
             </div>

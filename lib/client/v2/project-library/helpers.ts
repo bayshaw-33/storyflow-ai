@@ -1,5 +1,5 @@
-import type { DramaProject } from "../../../projects.ts";
 import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
+import type { ProjectLibraryProject } from "./types.ts";
 
 export type ProjectLibrarySort = "updated" | "created" | "title";
 export type ProjectLibraryFilters = {
@@ -38,11 +38,11 @@ function timestamp(value: string | undefined) {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function isRetiredNovelProject(project: DramaProject) {
+function isRetiredNovelProject(project: ProjectLibraryProject) {
   return isRetiredNovelRecord(project) || project.workflowType === "novel";
 }
 
-export function getProjectProgress(project: DramaProject): number | null {
+export function getProjectProgress(project: ProjectLibraryProject): number | null {
   const fields = project.workflowType === "continuation"
     ? CONTINUATION_PROGRESS_FIELDS
     : project.workflowType === "creation"
@@ -55,9 +55,9 @@ export function getProjectProgress(project: DramaProject): number | null {
 }
 
 export function filterAndSortProjects(
-  projects: DramaProject[],
+  projects: ProjectLibraryProject[],
   filters: ProjectLibraryFilters,
-): DramaProject[] {
+): ProjectLibraryProject[] {
   const query = normalized(filters.query);
   const workflow = normalized(filters.workflow);
   const status = normalized(filters.status);
@@ -75,11 +75,15 @@ export function filterAndSortProjects(
     });
 }
 
-export function getProjectWorkbenchHref(project: DramaProject) {
+export function getProjectWorkbenchHref(project: ProjectLibraryProject) {
   const projectId = encodeURIComponent(project.id);
+  const sourceUnitId = encodeURIComponent(project.sourceUnitId || `project-${project.id}`);
   if (project.workflowType === "song") return `/song-workbench?projectId=${projectId}`;
-  if (project.workflowType === "storyboard") return `/production?projectId=${projectId}&mode=planning`;
-  if (project.workflowType === "video") return `/production?projectId=${projectId}&mode=editor`;
+  if (project.workflowType === "storyboard") return `/production?projectId=${projectId}&sourceUnitId=${sourceUnitId}&mode=planning`;
+  if (project.workflowType === "video") return `/production?projectId=${projectId}&sourceUnitId=${sourceUnitId}&mode=editor`;
+  if (project.workflowType === "art") return `/production?projectId=${projectId}&sourceUnitId=${sourceUnitId}&mode=art`;
+  if (project.workflowType === "voice") return `/casting?projectId=${projectId}`;
+  if (project.workflowType === "editing") return `/editor?projectId=${projectId}&sourceUnitId=${sourceUnitId}`;
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${projectId}`;

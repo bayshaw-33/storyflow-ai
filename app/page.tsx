@@ -8,9 +8,10 @@ import { ContentSection } from "@/components/home/ContentSection";
 import { AuthModal } from "@/components/layout/AuthModal";
 import { TopNav } from "@/components/layout/TopNav";
 import {
-  hasWorkspaceModalPostLoginAction,
-  requestWorkspaceModalAfterLogin,
-  useWorkspaceModal,
+  clearProjectStartPostLoginAction,
+  clearWorkspaceModalPostLoginAction,
+  hasProjectStartPostLoginAction,
+  requestProjectStartAfterLogin,
 } from "@/hooks/use-workspace-modal";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -25,7 +26,6 @@ function heroBg(token: Parameters<typeof assetUrl>[0]) {
 export default function LandingPage() {
   const router = useRouter();
   const { locale } = useI18n();
-  const { openModal } = useWorkspaceModal();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -42,10 +42,14 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    if (session && hasWorkspaceModalPostLoginAction()) {
-      openModal();
+    if (session && hasProjectStartPostLoginAction()) {
+      clearProjectStartPostLoginAction();
+      router.push("/projects/new-v2");
     }
-  }, [session, openModal]);
+    // Old sessions may still contain the retired modal action. Do not reopen
+    // the legacy prompt after the unified entry has shipped.
+    clearWorkspaceModalPostLoginAction();
+  }, [session, router]);
 
   async function signOut() {
     const supabase = getSupabaseBrowserClient();
@@ -57,13 +61,13 @@ export default function LandingPage() {
     router.push("/dashboard");
   }
 
-  function enterWorkspaceModal() {
+  function enterProjectStart() {
     if (session) {
-      openModal();
+      router.push("/projects/new-v2");
       return;
     }
 
-    requestWorkspaceModalAfterLogin();
+    requestProjectStartAfterLogin();
     openAuth("signin");
   }
 
@@ -82,7 +86,7 @@ export default function LandingPage() {
         onSignOut={signOut}
       />
       <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
-      <HeroSection onStartCreating={enterWorkspaceModal} />
+      <HeroSection onStartCreating={enterProjectStart} />
 
       <ContentSection
         id="workspace"

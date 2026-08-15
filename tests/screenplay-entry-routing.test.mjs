@@ -50,3 +50,11 @@ test("the screenplay route resolves legacy project ids into ScreenplayStudio", (
   assert.match(source, /resolve-work\?projectId=/);
   assert.match(source, /<ScreenplayStudio \/>/);
 });
+
+test("homepage Hero enters the unified project-start grid instead of the retired modal", () => {
+  const source = read("../app/page.tsx");
+  assert.match(source, /router\.push\(["']\/projects\/new-v2["']\)/);
+  assert.doesNotMatch(source, /useWorkspaceModal/);
+  assert.doesNotMatch(source, /requestWorkspaceModalAfterLogin/);
+  assert.doesNotMatch(source, /openModal\(\)/);
+});
