@@ -8,6 +8,7 @@
 
 import { useCallback, useState } from "react";
 import styles from "./ScreenplayStudio.module.css";
+import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
 
 export interface ContinuityFindingDto {
   id: string;
@@ -46,7 +47,7 @@ export function ContinuityPanel({ workId, findings, unitTitleById, onOpenUnit, o
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/continuity`);
+      const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/continuity`);
       const body = (await response.json().catch(() => ({}))) as { success?: boolean; findings?: ContinuityFindingDto[]; error?: string };
       if (!response.ok || !body.success) throw new Error(body.error ?? "分析失败");
       onFindingsChange(body.findings ?? []);
@@ -62,7 +63,7 @@ export function ContinuityPanel({ workId, findings, unitTitleById, onOpenUnit, o
       setBusy(true);
       setError(null);
       try {
-        const response = await fetch(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/continuity`, {
+        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/continuity`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ findingId, action }),

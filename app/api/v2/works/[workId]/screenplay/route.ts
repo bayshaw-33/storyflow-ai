@@ -4,7 +4,7 @@
  * Phase 3 Task 3.2
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import {
   ScreenplayUnitsService,
   ScreenplayUnitsError,
@@ -14,14 +14,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ workId: string }> },
 ) {
   try {
     if (!hasServiceRoleConfig()) {
       return unavailable();
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const { workId } = await params;
     const service = new ScreenplayUnitsService(serviceFetch);
@@ -38,7 +38,7 @@ export async function POST(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));

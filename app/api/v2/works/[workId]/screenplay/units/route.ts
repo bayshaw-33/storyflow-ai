@@ -4,7 +4,7 @@
  * Phase 3 Task 3.3
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import {
   ScreenplayUnitsService,
   ScreenplayUnitsError,
@@ -19,7 +19,7 @@ export async function GET(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) return unauthorized();
     const { workId } = await params;
     const service = new ScreenplayUnitsService(serviceFetch);
@@ -36,7 +36,7 @@ export async function POST(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));

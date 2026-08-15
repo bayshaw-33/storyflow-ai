@@ -20,6 +20,7 @@ import {
   type StaleEdgeDto,
 } from "@/lib/client/v2/screenplay-studio/api";
 import { parseStudioUrl } from "@/lib/client/v2/screenplay-studio/types";
+import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
 import { UnitNavigator } from "./UnitNavigator";
 import { ScreenplayEditor } from "./ScreenplayEditor";
 import { StudioRightPanel } from "./StudioRightPanel";
@@ -154,7 +155,7 @@ export function ScreenplayStudio() {
       try {
         // The screenplay collection POST adapts legacy; creation uses units endpoint semantics:
         // we append via saveUnitContent-free create by posting identity fields.
-        const response = await fetch(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/units`, {
+        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/units`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type, title: "", parentId, order: units.filter((u) => u.type === type).length + 1 }),

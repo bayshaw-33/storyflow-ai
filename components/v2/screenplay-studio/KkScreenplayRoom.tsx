@@ -16,6 +16,7 @@ import {
   createCandidateDiffViewModel,
   nextDiffReviewState,
 } from "@/lib/client/v2/screenplay-studio/types";
+import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
 import { CandidateDiffPanel } from "./CandidateDiffPanel";
 import styles from "./ScreenplayStudio.module.css";
 
@@ -68,7 +69,7 @@ export function KkScreenplayRoom({
       setError(null);
       onInputPreserved(text);
       try {
-        const response = await fetch(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/${action === "discuss" ? "discuss" : "propose-change"}`, {
+        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/${action === "discuss" ? "discuss" : "propose-change"}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ conversationId, userMessage: text }),
@@ -112,7 +113,7 @@ export function KkScreenplayRoom({
       if (!pendingCandidate) return;
       setBusy(true);
       try {
-        const response = await fetch(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/propose-change`, {
+        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/propose-change`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ candidateId: pendingCandidate.id, acceptedPatchIndexes: acceptedIndexes }),
@@ -135,7 +136,7 @@ export function KkScreenplayRoom({
     if (!pendingCandidate) return;
     setBusy(true);
     try {
-      const response = await fetch(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/propose-change`, {
+      const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/propose-change`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ candidateId: pendingCandidate.id }),

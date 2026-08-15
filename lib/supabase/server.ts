@@ -89,6 +89,21 @@ export async function getViewerFromCookies(): Promise<AuthenticatedUser | null> 
   }
 }
 
+/**
+ * Read the viewer from the request Bearer token, with the server cookie as a
+ * backwards-compatible fallback for SSR/session-cookie callers.
+ */
+export async function getViewerFromRequest(request: Request): Promise<AuthenticatedUser | null> {
+  if (readBearerToken(request)) {
+    try {
+      return await authenticateRequest(request);
+    } catch {
+      return null;
+    }
+  }
+  return getViewerFromCookies();
+}
+
 async function readAccessTokenFromCookie(): Promise<string> {
   const cookieStore = await cookies();
   const ref = getSupabaseProjectRef();

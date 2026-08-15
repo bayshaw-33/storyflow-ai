@@ -5,6 +5,7 @@
  */
 
 import type { ScreenplayUnitType } from "../../../contracts/v2/screenplay-studio.ts";
+import { fetchScreenplayStudio } from "./auth";
 
 export interface ScreenplayUnitClientDto {
   id: string;
@@ -40,10 +41,7 @@ export class ScreenplayStudioApiError extends Error {
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
+  const response = await fetchScreenplayStudio(path, init);
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok || body.success === false) {
     throw new ScreenplayStudioApiError(
