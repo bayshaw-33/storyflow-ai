@@ -23,6 +23,9 @@ import { parseStudioUrl } from "@/lib/client/v2/screenplay-studio/types";
 import { UnitNavigator } from "./UnitNavigator";
 import { ScreenplayEditor } from "./ScreenplayEditor";
 import { StudioRightPanel } from "./StudioRightPanel";
+import { KkScreenplayRoom, type KkMessage, type KkCandidate } from "./KkScreenplayRoom";
+import { ContinuityPanel, type ContinuityFindingDto } from "./ContinuityPanel";
+import { ReferenceList, type PacketReferenceDto } from "./ReferenceList";
 import styles from "./ScreenplayStudio.module.css";
 
 const NEXT_PARENT_TYPE: Record<string, "world" | "character" | "outline" | "episode" | "scene" | null> = {
@@ -49,10 +52,16 @@ export function ScreenplayStudio() {
   const [narrow, setNarrow] = useState(false);
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
+  const [kkMessages, setKkMessages] = useState<KkMessage[]>([]);
+  const [kkCandidate, setKkCandidate] = useState<KkCandidate | null>(null);
+  const [preservedInput, setPreservedInput] = useState("");
+  const [findings, setFindings] = useState<ContinuityFindingDto[]>([]);
+  const [references, setReferences] = useState<PacketReferenceDto[]>([]);
   const bootstrappedRef = useRef(false);
 
   const workId = searchParams.get("workId");
   const urlUnitId = searchParams.get("unitId");
+  const conversationId = useMemo(() => `kk-${workId ?? "default"}`, [workId]);
 
   // Responsive: 390/768/1440/2560 no horizontal overflow; drawers on narrow.
   useEffect(() => {
@@ -297,9 +306,42 @@ export function ScreenplayStudio() {
           onResolveStale={resolveStaleEdge}
           currentVersionId={activeUnit?.currentVersionId ?? null}
           finalizedVersionId={activeUnit?.finalizedVersionId ?? null}
-          references={null}
-          kkRoom={null}
-          continuityPanel={null}
+          references={<ReferenceList references={references} onOpenSource={() => openUnit(activeUnitId ?? "")} />}
+          kkRoom={
+            workId ? (
+              <KkScreenplayRoom
+                workId={workId}
+                conversationId={conversationId}
+                messages={kkMessages}
+                pendingCandidate={kkCandidate}
+                onMessagesChange={setKkMessages}
+                onCandidateChange={setKkCandidate}
+                onAppliedVersion={async (versionId) => {
+                  // refresh units to reflect the new work version pointer
+                  try {
+                    const { units: list } = await screenplayStudioApi.listUnits(workId);
+                    setUnits(list);
+                  } catch {
+                    /* refresh best-effort; version id recorded */
+                  }
+                  void versionId;
+                }}
+                onInputPreserved={setPreservedInput}
+                preservedInput={preservedInput}
+              />
+            ) : null
+          }
+          continuityPanel={
+            workId ? (
+              <ContinuityPanel
+                workId={workId}
+                findings={findings}
+                unitTitleById={unitTitleById}
+                onOpenUnit={openUnit}
+                onFindingsChange={setFindings}
+              />
+            ) : null
+          }
         />
       </div>
       {narrow ? (
