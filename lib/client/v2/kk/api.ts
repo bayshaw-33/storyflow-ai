@@ -29,9 +29,10 @@ import {
   type KkEventEntry,
 } from "./types.ts";
 
-/** 是否使用 fixture 演示数据（向后兼容） */
-export const USE_FIXTURE =
-  process.env.NEXT_PUBLIC_USE_KK_FIXTURE !== "false";
+/** 是否使用 fixture 演示数据（fail-closed：生产环境恒 false，Phase 6 Task 6.2） */
+import { isFixtureEnabled } from "../runtime-mode.ts";
+
+export const USE_FIXTURE = isFixtureEnabled("NEXT_PUBLIC_USE_KK_FIXTURE", process.env);
 
 export interface KkResult {
   messages: KkMessage[];

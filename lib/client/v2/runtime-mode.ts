@@ -30,11 +30,19 @@ export function detectRuntimeMode(env: EnvLike): RuntimeMode {
  * - production: 永远不允许 (K21-FF-002)
  */
 export function isFixtureAllowed(env: EnvLike): boolean {
+  return isFixtureEnabled("NEXT_PUBLIC_USE_FIXTURE", env);
+}
+
+/**
+ * Phase 6 Task 6.2 — 通用 fixture 开关（fail-closed）。
+ * 各模块开关（如 NEXT_PUBLIC_USE_KK_FIXTURE）统一走此函数：
+ *   - production/preview：未显式 true/1 一律关闭（生产永远关闭）
+ *   - development：显式 true/1 才开启（开发默认关闭，避免误用 fixture 冒充真实）
+ */
+export function isFixtureEnabled(envName: string, env: EnvLike): boolean {
   const mode = detectRuntimeMode(env);
   if (mode === "production") return false;
-  if (mode === "development") return true;
-  // preview
-  const explicit = String(env.NEXT_PUBLIC_USE_FIXTURE ?? "").toLowerCase();
+  const explicit = String(env[envName] ?? "").toLowerCase();
   return explicit === "true" || explicit === "1";
 }
 

@@ -26,9 +26,11 @@ import {
 import type { ChangeProposalStatus } from "../../../contracts/v2/index.ts";
 
 // 全局开关：环境变量 NEXT_PUBLIC_USE_SHORT_DRAMA_FIXTURE 控制。
-// 未设置或非 "false" 时走 fixture（默认，UI 可独立预览 T-08 全部交付物）；
-// 显式 "false" 走真实 Codex API。
-export const USE_FIXTURE = process.env.NEXT_PUBLIC_USE_SHORT_DRAMA_FIXTURE !== "false";
+// fail-closed（Phase 6 Task 6.2）：production 恒 false；development/preview
+// 需显式 "true" 才走 fixture，否则走真实 API。
+import { isFixtureEnabled } from "../runtime-mode.ts";
+
+export const USE_FIXTURE = isFixtureEnabled("NEXT_PUBLIC_USE_SHORT_DRAMA_FIXTURE", process.env);
 
 // Codex v2 API 基础路径。
 const PROJECT_UNIVERSE_API = "/api/v2/projects";

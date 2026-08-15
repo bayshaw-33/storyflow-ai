@@ -31,7 +31,9 @@ import {
 // 全局开关：环境变量 NEXT_PUBLIC_USE_UNIVERSE_FIXTURE 控制。
 // 未设置或非 "false" 时走 fixture（默认，UI 可独立预览全部 9 个交付物）；
 // 显式 "false" 走真实 Codex API。
-export const USE_FIXTURE = process.env.NEXT_PUBLIC_USE_UNIVERSE_FIXTURE !== "false";
+import { isFixtureEnabled } from "../runtime-mode.ts";
+
+export const USE_FIXTURE = isFixtureEnabled("NEXT_PUBLIC_USE_UNIVERSE_FIXTURE", process.env);
 
 // Codex v2 API 基础路径。
 const API_PATH = "/api/v2/universes";
