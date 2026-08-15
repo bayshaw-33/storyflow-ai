@@ -31,6 +31,7 @@ test("listUnifiedJobs aggregates text, media, transfer, export and analysis sour
     if (path.includes("storyflow_generation_tasks")) return [{ id: "text-1", user_id: "u-1", project_id: "p-1", step_key: "script", phase_key: "script_production", status: "completed", created_at: "2026-08-12T00:00:00Z", completed_at: "2026-08-12T00:01:00Z", output_snapshot: "done" }];
     if (path.includes("storyflow_generation_jobs")) return [{ id: "media-1", owner_id: "u-1", project_id: "p-1", job_type: "video", status: "partial_failure", created_at: "2026-08-12T00:00:00Z", result_metadata: { completedCount: 2, totalCount: 3, results: ["asset-1", "asset-2"] } }];
     if (path.includes("storyflow_exports")) return [{ id: "export-1", user_id: "u-1", project_id: "p-1", status: "completed", created_at: "2026-08-12T00:03:00Z" }];
+    if (path.includes("storyflow_projects")) return [{ id: "p-1", workflow_type: "script", mode: null, data: {} }];
     throw new Error(`unexpected query: ${path}`);
   };
   const result = await listUnifiedJobs({ fetcher, userId: "u-1", projectId: "p-1", now: new Date("2026-08-12T00:10:00Z") });
@@ -39,7 +40,19 @@ test("listUnifiedJobs aggregates text, media, transfer, export and analysis sour
   assert.equal(result.items.find((job) => job.id === "media-1").progress.completed, 2);
   assert.equal(result.items.find((job) => job.id === "media-1").progress.total, 3);
   assert.deepEqual(result.items.find((job) => job.id === "media-1").resultReferences, ["asset-1", "asset-2"]);
-  assert.equal(calls.every((path) => path.includes("u-1") || path.includes("user_id=eq.u-1") || path.includes("owner_id=eq.u-1")), true);
+  assert.equal(calls.every((path) => path.includes("u-1") || path.includes("user_id=eq.u-1") || path.includes("owner_id=eq.u-1") || path.includes("storyflow_projects")), true);
+});
+
+test("listUnifiedJobs hides jobs whose project has an explicit retired novel marker", async () => {
+  const fetcher = async (path) => {
+    if (path.includes("storyflow_generation_tasks")) return [{ id: "novel-task", user_id: "u-1", project_id: "p-novel", step_key: "script", phase_key: "script_production", status: "completed", created_at: "2026-08-12T00:00:00Z" }];
+    if (path.includes("storyflow_generation_jobs")) return [];
+    if (path.includes("storyflow_exports")) return [];
+    if (path.includes("storyflow_projects")) return [{ id: "p-novel", workflow_type: "creation", mode: "novel", data: {} }];
+    throw new Error(`unexpected query: ${path}`);
+  };
+  const result = await listUnifiedJobs({ fetcher, userId: "u-1" });
+  assert.deepEqual(result.items, []);
 });
 
 test("missing jobs are distinguishable from service errors", async () => {

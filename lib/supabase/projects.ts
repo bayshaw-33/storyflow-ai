@@ -90,7 +90,7 @@ export async function syncProjectsWithSupabase(localProjects: DramaProject[], op
     };
   } catch (error) {
     return {
-      projects: localProjects,
+      projects: visibleLocalProjects,
       groups: readProjectGroupsFromStorage(),
       enabled: true,
       error: error instanceof Error ? error.message : "Supabase 同步失败，已使用本地缓存。",

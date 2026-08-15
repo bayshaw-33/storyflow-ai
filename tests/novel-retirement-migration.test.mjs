@@ -11,6 +11,10 @@ test("novel retirement migration is scoped to explicit structured markers", () =
   assert.match(migration, /p\.workflow_type = 'novel'/);
   assert.match(migration, /p\.data ->> 'contentType' = 'novel'/);
   assert.match(migration, /DELETE FROM public\.storyflow_projects AS p[\s\S]*p\.id IN \(SELECT id FROM _kiikis_retired_novel_projects\)/);
+  assert.match(migration, /DISABLE TRIGGER evidence_events_immutable/);
+  assert.match(migration, /DISABLE TRIGGER trg_block_delete_work_versions/);
+  assert.match(migration, /storyflow_generations/);
+  assert.match(migration, /storyflow_versions/);
   assert.match(migration, /preserved_universes/);
   assert.match(migration, /preserved_assets/);
   assert.doesNotMatch(migration, /DELETE FROM public\.storyflow_projects\s*;/);

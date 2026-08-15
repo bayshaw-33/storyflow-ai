@@ -38,8 +38,7 @@ INSERT INTO _kiikis_retired_novel_generation_tasks (id)
 SELECT t.id
 FROM public.storyflow_generation_tasks AS t
 WHERE t.project_id IN (SELECT id FROM _kiikis_retired_novel_projects)
-   OR t.step_key LIKE 'novel\_%' ESCAPE '\'
-   OR t.phase_key LIKE 'novel\_%' ESCAPE '\';
+   OR t.project_ref IN (SELECT id FROM _kiikis_retired_novel_projects);
 
 CREATE TEMP TABLE _kiikis_retired_novel_generation_jobs (
   id uuid PRIMARY KEY
@@ -48,8 +47,7 @@ CREATE TEMP TABLE _kiikis_retired_novel_generation_jobs (
 INSERT INTO _kiikis_retired_novel_generation_jobs (id)
 SELECT j.id
 FROM public.storyflow_generation_jobs AS j
-WHERE j.project_id IN (SELECT id FROM _kiikis_retired_novel_projects)
-   OR j.job_type LIKE 'novel\_%' ESCAPE '\';
+WHERE j.project_id IN (SELECT id FROM _kiikis_retired_novel_projects);
 
 CREATE TEMP TABLE _kiikis_retired_novel_evidence_cases (
   id uuid PRIMARY KEY
@@ -78,6 +76,14 @@ BEGIN
   SELECT count(*) INTO preserved_universes FROM public.storyflow_universes;
   SELECT count(*) INTO preserved_assets FROM public.storyflow_assets;
 
+  -- These tables intentionally reject ordinary deletes because their history
+  -- is append-only. This migration is the explicit, one-time retirement of a
+  -- whole workflow, so bypass only the delete guards for the rows selected by
+  -- the structured novel markers below, then restore the guards immediately.
+  ALTER TABLE public.storyflow_evidence_events DISABLE TRIGGER evidence_events_immutable;
+  ALTER TABLE public.storyflow_work_versions DISABLE TRIGGER trg_block_delete_work_versions;
+  ALTER TABLE public.storyflow_conversation_messages DISABLE TRIGGER trg_block_delete_messages;
+
   -- These tables are not all FK-linked to the legacy project tables, so remove
   -- their rows through explicit project/work/task markers first.
   DELETE FROM public.storyflow_task_events AS e
@@ -101,6 +107,12 @@ BEGIN
 
   DELETE FROM public.storyflow_generation_jobs AS j
   WHERE j.id IN (SELECT id FROM _kiikis_retired_novel_generation_jobs);
+
+  DELETE FROM public.storyflow_generations AS g
+  WHERE g.project_id IN (SELECT id FROM _kiikis_retired_novel_projects);
+
+  DELETE FROM public.storyflow_versions AS v
+  WHERE v.project_id IN (SELECT id FROM _kiikis_retired_novel_projects);
 
   DELETE FROM public.storyflow_evidence_events AS e
   WHERE e.case_id IN (SELECT id FROM _kiikis_retired_novel_evidence_cases)
@@ -143,6 +155,10 @@ BEGIN
 
   DELETE FROM public.storyflow_projects AS p
   WHERE p.id IN (SELECT id FROM _kiikis_retired_novel_projects);
+
+  ALTER TABLE public.storyflow_evidence_events ENABLE TRIGGER evidence_events_immutable;
+  ALTER TABLE public.storyflow_work_versions ENABLE TRIGGER trg_block_delete_work_versions;
+  ALTER TABLE public.storyflow_conversation_messages ENABLE TRIGGER trg_block_delete_messages;
 
   -- Remove retired model-prompt configuration, including its version history.
   DELETE FROM public.storyflow_ai_prompt_overrides

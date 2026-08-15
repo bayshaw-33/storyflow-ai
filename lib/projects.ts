@@ -1,6 +1,7 @@
 import type { ChineseScriptRange, FinalScriptVersion, LocalizationMode, TaskType } from "./ai/prompts";
 import { normalizeCreationWorkspace } from "./creation/state.ts";
 import type { CreationWorkspaceV2 } from "./creation/types.ts";
+import { isRetiredNovelRecord } from "./v2/retired-novel";
 
 export type ProjectStatus = "draft" | "generating" | "ready" | "error";
 export type WorkflowType = "creation" | "continuation" | "song" | "viral" | "novel" | "storyboard" | "video";
@@ -724,15 +725,7 @@ export function saveProjectsToStorage(projects: DramaProject[]) {
  * 以免误删剧本、歌曲或其他工作流项目。
  */
 export function isRetiredNovelProject(project: Partial<DramaProject>): boolean {
-  const record = project as Record<string, unknown>;
-  return [
-    record.workflowType,
-    record.contentType,
-    record.workType,
-    record.workflow_type,
-    record.content_type,
-    record.work_type,
-  ].some((value) => value === "novel");
+  return isRetiredNovelRecord(project);
 }
 
 export function normalizeStoredProject(project: Partial<DramaProject>): DramaProject {
