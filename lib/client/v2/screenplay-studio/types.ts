@@ -107,6 +107,76 @@ export function formalActionRequiresFinalized(action: string): boolean {
   return (FORMAL_ACTIONS as readonly string[]).includes(action);
 }
 
+// ---------------------------------------------------------------------------
+// KK two-action semantics — Phase 3 Task 3.4
+// ---------------------------------------------------------------------------
+
+export const KK_ACTION_MODES = ["discuss", "propose_change"] as const;
+export type KkActionMode = (typeof KK_ACTION_MODES)[number];
+
+const DISCUSS_INTENTS = ["聊一聊", "讨论", "聊聊", "参谋"];
+const PROPOSE_INTENTS = ["生成修改方案", "帮我改", "改一版", "提出修改"];
+
+export function resolveKkActionMode(intent: string): KkActionMode {
+  if (PROPOSE_INTENTS.some((k) => intent.includes(k))) return "propose_change";
+  if (DISCUSS_INTENTS.some((k) => intent.includes(k))) return "discuss";
+  return "discuss"; // default: never silently rewrite content
+}
+
+export interface CandidatePatchClient {
+  unitPath: string;
+  before: string;
+  after: string;
+}
+
+export interface CandidateDiffInput {
+  id: string;
+  status: string;
+  patches: CandidatePatchClient[];
+  error?: string;
+}
+
+export interface CandidateDiffHunk extends CandidatePatchClient {
+  accepted: boolean;
+}
+
+export interface CandidateDiffViewModel {
+  id: string;
+  status: string;
+  hunks: CandidateDiffHunk[];
+  anyAccepted: boolean;
+  allAccepted: boolean;
+  persisted: boolean;
+  canRetry: boolean;
+  inputPreserved: boolean;
+}
+
+export function createCandidateDiffViewModel(input: CandidateDiffInput): CandidateDiffViewModel {
+  const failed = input.status === "failed";
+  return {
+    id: input.id,
+    status: input.status,
+    hunks: input.patches.map((p) => ({ ...p, accepted: false })),
+    anyAccepted: false,
+    allAccepted: input.patches.length > 0 && input.patches.every(() => false),
+    persisted: false,
+    canRetry: failed,
+    inputPreserved: true,
+  };
+}
+
+export function nextDiffReviewState(vm: CandidateDiffViewModel, hunkIndex: number, accepted: boolean): CandidateDiffViewModel {
+  const hunks = vm.hunks.map((h, i) => (i === hunkIndex ? { ...h, accepted } : h));
+  return {
+    ...vm,
+    hunks,
+    anyAccepted: hunks.some((h) => h.accepted),
+    allAccepted: hunks.length > 0 && hunks.every((h) => h.accepted),
+    // reviewing is UI-only; persistence still requires explicit apply
+    persisted: false,
+  };
+}
+
 /** Draft try-outs never block: they auto-freeze a source Checkpoint. */
 export function draftTryoutPolicy(action: string): { blocked: boolean; autoFreeze: "checkpoint" | null } {
   const tryouts = ["art_tryout", "storyboard_tryout", "voice_tryout"];
