@@ -39,6 +39,9 @@ import {
 const MIGRATION_PATH = path.resolve(
   "supabase/migrations/20260828000000_K22-P0_work_identity.sql",
 );
+const RPC_FIX_MIGRATION_PATH = path.resolve(
+  "supabase/migrations/20260829020000_K22-P0_fix_project_start_rpc_ambiguity.sql",
+);
 
 // ============================================================
 // 1. Contract surface
@@ -340,6 +343,18 @@ test("migration defines create_project_with_primary_work SECURITY DEFINER RPC", 
   assert.match(sql, /CREATE OR REPLACE FUNCTION public\.create_project_with_primary_work/);
   assert.match(sql, /SECURITY DEFINER/);
   assert.match(sql, /storyflow_project_starts/);
+});
+
+test("migration qualifies project-start ledger fields so RPC return columns are unambiguous", () => {
+  assert.ok(
+    fs.existsSync(RPC_FIX_MIGRATION_PATH),
+    `expected RPC fix migration at ${RPC_FIX_MIGRATION_PATH}`,
+  );
+  const sql = fs.readFileSync(RPC_FIX_MIGRATION_PATH, "utf8");
+  assert.match(
+    sql,
+    /SELECT\s+starts\.project_id,\s+starts\.work_id\s+INTO\s+existing_project_id,\s+existing_work_id\s+FROM\s+public\.storyflow_project_starts\s+AS\s+starts/i,
+  );
 });
 
 test("migration enables RLS on storyflow_works and storyflow_project_starts", () => {
