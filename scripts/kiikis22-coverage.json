@@ -1,0 +1,185 @@
+{
+  "schemaVersion": "kiikis22.coverage/1",
+  "prdPath": "docs/kiikis-2.2/KIIKIS-2.2-总PRD-v1.0.md",
+  "groups": {
+    "ENTRY": {
+      "label": "入口与项目解析",
+      "ids": {
+        "ENTRY-001": [
+          "e2e/v22-project-entry.spec.ts"
+        ],
+        "ENTRY-002": [
+          "tests/ui-v2/project-start/project-start.test.mjs"
+        ],
+        "ENTRY-003": [
+          "tests/ui-v2/project-start/project-start.test.mjs"
+        ],
+        "ENTRY-004": [
+          "e2e/legacy-redirects.spec.ts"
+        ],
+        "ENTRY-005": [
+          "tests/ui-v2/project-library/project-library.test.mjs"
+        ],
+        "ENTRY-006": [
+          "e2e/v22-project-entry.spec.ts"
+        ]
+      }
+    },
+    "SW": {
+      "label": "剧本室",
+      "ids": {
+        "SW-002": [
+          "tests/server-v2/screenplays/units.test.mjs"
+        ],
+        "SW-003": [
+          "tests/server-v2/screenplays/dependencies.test.mjs"
+        ],
+        "SW-004": [
+          "tests/server-v2/screenplays/generation.test.mjs"
+        ],
+        "SW-005": [
+          "tests/ui-v2/screenplay-studio/navigation.test.mjs"
+        ],
+        "SW-006": [
+          "tests/server-v2/screenplays/continuity.test.mjs"
+        ],
+        "SW-007": [
+          "tests/ui-v2/screenplay-studio/layout.test.mjs"
+        ],
+        "SW-008": [
+          "e2e/v22-screenplay-navigation.spec.ts"
+        ],
+        "SW-001": [
+          "tests/contracts-v22/screenplay-studio.test.mjs"
+        ]
+      }
+    },
+    "UNI": {
+      "label": "Universe 继承",
+      "ids": {
+        "UNI-001": [
+          "tests/ui-v2/universe/universe.test.mjs"
+        ],
+        "UNI-002": [
+          "tests/server-v2/universe-read/universe-read.test.mjs"
+        ],
+        "UNI-003": [
+          "tests/ui-v2/universe/universe.test.mjs"
+        ],
+        "UNI-004": [
+          "tests/server-v2/universe-read/universe-read.test.mjs"
+        ],
+        "UNI-005": [
+          "tests/ui-v2/universe/universe.test.mjs"
+        ],
+        "UNI-006": [
+          "tests/server-v2/universe-read/universe-read.test.mjs"
+        ],
+        "UNI-007": [
+          "tests/ui-v2/universe/universe.test.mjs"
+        ],
+        "UNI-008": [
+          "tests/server-v2/universe-read/universe-read.test.mjs"
+        ]
+      }
+    },
+    "IMP": {
+      "label": "站外原作导入",
+      "ids": {
+        "IMP-001": [
+          "tests/contracts-v22/universe-import.test.mjs"
+        ],
+        "IMP-002": [
+          "tests/server-v2/universe-import/sessions.test.mjs"
+        ],
+        "IMP-003": [
+          "tests/server-v2/universe-import/state-machine.test.mjs"
+        ],
+        "IMP-004": [
+          "tests/server-v2/universe-import/parsers.test.mjs"
+        ],
+        "IMP-005": [
+          "tests/server-v2/universe-import/extraction.test.mjs"
+        ],
+        "IMP-006": [
+          "tests/ui-v2/universe-import/universe-import.test.mjs"
+        ],
+        "IMP-007": [
+          "tests/server-v2/universe-import/finalize.test.mjs"
+        ],
+        "IMP-008": [
+          "tests/server-v2/universe-import/revisions.test.mjs"
+        ],
+        "IMP-009": [
+          "tests/server-v2/universe-import/storage.test.mjs"
+        ],
+        "IMP-010": [
+          "e2e/v22-universe-import-review.spec.ts"
+        ]
+      }
+    },
+    "SONG": {
+      "label": "歌曲",
+      "ids": {
+        "SONG-001": [
+          "tests/song-conversation-ledger.test.mjs"
+        ],
+        "SONG-002": [
+          "tests/song-generation-latest-input.test.mjs"
+        ],
+        "SONG-003": [
+          "tests/song-generation-latest-input.test.mjs"
+        ],
+        "SONG-004": [
+          "tests/song-prompt.test.mjs"
+        ],
+        "SONG-005": [
+          "tests/song-translation.test.mjs"
+        ]
+      }
+    },
+    "JOB": {
+      "label": "Job 与任务中心",
+      "ids": {
+        "JOB-001": [
+          "tests/ui-v2/task-center/task-center.test.mjs"
+        ],
+        "JOB-002": [
+          "tests/ui-v2/task-center/jobs-transition.test.mjs"
+        ],
+        "JOB-003": [
+          "tests/ui-v2/kk/kk-task-projection.test.mjs"
+        ],
+        "JOB-004": [
+          "tests/ui-v2/task-center/api-adapter.test.mjs"
+        ],
+        "JOB-005": [
+          "e2e/v22-job-actions.spec.ts"
+        ],
+        "JOB-006": [
+          "tests/ui-v2/kk/kk.test.mjs"
+        ]
+      }
+    },
+    "MKT": {
+      "label": "社区与演员市场",
+      "ids": {
+        "MKT-001": [
+          "tests/ui-v2/marketplace/marketplace.test.mjs"
+        ],
+        "MKT-002": [
+          "tests/ui-v2/community/p0-correlation-id.test.mjs"
+        ],
+        "MKT-003": [
+          "tests/ui-v2/marketplace/api-adapter.test.mjs"
+        ],
+        "MKT-004": [
+          "e2e/v22-market-services.spec.ts"
+        ],
+        "MKT-005": [
+          "tests/community-route-filter-validation.test.mjs"
+        ]
+      }
+    }
+  }
+}
