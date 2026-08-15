@@ -24,20 +24,20 @@ import {
   fetchAssets,
   fetchAssemblyTimeline,
   fetchGenerationJobs,
-} from "./queries";
+} from "./queries.ts";
 import {
   okEntry,
   missingEntry,
   failedEntry,
   emptyEntry,
   buildManifest,
-} from "./manifest";
-import { isExportError, ExportError } from "./types";
+} from "./manifest.ts";
+import { isExportError, ExportError } from "./types.ts";
 import type {
   ManifestEntry,
   ProductionPackage,
   ProductionManifest,
-} from "./types";
+} from "./types.ts";
 
 // ============================================================
 // 单个文件构造器
@@ -242,3 +242,18 @@ export async function buildProductionPackage(params: {
     manifest,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5 Task 5.6 — 确定性导出包（实现见 deterministic-package.ts）
+// ---------------------------------------------------------------------------
+export {
+  buildDeterministicPackage,
+  packageManifest,
+  resolveArtifactOrigin,
+} from "./deterministic-package.ts";
+export type {
+  DeterministicPackageInput,
+  DeterministicPackageArtifact,
+  DeterministicPackage,
+  PackageManifestView,
+} from "./deterministic-package.ts";
