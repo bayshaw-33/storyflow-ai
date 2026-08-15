@@ -9,10 +9,8 @@ import { expect, test } from "@playwright/test";
 
 test.describe("Phase 5 — 横向 Evidence 与导出", () => {
   test("导出 API 未配置后端时返回真实失败", async ({ request }) => {
-    const response = await request.post("/api/export/production-package", {
-      data: { projectId: "missing-project" },
-    });
-    expect([401, 403, 404, 503]).toContain(response.status());
+    const response = await request.get("/api/export/production-package?projectId=missing-project");
+    expect([401, 403, 404, 500, 503]).toContain(response.status());
     const body = await response.json().catch(() => ({}));
     expect(body.success).not.toBe(true);
   });

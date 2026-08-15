@@ -17,6 +17,8 @@ test.describe("Phase 5 — 配音工作台", () => {
 
   test("未配置 Provider 时生成不产生假成功", async ({ page }) => {
     await page.goto("/voice-workbench");
+    // 先选择一个配音目标，编辑器才渲染生成按钮
+    await page.locator('[data-testid="voice-targets"] button').first().click();
     const generate = page.locator('[data-testid="voice-generate"]');
     await expect(generate).toBeDisabled();
     // 未出现“生成任务已提交”假成功

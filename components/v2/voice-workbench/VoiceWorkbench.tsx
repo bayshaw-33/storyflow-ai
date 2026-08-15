@@ -6,7 +6,7 @@
  * 不增加复杂流程向导；Provider 不可用时按钮禁用并显示真实原因。
  */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { VoiceLineEditor } from "./VoiceLineEditor";
 import styles from "./VoiceWorkbench.module.css";
 
@@ -33,6 +33,11 @@ export function VoiceWorkbench() {
   const [active, setActive] = useState<VoiceTarget | null>(null);
   const [providerAvailable, setProviderAvailable] = useState<boolean | null>(null);
   const [providerName, setProviderName] = useState("");
+
+  const handleProviderCheck = useCallback((ok: boolean, name?: string) => {
+    setProviderAvailable(ok);
+    setProviderName(name ?? "");
+  }, []);
 
   return (
     <div className={styles.workbench} data-testid="voice-workbench">
@@ -65,10 +70,7 @@ export function VoiceWorkbench() {
           <VoiceLineEditor
             target={active}
             providerAvailable={providerAvailable}
-            onProviderCheck={(ok, name) => {
-              setProviderAvailable(ok);
-              setProviderName(name ?? "");
-            }}
+            onProviderCheck={handleProviderCheck}
           />
         </main>
       </div>
