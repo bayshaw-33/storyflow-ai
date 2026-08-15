@@ -378,3 +378,87 @@ export async function listSongUniverseHistory(
   );
   return rows || [];
 }
+
+/**
+ * KIIKIS V2.2 歌曲显式关联 — Phase 5 Task 5.2.
+ * 歌曲 Work 显式关联 Universe/角色/作品/集/场景，生成 WorkUsageLink 输入
+ * （对应 Task 5.1 的 usage roles：diegetic_song / character_theme /
+ * episode_theme / scene_cue）。歌曲流程与现有创作界面不重做。
+ */
+import type { UsageRole } from "@/lib/contracts/v2/work-usage";
+
+export interface SongUsageLinkInput {
+  ownerId: string;
+  sourceWorkId: string;
+  sourceWorkVersionId: string;
+  targetProjectId: string;
+  targetWorkId: string;
+  characterId?: string | null;
+  episodeId?: string | null;
+  sceneId?: string | null;
+}
+
+export interface SongUsageLinkDraft {
+  sourceWorkId: string;
+  sourceWorkVersionId: string;
+  targetProjectId: string;
+  targetWorkId: string;
+  usageRole: UsageRole;
+  targetEntityType: string | null;
+  targetEntityId: string | null;
+}
+
+/**
+ * 由歌曲 Work 构建显式 usage 链接草稿：
+ * - diegetic_song：歌曲是剧内歌曲（绑定 target Work）
+ * - character_theme：绑定角色
+ * - episode_theme：绑定集
+ * - scene_cue：绑定场景
+ */
+export function buildSongUsageLinks(input: SongUsageLinkInput): SongUsageLinkDraft[] {
+  const links: SongUsageLinkDraft[] = [
+    {
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "diegetic_song",
+      targetEntityType: null,
+      targetEntityId: null,
+    },
+  ];
+  if (input.characterId) {
+    links.push({
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "character_theme",
+      targetEntityType: "character",
+      targetEntityId: input.characterId,
+    });
+  }
+  if (input.episodeId) {
+    links.push({
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "episode_theme",
+      targetEntityType: "episode",
+      targetEntityId: input.episodeId,
+    });
+  }
+  if (input.sceneId) {
+    links.push({
+      sourceWorkId: input.sourceWorkId,
+      sourceWorkVersionId: input.sourceWorkVersionId,
+      targetProjectId: input.targetProjectId,
+      targetWorkId: input.targetWorkId,
+      usageRole: "scene_cue",
+      targetEntityType: "scene",
+      targetEntityId: input.sceneId,
+    });
+  }
+  return links;
+}
