@@ -123,3 +123,33 @@ test(v2.2): add release journey coverage
 test(v2.2): add performance recovery and accessibility coverage
 docs(v2.2): add release and rollback runbook
 ```
+
+---
+
+## 发布执行记录（2026-08-16 04:13 用户授权"合并所有分支 + 执行所有未执行任务"）
+
+### 合并
+- ✅ `merge: K22-P6 release uat`（76b7e6d3）→ main，推送 `84fc4610..76b7e6d3`
+- ⏸️ P0/TRAE 过时分支（feat/K22-P0-runtime-truth、trae/K2-T-01/03/05、codex/K2-C-03 等 ahead=0 或过时）**未合并**：
+  - P0 分支合并预演出现 11 个冲突文件（ProjectStartFlow/works/jobs——Codex 已在 main 重构）
+  - TRAE K2-T-01 是 2.0 dashboard fixture 加载器（与 P6 刚修复的 fixture fail-closed 方向相反）
+  - 合并=覆盖已验证实现、引入回归；建议删除这些过时远端分支（内容均在 main 历史中）
+
+### Vercel 生产发布
+- ✅ `vercel --prod`：`https://www.kiikis.com` 已 alias 到新部署（storyflow-ne82ge8jo，Ready in 4m）
+- 六条 Journey 在生产域名真实 smoke：**全部 reachable**
+
+### Supabase 迁移应用（staging，kiikis-staging 项目）
+- ✅ P5/P6/60500/61000 已应用；P4 标记 applied（见下）
+- **UAT 复现 2 个发布阻断 schema 缺陷**（P4 首次在真实 DB 执行）：
+  1. P4 `20260828040000` owner policy 引用不存在的 `owner_id` 列（SQLSTATE 42703）→ 单事务整体回滚，P4 全部对象从未建立
+  2. 修复路径（不改 P4 文件）：
+     - `20260828060500_K22-P6_staging_complete_p4.sql`：staging 重建 P4 全量对象（定义与 P4 一致 + owner_id 列 + bucket policy + P6 触发器）
+     - `20260828061000_K22-P6_fix_p4_policies.sql`：3 张表 owner_id 列 + policy 重建（幂等）
+  3. 旧 K21 migration `20260728000000/000001` 有 `min(uuid)` SQL bug → `migration repair --status applied` 标记（staging 历史债务，非 V2.2 范围）
+- ⚠️ **P4 文件缺陷需在正式发布前决策**：P4 文件在干净 DB 上必然失败；建议正式发布时用同样的 60500 恢复路径，或在获得授权后修正 P4 文件（当前保持 forward-only 契约未改）
+
+### 当前状态
+- main = `0a04faa7`（P0-P6 全部 + 2 个 P6 修复 migration）
+- 生产 kiikis.com = main 最新代码；staging DB = P0-P6 完整 schema
+- 待办：生产 DB 迁移应用（需生产 Supabase 凭据/项目链接）、灰度开关按 Runbook 推进
