@@ -24,20 +24,20 @@ import {
   fetchAssets,
   fetchAssemblyTimeline,
   fetchGenerationJobs,
-} from "./queries.ts";
+} from "./queries";
 import {
   okEntry,
   missingEntry,
   failedEntry,
   emptyEntry,
   buildManifest,
-} from "./manifest.ts";
-import { isExportError, ExportError } from "./types.ts";
+} from "./manifest";
+import { isExportError, ExportError } from "./types";
 import type {
   ManifestEntry,
   ProductionPackage,
   ProductionManifest,
-} from "./types.ts";
+} from "./types";
 
 // ============================================================
 // 单个文件构造器
@@ -250,10 +250,10 @@ export {
   buildDeterministicPackage,
   packageManifest,
   resolveArtifactOrigin,
-} from "./deterministic-package.ts";
+} from "./deterministic-package";
 export type {
   DeterministicPackageInput,
   DeterministicPackageArtifact,
   DeterministicPackage,
   PackageManifestView,
-} from "./deterministic-package.ts";
+} from "./deterministic-package";
