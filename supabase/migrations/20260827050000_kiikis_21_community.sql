@@ -224,7 +224,7 @@ CREATE OR REPLACE FUNCTION public.create_publication(
   p_cover_url text default null,
   p_visibility text default 'public',
   p_invite_token_hash text default null,
-  p_idempotency_key text
+  p_idempotency_key text default null
 ) RETURNS public.storyflow_publications
 LANGUAGE plpgsql
 SECURITY DEFINER

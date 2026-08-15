@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS public.storyflow_comments (
   check (parent_comment_id is null or parent_comment_id <> id)
 );
 
+-- CO-003 先于 CM-004 创建了同名协作评论表。兼容已存在的旧表，补齐
+-- publication 评论所需字段，不删除或重建既有评论数据。
+ALTER TABLE public.storyflow_comments
+  ADD COLUMN IF NOT EXISTS publication_id uuid REFERENCES public.storyflow_publications(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
+  ADD COLUMN IF NOT EXISTS deleted_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS frozen_at timestamptz,
+  ADD COLUMN IF NOT EXISTS frozen_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS frozen_reason text,
+  ADD COLUMN IF NOT EXISTS moderation_id uuid;
+
 CREATE INDEX IF NOT EXISTS idx_comments_publication
   ON public.storyflow_comments(publication_id, created_at asc);
 CREATE INDEX IF NOT EXISTS idx_comments_parent
@@ -77,20 +88,20 @@ CREATE POLICY comments_select
   );
 
 -- 评论只能 author 自己创建
-CREATE POLICY comments_author_insert
+CREATE POLICY publication_comments_author_insert
   ON public.storyflow_comments
   FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = author_id);
 
 -- 评论只能 author 软删除 (审核冻结由 moderation 服务走 SECURITY DEFINER)
-CREATE POLICY comments_author_update
+CREATE POLICY publication_comments_author_update
   ON public.storyflow_comments
   FOR UPDATE TO authenticated
   USING (auth.uid() = author_id)
   WITH CHECK (auth.uid() = author_id);
 
 -- 作者可软删除自己的评论
-CREATE POLICY comments_author_delete
+CREATE POLICY publication_comments_author_delete
   ON public.storyflow_comments
   FOR DELETE TO authenticated
   USING (auth.uid() = author_id);
@@ -130,8 +141,8 @@ CREATE TRIGGER storyflow_comments_body_immutable_guard
 CREATE OR REPLACE FUNCTION public.create_comment(
   p_publication_id uuid,
   p_parent_comment_id uuid default null,
-  p_body text,
-  p_idempotency_key text
+  p_body text default null,
+  p_idempotency_key text default null
 ) RETURNS public.storyflow_comments
 LANGUAGE plpgsql
 SECURITY DEFINER

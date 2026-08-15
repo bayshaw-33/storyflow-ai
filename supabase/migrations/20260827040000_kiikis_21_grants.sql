@@ -218,7 +218,7 @@ CREATE OR REPLACE FUNCTION public.create_resource_grant(
   p_role text default null,
   p_terms jsonb default '{}'::jsonb,
   p_expires_at timestamptz default null,
-  p_idempotency_key text,
+  p_idempotency_key text default null,
   p_source_grant_id uuid default null
 ) RETURNS public.storyflow_resource_grants
 LANGUAGE plpgsql

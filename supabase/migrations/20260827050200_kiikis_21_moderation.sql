@@ -301,7 +301,7 @@ CREATE OR REPLACE FUNCTION public.create_report(
   p_target_id uuid,
   p_reason_type text,
   p_reason_description text default null,
-  p_idempotency_key text
+  p_idempotency_key text default null
 ) RETURNS public.storyflow_reports
 LANGUAGE plpgsql
 SECURITY DEFINER

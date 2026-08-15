@@ -289,7 +289,7 @@ CREATE OR REPLACE FUNCTION public.equip_kk_item(
   p_owner_id uuid,
   p_item_id text,
   p_item_version text
-) LANGUAGE plpgsql SECURITY INVOKER AS $$
+) RETURNS void LANGUAGE plpgsql SECURITY INVOKER AS $$
 DECLARE
   v_net_count bigint;
   v_current_equipped text;
@@ -345,7 +345,7 @@ CREATE OR REPLACE FUNCTION public.grant_milestone(
   p_xp integer,
   p_level_delta integer,
   p_idempotency_key text
-) LANGUAGE plpgsql SECURITY INVOKER AS $$
+) RETURNS void LANGUAGE plpgsql SECURITY INVOKER AS $$
 DECLARE
   v_existing uuid;
   v_new_level integer;
@@ -384,6 +384,7 @@ BEGIN
         growth_level = growth_level + p_level_delta,
         updated_at = now()
     WHERE owner_id = p_owner_id;
+END;
 $$;
 
 COMMIT;

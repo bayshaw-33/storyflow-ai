@@ -86,6 +86,14 @@ CREATE TABLE IF NOT EXISTS public.storyflow_evidence_events (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- K2-C-09 已创建同名的链式证据事件表。兼容既有事件，补齐 K22-P3
+-- 处置证据字段；旧事件没有 work_id 时继续保留但不参与工作级索引。
+ALTER TABLE public.storyflow_evidence_events
+  ADD COLUMN IF NOT EXISTS work_id uuid REFERENCES public.storyflow_works(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS kind text,
+  ADD COLUMN IF NOT EXISTS payload_json jsonb DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id);
+
 CREATE INDEX IF NOT EXISTS idx_k22_p3_evidence_work
   ON public.storyflow_evidence_events(work_id, created_at DESC);
 
