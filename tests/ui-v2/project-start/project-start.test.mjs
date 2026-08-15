@@ -7,7 +7,7 @@
  *   - client never sends owner_id; auth token drives identity
  *   - workbenchRoute from server response is used as-is (no client override)
  *   - DEFAULT_WORK_TITLES used for card label fallback
- *   - WORK_TYPE_CARDS: exactly 7 modules in canonical order, no novel
+ *   - WORK_TYPE_CARDS: exactly 8 modules in canonical order, includes adaptation, no novel
  *   - No fixture fallback: startProject always hits /api/v2/project-start
  */
 import assert from "node:assert/strict";
@@ -31,15 +31,23 @@ import {
 } from "../../../lib/client/v2/project-start/helpers.ts";
 
 // ============================================================
-// Task 0.2 RED: 7-module entry grid contract (K22-ENTRY-001..006)
+// Task 0.2 RED: 8-module entry grid contract (K22-ENTRY-001..006)
 // ============================================================
 
-test("WORK_TYPE_CARDS exposes exactly 7 modules in canonical order", () => {
-  assert.equal(WORK_TYPE_CARDS.length, 7);
-  assert.deepEqual(
-    WORK_TYPE_CARDS.map((c) => c.workType),
-    ["script", "song", "art", "storyboard", "video", "voice", "editing"],
-  );
+test("WORK_TYPE_CARDS exposes exactly 8 modules in canonical order", () => {
+  assert.equal(WORK_TYPE_CARDS.length, 8);
+  assert.deepEqual(WORK_TYPE_CARDS.map((c) => c.id), [
+    "script",
+    "song",
+    "art",
+    "storyboard",
+    "video",
+    "voice",
+    "editing",
+    "adaptation",
+  ]);
+  assert.equal(WORK_TYPE_CARDS.at(-1).titleZh, "改编");
+  assert.equal(WORK_TYPE_CARDS.at(-1).route, "/viral-workbench?setup=1");
 });
 
 test("WORK_TYPE_CARDS never includes novel", () => {
@@ -122,7 +130,7 @@ test("ProjectStartFlow.tsx no longer references K2-T-03 fixture/createProject/Co
   );
   assert.ok(
     /WORK_TYPE_CARDS/.test(src),
-    "ProjectStartFlow must render WORK_TYPE_CARDS (7-module grid)",
+    "ProjectStartFlow must render WORK_TYPE_CARDS (8-module grid)",
   );
 });
 

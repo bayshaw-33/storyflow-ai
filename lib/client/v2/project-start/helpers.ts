@@ -1,7 +1,7 @@
 /**
  * KIIKIS V2.2 project-start UI helpers.
  *
- * Card metadata for the 7-module entry grid (PRD §5.1). No fixture, no novel.
+ * Card metadata for the 8-module entry grid (PRD §5.1). No fixture, no novel.
  * Browser-safe pure functions.
  */
 
@@ -9,7 +9,10 @@ import type { WorkType } from "../../../contracts/v2/work.ts";
 import { DEFAULT_WORK_TITLES, WORK_TYPES } from "../../../contracts/v2/work.ts";
 
 export interface WorkTypeCardMeta {
-  workType: WorkType;
+  id: string;
+  workType?: WorkType;
+  /** Legacy workbench route for an entry outside the V2 WorkType RPC. */
+  route?: string;
   /** Lucide icon name; the component maps this to the actual icon component. */
   icon: string;
   titleZh: string;
@@ -19,11 +22,12 @@ export interface WorkTypeCardMeta {
 }
 
 /**
- * The 7 V2.2 top-level creation modules in canonical order (PRD §5.1).
+ * The 8 top-level creation modules in canonical order (PRD §5.1).
  * Universe / actor library / community / task center are NOT in this grid.
  */
 export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
   {
+    id: "script",
     workType: "script",
     icon: "FileText",
     titleZh: "剧本",
@@ -32,6 +36,7 @@ export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
     descEn: "Start a script from an idea, world, or existing Universe.",
   },
   {
+    id: "song",
     workType: "song",
     icon: "Music",
     titleZh: "歌曲",
@@ -40,6 +45,7 @@ export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
     descEn: "Lyrics, translations, style prompts and references.",
   },
   {
+    id: "art",
     workType: "art",
     icon: "Palette",
     titleZh: "美术",
@@ -48,6 +54,7 @@ export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
     descEn: "Characters, scenes and props, all in one place.",
   },
   {
+    id: "storyboard",
     workType: "storyboard",
     icon: "LayoutGrid",
     titleZh: "分镜",
@@ -56,6 +63,7 @@ export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
     descEn: "Shot list, 4/6/9/12 grids and video prompts.",
   },
   {
+    id: "video",
     workType: "video",
     icon: "Video",
     titleZh: "视频",
@@ -64,6 +72,7 @@ export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
     descEn: "Generate video from confirmed shots, persisted.",
   },
   {
+    id: "voice",
     workType: "voice",
     icon: "Mic",
     titleZh: "配音",
@@ -72,12 +81,22 @@ export const WORK_TYPE_CARDS: WorkTypeCardMeta[] = [
     descEn: "Character and dialogue voice, linked to Voice Identity.",
   },
   {
+    id: "editing",
     workType: "editing",
     icon: "Scissors",
     titleZh: "剪辑",
     titleEn: "Editing",
     descZh: "轻量 Timeline 编辑与导出。",
     descEn: "Lightweight timeline editing and export.",
+  },
+  {
+    id: "adaptation",
+    route: "/viral-workbench?setup=1",
+    icon: "Flame",
+    titleZh: "改编",
+    titleEn: "Adaptation",
+    descZh: "从已有作品出发，拆解结构并创作新的表达。",
+    descEn: "Start from an existing work and create a new interpretation.",
   },
 ];
 

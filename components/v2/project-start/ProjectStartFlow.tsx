@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * KIIKIS V2.2 Phase 0 — 项目入口（7 模块方格）。
+ * KIIKIS V2.2 Phase 0 — 项目入口（8 模块方格）。
  *
  * 删除 K2-T-03 的多步流程（内容类型/标题/Universe 关联/确认），
- * 改为直接渲染 WORK_TYPE_CARDS 七个顶级创作模块方格：
+ * 改为直接渲染 WORK_TYPE_CARDS 八个顶级创作模块方格：
  *   - 同尺寸、同间距
  *   - 无自由输入区、无文件上传、无 novel 选项
- *   - 点击任意方格即调用 startProject，使用 DEFAULT_WORK_TITLES 作为标题
+ *   - 七个 V2 方格调用 startProject，改编方格复用既有改编工作台
  *   - 服务端返回的 workbenchRoute 直接用于导航（客户端不构造路由）
  *
  * 参见 PRD §5.1 与 Phase 0 Task 0.2。
@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   FileText,
+  Flame,
   LayoutGrid,
   Mic,
   Music,
@@ -41,6 +42,7 @@ import styles from "./ProjectStartFlow.module.css";
 // 将 WORK_TYPE_CARDS 中的字符串 icon 名映射到 lucide 组件。
 const ICON_MAP: Record<string, typeof FileText> = {
   FileText,
+  Flame,
   Music,
   Palette,
   LayoutGrid,
@@ -175,7 +177,7 @@ export function ProjectStartFlow() {
           <p className={styles.headerSubtitle}>{headerCopy.subtitle}</p>
         </header>
 
-        {/* 7 模块方格：同尺寸、同间距 */}
+        {/* 8 模块方格：同尺寸、同间距 */}
         <section aria-label={isZh ? "创作模块" : "Creation modules"}>
           <div className={styles.moduleGrid}>
             {WORK_TYPE_CARDS.map((card) => {
@@ -184,12 +186,18 @@ export function ProjectStartFlow() {
               const disabled = pendingType !== null;
               return (
                 <button
-                  key={card.workType}
+                  key={card.id}
                   type="button"
                   className={`${styles.moduleCard} ${
                     isPending ? styles.moduleCardPending : ""
                   }`}
-                  onClick={() => void handleStart(card.workType)}
+                  onClick={() => {
+                    if (card.route) {
+                      router.push(card.route);
+                      return;
+                    }
+                    if (card.workType) void handleStart(card.workType);
+                  }}
                   disabled={disabled}
                   aria-busy={isPending}
                 >
