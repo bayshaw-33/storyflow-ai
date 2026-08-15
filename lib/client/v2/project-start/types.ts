@@ -1,7 +1,7 @@
 /**
  * KIIKIS V2.2 project-start client types.
  *
- * Replaces the K2-T-03 fixture-era types. V2.2 entry is a 7-module grid with
+ * Replaces the K2-T-03 fixture-era types. V2.2 entry is an 8-module grid with
  * no free-text input, no novel, no fixture fallback (PRD §5.1).
  *
  * contract_version = 2.2.0-alpha.1.

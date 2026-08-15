@@ -1,4 +1,4 @@
-/* KIIKIS V2.2 Phase 0 — 7 模块入口方格
+/* KIIKIS V2.2 Phase 0 — 8 模块入口方格
  * 与 Dashboard 视觉语言一致：背景 #070808 · accent #6de7df
  * 同尺寸、同间距，支持 light/dark 与移动端。 */
 
@@ -56,10 +56,10 @@
   line-height: 1.6;
 }
 
-/* ===== 7 模块方格：同尺寸、同间距 ===== */
+/* ===== 8 模块方格：同尺寸、同间距 ===== */
 .moduleGrid {
   display: grid;
-  /* 4 列：桌面端 4+3 布局；7 张卡同尺寸同间距 */
+  /* 4 列：桌面端 4+4 布局；8 张卡同尺寸同间距 */
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
