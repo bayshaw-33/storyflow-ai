@@ -8,7 +8,7 @@ test("the retired novel route no longer mounts the legacy creation workbench", a
   const page = await read("../app/novel-workbench/page.tsx");
   assert.doesNotMatch(page, /CreationWorkbench/);
   assert.match(page, /projects\/new-v2/);
-  assert.match(page, /script-workbench\?projectId=/);
+  assert.doesNotMatch(page, /script-workbench\?projectId=/);
 });
 
 test("the active screenplay route mounts the V2.2 screenplay studio", async () => {

@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  readUniverseWorks,
   toUniverseDto,
   V2UniverseError,
 } from "../../../lib/server/v2/universe/index.ts";
@@ -88,6 +89,24 @@ test("V2UniverseError: has correct code and message", () => {
   assert.equal(err.code, "not_found");
   assert.match(err.message, /not_found/);
   assert.match(err.message, /Universe not found/);
+});
+
+test("readUniverseWorks hides projects with explicit retired novel markers", async () => {
+  const fetcher = async (path) => {
+    if (path.includes("storyflow_universes")) return [UNIVERSE_ROW];
+    if (path.includes("storyflow_team_members")) return [];
+    if (path.includes("storyflow_universe_project_links")) return [
+      { id: "link-script", universe_id: "uni-001", project_id: "project-script", project_role: "main_season", updated_at: "2026-08-14T00:00:00Z" },
+      { id: "link-novel", universe_id: "uni-001", project_id: "project-novel", project_role: "other", updated_at: "2026-08-13T00:00:00Z" },
+    ];
+    if (path.includes("storyflow_projects")) return [
+      { id: "project-script", title: "Script", workflow_type: "creation", mode: "script", data: {} , status: "draft", updated_at: "2026-08-14T00:00:00Z" },
+      { id: "project-novel", title: "Legacy Novel", workflow_type: "creation", mode: "novel", data: {}, status: "draft", updated_at: "2026-08-13T00:00:00Z" },
+    ];
+    throw new Error(`unexpected query: ${path}`);
+  };
+  const result = await readUniverseWorks({ fetcher, userId: "user-001", universeId: "uni-001" });
+  assert.deepEqual(result.items.map((item) => item.id), ["project-script"]);
 });
 
 // ============================================================

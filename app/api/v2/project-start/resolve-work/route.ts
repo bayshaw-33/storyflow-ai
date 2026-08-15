@@ -8,10 +8,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { isRetiredNovelRecord } from "@/lib/v2/retired-novel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+interface ProjectMarkerRow { workflow_type?: string | null; mode?: string | null; data?: Record<string, unknown> | null }
 interface WorkRow { id: string; owner_id: string; is_primary: boolean }
 
 export async function GET(request: NextRequest) {
@@ -34,6 +36,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "projectId is required.", code: "validation_failed" },
         { status: 422 },
+      );
+    }
+    const projects = await serviceFetch<ProjectMarkerRow[]>(
+      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(projectId)}&select=workflow_type,mode,data&limit=1`,
+    );
+    if (projects[0] && isRetiredNovelRecord(projects[0])) {
+      return NextResponse.json(
+        { success: false, error: "This legacy novel project has been retired.", code: "retired_novel" },
+        { status: 410 },
       );
     }
     const rows = await serviceFetch<WorkRow[]>(

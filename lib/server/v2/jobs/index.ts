@@ -1,4 +1,5 @@
 import type { GenerationJob, GenerationJobStatus, JobAction, JobTiming } from "@/lib/contracts/v2";
+import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
 
 /**
  * Fetcher for Supabase REST. The optional `init` makes the fetcher capable of
@@ -38,6 +39,8 @@ type LegacyJobRow = {
   latency_ms?: number | null;
 };
 
+type ProjectMarkerRow = { id: string; workflow_type?: string | null; mode?: string | null; data?: Record<string, unknown> | null };
+
 export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob {
   const status = mapStatus(row.status);
   const metadata = row.result_metadata || {};
@@ -72,11 +75,16 @@ export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: st
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,owner_id,project_id,job_type,status,error,result_metadata,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,export_type,status,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
     ]);
-    const items = [
+    const rawItems = [
       ...(textTasks || []).map((row) => mapLegacyJob({ ...row, job_type: "text" }, params.now)),
       ...(mediaJobs || []).map((row) => mapLegacyJob(row, params.now)),
       ...(exports || []).map((row) => mapLegacyJob({ ...row, job_type: "export" }, params.now)),
-    ].filter((job) => !params.jobType || job.jobType === params.jobType).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    ];
+    const retiredProjectIds = await readRetiredProjectIds(params.fetcher, rawItems.map((job) => job.projectId));
+    const items = rawItems
+      .filter((job) => !job.projectId || !retiredProjectIds.has(job.projectId))
+      .filter((job) => !params.jobType || job.jobType === params.jobType)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return { items, hasMore: false };
   } catch (error) {
     if (error instanceof V2JobsError) throw error;
@@ -95,6 +103,8 @@ export async function readUnifiedJob(params: { fetcher: JobsFetcher; userId: str
     ]);
     const row = sources[0][0] || sources[1][0] || sources[2][0];
     if (!row) throw new V2JobsError("not_found", "Job not found.");
+    const retiredProjectIds = await readRetiredProjectIds(params.fetcher, [row.project_id]);
+    if (row.project_id && retiredProjectIds.has(row.project_id)) throw new V2JobsError("not_found", "Job not found.");
     return { job: mapLegacyJob({ ...row, job_type: row.job_type || (row.export_type ? "export" : "text") }, params.now) };
   } catch (error) {
     if (error instanceof V2JobsError) throw error;
@@ -132,6 +142,13 @@ function numberValue(value: unknown): number | null {
 async function query<T>(fetcher: JobsFetcher, path: string): Promise<T> {
   try { return await fetcher<T>(path); }
   catch (error) { if (error instanceof V2JobsError) throw error; throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable."); }
+}
+
+async function readRetiredProjectIds(fetcher: JobsFetcher, projectIds: Array<string | null | undefined>): Promise<Set<string>> {
+  const ids = Array.from(new Set(projectIds.filter((id): id is string => Boolean(id))));
+  if (!ids.length) return new Set();
+  const rows = await query<ProjectMarkerRow[]>(fetcher, `/rest/v1/storyflow_projects?id=in.(${ids.map(encodeURIComponent).join(",")})&select=id,workflow_type,mode,data`);
+  return new Set((rows || []).filter(isRetiredNovelRecord).map((row) => row.id));
 }
 
 /**

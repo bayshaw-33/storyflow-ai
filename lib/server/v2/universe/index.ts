@@ -4,6 +4,7 @@ import type {
   UniverseEntityKind,
   Project,
 } from "@/lib/contracts/v2";
+import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
 
 export type UniverseReadFetcher = <T = unknown>(path: string) => Promise<T>;
 
@@ -41,7 +42,7 @@ type EntityRow = {
 };
 
 type LinkRow = { id: string; universe_id: string; project_id: string; project_role?: string | null; updated_at: string };
-type ProjectRow = { id: string; title?: string | null; workflow_type?: string | null; status?: string | null; updated_at: string };
+type ProjectRow = { id: string; title?: string | null; workflow_type?: string | null; mode?: string | null; data?: Record<string, unknown> | null; status?: string | null; updated_at: string };
 type InboxRow = { id: string; universe_id: string; status: string; item_type?: string | null; title?: string | null; confidence?: number | null; updated_at: string };
 
 export interface UniverseListItem extends UniverseDto {
@@ -131,9 +132,11 @@ export async function readUniverseWorks(params: { fetcher: UniverseReadFetcher; 
   const links = await query<LinkRow[]>(params.fetcher, `/rest/v1/storyflow_universe_project_links?universe_id=eq.${encodeURIComponent(params.universeId)}&select=id,universe_id,project_id,project_role,updated_at&order=updated_at.desc&limit=500`);
   const projectIds = Array.from(new Set((links || []).map((link) => link.project_id).filter(Boolean)));
   if (!projectIds.length) return { items: [] };
-  const projects = await query<ProjectRow[]>(params.fetcher, `/rest/v1/storyflow_projects?id=in.(${projectIds.map(encodeURIComponent).join(",")})&select=id,title,workflow_type,status,updated_at`);
-  const projectById = new Map((projects || []).map((project) => [project.id, project]));
-  return { items: (links || []).map((link) => toProjectDto(projectById.get(link.project_id), link)) };
+  const projects = await query<ProjectRow[]>(params.fetcher, `/rest/v1/storyflow_projects?id=in.(${projectIds.map(encodeURIComponent).join(",")})&select=id,title,workflow_type,mode,data,status,updated_at`);
+  const projectById = new Map((projects || []).filter((project) => !isRetiredNovelRecord(project)).map((project) => [project.id, project]));
+  return { items: (links || [])
+    .filter((link) => projectById.has(link.project_id))
+    .map((link) => toProjectDto(projectById.get(link.project_id), link)) };
 }
 
 export async function readUniverseHealth(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseHealthResult> {

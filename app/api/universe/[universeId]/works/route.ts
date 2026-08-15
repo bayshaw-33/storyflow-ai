@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { isRetiredNovelRecord } from "@/lib/v2/retired-novel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,9 @@ type ProjectRow = {
   owner_id: string | null;
   status: string;
   updated_at: string;
+  workflow_type?: string | null;
+  mode?: string | null;
+  data?: Record<string, unknown> | null;
 };
 
 type ProductionProjectRow = {
@@ -77,12 +81,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
 
     const projectIds = links.map((link) => link.project_id).filter(Boolean);
     const projects = await serviceFetch<ProjectRow[]>(
-      `/rest/v1/storyflow_projects?id=in.(${projectIds.map(encodeURIComponent).join(",")})&select=id,title,owner_id,status,updated_at`,
+      `/rest/v1/storyflow_projects?id=in.(${projectIds.map(encodeURIComponent).join(",")})&select=id,title,owner_id,status,updated_at,workflow_type,mode,data`,
     ).catch(() => [] as ProjectRow[]);
 
     // 仅返回当前用户 owner 的 project（双重授权第二层：project owner_id 匹配 user.id）
     // team 共享：若 universe 是 team-owned 且 project.user_id 在 team memberships 里，则也允许
-    const accessibleProjects = projects.filter((project) => isProjectAccessible(project, universe, user.id));
+    const accessibleProjects = projects.filter((project) => !isRetiredNovelRecord(project) && isProjectAccessible(project, universe, user.id));
     const accessibleIds = new Set(accessibleProjects.map((project) => project.id));
     const projectById = new Map(accessibleProjects.map((project) => [project.id, project]));
 

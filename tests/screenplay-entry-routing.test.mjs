@@ -33,12 +33,16 @@ test("retired novel workbench is only a redirect and legacy storage is filtered 
   const retiredRoute = read("../app/novel-workbench/page.tsx");
   const projects = read("../lib/projects.ts");
   const supabaseProjects = read("../lib/supabase/projects.ts");
+  const resolveWork = read("../app/api/v2/project-start/resolve-work/route.ts");
   assert.doesNotMatch(retiredRoute, /CreationWorkbench/);
   assert.match(retiredRoute, /projects\/new-v2/);
+  assert.doesNotMatch(retiredRoute, /script-workbench\?projectId=/);
   assert.match(projects, /isRetiredNovelProject/);
   assert.match(projects, /filter\(\(project\) => !isRetiredNovelProject\(project\)\)/);
   assert.match(supabaseProjects, /isRetiredNovelProjectRow/);
   assert.match(supabaseProjects, /filter\(\(row\) => !isRetiredNovelProjectRow\(row\)\)/);
+  assert.match(resolveWork, /isRetiredNovelRecord/);
+  assert.match(supabaseProjects, /projects: visibleLocalProjects/);
 });
 
 test("the screenplay route resolves legacy project ids into ScreenplayStudio", () => {
