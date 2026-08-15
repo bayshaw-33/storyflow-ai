@@ -30,6 +30,23 @@ jobs:
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
 
+      - name: KIIKIS 2.2 release audits
+        run: pnpm audit:kiikis22
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_USE_FIXTURE: "false"
+          NEXT_PUBLIC_USE_KK_FIXTURE: "false"
+          NEXT_PUBLIC_USE_SHORT_DRAMA_FIXTURE: "false"
+          NEXT_PUBLIC_USE_UNIVERSE_FIXTURE: "false"
+          NEXT_PUBLIC_USE_MARKETPLACE_FIXTURE: "false"
+          NEXT_PUBLIC_USE_JOB_FIXTURE: "false"
+          NEXT_PUBLIC_USE_CREATOR_CENTER_FIXTURE: "false"
+          NEXT_PUBLIC_USE_LICENSING_FIXTURE: "false"
+          NEXT_PUBLIC_USE_MODEL_FIXTURE: "false"
+
+      - name: Unit tests
+        run: pnpm exec node --test tests/contracts-v22/*.test.mjs tests/security/kiikis-22-*.test.mjs tests/performance/v22-*.test.mjs tests/server-v2/work-usage/*.test.mjs tests/server-v2/universe-import/*.test.mjs
+
       - name: Build
         run: pnpm run build
         env:

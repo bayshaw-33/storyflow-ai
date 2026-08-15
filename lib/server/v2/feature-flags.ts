@@ -84,3 +84,39 @@ export function parseKiikis21Flags(env: EnvLike): Kiikis21Flags {
  * 保留 resolveKiikis21Flags 名称以兼容现有 API 路由调用方。
  */
 export const resolveKiikis21Flags = parseKiikis21Flags;
+
+// ---------------------------------------------------------------------------
+// Phase 6 Task 6.5 — V2.2 灰度开关
+// 只控制 V2.2 入口与路由选择；所有数据使用同一表和契约。
+// 关闭开关后旧项目仍可读，V2.2 数据不删除。
+// ---------------------------------------------------------------------------
+
+export type Kiikis22Flags = {
+  /** V2.2 统一入口可见性（灰度控制） */
+  v22EntriesEnabled: boolean;
+};
+
+export const DEFAULT_KIIKIS22_FLAGS: Kiikis22Flags = {
+  v22EntriesEnabled: false, // fail-closed
+};
+
+const K22_FLAG_ENV = "KIIKIS22_FF_ENTRIES_ENABLED";
+
+/**
+ * V2.2 入口灰度开关（纯函数）。
+ * - production：默认关闭（fail-closed），显式 true 才开
+ * - development：默认开启，便于本地验证
+ */
+export function isV22EntryEnabled(env: EnvLike): boolean {
+  const nodeEnv = String(env.NODE_ENV ?? "").toLowerCase();
+  const vercelEnv = String(env.VERCEL_ENV ?? "").toLowerCase();
+  const explicit = String(env[K22_FLAG_ENV] ?? "").toLowerCase();
+  if (nodeEnv === "production" || vercelEnv === "production") {
+    return explicit === "true" || explicit === "1";
+  }
+  if (nodeEnv === "development") {
+    return explicit === "false" ? false : true;
+  }
+  // preview：显式 true 才开
+  return explicit === "true" || explicit === "1";
+}
