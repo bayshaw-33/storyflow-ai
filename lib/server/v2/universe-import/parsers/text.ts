@@ -10,6 +10,10 @@ export interface ParsedBlock {
   endOffset: number;
   /** Scene/episode heading when detected (e.g. 第1集 第3场). */
   heading?: { episode?: number; scene?: number };
+  /** PDF page number (pdf parser). */
+  page?: number;
+  /** DOCX heading/section (docx parser). */
+  section?: string;
 }
 
 export interface ParsedDocument {
