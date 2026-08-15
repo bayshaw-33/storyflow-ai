@@ -217,6 +217,18 @@ test("createProjectWithPrimaryWork accepts all 7 valid work types and posts RPC"
   }
 });
 
+test("createProjectWithPrimaryWork accepts PostgREST's single-row array RPC response", async () => {
+  const { fetcher } = makeRecordingFetcher([
+    { project_id: "p-array", work_id: "w-array" },
+  ]);
+  const result = await createProjectWithPrimaryWork(
+    { ownerId: "u1", workType: "script", idempotencyKey: "k-array" },
+    fetcher,
+  );
+  assert.equal(result.projectId, "p-array");
+  assert.equal(result.workId, "w-array");
+});
+
 test("createProjectWithPrimaryWork uses provided title when non-empty, otherwise default", async () => {
   const titled = makeRecordingFetcher({ project_id: "p1", work_id: "w1" });
   const r1 = await createProjectWithPrimaryWork(

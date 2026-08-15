@@ -103,7 +103,7 @@ export async function createProjectWithPrimaryWork(
       ? input.title.trim()
       : DEFAULT_WORK_TITLES[input.workType];
 
-  let response: ProjectStartRpcResponse;
+  let response: ProjectStartRpcResponse | ProjectStartRpcResponse[];
   try {
     response = await fetcher<ProjectStartRpcResponse>(
       "/rest/v1/rpc/create_project_with_primary_work",
@@ -126,7 +126,10 @@ export async function createProjectWithPrimaryWork(
     );
   }
 
-  if (!response || !response.project_id || !response.work_id) {
+  // PostgREST returns a one-row `RETURNS TABLE` RPC as an array, while
+  // test doubles and some adapters may return the row object directly.
+  const result = Array.isArray(response) ? response[0] : response;
+  if (!result || !result.project_id || !result.work_id) {
     throw new WorksServiceError(
       "service_unavailable",
       "Project start RPC returned an incomplete result.",
@@ -134,8 +137,8 @@ export async function createProjectWithPrimaryWork(
   }
 
   return {
-    projectId: response.project_id,
-    workId: response.work_id,
+    projectId: result.project_id,
+    workId: result.work_id,
     workType: input.workType,
     title,
   };
