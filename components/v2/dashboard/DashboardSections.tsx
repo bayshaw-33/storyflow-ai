@@ -393,7 +393,7 @@ export function RecentWorksSection({ works }: { works: RecentWork[] }) {
   );
 }
 
-// 快速开始：新建项目跳转 /projects/new-v2（Phase 0 七模块入口方格）。
+// 快速开始：新建项目跳转 /projects/new-v2（Phase 0 八模块入口方格）。
 export function QuickStartSection() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";

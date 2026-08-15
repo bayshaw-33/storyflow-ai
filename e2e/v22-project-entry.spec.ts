@@ -2,7 +2,7 @@
  * Phase 0 Task 0.2 E2E — 工作流方格与 Dashboard 新建入口
  *
  * Gate 0 验收：
- *   - 七模块入口无输入框、无分组、无小说
+ *   - 八模块入口无输入框、无分组、无小说
  *   - 每张卡片可 Tab 聚焦、Enter/Space 激活
  *   - 点击卡片立即调用 Task 0.1 API；成功后进入对应工作台
  *   - 重复点击只产生一个 Project/Work（幂等）
@@ -11,22 +11,31 @@
  */
 import { expect, test } from "@playwright/test";
 
-const SEVEN_MODULES = ["script", "song", "art", "storyboard", "video", "voice", "editing"] as const;
+const EIGHT_MODULES = [
+  "script",
+  "song",
+  "art",
+  "storyboard",
+  "video",
+  "voice",
+  "editing",
+  "adaptation",
+] as const;
 
 test.describe("Phase 0 Task 0.2 — 工作流方格与 Dashboard 新建入口", () => {
-  test("新建项目入口存在七张同规格模块卡，无自由文本输入框", async ({ page }) => {
+  test("新建项目入口存在八张同规格模块卡，无自由文本输入框", async ({ page }) => {
     await page.goto("/projects/new-v2");
 
     // 无自由文本输入框（"描述你的故事"等旧入口痕迹）
     await expect(page.locator('textarea, input[type="text"]:not([name="csrf"])')).toHaveCount(0);
 
-    // 七张模块卡（按 PRD 顺序）
+    // 八张模块卡（按 PRD 顺序）
     const cards = page.locator('[data-module-type]');
-    await expect(cards).toHaveCount(7);
+    await expect(cards).toHaveCount(8);
     const types = await cards.evaluateAll((els) =>
       els.map((el) => el.getAttribute("data-module-type") || ""),
     );
-    expect(types).toEqual([...SEVEN_MODULES]);
+    expect(types).toEqual([...EIGHT_MODULES]);
   });
 
   test("每张卡片可 Tab 聚焦、Enter/Space 激活", async ({ page }) => {

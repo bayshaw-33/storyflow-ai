@@ -188,6 +188,7 @@ export function ProjectStartFlow() {
                 <button
                   key={card.id}
                   type="button"
+                  data-module-type={card.id}
                   className={`${styles.moduleCard} ${
                     isPending ? styles.moduleCardPending : ""
                   }`}

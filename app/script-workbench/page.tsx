@@ -5,7 +5,7 @@
  *
  * V2.2 Work（带 workId 参数）渲染 ScreenplayStudio（三栏剧本室）；
  * 旧 projectId 通过适配器解析 primary Work 后进入；无参数时回到
- * V2.2 七模块入口。旧线性向导和小说工作台不再恢复。
+ * V2.2 八模块入口。旧线性向导和小说工作台不再恢复。
  */
 
 import { Suspense, useEffect, useState } from "react";
@@ -47,6 +47,11 @@ function ScriptWorkbenchInner() {
     };
   }, [projectId, workId, router]);
 
+  useEffect(() => {
+    if (workId || projectId || resolving || resolveError) return;
+    router.replace("/projects/new-v2");
+  }, [projectId, resolving, resolveError, router, workId]);
+
   if (workId) return <ScreenplayStudio />;
   if (resolving) return <main className="cosmic-page" style={{ padding: 40, color: "rgba(255,255,255,0.6)" }}>正在解析旧项目…</main>;
   if (resolveError) {
@@ -58,9 +63,8 @@ function ScriptWorkbenchInner() {
       </main>
     );
   }
-  // 无参数：统一进入 V2.2 七模块入口，由用户选择剧本模块。
-  router.replace("/projects/new-v2");
-  return <main className="cosmic-page" />;
+  // 无参数：统一进入 V2.2 八模块入口，由用户选择剧本模块。
+  return <main className="cosmic-page" aria-busy="true" />;
 }
 
 export default function ScriptWorkbenchPage() {
