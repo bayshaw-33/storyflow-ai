@@ -9,6 +9,7 @@ import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import type { TeamRole } from "@/lib/actors";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import { createUniverseFromProject } from "@/lib/universe";
+import { UniverseImportWizard } from "@/components/v2/universe-import/UniverseImportWizard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { useOS } from "@/lib/os/uiState";
@@ -165,6 +166,9 @@ export default function UniversesPage() {
     setCreateOpen(true);
   }
 
+  // Phase 4: 上传站外原作建立 Universe（无 Project 也可用）
+  const [importOpen, setImportOpen] = useState(false);
+
   function handleProjectSelect(projectId: string) {
     const project = projects.find((p) => p.id === projectId);
     setCreateForm((current) => ({
@@ -244,10 +248,22 @@ export default function UniversesPage() {
             />
           </div>
           {canWriteUniverse ? (
-            <button type="button" className={styles.primaryButton} onClick={openCreate} disabled={projects.length === 0}>
-              <Plus size={15} />
-              {copy.list.create}
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className={styles.primaryButton} onClick={openCreate} disabled={projects.length === 0}>
+                <Plus size={15} />
+                {copy.list.create}
+              </button>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => setImportOpen(true)}
+                data-testid="entry-external-upload"
+                title={isZh ? "上传完整剧本或三件套，审核后建立 Universe U1（无需项目）" : "Import an out-of-band original into a new Universe (no project required)"}
+              >
+                <Plus size={15} />
+                {isZh ? "上传站外原作" : "Import original"}
+              </button>
+            </div>
           ) : (
             <Link className={styles.primaryButton} href={signedOut ? "/login" : "/subscription"}>
               {signedOut ? (isZh ? "登录" : "Sign In") : (isZh ? "升级 ULTRA" : "Upgrade to ULTRA")}
@@ -394,6 +410,19 @@ export default function UniversesPage() {
               </button>
               <button className={styles.primaryButton} onClick={submitCreate} disabled={creating || !canWriteUniverse}>
                 {creating ? (isZh ? "创建中…" : "Creating…") : isZh ? "创建宇宙" : "Create Universe"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {importOpen ? (
+        <div className={styles.modalOverlay} onClick={() => setImportOpen(false)} role="presentation">
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" data-testid="import-dialog">
+            <UniverseImportWizard onSessionCreated={() => setImportOpen(false)} />
+            <div className={styles.modalActions}>
+              <button className={styles.secondaryButton} onClick={() => setImportOpen(false)}>
+                {isZh ? "关闭" : "Close"}
               </button>
             </div>
           </div>
