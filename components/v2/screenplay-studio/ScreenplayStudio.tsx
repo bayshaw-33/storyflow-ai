@@ -46,6 +46,7 @@ export function ScreenplayStudio() {
   const [activeContent, setActiveContent] = useState("");
   const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentVersionId: string | null } | null>(null);
@@ -211,6 +212,20 @@ export function ScreenplayStudio() {
     }
   }, [workId, activeUnit, activeContent]);
 
+  const confirmUsable = useCallback(async () => {
+    if (!workId || !activeUnit) return;
+    if (!activeUnit.currentVersionId) return;
+    setConfirming(true);
+    try {
+      const { unit } = await screenplayStudioApi.finalizeUnit(workId, activeUnit.id, activeUnit.currentVersionId);
+      setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "确认可用失败");
+    } finally {
+      setConfirming(false);
+    }
+  }, [workId, activeUnit]);
+
   const resolveStaleEdge = useCallback(
     async (edge: StaleEdgeDto, resolution: string) => {
       if (!workId) return;
@@ -289,10 +304,12 @@ export function ScreenplayStudio() {
           unit={activeUnit}
           content={activeContent}
           saving={saving}
+          confirming={confirming}
           conflict={conflict}
           onContentChange={handleContentChange}
           onTitleChange={handleTitleChange}
           onSave={saveActiveUnit}
+          onConfirmUsable={confirmUsable}
         />
       </main>
       <div className={`${styles.rightPanel} ${narrow && rightOpen ? styles.open : ""}`} data-testid="studio-right">
