@@ -337,8 +337,11 @@ export class ScreenplayUnitsService {
     const toCreate: Array<{ type: ScreenplayUnitType; title: string; parentId: string | null; order: number; legacyId: string; content?: Record<string, unknown> }> = [];
 
     const bible = (project.story_bible ?? {}) as Record<string, unknown>;
-    if (bible.worldview && !existingLegacyIds.has(`${params.projectId}:world`)) {
-      toCreate.push({ type: "world", title: "世界观", parentId: null, order: 1, legacyId: `${params.projectId}:world`, content: { body: String(bible.worldview) } });
+    // Screenplay projects use bible.worldview; converted-novel projects keep
+    // the novel shape (bible.world as text) — accept both.
+    const worldText = String(bible.worldview ?? bible.world ?? "").trim();
+    if (worldText && !existingLegacyIds.has(`${params.projectId}:world`)) {
+      toCreate.push({ type: "world", title: "世界观", parentId: null, order: 1, legacyId: `${params.projectId}:world`, content: { body: worldText } });
     }
     const characters = Array.isArray(bible.characters) ? (bible.characters as Array<Record<string, unknown>>) : [];
     characters.forEach((c, i) => {
@@ -347,6 +350,11 @@ export class ScreenplayUnitsService {
         toCreate.push({ type: "character", title: String(c.name), parentId: null, order: i + 1, legacyId, content: { role: c.role ?? null } });
       }
     });
+    // Novel projects store relationships as prose instead of a character list.
+    const relationships = String(bible.characterRelationships ?? "").trim();
+    if (!characters.length && relationships && !existingLegacyIds.has(`${params.projectId}:character:relationships`)) {
+      toCreate.push({ type: "character", title: "角色关系（自小说项目转入）", parentId: null, order: 1, legacyId: `${params.projectId}:character:relationships`, content: { body: relationships } });
+    }
     for (const ep of episodes) {
       const epLegacyId = String(ep.id);
       if (!existingLegacyIds.has(epLegacyId)) {
