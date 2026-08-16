@@ -303,15 +303,32 @@ export class ScreenplayUnitsService {
     projectId: string;
   }): Promise<{ units: ScreenplayUnitDto[]; created: number }> {
     await this.assertWorkOwner(params.ownerId, params.workId);
+    if (!params.projectId) throw new ScreenplayUnitsError("validation_failed", "projectId is required.");
+    // Real legacy schema: story_bible lives on storyflow_projects; episodes
+    // and scenes are separate tables (the original select used phantom
+    // work_id/episodes columns that exist in no migration).
     const projects = await get<Array<Record<string, unknown>>>(
       this.fetcher,
-      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(params.projectId)}&select=id,owner_id,work_id,story_bible,episodes&limit=1`,
+      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(params.projectId)}&select=id,owner_id,story_bible&limit=1`,
     );
     const project = projects?.[0];
     if (!project) throw new ScreenplayUnitsError("not_found", "Legacy project not found.");
     if (String(project.owner_id) !== params.ownerId) {
       throw new ScreenplayUnitsError("forbidden", "Legacy project access denied.");
     }
+
+    const [episodeRows, sceneRows] = await Promise.all([
+      get<Array<{ id: string; episode_no: number; title: string | null; summary: string | null }>>(
+        this.fetcher,
+        `/rest/v1/storyflow_episodes?project_id=eq.${encodeURIComponent(params.projectId)}&select=id,episode_no,title,summary&order=episode_no.asc&limit=500`,
+      ).catch(() => []),
+      get<Array<{ id: string; episode_id: string; scene_no: number; location: string | null; beats: unknown[] }>>(
+        this.fetcher,
+        `/rest/v1/storyflow_scenes?project_id=eq.${encodeURIComponent(params.projectId)}&select=id,episode_id,scene_no,location,beats&order=scene_no.asc&limit=2000`,
+      ).catch(() => []),
+    ]);
+    const episodes = episodeRows ?? [];
+    const scenes = sceneRows ?? [];
 
     // Read existing adapted units (idempotency by legacy_id).
     const existing = await this.listUnits({ ownerId: params.ownerId, workId: params.workId });
@@ -330,19 +347,17 @@ export class ScreenplayUnitsService {
         toCreate.push({ type: "character", title: String(c.name), parentId: null, order: i + 1, legacyId, content: { role: c.role ?? null } });
       }
     });
-    const episodes = Array.isArray(project.episodes) ? (project.episodes as Array<Record<string, unknown>>) : [];
     for (const ep of episodes) {
       const epLegacyId = String(ep.id);
       if (!existingLegacyIds.has(epLegacyId)) {
-        toCreate.push({ type: "episode", title: String(ep.title ?? ""), parentId: null, order: Number(ep.order ?? 1), legacyId: epLegacyId, content: { body: String(ep.summary ?? "") } });
+        toCreate.push({ type: "episode", title: String(ep.title ?? `第 ${ep.episode_no} 集`), parentId: null, order: Number(ep.episode_no ?? 1), legacyId: epLegacyId, content: { body: String(ep.summary ?? "") } });
       }
-      const scenes = Array.isArray(ep.scenes) ? (ep.scenes as Array<Record<string, unknown>>) : [];
-      scenes.forEach((sc, i) => {
+      for (const sc of scenes.filter((s) => String(s.episode_id) === String(ep.id))) {
         const scLegacyId = String(sc.id);
         if (!existingLegacyIds.has(scLegacyId)) {
-          toCreate.push({ type: "scene", title: String(sc.title ?? ""), parentId: null, order: Number(sc.order ?? i + 1), legacyId: scLegacyId, content: { body: String(sc.content ?? "") } });
+          toCreate.push({ type: "scene", title: `场 ${sc.scene_no}${sc.location ? ` · ${sc.location}` : ""}`, parentId: null, order: Number(sc.scene_no ?? 1), legacyId: scLegacyId, content: { body: beatsToText(sc.beats) } });
         }
-      });
+      }
     }
 
     // Materialize: create units + first versions; never touch legacy fields.
@@ -354,7 +369,7 @@ export class ScreenplayUnitsService {
       let parentId: string | null = null;
       if (item.type === "scene") {
         const ownerEp = episodes.find((ep) =>
-          Array.isArray(ep.scenes) && (ep.scenes as Array<Record<string, unknown>>).some((sc) => String(sc.id) === item.legacyId),
+          scenes.some((sc) => String(sc.id) === item.legacyId && String(sc.episode_id) === String(ep.id)),
         );
         if (ownerEp) parentId = idByLegacy.get(String(ownerEp.id)) ?? null;
       }
@@ -454,6 +469,23 @@ function toVersionDto(row: UnitVersionRow): UnitVersionDto {
     contentHash: row.content_hash,
     createdAt: row.created_at,
   };
+}
+
+/** Legacy scene beats (jsonb array) → readable plain-text body. */
+function beatsToText(beats: unknown): string {
+  if (!Array.isArray(beats) || !beats.length) return "";
+  return beats
+    .map((beat) => {
+      if (typeof beat === "string") return beat;
+      if (beat && typeof beat === "object") {
+        const b = beat as Record<string, unknown>;
+        const text = b.description ?? b.text ?? b.action ?? b.beat;
+        if (typeof text === "string" && text.trim()) return text;
+      }
+      return JSON.stringify(beat);
+    })
+    .filter((line) => line.trim())
+    .join("\n");
 }
 
 function isUsableCheckpoint(row: Pick<UnitRow, "readiness" | "finalized_version_id">): boolean {

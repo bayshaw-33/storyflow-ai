@@ -3,7 +3,7 @@
  * Phase 1 Task 1.2
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { createCheckpoint, WorkVersionsServiceError } from "@/lib/server/v2/works/versions";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

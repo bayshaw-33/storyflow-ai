@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hasServiceRoleConfig, serviceFetch, getViewerFromCookies } from "@/lib/supabase/server";
+import { hasServiceRoleConfig, serviceFetch, getViewerFromCookies, getViewerFromRequest} from "@/lib/supabase/server";
 import { listDiscoveryFeed, listByPublisher } from "@/lib/server/v2/community/discovery";
 import { CommunityServiceError, isSchemaError } from "@/lib/server/v2/community/publications";
 
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const mine = url.searchParams.get("mine") === "1";
 
     // CM-009: 匿名可浏览 public; mine 需要登录
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (mine && !viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

@@ -11,6 +11,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ScreenplayStudio } from "@/components/v2/screenplay-studio/ScreenplayStudio";
+import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
 
 function ScriptWorkbenchInner() {
   const router = useRouter();
@@ -26,7 +27,8 @@ function ScriptWorkbenchInner() {
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch(`/api/v2/project-start/resolve-work?projectId=${encodeURIComponent(projectId)}`);
+        // Bearer 认证（与剧本室客户端一致）；服务端同样支持 cookie 兜底。
+        const response = await fetchScreenplayStudio(`/api/v2/project-start/resolve-work?projectId=${encodeURIComponent(projectId)}`);
         const body = (await response.json().catch(() => ({}))) as { success?: boolean; workId?: string; error?: string };
         if (cancelled) return;
         if (response.ok && body.success && body.workId) {

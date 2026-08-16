@@ -4,7 +4,7 @@
  * Phase 4 Task 4.5
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { FinalizeUniverseImportService, FinalizeError } from "@/lib/server/v2/universe-import/finalize";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export async function POST(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Import service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }
@@ -45,7 +45,7 @@ export async function GET(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Import service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }

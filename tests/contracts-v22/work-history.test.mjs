@@ -311,8 +311,8 @@ test("assertGenerationCandidate: rejects applied without appliedAt", () => {
   );
 });
 
-test("CANDIDATE_STATUSES contains ready, applied, rejected, superseded", () => {
-  assert.deepEqual([...CANDIDATE_STATUSES], ["ready", "applied", "rejected", "superseded"]);
+test("CANDIDATE_STATUSES contains ready, pending_review, applied, rejected, superseded", () => {
+  assert.deepEqual([...CANDIDATE_STATUSES], ["ready", "pending_review", "applied", "rejected", "superseded"]);
 });
 
 // ============================================================

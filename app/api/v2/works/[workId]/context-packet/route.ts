@@ -11,7 +11,7 @@
  *   tokenBudget          — optional, default 8192, byte budget for selected objects
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { buildContextPacket, ContextPacketError } from "@/lib/server/v2/context-packets";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function GET(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

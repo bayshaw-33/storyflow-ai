@@ -9,6 +9,7 @@ import {
   ScreenplayUnitsService,
   ScreenplayUnitsError,
 } from "@/lib/server/v2/screenplays/units";
+import { classifyServiceError } from "@/lib/server/v2/service-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,23 +74,19 @@ function unauthorized() {
 
 function errorResponse(error: unknown) {
   if (error instanceof ScreenplayUnitsError) {
-    const status =
-      error.code === "unauthenticated" ? 401 :
-      error.code === "forbidden" ? 403 :
-      error.code === "not_found" ? 404 :
-      error.code === "conflict" ? 409 :
-      error.code === "validation_failed" ? 422 :
-      503;
+    const classified = classifyServiceError(error, "screenplay");
     const body: Record<string, unknown> = {
       success: false,
-      error: error.message.replace(`${error.code}: `, ""),
-      code: error.code,
+      error: classified.message,
+      code: classified.code,
+      requestId: classified.requestId,
     };
     if (error.currentVersionId) body.currentVersionId = error.currentVersionId;
-    return NextResponse.json(body, { status });
+    return NextResponse.json(body, { status: classified.status });
   }
+  const classified = classifyServiceError(error, "screenplay");
   return NextResponse.json(
-    { success: false, error: "Screenplay service unavailable.", code: "service_unavailable" },
-    { status: 503 },
+    { success: false, error: classified.message, code: classified.code, requestId: classified.requestId },
+    { status: classified.status },
   );
 }

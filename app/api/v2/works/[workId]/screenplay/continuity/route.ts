@@ -8,9 +8,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import {
-  ScreenplayContinuityService,
-  ScreenplayContinuityError,
+  ScreenplayContinuityService, 
 } from "@/lib/server/v2/screenplays/continuity";
+import { classifyServiceError } from "@/lib/server/v2/service-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,21 +79,12 @@ export async function POST(
 }
 
 function errorResponse(error: unknown) {
-  if (error instanceof ScreenplayContinuityError) {
-    const status =
-      error.code === "unauthenticated" ? 401 :
-      error.code === "forbidden" ? 403 :
-      error.code === "not_found" ? 404 :
-      error.code === "conflict" ? 409 :
-      error.code === "validation_failed" ? 422 :
-      503;
-    return NextResponse.json(
-      { success: false, error: error.message.replace(`${error.code}: `, ""), code: error.code },
-      { status },
-    );
-  }
-  return NextResponse.json(
-    { success: false, error: "Service unavailable.", code: "service_unavailable" },
-    { status: 503 },
-  );
+  const classified = classifyServiceError(error, "screenplay-continuity");
+  const body: Record<string, unknown> = {
+    success: false,
+    error: classified.message,
+    code: classified.code,
+    requestId: classified.requestId,
+  };
+  return NextResponse.json(body, { status: classified.status });
 }

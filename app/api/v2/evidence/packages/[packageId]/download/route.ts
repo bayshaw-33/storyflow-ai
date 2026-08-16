@@ -7,7 +7,7 @@
  * The URL is owner-scoped: only the package owner can request it.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig } from "@/lib/supabase/server";
 import {
   signEvidencePackageV2,
   createServerEvidencePackageV2Store,
@@ -28,7 +28,7 @@ export async function GET(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

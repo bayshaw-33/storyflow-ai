@@ -1,16 +1,25 @@
 /**
  * POST /api/v2/works/[workId]/screenplay/discuss — KK 聊一聊（只追加对话）
- * Phase 3 Task 3.4
+ * GET  /api/v2/works/[workId]/screenplay/discuss?conversationId= — 会话历史（刷新恢复）
+ * Phase 3 Task 3.4 · 2026-08-16 production hotfix: real model routing.
+ *
+ * body.purpose:
+ *   - "discuss"（默认）：自由讨论。
+ *   - "similarity_review"：大纲雷同审查。要求已存在大纲单元；结果会追加
+ *     一条 work-scoped 证据事件（绑定大纲版本与会话），作为审查留痕。
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import {
   ScreenplayGenerationService,
-  ScreenplayGenerationError,
   type GenerationDeps,
+  type KkPurpose,
 } from "@/lib/server/v2/screenplays/generation";
+import { invokeScreenplayModel } from "@/lib/server/v2/screenplays/model-invoke";
 import { buildContextPacket } from "@/lib/server/v2/context-packets";
 import { getWork } from "@/lib/server/v2/works/versions";
+import { ScreenplayUnitsService } from "@/lib/server/v2/screenplays/units";
+import { classifyServiceError } from "@/lib/server/v2/service-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,20 +35,62 @@ function buildDeps(ownerId: string): GenerationDeps {
           { ownerId, workId, workVersionId: versionId, view: "screenplay-studio-kk", tokenBudget: 4096 },
           serviceFetch,
         );
-        return { packetId: packet.id, references: packet.references };
+        return { packetId: packet.id, packetContent: packet.content, references: packet.references };
       } catch {
         // Context packet is best-effort for chat; missing packet never blocks
         // the append-only discussion.
         return { packetId: null, references: [] };
       }
     },
-    modelInvoke: async () => {
-      // Real provider routing is wired in Phase 5 model-router integration;
-      // until then discussing returns a deterministic assistant echo so the
-      // append-only semantics stay verifiable without fake content edits.
-      return { assistantText: "KK：收到。我在听，先不动稿子——需要改法就说“生成修改方案”。", patches: [] };
+    loadUnit: async (workId, unitId) => {
+      try {
+        const units = new ScreenplayUnitsService(serviceFetch);
+        const { unit, content } = await units.getUnit({ ownerId, workId, unitId });
+        return { type: unit.type, title: unit.title, body: String((content as { body?: string } | null)?.body ?? "") };
+      } catch {
+        return null;
+      }
+    },
+    // Real provider routing (DeepSeek flash→pro fallback). Missing credentials
+    // surface as provider_failed — never a deterministic fake reply.
+    modelInvoke: async (params) => {
+      return invokeScreenplayModel({
+        userMessage: params.userMessage,
+        purpose: params.purpose,
+        scope: params.scope,
+        packetContent: params.packetContent,
+        references: (params.references as Array<{ type: string; id: string; versionId: string; reason: string }>) ?? [],
+        history: params.history,
+        unit: params.unit,
+        clientContext: params.clientContext,
+      });
     },
   };
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ workId: string }> },
+) {
+  try {
+    if (!hasServiceRoleConfig()) {
+      return NextResponse.json({ success: false, error: "Service not configured.", code: "service_unavailable" }, { status: 503 });
+    }
+    const viewer = await getViewerFromRequest(request);
+    if (!viewer) {
+      return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
+    }
+    const { workId } = await params;
+    const conversationId = request.nextUrl.searchParams.get("conversationId") ?? "";
+    if (!conversationId) {
+      return NextResponse.json({ success: false, error: "conversationId is required.", code: "validation_failed" }, { status: 422 });
+    }
+    const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
+    const { messages } = await service.listMessages({ ownerId: viewer.id, workId, conversationId });
+    return NextResponse.json({ success: true, contractVersion: "2.2.0-alpha.1", messages });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 export async function POST(
@@ -56,14 +107,37 @@ export async function POST(
     }
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));
+    const purpose = (String(body.purpose ?? "discuss") === "similarity_review" ? "similarity_review" : "discuss") as KkPurpose;
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
     const result = await service.discuss({
       ownerId: viewer.id,
       workId,
       conversationId: String(body.conversationId ?? ""),
       userMessage: String(body.userMessage ?? ""),
+      purpose,
+      clientContext: body.clientContext ? String(body.clientContext).slice(0, 200) : null,
       idempotencyKey: body.idempotencyKey,
     });
+
+    // Similarity review leaves a work-scoped evidence record bound to the
+    // current outline version, so the review survives refreshes and audits.
+    if (purpose === "similarity_review") {
+      const outlineVersionId = await resolveOutlineVersionId(viewer.id, workId);
+      await service
+        .appendEvidence({
+          ownerId: viewer.id,
+          workId,
+          kind: "similarity_review",
+          payload: {
+            threadId: String(body.conversationId ?? ""),
+            assistantMessageId: result.assistantMessage.id,
+            outlineVersionId,
+            reviewedAt: new Date().toISOString(),
+          },
+        })
+        .catch(() => undefined); // 留痕失败不阻断审查结果返回
+    }
+
     return NextResponse.json({
       success: true,
       contractVersion: "2.2.0-alpha.1",
@@ -75,23 +149,21 @@ export async function POST(
   }
 }
 
-function errorResponse(error: unknown) {
-  if (error instanceof ScreenplayGenerationError) {
-    const status =
-      error.code === "unauthenticated" ? 401 :
-      error.code === "forbidden" ? 403 :
-      error.code === "not_found" ? 404 :
-      error.code === "conflict" ? 409 :
-      error.code === "validation_failed" ? 422 :
-      error.code === "provider_failed" ? 502 :
-      503;
-    return NextResponse.json(
-      { success: false, error: error.message.replace(`${error.code}: `, ""), code: error.code },
-      { status },
-    );
+async function resolveOutlineVersionId(ownerId: string, workId: string): Promise<string | null> {
+  try {
+    const units = new ScreenplayUnitsService(serviceFetch);
+    const { units: list } = await units.listUnits({ ownerId, workId });
+    const outline = list.find((u) => u.type === "outline");
+    return outline?.currentVersionId ?? null;
+  } catch {
+    return null;
   }
+}
+
+function errorResponse(error: unknown) {
+  const classified = classifyServiceError(error, "screenplay-discuss");
   return NextResponse.json(
-    { success: false, error: "Service unavailable.", code: "service_unavailable" },
-    { status: 503 },
+    { success: false, error: classified.message, code: classified.code, requestId: classified.requestId },
+    { status: classified.status },
   );
 }

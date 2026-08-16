@@ -54,7 +54,7 @@ export function ScreenplayEditor({
       <div className={styles.editorBody}>
         <div className={styles.emptyHints}>
           <div className={styles.emptyHintTitle}>从左侧选择一个节点，或新建一个开始写作</div>
-          <div className={styles.placeholder}>世界观、角色、大纲、分集、正文都可以作为起点，没有顺序要求。</div>
+          <div className={styles.placeholder}>已创建的节点可随时回改；新节点按 世界观 → 角色圣经 → 剧情及大纲 → 分集 → 正文 顺序创建。</div>
         </div>
       </div>
     );

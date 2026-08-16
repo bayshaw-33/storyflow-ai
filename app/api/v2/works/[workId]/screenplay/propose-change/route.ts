@@ -2,18 +2,20 @@
  * POST  /api/v2/works/[workId]/screenplay/propose-change — 生成修改方案（Candidate Diff）
  * PUT   /api/v2/works/[workId]/screenplay/propose-change — 采用候选（acceptedPatchIndexes）
  * DELETE /api/v2/works/[workId]/screenplay/propose-change — 拒绝候选
- * Phase 3 Task 3.4
+ * Phase 3 Task 3.4 · 2026-08-16 hotfix: real model routing + atomic RPC transitions.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import {
   ScreenplayGenerationService,
-  ScreenplayGenerationError,
   type GenerationDeps,
   type ProposeScope,
 } from "@/lib/server/v2/screenplays/generation";
+import { invokeScreenplayModel } from "@/lib/server/v2/screenplays/model-invoke";
 import { buildContextPacket } from "@/lib/server/v2/context-packets";
 import { getWork } from "@/lib/server/v2/works/versions";
+import { ScreenplayUnitsService } from "@/lib/server/v2/screenplays/units";
+import { classifyServiceError } from "@/lib/server/v2/service-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,28 +31,49 @@ function buildDeps(ownerId: string): GenerationDeps {
           { ownerId, workId, workVersionId: versionId, view: "screenplay-studio-propose", tokenBudget: 8192 },
           serviceFetch,
         );
-        return { packetId: packet.id, references: packet.references };
+        return { packetId: packet.id, packetContent: packet.content, references: packet.references };
       } catch {
         return { packetId: null, references: [] };
       }
     },
-    modelInvoke: async ({ userMessage, scope }) => {
-      // Deterministic candidate builder until Phase 5 model-router lands.
-      // It returns a reviewable patch derived from the request itself — never
-      // a silent content rewrite: the patch only takes effect on user apply.
-      const label = scope?.kind === "all" ? "全剧本" : `${scope?.kind ?? "未指定范围"}`;
-      return {
-        assistantText: `KK：基于「${label}」范围生成了一版修改方案，请逐块审阅。`,
-        patches: [
-          {
-            unitPath: scope?.unitId ? `unit:${scope.unitId}` : "scope:current",
-            before: "（当前正文保持不变，等待审阅）",
-            after: `【建议】${userMessage.slice(0, 80)}`,
-          },
-        ],
-      };
+    loadUnit: async (workId, unitId) => {
+      try {
+        const units = new ScreenplayUnitsService(serviceFetch);
+        const { unit, content } = await units.getUnit({ ownerId, workId, unitId });
+        return { type: unit.type, title: unit.title, body: String((content as { body?: string } | null)?.body ?? "") };
+      } catch {
+        return null;
+      }
+    },
+    modelInvoke: async (params) => {
+      return invokeScreenplayModel({
+        userMessage: params.userMessage,
+        purpose: "propose_change",
+        scope: params.scope,
+        packetContent: params.packetContent,
+        references: (params.references as Array<{ type: string; id: string; versionId: string; reason: string }>) ?? [],
+        history: params.history,
+        unit: params.unit,
+        clientContext: params.clientContext,
+      });
     },
   };
+}
+
+function unauthorized() {
+  return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
+}
+
+function unavailable() {
+  return NextResponse.json({ success: false, error: "Service not configured.", code: "service_unavailable" }, { status: 503 });
+}
+
+function errorResponse(error: unknown) {
+  const classified = classifyServiceError(error, "screenplay-propose-change");
+  return NextResponse.json(
+    { success: false, error: classified.message, code: classified.code, requestId: classified.requestId },
+    { status: classified.status },
+  );
 }
 
 export async function POST(
@@ -58,13 +81,9 @@ export async function POST(
   { params }: { params: Promise<{ workId: string }> },
 ) {
   try {
-    if (!hasServiceRoleConfig()) {
-      return NextResponse.json({ success: false, error: "Service not configured.", code: "service_unavailable" }, { status: 503 });
-    }
+    if (!hasServiceRoleConfig()) return unavailable();
     const viewer = await getViewerFromRequest(request);
-    if (!viewer) {
-      return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
-    }
+    if (!viewer) return unauthorized();
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));
     const work = await getWork({ ownerId: viewer.id, workId }, serviceFetch);
@@ -76,6 +95,7 @@ export async function POST(
       userMessage: String(body.userMessage ?? ""),
       scope: (body.scope ?? { kind: "all" }) as ProposeScope,
       baseVersionId: body.baseVersionId ?? work.current_version_id ?? "",
+      clientContext: body.clientContext ? String(body.clientContext).slice(0, 200) : null,
       idempotencyKey: body.idempotencyKey,
     });
     return NextResponse.json(
@@ -92,13 +112,9 @@ export async function PUT(
   { params }: { params: Promise<{ workId: string }> },
 ) {
   try {
-    if (!hasServiceRoleConfig()) {
-      return NextResponse.json({ success: false, error: "Service not configured.", code: "service_unavailable" }, { status: 503 });
-    }
+    if (!hasServiceRoleConfig()) return unavailable();
     const viewer = await getViewerFromRequest(request);
-    if (!viewer) {
-      return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
-    }
+    if (!viewer) return unauthorized();
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
@@ -119,13 +135,9 @@ export async function DELETE(
   { params }: { params: Promise<{ workId: string }> },
 ) {
   try {
-    if (!hasServiceRoleConfig()) {
-      return NextResponse.json({ success: false, error: "Service not configured.", code: "service_unavailable" }, { status: 503 });
-    }
+    if (!hasServiceRoleConfig()) return unavailable();
     const viewer = await getViewerFromRequest(request);
-    if (!viewer) {
-      return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
-    }
+    if (!viewer) return unauthorized();
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
@@ -138,25 +150,4 @@ export async function DELETE(
   } catch (error) {
     return errorResponse(error);
   }
-}
-
-function errorResponse(error: unknown) {
-  if (error instanceof ScreenplayGenerationError) {
-    const status =
-      error.code === "unauthenticated" ? 401 :
-      error.code === "forbidden" ? 403 :
-      error.code === "not_found" ? 404 :
-      error.code === "conflict" ? 409 :
-      error.code === "validation_failed" ? 422 :
-      error.code === "provider_failed" ? 502 :
-      503;
-    return NextResponse.json(
-      { success: false, error: error.message.replace(`${error.code}: `, ""), code: error.code },
-      { status },
-    );
-  }
-  return NextResponse.json(
-    { success: false, error: "Service unavailable.", code: "service_unavailable" },
-    { status: 503 },
-  );
 }

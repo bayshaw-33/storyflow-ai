@@ -8643,3 +8643,9 @@ a.ghost-button {
   padding: 0 14px;
   font-size: 13px;
 }
+
+/* 剧本室专注模式（script-workbench）：折叠全局侧栏，两栏布局独占视口 */
+html[data-screenplay-focus="on"] .kk-nav-vertical,
+html[data-screenplay-focus="on"] .kk-nav-settings-corner {
+  display: none;
+}

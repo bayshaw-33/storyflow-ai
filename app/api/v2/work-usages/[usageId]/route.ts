@@ -3,7 +3,7 @@
  * Phase 5 Task 5.1
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { WorkUsageService, WorkUsageError } from "@/lib/server/v2/work-usage";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function GET(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Usage service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }

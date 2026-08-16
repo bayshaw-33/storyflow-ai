@@ -4,7 +4,7 @@
  * Phase 4 Task 4.2
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { UniverseImportSessionsService, UniverseImportError } from "@/lib/server/v2/universe-import";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const service = new UniverseImportSessionsService(serviceFetch);
     const includeFinished = request.nextUrl.searchParams.get("includeFinished") === "1";
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const body = await request.json().catch(() => ({}));
     const service = new UniverseImportSessionsService(serviceFetch);

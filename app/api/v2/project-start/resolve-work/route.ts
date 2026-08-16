@@ -7,8 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { isRetiredNovelRecord } from "@/lib/v2/retired-novel";
+import { classifyServiceError } from "@/lib/server/v2/service-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,9 @@ export async function GET(request: NextRequest) {
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    // Bearer token first (the screenplay client path), server cookie fallback
+    // for SSR callers — the two auth paths previously disagreed here.
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },
@@ -58,10 +61,11 @@ export async function GET(request: NextRequest) {
       );
     }
     return NextResponse.json({ success: true, contractVersion: "2.2.0-alpha.1", workId: primary.id });
-  } catch {
+  } catch (error) {
+    const classified = classifyServiceError(error, "resolve-work");
     return NextResponse.json(
-      { success: false, error: "Work service unavailable.", code: "service_unavailable" },
-      { status: 503 },
+      { success: false, error: classified.message, code: classified.code, requestId: classified.requestId },
+      { status: classified.status },
     );
   }
 }

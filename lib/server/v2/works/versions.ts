@@ -75,6 +75,9 @@ interface WorkVersionRow {
 interface WorkRow {
   id: string;
   owner_id: string;
+  title?: string;
+  project_id?: string;
+  universe_id?: string | null;
   current_version_id: string | null;
   latest_checkpoint_id: string | null;
   finalized_version_id: string | null;
@@ -171,6 +174,7 @@ export async function appendWorkVersion(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          p_actor: input.ownerId,
           p_work_id: input.workId,
           p_parent_version_id: input.parentVersionId,
           p_kind: input.kind,
@@ -191,7 +195,7 @@ export async function appendWorkVersion(
     if (msg.includes("VERSION_CONFLICT") || msg.includes("40001")) {
       // Fetch current version id for the client.
       const work = await fetcher<WorkRow | null>(
-        `/rest/v1/storyflow_works?id=eq.${encodeURIComponent(input.workId)}&select=id,owner_id,current_version_id,latest_checkpoint_id,finalized_version_id`,
+        `/rest/v1/storyflow_works?id=eq.${encodeURIComponent(input.workId)}&select=id,owner_id,title,project_id,universe_id,current_version_id,latest_checkpoint_id,finalized_version_id`,
       ).then((r) => (Array.isArray(r) ? (r[0] as WorkRow | undefined) : null) ?? null);
       throw new WorkVersionsServiceError(
         "conflict",
@@ -313,7 +317,7 @@ export async function getWork(
   let rows: WorkRow[];
   try {
     rows = await fetcher<WorkRow[]>(
-      `/rest/v1/storyflow_works?id=eq.${encodeURIComponent(input.workId)}&select=id,owner_id,current_version_id,latest_checkpoint_id,finalized_version_id`,
+      `/rest/v1/storyflow_works?id=eq.${encodeURIComponent(input.workId)}&select=id,owner_id,title,project_id,universe_id,current_version_id,latest_checkpoint_id,finalized_version_id`,
     );
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

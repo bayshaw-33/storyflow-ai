@@ -104,6 +104,7 @@ export type GenerationOperation = (typeof GENERATION_OPERATIONS)[number];
 
 export const CANDIDATE_STATUSES = [
   "ready",
+  "pending_review",
   "applied",
   "rejected",
   "superseded",

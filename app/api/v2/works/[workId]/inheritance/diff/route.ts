@@ -8,7 +8,7 @@
  * `isStale` flag and `diffs` array reflect what changed in the Universe.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { InheritanceV22Error } from "@/lib/server/v2/inheritance";
 import { readInheritanceDiff } from "@/lib/server/v2/inheritance/diff";
 
@@ -26,7 +26,7 @@ export async function GET(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

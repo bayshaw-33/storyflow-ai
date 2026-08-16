@@ -279,6 +279,7 @@ export async function applyCandidate(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          p_actor: input.ownerId,
           p_candidate_id: input.candidateId,
           p_content_schema: input.contentSchema,
           p_idempotency_key: input.idempotencyKey,

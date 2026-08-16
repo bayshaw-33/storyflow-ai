@@ -7,7 +7,7 @@
  * Work is not bound to a Universe.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { readWorkInheritanceV22, InheritanceV22Error } from "@/lib/server/v2/inheritance";
 
 export const runtime = "nodejs";
@@ -24,7 +24,7 @@ export async function GET(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

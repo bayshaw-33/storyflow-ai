@@ -5,7 +5,7 @@
  * Phase 4 Task 4.3
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { UniverseImportError, UniverseImportSessionsService } from "@/lib/server/v2/universe-import";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export async function GET(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) return unauthorized();
     const { sessionId, jobId } = await params;
     // Ownership via the session (jobs are session-scoped).
@@ -64,7 +64,7 @@ export async function POST(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const { sessionId, jobId } = await params;
     const body = await request.json().catch(() => ({}));

@@ -4,7 +4,7 @@
  *   POST /api/v2/works/[workId]/usages — create a usage link
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { WorkUsageService, WorkUsageError } from "@/lib/server/v2/work-usage";
 import { isUsageRole } from "@/lib/contracts/v2/work-usage";
 
@@ -32,7 +32,7 @@ export async function GET(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Usage service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }
@@ -57,7 +57,7 @@ export async function POST(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Usage service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }

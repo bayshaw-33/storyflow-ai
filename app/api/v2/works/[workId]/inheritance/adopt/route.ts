@@ -11,7 +11,7 @@
  * current manifest.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { InheritanceV22Error } from "@/lib/server/v2/inheritance";
 import { adoptInheritanceDiff } from "@/lib/server/v2/inheritance/diff";
 
@@ -29,7 +29,7 @@ export async function POST(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

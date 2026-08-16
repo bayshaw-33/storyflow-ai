@@ -1,15 +1,21 @@
-/* Screenplay Studio — V2.2 two-column, AI-first layout */
+/* Screenplay Studio — V2.2 two-column, AI-first layout (focus mode) */
 
 .studio {
   display: grid;
   grid-template-columns: 276px minmax(0, 1fr);
   grid-template-rows: 100%;
-  height: 100%;
+  /* Focus mode owns the full viewport: global side nav is collapsed via
+     html[data-screenplay-focus] (see globals.css). */
+  height: 100dvh;
   min-height: 0;
+  overflow: hidden;
 }
 
 .studio.narrow {
   grid-template-columns: minmax(0, 1fr);
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
 }
 
 .leftPanel {
@@ -278,12 +284,32 @@
 }
 
 .toolDrawer {
-  max-height: 43%;
-  margin: 12px 30px 18px;
-  overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  /* Bottom dock overlay: ~35% of the main area, KK keeps the primary view. */
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  bottom: 56px;
+  height: 35%;
+  min-height: 220px;
+  max-height: 46%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 14px;
-  background: rgba(18, 20, 24, 0.96);
+  background: rgba(18, 20, 24, 0.98);
+  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+}
+
+.toolDrawer .toolContent,
+.toolDrawer .editorBody,
+.toolDrawer .editorFooter {
+  overflow-y: auto;
+}
+
+.centerPanel {
+  position: relative;
 }
 
 .toolDrawerHeader {
@@ -791,6 +817,17 @@
 @media (max-width: 1023px) {
   .studio {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .toolDrawer {
+    position: static;
+    height: auto;
+    max-height: 60vh;
+    margin: 12px 12px 18px;
+    box-shadow: none;
   }
 
   .workspaceHeader {
@@ -811,9 +848,106 @@
     margin: 14px 12px 0;
   }
 
-  .toolDrawer,
   .toolTray {
     margin-left: 12px;
     margin-right: 12px;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * 2026-08-16 hotfix additions
+ * ------------------------------------------------------------------------- */
+
+.toolDrawer > .toolContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Editor inside the dock: let the body flex and scroll. */
+.toolDrawer .editorShell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.toolDrawer .editorBody {
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+
+.toolDrawer .editorTextarea {
+  min-height: 120px;
+  height: 100%;
+}
+
+/* KK context chip — tool state drives what KK focuses on. */
+.kkContextChip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px clamp(18px, 4vw, 64px) 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(100, 232, 223, 0.22);
+  border-radius: 10px;
+  background: rgba(100, 232, 223, 0.05);
+}
+
+.kkContextLabel {
+  color: #64e8df;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.kkContextDetail {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.kkModeRow {
+  display: flex;
+  gap: 6px;
+}
+
+.kkModeRow .tabBtn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+}
+
+/* Project breadcrumb: project / universe / current unit. */
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}
+
+.breadcrumbItem {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumbItem:first-child {
+  color: #64e8df;
+}
+
+.breadcrumbSep {
+  margin: 0 2px;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.deliveryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
 }

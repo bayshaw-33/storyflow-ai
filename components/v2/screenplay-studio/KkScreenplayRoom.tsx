@@ -1,28 +1,32 @@
 "use client";
 
 /**
- * KK 剧本室 — Phase 3 Task 3.4.
+ * KK 剧本室 — Phase 3 Task 3.4 · 2026-08-16 production hotfix.
  * 两种操作语义：
  *   - 聊一聊（discuss）：只追加对话，永不动正文。
  *   - 生成修改方案（propose_change）：产生 Candidate Diff，逐块审阅，
- *     显式采用后才创建版本。
+ *     显式采用后才创建版本（服务端原子 RPC 完成状态转换）。
  * 失败保护：生成失败保留输入与消息，重试复用同一快照。
+ * 会话历史由父组件从服务端加载（刷新不丢）。
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   resolveKkActionMode,
   type CandidateDiffViewModel,
   createCandidateDiffViewModel,
   nextDiffReviewState,
 } from "@/lib/client/v2/screenplay-studio/types";
-import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
+import {
+  screenplayStudioApi,
+  ScreenplayStudioApiError,
+} from "@/lib/client/v2/screenplay-studio/api";
 import { CandidateDiffPanel } from "./CandidateDiffPanel";
 import styles from "./ScreenplayStudio.module.css";
 
 export interface KkMessage {
   id: string;
-  role: "user" | "assistant";
+  role: string;
   content: string;
 }
 
@@ -32,11 +36,25 @@ export interface KkCandidate {
   patches: Array<{ unitPath: string; before: string; after: string }>;
 }
 
+export interface KkContextSummary {
+  label: string;
+  detail: string;
+}
+
+export interface KkPresetInput {
+  text: string;
+  mode: "discuss" | "propose_change";
+  contextLabel?: string;
+}
+
 export interface KkScreenplayRoomProps {
   workId: string;
   conversationId: string;
   messages: KkMessage[];
   pendingCandidate: KkCandidate | null;
+  contextSummary: KkContextSummary | null;
+  presetInput?: KkPresetInput | null;
+  onPresetConsumed?: () => void;
   onMessagesChange: (messages: KkMessage[]) => void;
   onCandidateChange: (candidate: KkCandidate | null) => void;
   onAppliedVersion: (versionId: string) => void;
@@ -49,6 +67,9 @@ export function KkScreenplayRoom({
   conversationId,
   messages,
   pendingCandidate,
+  contextSummary,
+  presetInput,
+  onPresetConsumed,
   onMessagesChange,
   onCandidateChange,
   onAppliedVersion,
@@ -58,9 +79,32 @@ export function KkScreenplayRoom({
   const [input, setInput] = useState(preservedInput);
   const [mode, setMode] = useState<"discuss" | "propose_change">("discuss");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; requestId?: string } | null>(null);
   const [diffVm, setDiffVm] = useState<CandidateDiffViewModel | null>(null);
   const retryRef = useRef<(() => void) | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+
+  // 外部工具（本土化等）注入的预设输入。
+  useEffect(() => {
+    if (!presetInput) return;
+    setInput(presetInput.text);
+    setMode(presetInput.mode);
+    onInputPreserved(presetInput.text);
+    onPresetConsumed?.();
+  }, [presetInput, onInputPreserved, onPresetConsumed]);
+
+  // 新消息时滚到底部（会话恢复后同样生效）。
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, pendingCandidate?.id]);
+
+  const describeError = useCallback((e: unknown): { message: string; requestId?: string } => {
+    if (e instanceof ScreenplayStudioApiError) {
+      return { message: e.userMessage, requestId: e.requestId };
+    }
+    return { message: e instanceof Error ? e.message : "请求失败；你的输入已保留，可重试。" };
+  }, []);
 
   const runAction = useCallback(
     async (action: "discuss" | "propose_change", text: string) => {
@@ -69,38 +113,50 @@ export function KkScreenplayRoom({
       setError(null);
       onInputPreserved(text);
       try {
-        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/${action === "discuss" ? "discuss" : "propose-change"}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversationId, userMessage: text }),
-        });
-        const body = (await response.json().catch(() => ({}))) as {
-          success?: boolean;
-          error?: string;
-          userMessage?: KkMessage;
-          assistantMessage?: KkMessage;
-          candidate?: KkCandidate;
-        };
-        if (!response.ok || !body.success) throw new Error(body.error ?? `请求失败 (${response.status})`);
-        const next = [...messages];
-        if (body.userMessage && !next.some((m) => m.id === body.userMessage!.id)) next.push(body.userMessage);
-        if (body.assistantMessage && !next.some((m) => m.id === body.assistantMessage!.id)) next.push(body.assistantMessage);
-        onMessagesChange(next);
-        if (action === "propose_change" && body.candidate) {
-          onCandidateChange(body.candidate);
-          setDiffVm(createCandidateDiffViewModel(body.candidate));
+        if (action === "discuss") {
+          const body = await screenplayStudioApi.discuss(workId, {
+            conversationId,
+            userMessage: text,
+            clientContext: contextSummary ? `${contextSummary.label} · ${contextSummary.detail}`.slice(0, 200) : undefined,
+          });
+          const next = [...messages];
+          if (!next.some((m) => m.id === body.userMessage.id)) next.push(body.userMessage);
+          if (!next.some((m) => m.id === body.assistantMessage.id)) next.push(body.assistantMessage);
+          onMessagesChange(next);
+        } else {
+          const body = await screenplayStudioApi.proposeChange(workId, {
+            conversationId,
+            userMessage: text,
+            scope: { kind: "all" },
+            clientContext: contextSummary ? `${contextSummary.label} · ${contextSummary.detail}`.slice(0, 200) : undefined,
+          });
+          // propose 的用户/助手消息在服务端追加；拉取最新会话保持一致。
+          try {
+            const history = await screenplayStudioApi.listMessages(workId, conversationId);
+            onMessagesChange(history);
+          } catch {
+            /* 历史拉取失败不阻断候选展示 */
+          }
+          if (body.candidate) {
+            onCandidateChange(body.candidate);
+            setDiffVm(createCandidateDiffViewModel(body.candidate));
+          }
         }
         setInput("");
         onInputPreserved("");
       } catch (e) {
         // 失败保护：输入、消息、旧候选全部保留
-        setError(e instanceof Error ? e.message : "请求失败；你的输入已保留，可重试。");
+        const described = describeError(e);
+        setError({
+          message: described.requestId ? `${described.message}（编号 ${described.requestId}）` : described.message,
+          requestId: described.requestId,
+        });
         retryRef.current = () => void runAction(action, text);
       } finally {
         setBusy(false);
       }
     },
-    [workId, conversationId, messages, onMessagesChange, onCandidateChange, onInputPreserved],
+    [workId, conversationId, messages, contextSummary, onMessagesChange, onCandidateChange, onInputPreserved, describeError],
   );
 
   const handleSend = useCallback(() => {
@@ -113,48 +169,45 @@ export function KkScreenplayRoom({
       if (!pendingCandidate) return;
       setBusy(true);
       try {
-        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/propose-change`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ candidateId: pendingCandidate.id, acceptedPatchIndexes: acceptedIndexes }),
+        const body = await screenplayStudioApi.applyCandidate(workId, {
+          candidateId: pendingCandidate.id,
+          acceptedPatchIndexes: acceptedIndexes,
         });
-        const body = (await response.json().catch(() => ({}))) as { success?: boolean; version?: { id: string }; error?: string };
-        if (!response.ok || !body.success || !body.version) throw new Error(body.error ?? "采用失败");
         onAppliedVersion(body.version.id);
         onCandidateChange(null);
         setDiffVm(null);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "采用失败");
+        setError(describeError(e));
       } finally {
         setBusy(false);
       }
     },
-    [workId, pendingCandidate, onAppliedVersion, onCandidateChange],
+    [workId, pendingCandidate, onAppliedVersion, onCandidateChange, describeError],
   );
 
   const rejectCandidate = useCallback(async () => {
     if (!pendingCandidate) return;
     setBusy(true);
     try {
-      const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}/screenplay/propose-change`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateId: pendingCandidate.id }),
-      });
-      const body = (await response.json().catch(() => ({}))) as { success?: boolean; error?: string };
-      if (!response.ok || !body.success) throw new Error(body.error ?? "拒绝失败");
+      await screenplayStudioApi.rejectCandidate(workId, { candidateId: pendingCandidate.id });
       onCandidateChange(null);
       setDiffVm(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "拒绝失败");
+      setError(describeError(e));
     } finally {
       setBusy(false);
     }
-  }, [workId, pendingCandidate, onCandidateChange]);
+  }, [workId, pendingCandidate, onCandidateChange, describeError]);
 
   return (
     <div className={styles.kkConversation} data-testid="kk-screenplay-room">
-      <div className={styles.kkTranscript}>
+      {contextSummary ? (
+        <div className={styles.kkContextChip} data-testid="kk-context">
+          <span className={styles.kkContextLabel}>{contextSummary.label}</span>
+          <span className={styles.kkContextDetail}>{contextSummary.detail}</span>
+        </div>
+      ) : null}
+      <div className={styles.kkTranscript} ref={transcriptRef}>
         {messages.length === 0 ? (
           <div className={styles.kkWelcome}>
             <div className={styles.kkWelcomeEyebrow}>KK · AI 剧本伙伴</div>
@@ -180,7 +233,7 @@ export function KkScreenplayRoom({
         ) : null}
         {error ? (
           <div className={styles.staleRow} role="alert">
-            {error}
+            {error.message}
             <div className={styles.staleActions}>
               <button type="button" className={styles.staleActionBtn} onClick={() => retryRef.current?.()}>
                 重试（复用同一快照）
@@ -190,7 +243,7 @@ export function KkScreenplayRoom({
         ) : null}
       </div>
       <div className={styles.kkComposer}>
-        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+        <div className={styles.kkModeRow}>
           <button
             type="button"
             className={`${styles.tabBtn} ${mode === "discuss" ? styles.active : ""}`}
@@ -210,7 +263,7 @@ export function KkScreenplayRoom({
         </div>
         <textarea
           className={styles.editorTextarea}
-          style={{ minHeight: 128 }}
+          style={{ minHeight: 96 }}
           value={input}
           aria-label="KK 输入"
           onChange={(e) => setInput(e.target.value)}

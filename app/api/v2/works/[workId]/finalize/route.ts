@@ -6,7 +6,7 @@
  * The versionId must be an existing checkpoint or editing_draft of the same work.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { finalizeWorkVersion, WorkVersionsServiceError } from "@/lib/server/v2/works/versions";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function POST(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

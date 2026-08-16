@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest, hasServiceRoleConfig, serviceFetch, getViewerFromCookies } from "@/lib/supabase/server";
+import { authenticateRequest, hasServiceRoleConfig, serviceFetch, getViewerFromCookies, getViewerFromRequest} from "@/lib/supabase/server";
 import {
   getPublication,
   hidePublication,
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       );
     }
     const { id } = await params;
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
 
     const publication = await getPublicationDetail(serviceFetch, id);
     if (!publication) {

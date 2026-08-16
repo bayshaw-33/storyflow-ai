@@ -4,7 +4,7 @@
  *   POST /api/v2/works/[workId]/timeline — save (CAS baseVersionId → 409)
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { TimelineVersioningService, TimelineVersionError } from "@/lib/server/v2/editing";
 import { TIMELINE_SCHEMA_VERSION } from "@/lib/editor/types";
 
@@ -39,7 +39,7 @@ export async function GET(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Timeline service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }
@@ -69,7 +69,7 @@ export async function POST(
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "Timeline service not configured.", code: "service_unavailable" }, { status: 503 });
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) {
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }

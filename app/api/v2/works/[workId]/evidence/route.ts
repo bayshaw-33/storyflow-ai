@@ -9,7 +9,7 @@
  * large packages will return 202 + jobId in a future iteration.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { buildEvidenceManifestV2, ManifestBuilderError } from "@/lib/server/v2/evidence/manifest-v2";
 import {
   materializeEvidencePackageV2,
@@ -31,7 +31,7 @@ export async function GET(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },
@@ -71,7 +71,7 @@ export async function POST(
         { status: 503 },
       );
     }
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) {
       return NextResponse.json(
         { success: false, error: "Authentication required.", code: "unauthenticated" },

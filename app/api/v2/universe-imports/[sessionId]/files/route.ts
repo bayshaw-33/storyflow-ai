@@ -7,7 +7,7 @@
  * Phase 4 Task 4.2
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { UniverseImportSessionsService, UniverseImportError } from "@/lib/server/v2/universe-import";
 import { signUploadTarget } from "@/lib/server/v2/universe-import/storage";
 
@@ -20,7 +20,7 @@ export async function GET(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(_request);
     if (!viewer) return unauthorized();
     const { sessionId } = await params;
     const service = new UniverseImportSessionsService(serviceFetch);
@@ -37,7 +37,7 @@ export async function POST(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const { sessionId } = await params;
     const body = await request.json().catch(() => ({}));
@@ -71,7 +71,7 @@ export async function PATCH(
 ) {
   try {
     if (!hasServiceRoleConfig()) return unavailable();
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     if (!viewer) return unauthorized();
     const { sessionId } = await params;
     const body = await request.json().catch(() => ({}));
