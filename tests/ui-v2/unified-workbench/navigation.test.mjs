@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import {
@@ -6,6 +7,8 @@ import {
   parseUnifiedWorkbenchQuery,
 } from "../../../lib/contracts/v2/unified-workbench.ts";
 import { resolveWorkbenchRoute } from "../../../lib/client/v2/navigation/resolver.ts";
+
+const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("audiovisual work types share the production route and preserve stage", () => {
   const expected = {
@@ -50,4 +53,28 @@ test("dynamic storyboard is never accepted as a production stage", () => {
     parseUnifiedWorkbenchQuery("projectId=p1&workId=w1&tab=grid").tab,
     "storyboard",
   );
+});
+
+test("legacy production modes normalize to unified stages", () => {
+  const expected = {
+    art: "art",
+    planning: "storyboard",
+    grid: "storyboard",
+    dynamic: "storyboard",
+    editor: "video",
+  };
+  for (const [mode, stage] of Object.entries(expected)) {
+    assert.equal(
+      parseUnifiedWorkbenchQuery(`projectId=p1&mode=${mode}`).tab,
+      stage,
+    );
+  }
+});
+
+test("authenticated workbench client uses the shared screenplay auth transport", () => {
+  const source = read("../../../lib/client/v2/unified-workbench/api.ts");
+  assert.match(source, /fetchScreenplayStudio/);
+  assert.match(source, /workbench-context/);
+  assert.match(source, /workbench-stages/);
+  assert.match(source, /idempotency-key/);
 });

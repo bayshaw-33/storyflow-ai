@@ -15,6 +15,8 @@
  * 调用方负责传入上下文；本模块只决定"能否跳"以及"为什么不能跳"。
  */
 
+import { buildUnifiedWorkbenchUrl } from "@/lib/contracts/v2/unified-workbench";
+
 export type WorkbenchSide = "creation" | "production" | "dub" | "edit";
 
 export type JumpContext = {
@@ -116,9 +118,9 @@ export function buildProductionJumpUrl(
  */
 export function buildCreationJumpUrl(ctx: JumpContext): string {
   const projectId = ctx.projectId || "";
-  const sourceUnit = ctx.sourceUnitId || "";
-  const params = new URLSearchParams();
-  params.set("projectId", projectId);
-  if (sourceUnit) params.set("sourceUnitId", sourceUnit);
-  return `/script-workbench?${params.toString()}`;
+  return buildUnifiedWorkbenchUrl({
+    projectId,
+    tab: "script",
+    unitId: ctx.sourceUnitId,
+  });
 }

@@ -61,6 +61,7 @@ import {
 import styles from "@/components/universe/universe.module.css";
 // K2-T-07：v2 工作台默认渲染，view=v1 回退到 1.0 详情页
 import { UniverseWorkbenchClient } from "@/components/v2/universe/UniverseWorkbenchClient";
+import { buildUnifiedWorkbenchUrl } from "@/lib/contracts/v2/unified-workbench";
 
 type TabKey = "overview" | "assets" | "works" | "canon" | "inbox" | "graph";
 
@@ -1138,9 +1139,13 @@ function buildProjectFromUniverse(input: {
 
 function routeForCreatedProject(project: DramaProject) {
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
-  if (project.workflowType === "storyboard") return `/production?projectId=${encodeURIComponent(project.id)}&mode=planning`;
-  if (project.workflowType === "video") return `/production?projectId=${encodeURIComponent(project.id)}&mode=editor`;
-  return `/script-workbench?projectId=${encodeURIComponent(project.id)}`;
+  const tab =
+    project.workflowType === "storyboard"
+      ? "storyboard"
+      : project.workflowType === "video"
+        ? "video"
+        : "script";
+  return buildUnifiedWorkbenchUrl({ projectId: project.id, tab });
 }
 
 function buildUniverseInheritanceSummary(bundle: UniverseBundle) {

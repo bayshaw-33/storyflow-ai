@@ -58,16 +58,18 @@ export function parseUnifiedWorkbenchQuery(search: string | URLSearchParams): {
 } {
   const query =
     typeof search === "string" ? new URLSearchParams(search) : search;
-  const rawTab = query.get("tab");
+  const rawTab = query.get("tab") ?? query.get("mode");
   return {
     projectId: query.get("projectId"),
     workId: query.get("workId"),
     tab:
-      rawTab === "grid" || rawTab === "dynamic"
+      rawTab === "planning" || rawTab === "grid" || rawTab === "dynamic"
         ? "storyboard"
-        : isUnifiedProductionStage(rawTab)
-          ? rawTab
-          : "script",
+        : rawTab === "editor"
+          ? "video"
+          : isUnifiedProductionStage(rawTab)
+            ? rawTab
+            : "script",
     unitId: query.get("unitId") ?? query.get("sourceUnitId"),
   };
 }

@@ -5,6 +5,7 @@
 import type { AssetToken } from "@/lib/design/manifest";
 import type { DramaProject } from "@/lib/projects";
 import type { Universe } from "@/lib/universe";
+import { buildUnifiedWorkbenchUrl } from "@/lib/contracts/v2/unified-workbench";
 
 export type NodeType = "flagship" | "world" | "story" | "feature";
 export type EdgeType = "relation" | "unlock" | "dependency";
@@ -64,6 +65,26 @@ const FEATURE_NODES: { id: string; x: number; y: number; href?: string }[] = [
   { id: "feature-timeline", x: 84, y: 74 },
 ];
 
+function getProjectHref(project: DramaProject): string {
+  const projectId = encodeURIComponent(project.id);
+  if (project.workflowType === "song") {
+    return `/song-workbench?projectId=${projectId}`;
+  }
+  if (project.workflowType === "viral") {
+    const viralProjectId = project.id.startsWith("viral-")
+      ? project.id.slice("viral-".length)
+      : project.id;
+    return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${projectId}`;
+  }
+  const tab =
+    project.workflowType === "storyboard"
+      ? "storyboard"
+      : project.workflowType === "video"
+        ? "video"
+        : "script";
+  return buildUnifiedWorkbenchUrl({ projectId: project.id, tab });
+}
+
 export function buildUniverseGraph(projects: DramaProject[]): UniverseGraph {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -106,7 +127,7 @@ export function buildUniverseGraph(projects: DramaProject[]): UniverseGraph {
       x: clampPct(pos.x),
       y: clampPct(pos.y),
       scale: 0.95,
-      href: `/script-workbench?projectId=${encodeURIComponent(project.id)}`,
+      href: getProjectHref(project),
       connections: ["flagship"],
     });
     flagship.connections.push(worldId);
@@ -121,7 +142,7 @@ export function buildUniverseGraph(projects: DramaProject[]): UniverseGraph {
         x: clampPct(pos.x + 7),
         y: clampPct(pos.y + 9),
         scale: 0.7,
-      href: `/script-workbench?projectId=${encodeURIComponent(project.id)}`,
+        href: getProjectHref(project),
         connections: [worldId],
       });
       edges.push({ from: worldId, to: storyId, type: "dependency" });

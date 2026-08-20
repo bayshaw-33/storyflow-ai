@@ -10,6 +10,7 @@ import {
   getWorkflowSteps,
 } from "@/lib/projects";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { buildUnifiedWorkbenchUrl } from "@/lib/contracts/v2/unified-workbench";
 
 type ProjectListProps = {
   groupedProjects: Array<{
@@ -68,13 +69,17 @@ function getWorkflowDetail(project: DramaProject, isZh: boolean) {
 
 function getProjectHref(project: DramaProject) {
   if (project.workflowType === "song") return `/song-workbench?projectId=${encodeURIComponent(project.id)}`;
-  if (project.workflowType === "storyboard") return `/production?projectId=${encodeURIComponent(project.id)}&mode=planning`;
-  if (project.workflowType === "video") return `/production?projectId=${encodeURIComponent(project.id)}&mode=editor`;
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${encodeURIComponent(project.id)}`;
   }
-  return `/script-workbench?projectId=${encodeURIComponent(project.id)}`;
+  const tab =
+    project.workflowType === "storyboard"
+      ? "storyboard"
+      : project.workflowType === "video"
+        ? "video"
+        : "script";
+  return buildUnifiedWorkbenchUrl({ projectId: project.id, tab });
 }
 
 function formatUpdatedAt(value: string) {

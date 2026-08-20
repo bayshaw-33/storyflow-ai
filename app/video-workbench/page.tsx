@@ -1,6 +1,7 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { Suspense, type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { Download, Loader2, Play, Plus, RefreshCw, Save, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -9,6 +10,7 @@ import { createProject, readProjectsFromStorage, upsertProject, type DramaProjec
 import { readProjectFromSupabase, syncProjectsWithSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { buildProjectLink, listUniverses, saveInboxItems, upsertUniverseProjectLink, type Universe } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
+import { resolveUnifiedWorkbenchRoute } from "@/lib/client/v2/unified-workbench/api";
 
 type VideoStatus = "draft" | "queued" | "running" | "done" | "error";
 
@@ -211,7 +213,7 @@ function videoStateToMarkdown(state: VideoState, title: string) {
   ].filter(Boolean).join("\n");
 }
 
-export default function VideoWorkbenchPage() {
+function StandaloneVideoWorkbenchPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [projectId, setProjectId] = useState("");
@@ -891,5 +893,35 @@ export default function VideoWorkbenchPage() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function ProjectBoundVideoRedirect() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const workId = searchParams.get("workId");
+  const unitId = searchParams.get("unitId") ?? searchParams.get("sourceUnitId");
+
+  useEffect(() => {
+    if (!projectId) return;
+    void resolveUnifiedWorkbenchRoute({ projectId, workId, tab: "video", unitId })
+      .then((href) => router.replace(href))
+      .catch(() => router.replace("/projects/new-v2"));
+  }, [projectId, router, unitId, workId]);
+
+  return <main className="cosmic-page" aria-busy="true" />;
+}
+
+function VideoWorkbenchEntry() {
+  const projectId = useSearchParams().get("projectId");
+  return projectId ? <ProjectBoundVideoRedirect /> : <StandaloneVideoWorkbenchPage />;
+}
+
+export default function VideoWorkbenchPage() {
+  return (
+    <Suspense fallback={<main className="cosmic-page" aria-busy="true" />}>
+      <VideoWorkbenchEntry />
+    </Suspense>
   );
 }

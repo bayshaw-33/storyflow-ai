@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { Suspense, type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowRight, Download, ImagePlus, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
@@ -17,6 +18,7 @@ import {
   type Universe,
 } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
+import { resolveUnifiedWorkbenchRoute } from "@/lib/client/v2/unified-workbench/api";
 
 type Shot = {
   id: string;
@@ -327,7 +329,7 @@ function renderConceptPreview(asset: string, emptyText: string) {
   return <div className="studio-concept-preview">{asset || emptyText}</div>;
 }
 
-export default function StoryboardWorkbenchPage() {
+function StandaloneStoryboardWorkbenchPage() {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [projectId, setProjectId] = useState("");
@@ -1213,4 +1215,34 @@ function extractStoryboardSourceScript(project: DramaProject) {
     project.brief,
     project.idea,
   ].find((value) => value?.trim()) || "";
+}
+
+function ProjectBoundStoryboardRedirect() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const workId = searchParams.get("workId");
+  const unitId = searchParams.get("unitId") ?? searchParams.get("sourceUnitId");
+
+  useEffect(() => {
+    if (!projectId) return;
+    void resolveUnifiedWorkbenchRoute({ projectId, workId, tab: "storyboard", unitId })
+      .then((href) => router.replace(href))
+      .catch(() => router.replace("/projects/new-v2"));
+  }, [projectId, router, unitId, workId]);
+
+  return <main className="cosmic-page" aria-busy="true" />;
+}
+
+function StoryboardWorkbenchEntry() {
+  const projectId = useSearchParams().get("projectId");
+  return projectId ? <ProjectBoundStoryboardRedirect /> : <StandaloneStoryboardWorkbenchPage />;
+}
+
+export default function StoryboardWorkbenchPage() {
+  return (
+    <Suspense fallback={<main className="cosmic-page" aria-busy="true" />}>
+      <StoryboardWorkbenchEntry />
+    </Suspense>
+  );
 }

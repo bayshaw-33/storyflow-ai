@@ -1,5 +1,6 @@
 import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
 import type { ProjectLibraryProject } from "./types.ts";
+import { buildUnifiedWorkbenchUrl } from "../../../contracts/v2/unified-workbench.ts";
 
 export type ProjectLibrarySort = "updated" | "created" | "title";
 export type ProjectLibraryFilters = {
@@ -77,16 +78,17 @@ export function filterAndSortProjects(
 
 export function getProjectWorkbenchHref(project: ProjectLibraryProject) {
   const projectId = encodeURIComponent(project.id);
-  const sourceUnitId = encodeURIComponent(project.sourceUnitId || `project-${project.id}`);
+  const unitId = project.sourceUnitId || `project-${project.id}`;
+  const sourceUnitId = encodeURIComponent(unitId);
   if (project.workflowType === "song") return `/song-workbench?projectId=${projectId}`;
-  if (project.workflowType === "storyboard") return `/production?projectId=${projectId}&sourceUnitId=${sourceUnitId}&mode=planning`;
-  if (project.workflowType === "video") return `/production?projectId=${projectId}&sourceUnitId=${sourceUnitId}&mode=editor`;
-  if (project.workflowType === "art") return `/production?projectId=${projectId}&sourceUnitId=${sourceUnitId}&mode=art`;
+  if (project.workflowType === "storyboard") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "storyboard", unitId });
+  if (project.workflowType === "video") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "video", unitId });
+  if (project.workflowType === "art") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "art", unitId });
   if (project.workflowType === "voice") return `/casting?projectId=${projectId}`;
   if (project.workflowType === "editing") return `/editor?projectId=${projectId}&sourceUnitId=${sourceUnitId}`;
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${projectId}`;
   }
-  return `/script-workbench?projectId=${projectId}`;
+  return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "script", unitId });
 }

@@ -74,12 +74,12 @@ test("project library sorts by title, creation time, and update time", () => {
   assert.deepEqual(filterAndSortProjects(projects, { ...base, sort: "updated" }).map((p) => p.id), ["b", "a"]);
 });
 
-test("project library routes each legacy project to its existing workbench", () => {
-  assert.equal(getProjectWorkbenchHref(project({ id: "script-1", workflowType: "creation" })), "/script-workbench?projectId=script-1");
+test("project library routes audiovisual projects into production and preserves professional routes", () => {
+  assert.equal(getProjectWorkbenchHref(project({ id: "script-1", workflowType: "creation" })), "/production?projectId=script-1&tab=script&unitId=project-script-1");
   assert.equal(getProjectWorkbenchHref(project({ id: "song-1", workflowType: "song" })), "/song-workbench?projectId=song-1");
-  assert.equal(getProjectWorkbenchHref(project({ id: "storyboard-1", workflowType: "storyboard" })), "/production?projectId=storyboard-1&sourceUnitId=project-storyboard-1&mode=planning");
-  assert.equal(getProjectWorkbenchHref(project({ id: "video-1", workflowType: "video" })), "/production?projectId=video-1&sourceUnitId=project-video-1&mode=editor");
-  assert.equal(getProjectWorkbenchHref(project({ id: "art-1", workflowType: "art" })), "/production?projectId=art-1&sourceUnitId=project-art-1&mode=art");
+  assert.equal(getProjectWorkbenchHref(project({ id: "storyboard-1", workflowType: "storyboard" })), "/production?projectId=storyboard-1&tab=storyboard&unitId=project-storyboard-1");
+  assert.equal(getProjectWorkbenchHref(project({ id: "video-1", workflowType: "video" })), "/production?projectId=video-1&tab=video&unitId=project-video-1");
+  assert.equal(getProjectWorkbenchHref(project({ id: "art-1", workflowType: "art" })), "/production?projectId=art-1&tab=art&unitId=project-art-1");
   assert.equal(getProjectWorkbenchHref(project({ id: "voice-1", workflowType: "voice" })), "/casting?projectId=voice-1");
   assert.equal(getProjectWorkbenchHref(project({ id: "editing-1", workflowType: "editing" })), "/editor?projectId=editing-1&sourceUnitId=project-editing-1");
   assert.equal(getProjectWorkbenchHref(project({ id: "viral-source", workflowType: "viral" })), "/viral-workbench?projectId=source&dashboardProjectId=viral-source");

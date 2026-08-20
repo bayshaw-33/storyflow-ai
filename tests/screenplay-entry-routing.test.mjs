@@ -4,18 +4,26 @@ import test from "node:test";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("existing screenplay projects enter the V2.2 screenplay studio", () => {
+test("project-bound audiovisual entry points use the unified production route", () => {
   const sources = [
     read("../components/home/ProjectList.tsx"),
     read("../components/universe/UniverseWorks.tsx"),
     read("../app/universes/[universeId]/page.tsx"),
     read("../lib/universe/graph.ts"),
+    read("../lib/client/v2/project-library/helpers.ts"),
   ];
 
   for (const source of sources) {
     assert.doesNotMatch(source, /novel-workbench\?projectId=/);
-    assert.match(source, /script-workbench\?projectId=/);
+    assert.doesNotMatch(source, /script-workbench\?projectId=/);
+    assert.match(source, /buildUnifiedWorkbenchUrl|resolveWorkbenchRoute/);
   }
+});
+
+test("universe graph preserves standalone project routes", () => {
+  const graph = read("../lib/universe/graph.ts");
+  assert.match(graph, /song-workbench/);
+  assert.match(graph, /viral-workbench/);
 });
 
 test("active creation entry points contain no novel module or route", () => {
@@ -45,10 +53,28 @@ test("retired novel workbench is only a redirect and legacy storage is filtered 
   assert.match(supabaseProjects, /projects: visibleLocalProjects/);
 });
 
-test("the screenplay route resolves legacy project ids into ScreenplayStudio", () => {
-  const source = read("../app/script-workbench/page.tsx");
-  assert.match(source, /resolve-work\?projectId=/);
-  assert.match(source, /<ScreenplayStudio \/>/);
+test("legacy project workbench pages resolve and redirect without mounting old workbenches", () => {
+  for (const legacyPage of [
+    "../app/script-workbench/page.tsx",
+    "../app/production-workbench/page.tsx",
+  ]) {
+    const source = read(legacyPage);
+    assert.match(source, /router\.replace|redirect/);
+    assert.match(source, /resolveUnifiedWorkbenchRoute/);
+    assert.doesNotMatch(source, /<ScreenplayStudio|<ProductionWorkbench/);
+  }
+});
+
+test("legacy audiovisual workbench pages keep standalone modes and redirect project-bound entries", () => {
+  for (const legacyPage of [
+    "../app/storyboard-workbench/page.tsx",
+    "../app/art-workbench/page.tsx",
+    "../app/video-workbench/page.tsx",
+  ]) {
+    const source = read(legacyPage);
+    assert.match(source, /router\.replace|redirect/);
+    assert.match(source, /projectId/);
+  }
 });
 
 test("homepage Hero enters the unified project-start grid instead of the retired modal", () => {
