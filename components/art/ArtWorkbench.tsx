@@ -8,7 +8,7 @@ import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
-import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
+import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ArtWorkbench.module.css";
@@ -84,9 +84,11 @@ type ArtWorkbenchProps = {
   contextProjectTitle?: string;
   /** PRD §7.2：嵌入美术台必须同时携带 sourceUnitId，scope 不能只有 project */
   contextSourceUnitId?: string;
+  /** Task 6：嵌入美术台必须绑定到明确的 stage Work */
+  contextWorkId?: string;
 };
 
-export default function ArtWorkbench({ contextProjectId, contextProjectTitle, contextSourceUnitId }: ArtWorkbenchProps = {}) {
+export default function ArtWorkbench({ contextProjectId, contextProjectTitle, contextSourceUnitId, contextWorkId }: ArtWorkbenchProps = {}) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
@@ -104,9 +106,12 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   const [isHydrated, setIsHydrated] = useState(false);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
-  const storageKey = getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId);
-  // PRD §8.1：嵌入模式（制作工作台美术 Tab）隐藏独立项目创建/切换能力
-  const isEmbedded = Boolean(contextProjectId);
+  const isEmbedded = Boolean(contextProjectId || contextWorkId);
+  const embeddedStorageKey = isEmbedded
+    ? resolveArtDraftKey({ userId: session?.user.id, projectId: contextProjectId, workId: contextWorkId })
+    : null;
+  const storageKey = embeddedStorageKey || getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId);
+  const storageReady = !isEmbedded || Boolean(embeddedStorageKey);
 
   useEffect(() => {
     setIsHydrated(false);
@@ -122,7 +127,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     void supabase?.auth.getSession().then(({ data }) => loadSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { void loadSession(next); }) || {};
     // 加载归档索引（用于"我的草稿"下拉）
-    setArchiveIndex(readArchiveIndex(storageKey));
+    setArchiveIndex(storageReady ? readArchiveIndex(storageKey) : []);
     const params = new URLSearchParams(window.location.search);
 
     // 通用：开始新草稿前自动归档当前草稿（不丢失任何工作成果）
@@ -145,7 +150,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     // 任务 2：嵌入模式（制作工作台美术 Tab）——用传入的项目上下文初始化
     if (contextProjectId) {
       try {
-        const existing = localStorage.getItem(storageKey);
+        const existing = storageReady ? localStorage.getItem(storageKey) : null;
         const baseState = existing ? { ...createEmptyArtWorkbenchState(), ...JSON.parse(existing) as ArtWorkbenchState } : createEmptyArtWorkbenchState();
         setState({
           ...baseState,
@@ -193,24 +198,24 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       return () => listener?.subscription.unsubscribe();
     }
     try {
-      const saved = localStorage.getItem(storageKey);
+      const saved = storageReady ? localStorage.getItem(storageKey) : null;
       if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
     } catch (error) {
       // JSON 解析失败：备份损坏数据以便排查，并提示用户（不静默清空）
       try {
-        const saved = localStorage.getItem(storageKey);
+        const saved = storageReady ? localStorage.getItem(storageKey) : null;
         if (saved) localStorage.setItem(`${storageKey}__corrupted_backup_${Date.now()}`, saved);
       } catch { /* 备份失败忽略 */ }
       setNotice(isZh ? "本地美术草稿数据损坏，已自动备份原始数据。请重新开始或联系支持。" : "Local art draft data is corrupted. Original data has been backed up.");
     }
     setIsHydrated(true);
     return () => listener?.subscription.unsubscribe();
-  }, [contextProjectId, contextProjectTitle, contextSourceUnitId, isZh, storageKey]);
+  }, [contextProjectId, contextProjectTitle, contextSourceUnitId, contextWorkId, isZh, storageKey, storageReady]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !storageReady) return;
     try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
-  }, [isHydrated, state, storageKey]);
+  }, [isHydrated, state, storageKey, storageReady]);
 
   const visibleAssets = useMemo(() => state.assets.filter((asset) => asset.kind === selectedKind && (!query.trim() || `${asset.name} ${asset.role} ${asset.description}`.toLowerCase().includes(query.trim().toLowerCase()))), [state.assets, selectedKind, query]);
   const counts = useMemo(() => ({ character: state.assets.filter((asset) => asset.kind === "character").length, scene: state.assets.filter((asset) => asset.kind === "scene").length, prop: state.assets.filter((asset) => asset.kind === "prop").length }), [state.assets]);
@@ -451,7 +456,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         <div className={styles.brand}><span>KIIKIS</span><strong>{state.title}</strong><small>美术工作台</small></div>
         <div className={styles.headerActions}>
           {/* 关联已有项目下拉：无论嵌入/独立模式都显示，让用户能切换 art 上下文到其他已有项目 */}
-          <label className={styles.projectSelect}><Archive size={15} /><select value={state.projectId || ""} onChange={(event) => selectProject(event.target.value)}><option value="">{isZh ? "关联已有项目" : "Link project"}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDown size={14} /></label>
+          {isEmbedded ? null : <label className={styles.projectSelect}><Archive size={15} /><select value={state.projectId || ""} onChange={(event) => selectProject(event.target.value)}><option value="">{isZh ? "关联已有项目" : "Link project"}</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDown size={14} /></label>}
           {/* PRD §8.1：嵌入模式（制作工作台美术 Tab）隐藏独立项目创建/草稿切换/清空能力 */}
           {isEmbedded ? null : (
             <>
@@ -484,7 +489,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.repoActions}><button type="button" className={styles.extractButton} onClick={extractAssets} disabled={busy === "extract" || !state.sourceText.trim()} title={!state.sourceText.trim() ? "请先关联项目或上传资料" : "AI 自动拆解角色、场景、道具"}>{busy === "extract" ? <LoaderCircle className={styles.spin} size={16} /> : <Sparkles size={16} />}{busy === "extract" ? "拆解中..." : "自动拆解"}</button><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} embedded={isEmbedded} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -500,7 +505,7 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
   return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string }) {
+function AssetCard({ asset, onDelete, isZh, embedded, scopeProjectId, scopeSourceUnitId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; embedded?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string }) {
   const image = useMemo(() => {
     // 优先使用已设为终稿的版本图；否则取最新生成的版本图
     const masterVariant = asset.variants?.find((item) => item.type === "master");
@@ -520,14 +525,17 @@ function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }:
     }
     return path;
   }, [asset.id, scopeProjectId, scopeSourceUnitId]);
+  const cardContent = (
+    <>
+      <div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div>
+      <div className={styles.assetTitle}><strong>{asset.name}</strong><span className={asset.status === "ready" ? styles.ready : ""}>{asset.status === "ready" ? "已锁定" : asset.status === "generating" ? "生成中" : asset.status === "error" ? "失败" : "草稿"}</span></div>
+      <p>{asset.role || asset.description || "尚未填写设计说明"}</p>
+      <small>{asset.kind === "character" ? `${asset.variants?.length || 0} 个剧中造型` : `${asset.variants?.length || 0} 个状态变体`}</small>
+    </>
+  );
   return (
     <div className={styles.assetCardWrapper}>
-      <Link className={styles.assetCard} href={assetDetailHref}>
-        <div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div>
-        <div className={styles.assetTitle}><strong>{asset.name}</strong><span className={asset.status === "ready" ? styles.ready : ""}>{asset.status === "ready" ? "已锁定" : asset.status === "generating" ? "生成中" : asset.status === "error" ? "失败" : "草稿"}</span></div>
-        <p>{asset.role || asset.description || "尚未填写设计说明"}</p>
-        <small>{asset.kind === "character" ? `${asset.variants?.length || 0} 个剧中造型` : `${asset.variants?.length || 0} 个状态变体`}</small>
-      </Link>
+      {embedded ? <div className={styles.assetCard}>{cardContent}</div> : <Link className={styles.assetCard} href={assetDetailHref}>{cardContent}</Link>}
       {onDelete ? <button type="button" className={styles.assetDeleteBtn} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(asset.id); }} title={isZh ? "删除" : "Delete"}>×</button> : null}
     </div>
   );

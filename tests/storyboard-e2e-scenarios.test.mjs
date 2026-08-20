@@ -10,6 +10,7 @@
  * Run: node --test tests/storyboard-e2e-scenarios.test.mjs
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -41,4 +42,12 @@ test("legacy dynamic storyboard URL redirects compatibly (never a top-level tab)
 
 test("legacy dynamic grid schema version stays parseable", () => {
   assert.equal(DYNAMIC_GRID_SCHEMA_VERSION, "kiikis.dynamic-grid-storyboard/1");
+});
+
+test("production keeps one storyboard stage and moves motion grid inside it", () => {
+  const productionSource = readFileSync(new URL("../components/production/ProductionWorkbench.tsx", import.meta.url), "utf8");
+  const stageSource = readFileSync(new URL("../components/production/UnifiedStoryboardStage.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(productionSource, /UNIFIED_PRODUCTION_STAGES[\s\S]{0,240}grid/);
+  assert.match(stageSource, /DynamicGridEditor/);
+  assert.match(stageSource, /type StoryboardSubview = "shot_table" \| "grids" \| "motion" \| "prompts"/);
 });

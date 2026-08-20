@@ -23,6 +23,29 @@ export function getArtWorkbenchStorageKey(projectId?: string, sourceUnitId?: str
   return ART_WORKBENCH_STORAGE_KEY;
 }
 
+export type ArtDraftScope = {
+  userId?: string;
+  projectId?: string;
+  workId?: string;
+};
+
+/**
+ * Resolve the storage scope for an embedded Art Work.
+ *
+ * Embedded drafts must never fall back to the legacy project/global key: until
+ * all three identities are known, returning null makes the caller wait rather
+ * than risk showing or overwriting another user's work.
+ */
+export function resolveArtDraftKey(scope: ArtDraftScope): string | null {
+  const userId = scope.userId?.trim();
+  const projectId = scope.projectId?.trim();
+  const workId = scope.workId?.trim();
+  if (!userId || !projectId || !workId) return null;
+  return [ART_WORKBENCH_STORAGE_KEY, userId, projectId, workId]
+    .map((part) => encodeURIComponent(part))
+    .join(":");
+}
+
 export type ArtAssetKind = "character" | "scene" | "prop";
 export type ArtCharacterPriority = "lead" | "supporting" | "minor";
 export type ArtAssetStatus = "draft" | "generating" | "ready" | "error";

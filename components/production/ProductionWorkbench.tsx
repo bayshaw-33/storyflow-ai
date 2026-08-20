@@ -73,8 +73,8 @@ import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
 import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
-import { DynamicGridEditor } from "./DynamicGridEditor";
 import { ScreenplayStudio } from "@/components/v2/screenplay-studio/ScreenplayStudio";
+import { StoryboardFrameGrid, StoryboardPromptList, UnifiedStoryboardStage, type StoryboardSubview } from "./UnifiedStoryboardStage";
 import {
   buildUnifiedWorkbenchUrl,
   parseUnifiedWorkbenchQuery,
@@ -108,7 +108,7 @@ export function ProductionWorkbench() {
 
   // --- 顶层状态 ---
   const [activeStage, setActiveStage] = useState<UnifiedProductionStage>("script");
-  const [storyboardView, setStoryboardView] = useState<"table" | "grid">("table");
+  const [storyboardSubview, setStoryboardSubview] = useState<StoryboardSubview>("shot_table");
   const [session, setSession] = useState<Session | null>(null);
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient | null>(null);
   const [projectId, setProjectId] = useState<string>("");
@@ -234,7 +234,7 @@ export function ProductionWorkbench() {
         setIsEmptyState(false);
         setProjectTitle("未命名草稿");
         setActiveStage(query.tab);
-        setStoryboardView("table");
+        setStoryboardSubview("shot_table");
         setEntryMode(mode as EntryMode);
         setContext(null);
         setHydrationPhase("loading_local");
@@ -250,6 +250,11 @@ export function ProductionWorkbench() {
     setWorkId(query.workId);
     setUnitId(query.unitId || "");
     setActiveStage(query.tab);
+    const requestedStoryboardSubview = searchParams.get("storyboardView") || searchParams.get("view");
+    if (requestedStoryboardSubview === "grid") setStoryboardSubview("grids");
+    else if (requestedStoryboardSubview === "dynamic" || requestedStoryboardSubview === "motion") setStoryboardSubview("motion");
+    else if (requestedStoryboardSubview === "prompts" || requestedStoryboardSubview === "video_prompt") setStoryboardSubview("prompts");
+    else if (requestedStoryboardSubview === "shot_table" || requestedStoryboardSubview === "shots") setStoryboardSubview("shot_table");
     setHandoffId(searchParams.get("handoffId") || "");
     setHydrationPhase("loading_local");
 
@@ -791,7 +796,7 @@ export function ProductionWorkbench() {
         setDeletedShotIds([]);
         setNotice(`已分析剧本：${response.scenes.length} 场 · ${response.scenes.reduce((n, s) => n + s.shots.length, 0)} 个分镜。`);
         setActiveStage("storyboard");
-        setStoryboardView("table");
+        setStoryboardSubview("shot_table");
       }
     } catch (err) {
       // BLOCKER 4 contract: 不清场，保留现有 scenes
@@ -1341,7 +1346,18 @@ export function ProductionWorkbench() {
     }), { scroll: false });
     setWorkId(nextWorkId);
     setActiveStage(stage);
-    if (stage === "storyboard") setStoryboardView("table");
+    if (stage === "storyboard") setStoryboardSubview("shot_table");
+  }
+
+  function handleStoryboardSubviewChange(subview: StoryboardSubview) {
+    setStoryboardSubview(subview);
+    if (!projectId) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("projectId", projectId);
+    params.set("tab", "storyboard");
+    if (workId) params.set("workId", workId);
+    params.set("view", subview);
+    router.replace(`/production?${params.toString()}`, { scroll: false });
   }
 
   const handleStageChange = (stage: UnifiedProductionStage) => {
@@ -1620,13 +1636,6 @@ export function ProductionWorkbench() {
                 </div>
               );
             })}
-            {activeStage === "storyboard" ? (
-              <div className={styles.storyboardTools} aria-label="分镜工具">
-                <p className={styles.stageRailTitle}>分镜工具</p>
-                <button type="button" className={storyboardView === "table" ? styles.storyboardToolActive : styles.storyboardTool} onClick={() => setStoryboardView("table")}>分镜表</button>
-                <button type="button" className={storyboardView === "grid" ? styles.storyboardToolActive : styles.storyboardTool} onClick={() => setStoryboardView("grid")}>动态宫格</button>
-              </div>
-            ) : null}
           </aside>
 
           <div className={styles.stageContent}>
@@ -1649,36 +1658,57 @@ export function ProductionWorkbench() {
               )
             ) : null}
             {activeStage === "art" ? (
-              <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} />
-            ) : null}
-            {activeStage === "storyboard" && storyboardView === "table" ? (
-              <StoryboardTablePanel
-                scenes={scenes}
-                revision={revision}
-                analyzingSceneId={analyzingSceneId}
-                conflictRevision={conflictRevision}
-                onUpdateScene={updateScene}
-                onUpdateShot={updateShot}
-                onAddShot={addShot}
-                onDeleteShot={deleteShot}
-                onAddScene={addScene}
-                onDeleteScene={deleteScene}
-                onSplitShot={splitShot}
-                onMergeShot={() => { /* TODO: 任务 8 配套 */ }}
-                onMoveShot={moveShot}
-                onToggleShotLock={toggleShotLock}
-                onToggleShotConfirm={toggleShotConfirm}
-                onReanalyzeScene={(sceneId) => analyzeScript("scene", sceneId)}
-                onClearConflict={() => setConflictRevision(null)}
-              />
-            ) : null}
-            {activeStage === "storyboard" && storyboardView === "grid" ? (
-              handoffId ? (
-                <DynamicGridEditor handoffId={handoffId} />
+              workId ? (
+                <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} contextWorkId={workId} />
               ) : (
-                <div style={{ padding: "40px 28px", color: "var(--ink-muted)", textAlign: "center" }}>
-                  请先在剧本工作台「定稿并进入分镜」以生成 handoff，再回到分镜工具打开动态宫格。
-                </div>
+                <section className={styles.stageEmpty}>
+                  <h2>美术工作流尚未启动</h2>
+                  <p>先建立美术 Work，角色、场景和道具会统一纳入当前项目的美术资产。</p>
+                  <button type="button" className={styles.primaryButton} onClick={() => void startStage("art")}>开始美术</button>
+                </section>
+              )
+            ) : null}
+            {activeStage === "storyboard" ? (
+              workId ? (
+                <UnifiedStoryboardStage
+                  projectId={projectId}
+                  workId={workId}
+                  unitId={unitId || null}
+                  subview={storyboardSubview}
+                  onSubviewChange={handleStoryboardSubviewChange}
+                  handoffId={handoffId || null}
+                  content={{
+                    shot_table: (
+                      <StoryboardTablePanel
+                        scenes={scenes}
+                        revision={revision}
+                        analyzingSceneId={analyzingSceneId}
+                        conflictRevision={conflictRevision}
+                        onUpdateScene={updateScene}
+                        onUpdateShot={updateShot}
+                        onAddShot={addShot}
+                        onDeleteShot={deleteShot}
+                        onAddScene={addScene}
+                        onDeleteScene={deleteScene}
+                        onSplitShot={splitShot}
+                        onMergeShot={() => { /* TODO: 任务 8 配套 */ }}
+                        onMoveShot={moveShot}
+                        onToggleShotLock={toggleShotLock}
+                        onToggleShotConfirm={toggleShotConfirm}
+                        onReanalyzeScene={(sceneId) => analyzeScript("scene", sceneId)}
+                        onClearConflict={() => setConflictRevision(null)}
+                      />
+                    ),
+                    grids: <StoryboardFrameGrid scenes={scenes} frames={frames} />,
+                    prompts: <StoryboardPromptList scenes={scenes} prompts={prompts} onGenerate={() => void generatePromptsForShots(scenes.flatMap((scene) => scene.shots.map((shot) => shot.id ?? shot.clientId ?? "")))} />,
+                  }}
+                />
+              ) : (
+                <section className={styles.stageEmpty}>
+                  <h2>分镜工作流尚未启动</h2>
+                  <p>先建立分镜 Work，镜头表、宫格、运动预览和视频提示词会在同一页面中切换。</p>
+                  <button type="button" className={styles.primaryButton} onClick={() => void startStage("storyboard")}>开始分镜</button>
+                </section>
               )
             ) : null}
             {activeStage === "video" ? (

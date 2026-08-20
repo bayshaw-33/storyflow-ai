@@ -15,6 +15,7 @@ import {
   createArtAsset,
   createEmptyArtWorkbenchState,
   getArtWorkbenchStorageKey,
+  resolveArtDraftKey,
   buildArtImagePrompt,
 } from "../lib/art-workbench.ts";
 import {
@@ -33,6 +34,34 @@ test("art-workbench core exports keep working (regression guard)", () => {
   assert.equal(asset.kind, "character");
   assert.ok(getArtWorkbenchStorageKey("p1", "u1").includes("p1"));
   assert.ok(buildArtImagePrompt(asset, "concept", "冷色调").length > 0);
+});
+
+test("same project different Work IDs receive different embedded draft/archive scopes", () => {
+  const first = resolveArtDraftKey({ userId: "u1", projectId: "p1", workId: "art-1" });
+  const second = resolveArtDraftKey({ userId: "u1", projectId: "p1", workId: "art-2" });
+
+  assert.ok(first);
+  assert.ok(second);
+  assert.notEqual(first, second);
+  assert.match(first, /u1/);
+  assert.match(first, /p1/);
+  assert.match(first, /art-1/);
+});
+
+test("embedded Art scope refuses to fall back to an unscoped key", () => {
+  assert.equal(resolveArtDraftKey({ userId: "u1", projectId: "p1" }), null);
+  assert.equal(resolveArtDraftKey({ userId: "u1", workId: "art-1" }), null);
+  assert.equal(resolveArtDraftKey({ projectId: "p1", workId: "art-1" }), null);
+});
+
+test("embedded ArtWorkbench declares Work scope and hides standalone project navigation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const component = await readFile(new URL("../components/art/ArtWorkbench.tsx", import.meta.url), "utf8");
+
+  assert.match(component, /contextWorkId\?: string/);
+  assert.match(component, /resolveArtDraftKey\(/);
+  assert.match(component, /isEmbedded \? null/);
+  assert.match(component, /embedded \? <div className=\{styles\.assetCard\}/);
 });
 
 // ============================================================
