@@ -29,6 +29,7 @@ import type {
 import type { DashboardWorkflowType } from "@/lib/client/v2/dashboard/types";
 import {
   resolveJobDetailUrl,
+  resolveProjectWorkbenchRoute,
 } from "@/lib/client/v2/navigation/resolver";
 
 function formatRelative(iso: string, isZh: boolean): string {
@@ -56,12 +57,16 @@ function formatElapsed(ms: number, isZh: boolean): string {
 }
 
 const WORKFLOW_LABELS: Record<DashboardWorkflowType, string> = {
+  script: "剧本",
   creation: "原创剧本",
   continuation: "续作剧本",
   song: "歌曲",
+  art: "美术",
   viral: "短视频改编",
   storyboard: "分镜",
   video: "视频",
+  voice: "配音",
+  editing: "剪辑",
 };
 
 const CONFIRMATION_LABELS: Record<PendingConfirmationType, string> = {
@@ -111,7 +116,7 @@ export function ContinueCreatingSection({ projects }: { projects: RecentProject[
       ) : (
         <ul className={styles.list}>
           {projects.map((project) => {
-            const target = `/projects/${encodeURIComponent(project.id)}`;
+            const target = resolveProjectWorkbenchRoute(project.workflowType, { projectId: project.id });
             return (
             <li key={project.id}>
               <Link href={target} className={`${styles.row} ${styles.rowClickable}`}>

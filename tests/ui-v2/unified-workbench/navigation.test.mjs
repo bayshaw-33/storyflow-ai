@@ -7,6 +7,7 @@ import {
   parseUnifiedWorkbenchQuery,
 } from "../../../lib/contracts/v2/unified-workbench.ts";
 import { resolveWorkbenchRoute } from "../../../lib/client/v2/navigation/resolver.ts";
+import { buildProductionJumpUrl } from "../../../lib/workflow/can-jump.ts";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -69,6 +70,30 @@ test("legacy production modes normalize to unified stages", () => {
       stage,
     );
   }
+});
+
+test("creation-to-production jumps always carry an explicit canonical tab", () => {
+  const context = { projectId: "p1", sourceUnitId: "u1" };
+  const expected = {
+    planning: "storyboard",
+    art: "art",
+    editor: "video",
+    dub: "video",
+    edit: "video",
+  };
+
+  for (const [mode, tab] of Object.entries(expected)) {
+    assert.equal(
+      buildProductionJumpUrl(context, mode),
+      `/production?projectId=p1&tab=${tab}&unitId=u1`,
+    );
+  }
+});
+
+test("CreationWorkbench delegates downstream route decisions to the shared jump builder", () => {
+  const source = read("../../../components/creation/CreationWorkbench.tsx");
+  assert.match(source, /buildProductionJumpUrl/);
+  assert.doesNotMatch(source, /router\.push\(`\/production\?/);
 });
 
 test("authenticated workbench client uses the shared screenplay auth transport", () => {

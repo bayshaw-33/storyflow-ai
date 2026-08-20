@@ -9,7 +9,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  resolveArtWorkbenchEntry,
   resolveWorkbenchRoute,
+  resolveProjectWorkbenchRoute,
   resolveJobDetailUrl,
   resolveJobResultUrl,
   isInternalAppRoute,
@@ -25,6 +27,25 @@ test("resolveWorkbenchRoute keeps non-production work types on professional rout
   };
   for (const t of WORK_TYPES.filter((type) => type in expected)) {
     assert.equal(resolveWorkbenchRoute(t, { projectId: "p1", workId: "w1" }), expected[t]);
+  }
+});
+
+test("resolveProjectWorkbenchRoute keeps professional workflows professional and stages audiovisual projects", () => {
+  const expected = {
+    creation: "/production?projectId=p1&tab=script",
+    continuation: "/production?projectId=p1&tab=script",
+    art: "/production?projectId=p1&tab=art",
+    storyboard: "/production?projectId=p1&tab=storyboard",
+    video: "/production?projectId=p1&tab=video",
+    song: "/song-workbench?projectId=p1",
+    voice: "/casting?projectId=p1",
+    editing: "/editor?projectId=p1",
+    viral: "/viral-workbench?projectId=source&dashboardProjectId=viral-source",
+  };
+
+  for (const [workflowType, route] of Object.entries(expected)) {
+    const projectId = workflowType === "viral" ? "viral-source" : "p1";
+    assert.equal(resolveProjectWorkbenchRoute(workflowType, { projectId }), route);
   }
 });
 
@@ -58,6 +79,59 @@ test("resolveJobResultUrl returns internal resultUrl as-is", () => {
     resolveJobResultUrl({ resultUrl: "/art-workbench?assetId=a1" }),
     "/art-workbench?assetId=a1",
   );
+});
+
+test("standalone Art entries retain their existing route and complete query identity", () => {
+  for (const query of [
+    "assetId=a1",
+    "setup=1&universeId=u1",
+    "universeId=u1&tool=reference-sheet&variant=v2",
+  ]) {
+    const resultUrl = `/art-workbench?${query}`;
+    assert.deepEqual(resolveArtWorkbenchEntry(query), { kind: "standalone" });
+    assert.equal(resolveJobResultUrl({ resultUrl }), resultUrl);
+  }
+});
+
+test("project-bound Art entries expose the full identity needed for canonical routing", () => {
+  assert.deepEqual(
+    resolveArtWorkbenchEntry("projectId=p1&workId=w1&sourceUnitId=u1&assetId=a1"),
+    { kind: "project", projectId: "p1", workId: "w1", unitId: "u1" },
+  );
+});
+
+test("project-bound audiovisual job results use server identity and preserve result parameters", () => {
+  const target = resolveJobResultUrl({
+    resultUrl: "/art-workbench?projectId=stale&sourceUnitId=u1&assetId=a1#version-2",
+    projectId: "p1",
+    workId: "w1",
+    workbenchType: "art",
+  });
+  const url = new URL(target, "https://kiikis.test");
+
+  assert.equal(url.pathname, "/production");
+  assert.equal(url.hash, "#version-2");
+  assert.deepEqual(Object.fromEntries(url.searchParams), {
+    projectId: "p1",
+    assetId: "a1",
+    workId: "w1",
+    tab: "art",
+    unitId: "u1",
+  });
+});
+
+test("job result normalization preserves professional routes", () => {
+  for (const resultUrl of [
+    "/song-workbench?projectId=p1&workId=w-song",
+    "/casting?projectId=p1&workId=w-voice",
+    "/editor?projectId=p1&workId=w-edit",
+    "/viral-workbench?projectId=p1",
+  ]) {
+    assert.equal(
+      resolveJobResultUrl({ resultUrl, projectId: "p1", workbenchType: "script" }),
+      resultUrl,
+    );
+  }
 });
 
 test("resolveJobResultUrl rejects external URLs to prevent open redirect", () => {

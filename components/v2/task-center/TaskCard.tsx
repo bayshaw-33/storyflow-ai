@@ -257,7 +257,11 @@ function TaskCardComponent({ job, locale, onAction, pendingAction }: TaskCardPro
           );
         })}
         {(() => {
-          const target = resolveJobResultUrl({ resultUrl: job.resultUrl });
+          const target = resolveJobResultUrl({
+            resultUrl: job.resultUrl,
+            projectId: job.projectId,
+            workbenchType: job.workbenchType,
+          });
           if (!target) return null;
           return (
             <a

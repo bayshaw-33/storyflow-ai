@@ -127,7 +127,12 @@ export function JobDetail({ job, locale, accessToken, onUpdated, onBack }: JobDe
   // Derive result URL from the optional resultUrl field, falling back to the
   // first resultReference (where the server currently stores result paths).
   const resultUrl = job.resultUrl || job.resultReferences?.[0] || null;
-  const internalResultUrl = resolveJobResultUrl({ resultUrl });
+  const internalResultUrl = resolveJobResultUrl({
+    resultUrl,
+    projectId: job.projectId,
+    workId: job.workId,
+    workbenchType: job.workbenchType,
+  });
 
   const handlePatchAction = useCallback(
     async (action: "cancel" | "retry") => {

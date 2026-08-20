@@ -80,6 +80,7 @@ import type {
 } from "@/lib/creation/types";
 import { buildCreativeHandoffPackage, writeCreativeHandoff } from "@/lib/creative-handoff";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { buildProductionJumpUrl } from "@/lib/workflow/can-jump";
 import {
   DEFAULT_PROJECT_GROUP,
   createNovelProject,
@@ -1476,13 +1477,10 @@ export function CreationWorkbench() {
     const contentType = mode === "novel" ? "novel" : "script";
     const sourceUnitId = target === "production" ? activeUnit?.id : undefined;
     writeCreativeHandoff(buildCreativeHandoffPackage(project, contentType, sourceUnitId));
-    const source = encodeURIComponent(project.id);
-    if (target === "art") {
-      router.push(`/production?mode=art&projectId=${source}`);
-      return;
-    }
-    const unit = encodeURIComponent(sourceUnitId || "");
-    router.push(`/production?projectId=${source}&sourceUnitId=${unit}`);
+    router.push(buildProductionJumpUrl(
+      { projectId: project.id, sourceUnitId },
+      target === "art" ? "art" : "planning",
+    ));
   }
 
   function editorValue() {

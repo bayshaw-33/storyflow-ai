@@ -107,6 +107,28 @@ test("projectJobToKkMessage: completed + internal resultUrl → actionUrl = resu
   assert.equal(msg.actionDisabledReason, undefined, "internal result should not disable");
 });
 
+test("projectJobToKkMessage: project-bound legacy audiovisual result uses server-owned identity", () => {
+  const msg = projectJobToKkMessage({
+    job: makeJob({
+      status: "completed",
+      completedAt: "2026-08-14T11:30:00+08:00",
+      projectId: "proj-server",
+      workId: "work-server",
+      workbenchType: "storyboard",
+      resultUrl: "/storyboard-workbench?projectId=proj-stale&sourceUnitId=unit-1&shotId=shot-2",
+    }),
+    now: NOW,
+  });
+  const url = new URL(msg.actionUrl, "https://kiikis.test");
+
+  assert.equal(url.pathname, "/production");
+  assert.equal(url.searchParams.get("projectId"), "proj-server");
+  assert.equal(url.searchParams.get("workId"), "work-server");
+  assert.equal(url.searchParams.get("tab"), "storyboard");
+  assert.equal(url.searchParams.get("unitId"), "unit-1");
+  assert.equal(url.searchParams.get("shotId"), "shot-2");
+});
+
 // ---------------------------------------------------------------------------
 // 3. completed + 外部/空 resultUrl → 详情页 + 禁用原因
 // ---------------------------------------------------------------------------

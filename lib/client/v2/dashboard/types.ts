@@ -2,16 +2,12 @@
 // 基于 PRD §10 核心领域契约与 §5.2 首页固定区域。
 // contract_version 与 Codex 的 K2-C-01 解耦，自建 fixture 即可独立预览。
 
+import type { WorkType } from "../../../contracts/v2/work.ts";
+
 export const CONTRACT_VERSION = "2.0.0-alpha.1";
 
-// 作品类型沿用 1.0 的 WorkflowType，避免与既有 lib/projects.ts 冲突。
-export type DashboardWorkflowType =
-  | "creation"
-  | "continuation"
-  | "song"
-  | "viral"
-  | "storyboard"
-  | "video";
+// 作品类型覆盖统一制作阶段与独立专业工作台；不包含已退役的 novel。
+export type DashboardWorkflowType = WorkType | "creation" | "continuation" | "viral";
 
 // 等待确认项的来源类型，对齐 PRD §10.3 状态。
 export type PendingConfirmationType =

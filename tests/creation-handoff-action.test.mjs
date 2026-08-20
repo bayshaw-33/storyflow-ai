@@ -290,9 +290,10 @@ test("buildProductionRedirectUrl: 生成正确的跳转 URL", () => {
 
   assert.ok(url.startsWith("/production?"));
   assert.ok(url.includes("projectId=proj-umbral"));
-  assert.ok(url.includes("sourceUnitId=unit-06"));
+  assert.ok(url.includes("unitId=unit-06"));
   assert.ok(url.includes("handoffId=handoff-abc"));
-  assert.ok(url.includes("mode=planning"));
+  assert.ok(url.includes("tab=storyboard"));
+  assert.ok(!url.includes("mode="));
 });
 
 // ============================================================

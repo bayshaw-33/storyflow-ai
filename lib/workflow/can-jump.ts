@@ -15,7 +15,7 @@
  * 调用方负责传入上下文；本模块只决定"能否跳"以及"为什么不能跳"。
  */
 
-import { buildUnifiedWorkbenchUrl } from "@/lib/contracts/v2/unified-workbench";
+import { buildUnifiedWorkbenchUrl, type UnifiedProductionStage } from "../contracts/v2/unified-workbench.ts";
 
 export type WorkbenchSide = "creation" | "production" | "dub" | "edit";
 
@@ -103,13 +103,18 @@ export function buildProductionJumpUrl(
   ctx: JumpContext,
   mode: "planning" | "art" | "editor" | "dub" | "edit" = "planning",
 ): string {
-  const projectId = ctx.projectId || "";
-  const sourceUnit = ctx.sourceUnitId || "";
-  const params = new URLSearchParams();
-  params.set("projectId", projectId);
-  if (sourceUnit) params.set("sourceUnitId", sourceUnit);
-  if (mode !== "planning") params.set("mode", mode);
-  return `/production?${params.toString()}`;
+  const stageByMode: Record<typeof mode, UnifiedProductionStage> = {
+    planning: "storyboard",
+    art: "art",
+    editor: "video",
+    dub: "video",
+    edit: "video",
+  };
+  return buildUnifiedWorkbenchUrl({
+    projectId: ctx.projectId || "",
+    tab: stageByMode[mode],
+    unitId: ctx.sourceUnitId,
+  });
 }
 
 /**

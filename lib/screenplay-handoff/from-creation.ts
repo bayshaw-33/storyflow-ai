@@ -211,7 +211,7 @@ export function buildHandoffInputFromCreation(
 
 /**
  * 生成 handoff 确认后的跳转 URL。
- * /production?projectId=&sourceUnitId=&handoffId=&mode=planning
+ * /production?projectId=&tab=storyboard&unitId=&handoffId=
  */
 export function buildProductionRedirectUrl(params: {
   projectId: string;
@@ -220,9 +220,9 @@ export function buildProductionRedirectUrl(params: {
 }): string {
   const search = new URLSearchParams({
     projectId: params.projectId,
-    sourceUnitId: params.sourceUnitId,
+    tab: "storyboard",
+    unitId: params.sourceUnitId,
     handoffId: params.handoffId,
-    mode: "planning",
   });
   return `/production?${search.toString()}`;
 }

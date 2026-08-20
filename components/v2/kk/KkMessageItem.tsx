@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { KkMessage, KkSeverity } from "@/lib/client/v2/kk/types";
 import { SEVERITY_COLORS, messageTypeLabel } from "@/lib/client/v2/kk/filtering";
-import { isInternalAppRoute } from "@/lib/client/v2/navigation/resolver";
+import { resolveJobResultUrl } from "@/lib/client/v2/navigation/resolver";
 import { useI18n } from "@/lib/i18n/useI18n";
 import styles from "./kk.module.css";
 
@@ -59,14 +59,14 @@ export function KkMessageItem({ message, onRead }: KkMessageItemProps) {
   // Phase 0 Task 0.4：actionUrl 必须是同源应用路由，外部 URL 不传给 router.push
   // （防开放重定向，PRD §6.1）。只显示进度文本而无合法目标时，按钮禁用并展示原因。
   const hasLabel = Boolean(message.actionLabel);
-  const safeUrl = typeof message.actionUrl === "string" ? isInternalAppRoute(message.actionUrl) : false;
+  const safeUrl = resolveJobResultUrl({ resultUrl: message.actionUrl });
   const actionDisabled = hasLabel && !safeUrl;
 
   // 跳转动作：跳到对应页面让用户处理，不代为确认
   const handleAction = () => {
     onRead(message.id);
-    if (safeUrl && message.actionUrl) {
-      router.push(message.actionUrl);
+    if (safeUrl) {
+      router.push(safeUrl);
     }
   };
 

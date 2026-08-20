@@ -151,7 +151,12 @@ export function projectJobToKkMessage(input: ProjectJobMessageInput): KkMessage 
   }
 
   const detailUrl = resolveJobDetailUrl(job.id);
-  const internalResult = resolveJobResultUrl({ resultUrl: job.resultUrl ?? null });
+  const internalResult = resolveJobResultUrl({
+    resultUrl: job.resultUrl ?? null,
+    projectId: job.projectId,
+    workId: job.workId,
+    workbenchType: job.workbenchType,
+  });
 
   // Completed jobs prefer the result URL when it is a safe same-origin route.
   const useResultAction = job.status === "completed" && internalResult !== null;

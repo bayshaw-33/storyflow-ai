@@ -75,6 +75,17 @@ test("legacy audiovisual workbench pages keep standalone modes and redirect proj
     assert.match(source, /router\.replace|redirect/);
     assert.match(source, /projectId/);
   }
+
+  const artPage = read("../app/art-workbench/page.tsx");
+  assert.match(artPage, /resolveArtWorkbenchEntry/);
+  assert.match(artPage, /<ArtWorkbench\s*\/>/);
+  assert.doesNotMatch(artPage, /router\.replace\(["']\/production\?mode=art["']\)/);
+});
+
+test("Dashboard project cards use the workflow-aware route decision", () => {
+  const dashboard = read("../components/v2/dashboard/DashboardSections.tsx");
+  assert.match(dashboard, /resolveProjectWorkbenchRoute\(project\.workflowType/);
+  assert.doesNotMatch(dashboard, /`\/projects\/\$\{encodeURIComponent\(project\.id\)\}`/);
 });
 
 test("homepage Hero enters the unified project-start grid instead of the retired modal", () => {
