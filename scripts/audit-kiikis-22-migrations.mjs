@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = resolve(root, "supabase/migrations");
-const K22_PREFIX = /^20260828/;
+const K22_MIN_STAMP = 20260828000000;
 
 function fail(message) {
   console.error(`❌ ${message}`);
@@ -53,7 +53,8 @@ function extractTriggerTargets(sql) {
 
 function main() {
   const files = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".sql") && K22_PREFIX.test(f))
+    .filter((file) => file.endsWith(".sql"))
+    .filter((file) => Number(file.slice(0, 14)) >= K22_MIN_STAMP)
     .sort();
 
   console.log(`K22 migration 共 ${files.length} 个（时间戳 ≥ 20260828）。`);
