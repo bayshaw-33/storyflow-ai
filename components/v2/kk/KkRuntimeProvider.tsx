@@ -36,6 +36,7 @@ import {
   fetchKkMessages,
 } from "@/lib/client/v2/kk/api";
 import { computeStats } from "@/lib/client/v2/kk/filtering";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   ALL_KK_ACTIONS,
   type KkActionId,
@@ -151,7 +152,7 @@ export interface KkRuntimeProviderProps {
 
 export function KkRuntimeProvider({
   children,
-  accessToken = null,
+  accessToken,
   forceEnabled = false,
   pollingEnabled = true,
   pollingIntervalMs = 30_000,
@@ -162,6 +163,13 @@ export function KkRuntimeProvider({
   const [events, setEvents] = useState<KkEventEntry[]>([]);
   const [error, setError] = useState<KkRuntimeClientError | null>(null);
   const [lastSequence, setLastSequence] = useState(0);
+  const [browserSession, setBrowserSession] = useState<{
+    accessToken: string | null;
+    resolved: boolean;
+  }>({ accessToken: null, resolved: false });
+
+  const runtimeAccessToken = accessToken === undefined ? browserSession.accessToken : accessToken;
+  const sessionResolved = accessToken !== undefined || browserSession.resolved;
 
   // 旧 KkCompanion 兼容：fixture 消息（仅当 fixture 模式启用时拉取）
   const [legacyMessages, setLegacyMessages] = useState<KkMessage[]>([]);
@@ -172,23 +180,59 @@ export function KkRuntimeProvider({
   const inflightRefresh = useRef(false);
   const inflightPull = useRef(false);
 
+  useEffect(() => {
+    if (accessToken !== undefined) return;
+
+    const client = getSupabaseBrowserClient();
+    if (!client) {
+      setBrowserSession({ accessToken: null, resolved: true });
+      return;
+    }
+
+    let active = true;
+    let authStateChanged = false;
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      authStateChanged = true;
+      setBrowserSession({ accessToken: session?.access_token ?? null, resolved: true });
+    });
+
+    void client.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active || authStateChanged) return;
+        setBrowserSession({ accessToken: data.session?.access_token ?? null, resolved: true });
+      })
+      .catch(() => {
+        if (!active || authStateChanged) return;
+        setBrowserSession({ accessToken: null, resolved: true });
+      });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [accessToken]);
+
   const refreshJobMessages = useCallback(async () => {
+    if (!sessionResolved) return;
     try {
-      setJobMessages(await fetchKkJobMessages(accessToken));
+      setJobMessages(await fetchKkJobMessages(runtimeAccessToken));
     } catch {
       // Job messages are additive; a transient jobs failure must not disable KK runtime.
     }
-  }, [accessToken]);
+  }, [runtimeAccessToken, sessionResolved]);
 
   // -----------------------------------------------------------------------
   // 启动 fetch (K21-KK-001)
   // -----------------------------------------------------------------------
   const refresh = useCallback(async () => {
+    if (!sessionResolved) return;
     if (inflightRefresh.current) return;
     inflightRefresh.current = true;
     setConnectionState((prev) => (prev === "live" ? "live" : "connecting"));
     try {
-      const data = await fetchKkRuntime(accessToken);
+      const data = await fetchKkRuntime(runtimeAccessToken);
       setRuntime(data);
       setLastSequence(data.serverCursor);
       setConnectionState("live");
@@ -209,17 +253,18 @@ export function KkRuntimeProvider({
     } finally {
       inflightRefresh.current = false;
     }
-  }, [accessToken]);
+  }, [runtimeAccessToken, sessionResolved]);
 
   // -----------------------------------------------------------------------
   // 增量事件 pull (K21-KK-003/004)
   // -----------------------------------------------------------------------
   const pullEvents = useCallback(async () => {
+    if (!sessionResolved) return;
     if (inflightPull.current) return;
     if (connectionState === "offline" && !allowFixtureFallback) return;
     inflightPull.current = true;
     try {
-      const result = await fetchKkEvents(accessToken, { afterSequence: lastSequence });
+      const result = await fetchKkEvents(runtimeAccessToken, { afterSequence: lastSequence });
       if (result.events.length > 0) {
         // K21-KK-007: 按 sequence 单调 + 客户端去重
         setEvents((prev) => {
@@ -253,20 +298,22 @@ export function KkRuntimeProvider({
     } finally {
       inflightPull.current = false;
     }
-  }, [accessToken, lastSequence, connectionState, allowFixtureFallback]);
+  }, [runtimeAccessToken, sessionResolved, lastSequence, connectionState, allowFixtureFallback]);
 
   // -----------------------------------------------------------------------
   // 启动时 fetch
   // -----------------------------------------------------------------------
   useEffect(() => {
+    if (!sessionResolved) return;
     void refresh();
     void refreshJobMessages();
-  }, [refresh, refreshJobMessages]);
+  }, [sessionResolved, refresh, refreshJobMessages]);
 
   // -----------------------------------------------------------------------
   // polling 兜底 (K21-KK-004: Realtime 断线补拉)
   // -----------------------------------------------------------------------
   useEffect(() => {
+    if (!sessionResolved) return;
     if (!pollingEnabled) return;
     if (connectionState === "offline" && !allowFixtureFallback) return;
     const id = setInterval(() => {
@@ -274,18 +321,19 @@ export function KkRuntimeProvider({
       void refreshJobMessages();
     }, pollingIntervalMs);
     return () => clearInterval(id);
-  }, [pollingEnabled, pollingIntervalMs, connectionState, allowFixtureFallback, pullEvents, refreshJobMessages]);
+  }, [sessionResolved, pollingEnabled, pollingIntervalMs, connectionState, allowFixtureFallback, pullEvents, refreshJobMessages]);
 
   // -----------------------------------------------------------------------
   // fixture 兜底：连接失败时拉旧 KkMessage（K21-KK-002 dev 允许）
   // -----------------------------------------------------------------------
   useEffect(() => {
+    if (!sessionResolved) return;
     if (connectionState !== "offline") return;
     if (!allowFixtureFallback) return;
     let cancelled = false;
     void (async () => {
       try {
-        const result = await fetchKkMessages(accessToken);
+        const result = await fetchKkMessages(runtimeAccessToken);
         if (cancelled) return;
         setLegacyMessages(result.messages);
         setLegacySource(result.source);
@@ -296,7 +344,7 @@ export function KkRuntimeProvider({
     return () => {
       cancelled = true;
     };
-  }, [connectionState, allowFixtureFallback, accessToken]);
+  }, [connectionState, allowFixtureFallback, runtimeAccessToken, sessionResolved]);
 
   // -----------------------------------------------------------------------
   // 旧 KkCompanion 兼容：标记已读（本地状态）
