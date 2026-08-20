@@ -80,8 +80,12 @@ export async function getUnifiedWorkbenchContext(input: {
 
   const works = await readWorks(input);
   const activeStageWorks = works.filter((work) => isUnifiedProductionStage(work.work_type));
+  const selectedStageWorks = selectStageWorks(activeStageWorks);
+  const legacyStageWorks = Object.values(selectedStageWorks).filter(
+    (work): work is WorkRow => work !== null && !work.current_version_id,
+  );
   const [versions, universe] = await Promise.all([
-    readWorkVersions(input.fetcher, activeStageWorks),
+    readWorkVersions(input.fetcher, legacyStageWorks),
     readUniverseContext(input.fetcher, project.universe_id ?? null),
   ]);
 
@@ -92,11 +96,11 @@ export async function getUnifiedWorkbenchContext(input: {
     }
   }
   const stages = emptyStageSlots();
-  for (const work of activeStageWorks) {
-    if (!isUnifiedProductionStage(work.work_type)) continue;
-    const stage = work.work_type;
-    if (stages[stage]) continue;
-    stages[stage] = toStageContext(work, latestVersionByWorkId.get(work.id) ?? null);
+  for (const stage of UNIFIED_PRODUCTION_STAGES) {
+    const work = selectedStageWorks[stage];
+    if (work) {
+      stages[stage] = toStageContext(work, latestVersionByWorkId.get(work.id) ?? null);
+    }
   }
 
   return {
@@ -220,12 +224,14 @@ async function readWorkVersions(
   works: WorkRow[],
 ): Promise<WorkVersionRow[]> {
   if (!works.length) return [];
-  const workIds = works.map((work) => encodeURIComponent(work.id)).join(",");
   try {
-    const rows = await fetcher<WorkVersionRow[]>(
-      `/rest/v1/storyflow_work_versions?work_id=in.(${workIds})&select=id,work_id&order=created_at.desc&limit=400`,
-    );
-    return Array.isArray(rows) ? rows : [];
+    const versions = await Promise.all(works.map(async (work) => {
+      const rows = await fetcher<WorkVersionRow[]>(
+        `/rest/v1/storyflow_work_versions?work_id=eq.${encodeURIComponent(work.id)}&select=id,work_id&order=created_at.desc&limit=1`,
+      );
+      return Array.isArray(rows) ? rows[0] ?? null : null;
+    }));
+    return versions.filter((version): version is WorkVersionRow => version !== null);
   } catch (error) {
     throw toUnifiedWorkbenchError(error, "Work version service is unavailable.");
   }
@@ -262,6 +268,20 @@ function emptyStageSlots(): Record<UnifiedProductionStage, UnifiedWorkbenchStage
   return Object.fromEntries(
     UNIFIED_PRODUCTION_STAGES.map((stage) => [stage, null]),
   ) as Record<UnifiedProductionStage, UnifiedWorkbenchStageContext | null>;
+}
+
+function selectStageWorks(
+  works: WorkRow[],
+): Record<UnifiedProductionStage, WorkRow | null> {
+  const selected = Object.fromEntries(
+    UNIFIED_PRODUCTION_STAGES.map((stage) => [stage, null]),
+  ) as Record<UnifiedProductionStage, WorkRow | null>;
+  for (const work of works) {
+    if (isUnifiedProductionStage(work.work_type) && !selected[work.work_type]) {
+      selected[work.work_type] = work;
+    }
+  }
+  return selected;
 }
 
 function toStageContext(
