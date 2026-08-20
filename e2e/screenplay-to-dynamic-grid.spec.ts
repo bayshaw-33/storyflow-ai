@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
  *   1. 安全边界：未认证访问 storyboards API → 401
  *   2. 完整流程（需认证）：handoff 创建 → 列表为空 → POST 创建第一个版本 →
  *      GET 当前版本 → POST 用过期 revision 触发 409 → 接受服务端版本
- *   3. UI：Production Workbench 加 handoffId 参数渲染动态分镜 tab
+ *   3. UI：统一 Production Workbench 的分镜阶段内渲染运动预览
  *
  * 认证依赖：
  *   - 场景 1 测试安全边界，不需要凭证。
@@ -21,8 +21,11 @@ import { expect, test } from "@playwright/test";
 
 const TEST_TOKEN = process.env.DYNAMIC_GRID_E2E_TOKEN || "";
 const TEST_HANDOFF_ID = process.env.DYNAMIC_GRID_E2E_HANDOFF_ID || "";
+const TEST_PROJECT_ID = process.env.DYNAMIC_GRID_E2E_PROJECT_ID || "";
+const TEST_WORK_ID = process.env.DYNAMIC_GRID_E2E_WORK_ID || "";
 const TEST_SCENE_ID = process.env.DYNAMIC_GRID_E2E_SCENE_ID || "scene-e2e-01";
-const SKIP_AUTHED = !TEST_TOKEN || !TEST_HANDOFF_ID;
+const SKIP_AUTHED = !TEST_TOKEN || !TEST_HANDOFF_ID || !TEST_PROJECT_ID || !TEST_WORK_ID;
+const HAS_SERVER_CONFIG = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 
@@ -31,6 +34,8 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 // ============================================================
 
 test.describe("Dynamic Grid Storyboard 安全边界", () => {
+  test.skip(!HAS_SERVER_CONFIG, "本地未配置 Supabase 服务端变量，跳过依赖后端的认证边界测试");
+
   test("未认证 GET /api/v2/storyboards → 401", async ({ request }) => {
     const res = await request.get(
       `/api/v2/storyboards?handoffId=00000000-0000-0000-0000-000000000000`,
@@ -192,21 +197,21 @@ test.describe("Dynamic Grid Storyboard API 流程", () => {
 // 场景 3：UI 渲染（需认证 + 本地 dev server）
 // ============================================================
 
-test.describe("Production Workbench 动态分镜 tab", () => {
-  test.skip(SKIP_AUTHED, "需要 DYNAMIC_GRID_E2E_TOKEN + DYNAMIC_GRID_E2E_HANDOFF_ID");
+test.describe("Production Workbench 分镜阶段运动预览", () => {
+  test.skip(SKIP_AUTHED, "需要 DYNAMIC_GRID_E2E_TOKEN + DYNAMIC_GRID_E2E_PROJECT_ID + DYNAMIC_GRID_E2E_WORK_ID + DYNAMIC_GRID_E2E_HANDOFF_ID");
 
-  test("加载 /production?handoffId=... 显示动态分镜 tab 与场景选择栏", async ({ page }) => {
+  test("加载分镜阶段后显示运动预览子视图，而非顶层动态分镜", async ({ page }) => {
     // 登录态由测试环境 cookie 提供（CI 通过 storageState 注入）
     await page.goto(
-      `${BASE_URL}/production?handoffId=${encodeURIComponent(TEST_HANDOFF_ID)}&mode=planning`,
+      `${BASE_URL}/production?projectId=${encodeURIComponent(TEST_PROJECT_ID)}&workId=${encodeURIComponent(TEST_WORK_ID)}&handoffId=${encodeURIComponent(TEST_HANDOFF_ID)}&tab=storyboard&mode=planning`,
     );
 
-    // 动态分镜 tab 标签存在
-    const gridTab = page.locator('button, [role="tab"]', { hasText: "动态分镜" }).first();
-    await expect(gridTab).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("tab", { name: "分镜" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "动态分镜" })).toHaveCount(0);
 
-    // 点击进入动态分镜 tab
-    await gridTab.click();
+    const motionTab = page.getByRole("button", { name: "运动预览" });
+    await expect(motionTab).toBeVisible({ timeout: 15000 });
+    await motionTab.click();
 
     // 场景选择栏存在
     const sceneSelect = page.locator('[aria-label="选择场景"]').first();
@@ -214,10 +219,10 @@ test.describe("Production Workbench 动态分镜 tab", () => {
   });
 
   test("缺少 handoffId 时显示提示而非编辑器", async ({ page }) => {
-    await page.goto(`${BASE_URL}/production?mode=planning`);
-    const gridTab = page.locator('button, [role="tab"]', { hasText: "动态分镜" }).first();
-    await expect(gridTab).toBeVisible({ timeout: 15000 });
-    await gridTab.click();
+    await page.goto(`${BASE_URL}/production?projectId=${encodeURIComponent(TEST_PROJECT_ID)}&workId=${encodeURIComponent(TEST_WORK_ID)}&tab=storyboard&mode=planning`);
+    const motionTab = page.getByRole("button", { name: "运动预览" });
+    await expect(motionTab).toBeVisible({ timeout: 15000 });
+    await motionTab.click();
     // 应显示提示文案，而非编辑器
     await expect(page.locator("text=请先在剧本工作台「定稿并进入分镜」以生成 handoff").first()).toBeVisible({ timeout: 10000 });
   });

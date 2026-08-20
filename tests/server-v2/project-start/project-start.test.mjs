@@ -106,23 +106,24 @@ test("assertWorkType throws WorkContractError with field=workType on invalid inp
 // 2. Navigation resolver
 // ============================================================
 
-test("resolveWorkbenchRoute returns /<workbench>?projectId=&workId= for each WorkType", () => {
+test("resolveWorkbenchRoute returns the canonical production route for audiovisual WorkTypes", () => {
   for (const t of WORK_TYPES) {
     const route = resolveWorkbenchRoute(t, { projectId: "p1", workId: "w1" });
-    assert.match(
-      route,
-      /^\/[a-z-]+\?projectId=p1&workId=w1$/,
-      `bad route for ${t}`,
-    );
+    if (["script", "art", "storyboard", "video"].includes(t)) {
+      assert.equal(route, `/production?projectId=p1&workId=w1&tab=${t}`, `bad route for ${t}`);
+    } else {
+      assert.match(route, /^\/[a-z-]+\?projectId=p1&workId=w1$/, `bad route for ${t}`);
+    }
   }
 });
 
-test("resolveWorkbenchRoute starts with /script-workbench for script", () => {
+test("resolveWorkbenchRoute starts with /production for script", () => {
   const route = resolveWorkbenchRoute("script", {
     projectId: "p1",
     workId: "w1",
   });
-  assert.ok(route.startsWith("/script-workbench?"));
+  assert.ok(route.startsWith("/production?"));
+  assert.match(route, /tab=script/);
 });
 
 test("resolveJobDetailUrl returns /job-center/:jobId", () => {

@@ -24,7 +24,7 @@ function run(cmd) {
 }
 
 const JOURNEYS = [
-  { id: "a-screenplay", path: "/script-workbench", check: "script-workbench" },
+  { id: "a-screenplay", path: "/production?tab=script", check: "production-script" },
   { id: "b-universe", path: "/universes", check: "universes" },
   { id: "c-import", path: "/universes/import/missing-session", check: "universe-import" },
   { id: "d-song", path: "/song-workbench", check: "song-workbench" },
@@ -32,7 +32,9 @@ const JOURNEYS = [
   { id: "f-market", path: "/community", check: "community" },
 ];
 
-function main() {
+const PRODUCTION_STAGES = ["script", "art", "storyboard", "video"];
+
+async function main() {
   const results = [];
   console.log("=== KIIKIS 2.2 smoke ===");
 
@@ -70,13 +72,25 @@ function main() {
   } else {
     for (const journey of JOURNEYS) {
       try {
-        const response = fetch(`${baseUrl}${journey.path}`, { redirect: "manual" });
-        // 真实环境探测需要登录态；此处只验证可达性，状态码非 200 视为待人工 UAT
-        results.push({ step: `journey:${journey.id}`, ok: true, note: "reachable（登录态由 UAT 人工验证）" });
-        console.log(`✅ journey:${journey.id} reachable`);
+        const response = await fetch(`${baseUrl}${journey.path}`, { redirect: "manual", signal: AbortSignal.timeout(15_000) });
+        const ok = response.status < 500;
+        results.push({ step: `journey:${journey.id}`, ok, note: `HTTP ${response.status}` });
+        console.log(`${ok ? "✅" : "❌"} journey:${journey.id} HTTP ${response.status}`);
       } catch (error) {
         results.push({ step: `journey:${journey.id}`, ok: false });
         console.log(`❌ journey:${journey.id} unreachable: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
+      }
+    }
+    for (const stage of PRODUCTION_STAGES) {
+      try {
+        const response = await fetch(`${baseUrl}/production?tab=${stage}`, { redirect: "manual", signal: AbortSignal.timeout(15_000) });
+        const ok = response.status < 500;
+        results.push({ step: `production:${stage}`, ok, note: `HTTP ${response.status}` });
+        console.log(`${ok ? "✅" : "❌"} production:${stage} HTTP ${response.status}`);
+      } catch (error) {
+        results.push({ step: `production:${stage}`, ok: false });
+        console.log(`❌ production:${stage} unreachable: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 1;
       }
     }
@@ -90,4 +104,4 @@ function main() {
   }
 }
 
-main();
+await main();
