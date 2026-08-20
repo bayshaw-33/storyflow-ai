@@ -24,6 +24,31 @@ test("unified job model reports phase and timing without fabricated precise prog
   assert.equal(mapped.timing.estimateConfidence, "medium");
 });
 
+test("unified job DTO preserves server-owned result identity", () => {
+  const mapped = mapLegacyJob({
+    id: "job-identity",
+    owner_id: "u-1",
+    project_id: "project-server",
+    job_type: "image",
+    status: "completed",
+    result_url: "/storyboard-workbench?projectId=project-stale&workId=work-stale&sourceUnitId=unit-1",
+    result_metadata: {
+      workId: "work-server",
+      workbenchType: "storyboard",
+      results: ["/storyboard-workbench?projectId=project-stale&workId=work-stale"],
+    },
+    created_at: "2026-08-12T00:00:00Z",
+    completed_at: "2026-08-12T00:01:00Z",
+  });
+
+  assert.equal(mapped.workId, "work-server");
+  assert.equal(mapped.workbenchType, "storyboard");
+  assert.equal(
+    mapped.resultUrl,
+    "/storyboard-workbench?projectId=project-stale&workId=work-stale&sourceUnitId=unit-1",
+  );
+});
+
 test("listUnifiedJobs aggregates text, media, transfer, export and analysis sources for one owner", async () => {
   const calls = [];
   const fetcher = async (path) => {

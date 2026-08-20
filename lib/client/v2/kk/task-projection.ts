@@ -12,6 +12,7 @@
  */
 
 import type { GenerationJob, GenerationJobStatus } from "@/lib/contracts/v2";
+import type { UnifiedJob } from "../jobs/types.ts";
 import type { KkMessage, KkMessageType, KkSeverity } from "./types";
 import {
   resolveJobDetailUrl,
@@ -200,6 +201,29 @@ export function projectJobsToKkMessages(
     byId.set(job.id, projectJobToKkMessage({ job, locale: opts.locale, now }));
   }
   return Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** Project the live Task Center adapter model through the canonical KK job path. */
+export function projectUnifiedJobsToKkMessages(
+  jobs: ReadonlyArray<UnifiedJob>,
+  opts: { locale?: "zh-CN" | "en-US"; now?: Date } = {},
+): KkMessage[] {
+  return projectJobsToKkMessages(
+    jobs.map((job) => ({
+      id: job.id,
+      projectId: job.projectId || null,
+      workId: job.workId ?? null,
+      workbenchType: job.workbenchType,
+      resultUrl: job.resultUrl ?? null,
+      jobType: job.type,
+      status: job.stage,
+      phase: job.stage,
+      progress: { completed: job.completed, total: job.total },
+      failedItemCount: Math.max(0, job.total - job.completed),
+      createdAt: job.createdAt,
+    })),
+    opts,
+  );
 }
 
 export { MAPPING as STATUS_MAPPING };

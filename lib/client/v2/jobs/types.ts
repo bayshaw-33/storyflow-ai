@@ -59,6 +59,8 @@ export interface UnifiedJob {
   type: JobType;
   projectName: string;
   projectId: string;
+  /** 服务端归属 Work；项目型结果跳转不得从旧 URL 推断 */
+  workId?: string;
   /** 工作台类型，如 script / art / production / video / song 等 */
   workbenchType: string;
   stage: JobStage;

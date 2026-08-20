@@ -58,6 +58,9 @@ interface CodexJobTiming {
 interface CodexGenerationJob {
   id: string;
   projectId: string | null;
+  workId?: string | null;
+  workbenchType?: string | null;
+  resultUrl?: string | null;
   jobType: CodexJobType;
   status: CodexJobStatus;
   phase: CodexJobStatus;
@@ -139,7 +142,7 @@ function mapConfidence(c?: "low" | "medium" | "high" | null): number | undefined
   return undefined;
 }
 
-/** Codex jobType → TRAE workbenchType 粗粒度映射（Codex 不提供精确 workbenchType） */
+/** 旧任务缺少服务端 workbenchType 时的兼容降级。 */
 function inferWorkbenchType(jobType: CodexJobType): string {
   switch (jobType) {
     case "image":
@@ -202,10 +205,10 @@ const JOB_TYPE_LABEL_ZH: Record<CodexJobType, string> = {
 /**
  * Codex GenerationJob → TRAE UnifiedJob。
  *
- * Codex 不提供 name / projectName / resultUrl，在此降级：
+ * Codex 不提供 name / projectName，在此降级：
  * - name：jobType 中文 + id 前 6 位（避免空字符串，UI 仍可显示）
  * - projectName：固定"未知项目"（避免在适配器层 N+1 查询 project）
- * - resultUrl：从 resultReferences 派生（首项若为 URL 或路径）
+ * - resultUrl：优先使用服务端字段，旧响应才从 resultReferences 派生
  */
 function mapGenerationJobToUnifiedJob(codex: CodexGenerationJob): UnifiedJob {
   const elapsedMs =
@@ -229,7 +232,8 @@ function mapGenerationJobToUnifiedJob(codex: CodexGenerationJob): UnifiedJob {
 
   const refs = codex.resultReferences || [];
   const currentResult = refs.length > 0 ? refs.join("、") : undefined;
-  const resultUrl = refs.find((r) => /^https?:\/\//.test(r) || r.startsWith("/"));
+  const resultUrl = codex.resultUrl
+    ?? refs.find((r) => /^https?:\/\//.test(r) || r.startsWith("/"));
 
   const shortId = codex.id.length > 6 ? codex.id.slice(0, 6) : codex.id;
 
@@ -239,7 +243,8 @@ function mapGenerationJobToUnifiedJob(codex: CodexGenerationJob): UnifiedJob {
     type: codex.jobType,
     projectName: "未知项目",
     projectId: codex.projectId || "",
-    workbenchType: inferWorkbenchType(codex.jobType),
+    workId: codex.workId || undefined,
+    workbenchType: codex.workbenchType || inferWorkbenchType(codex.jobType),
     stage: codex.status,
     completed: codex.progress?.completed ?? 0,
     total: codex.progress?.total ?? 0,

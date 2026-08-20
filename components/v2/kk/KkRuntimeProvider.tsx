@@ -32,6 +32,7 @@ import {
   fetchKkEvents,
   fetchKkRuntime,
   KkRuntimeClientError,
+  fetchKkJobMessages,
   fetchKkMessages,
 } from "@/lib/client/v2/kk/api";
 import { computeStats } from "@/lib/client/v2/kk/filtering";
@@ -164,11 +165,20 @@ export function KkRuntimeProvider({
 
   // 旧 KkCompanion 兼容：fixture 消息（仅当 fixture 模式启用时拉取）
   const [legacyMessages, setLegacyMessages] = useState<KkMessage[]>([]);
+  const [jobMessages, setJobMessages] = useState<KkMessage[]>([]);
   const [legacySource, setLegacySource] = useState<"fixture" | "api">("api");
 
   // 防止重复并发 fetch
   const inflightRefresh = useRef(false);
   const inflightPull = useRef(false);
+
+  const refreshJobMessages = useCallback(async () => {
+    try {
+      setJobMessages(await fetchKkJobMessages(accessToken));
+    } catch {
+      // Job messages are additive; a transient jobs failure must not disable KK runtime.
+    }
+  }, [accessToken]);
 
   // -----------------------------------------------------------------------
   // 启动 fetch (K21-KK-001)
@@ -250,7 +260,8 @@ export function KkRuntimeProvider({
   // -----------------------------------------------------------------------
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void refreshJobMessages();
+  }, [refresh, refreshJobMessages]);
 
   // -----------------------------------------------------------------------
   // polling 兜底 (K21-KK-004: Realtime 断线补拉)
@@ -260,9 +271,10 @@ export function KkRuntimeProvider({
     if (connectionState === "offline" && !allowFixtureFallback) return;
     const id = setInterval(() => {
       void pullEvents();
+      void refreshJobMessages();
     }, pollingIntervalMs);
     return () => clearInterval(id);
-  }, [pollingEnabled, pollingIntervalMs, connectionState, allowFixtureFallback, pullEvents]);
+  }, [pollingEnabled, pollingIntervalMs, connectionState, allowFixtureFallback, pullEvents, refreshJobMessages]);
 
   // -----------------------------------------------------------------------
   // fixture 兜底：连接失败时拉旧 KkMessage（K21-KK-002 dev 允许）
@@ -291,20 +303,20 @@ export function KkRuntimeProvider({
   // -----------------------------------------------------------------------
   const markMessageRead = useCallback((id: string) => {
     setLegacyMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read: true } : m)));
+    setJobMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read: true } : m)));
   }, []);
 
   // -----------------------------------------------------------------------
-  // 派生 messages/stats（fixture 兜底时来自 legacyMessages；live 时来自 events 投影）
+  // 派生 messages/stats（兼容消息 + 服务端 Job 投影）
   // -----------------------------------------------------------------------
   const derivedMessages = useMemo<ReadonlyArray<KkMessage>>(() => {
-    if (connectionState === "live") {
-      // live 状态下 events 流投影为 KkMessage（保持向后兼容）
-      // 但 events 流不是消息列表，2.1 KK 面板将逐步迁移到事件视图
-      // 过渡期：live 时清空 legacy messages，避免重复
-      return legacyMessages;
-    }
-    return legacyMessages;
-  }, [connectionState, legacyMessages]);
+    const byId = new Map<string, KkMessage>();
+    for (const message of legacyMessages) byId.set(message.id, message);
+    for (const message of jobMessages) byId.set(message.id, message);
+    return Array.from(byId.values()).sort((a, b) => {
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+  }, [legacyMessages, jobMessages]);
 
   const derivedStats = useMemo<KkStats>(() => computeStats(derivedMessages as KkMessage[]), [derivedMessages]);
 

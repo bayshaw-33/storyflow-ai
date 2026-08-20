@@ -260,6 +260,7 @@ function TaskCardComponent({ job, locale, onAction, pendingAction }: TaskCardPro
           const target = resolveJobResultUrl({
             resultUrl: job.resultUrl,
             projectId: job.projectId,
+            workId: job.workId,
             workbenchType: job.workbenchType,
           });
           if (!target) return null;

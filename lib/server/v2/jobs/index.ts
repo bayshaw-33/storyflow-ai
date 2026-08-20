@@ -30,6 +30,8 @@ type LegacyJobRow = {
   status?: string | null;
   error?: string | null;
   error_message?: string | null;
+  input_params?: Record<string, unknown> | null;
+  result_url?: string | null;
   result_metadata?: Record<string, unknown> | null;
   output_snapshot?: string | null;
   created_at: string;
@@ -47,6 +49,11 @@ export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob
   const completed = numberValue(metadata.completedCount) ?? (status === "completed" ? 1 : 0);
   const total = numberValue(metadata.totalCount) ?? (status === "completed" ? 1 : 0);
   const resultReferences = Array.isArray(metadata.results) ? metadata.results.map(String).filter(Boolean) : [];
+  const inputParams = row.input_params || {};
+  const workId = stringValue(metadata.workId) ?? stringValue(inputParams.workId);
+  const workbenchType = stringValue(metadata.workbenchType) ?? stringValue(inputParams.workbenchType);
+  const resultUrl = stringValue(row.result_url) ?? stringValue(metadata.resultUrl)
+    ?? resultReferences.find((reference) => reference.startsWith("/") || /^https?:\/\//.test(reference));
   const timing = buildTiming(row, metadata, now);
   const actions: JobAction[] = status === "failed" || status === "partial_failure" ? ["retry", "view_details"] : status === "completed" ? ["view_results", "view_details"] : status === "cancelled" ? ["view_details"] : ["cancel", "view_details"];
   return {
@@ -62,6 +69,9 @@ export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob
     actions,
     createdAt: row.created_at,
     completedAt: row.completed_at || null,
+    workId,
+    workbenchType,
+    resultUrl,
   };
 }
 
@@ -72,7 +82,7 @@ export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: st
   try {
     const [textTasks, mediaJobs, exports] = await Promise.all([
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_tasks?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,step_key,phase_key,status,error_message,output_snapshot,created_at,started_at,completed_at,latency_ms&order=created_at.desc&limit=200`),
-      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,owner_id,project_id,job_type,status,error,result_metadata,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
+      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,owner_id,project_id,job_type,status,error,input_params,result_url,result_metadata,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,export_type,status,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
     ]);
     const rawItems = [
@@ -98,7 +108,7 @@ export async function readUnifiedJob(params: { fetcher: JobsFetcher; userId: str
   try {
     const sources = await Promise.all([
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_tasks?id=eq.${encodeURIComponent(params.jobId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=id,user_id,project_id,step_key,phase_key,status,error_message,output_snapshot,created_at,started_at,completed_at,latency_ms&limit=1`),
-      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(params.jobId)}&owner_id=eq.${encodeURIComponent(params.userId)}&select=id,owner_id,project_id,job_type,status,error,result_metadata,created_at,updated_at,completed_at&limit=1`),
+      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(params.jobId)}&owner_id=eq.${encodeURIComponent(params.userId)}&select=id,owner_id,project_id,job_type,status,error,input_params,result_url,result_metadata,created_at,updated_at,completed_at&limit=1`),
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?id=eq.${encodeURIComponent(params.jobId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=id,user_id,project_id,export_type,status,created_at,updated_at,completed_at&limit=1`),
     ]);
     const row = sources[0][0] || sources[1][0] || sources[2][0];
@@ -137,6 +147,10 @@ function buildTiming(row: LegacyJobRow, metadata: Record<string, unknown>, now: 
 
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 async function query<T>(fetcher: JobsFetcher, path: string): Promise<T> {

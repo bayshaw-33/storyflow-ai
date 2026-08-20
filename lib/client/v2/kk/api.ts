@@ -20,6 +20,8 @@ import {
   loadFixtureStats,
 } from "./fixtures.ts";
 import { computeStats } from "./filtering.ts";
+import { fetchJobs } from "../jobs/api.ts";
+import { projectUnifiedJobsToKkMessages } from "./task-projection.ts";
 import {
   CONTRACT_VERSION,
   type KkMessage,
@@ -63,6 +65,15 @@ export class KkRuntimeClientError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+/** Load live jobs through the Task Center adapter and project their canonical KK actions. */
+export async function fetchKkJobMessages(
+  accessToken: string | null,
+  options: { locale?: "zh-CN" | "en-US"; now?: Date } = {},
+): Promise<KkMessage[]> {
+  const result = await fetchJobs(accessToken);
+  return projectUnifiedJobsToKkMessages(result.jobs, options);
 }
 
 /**
