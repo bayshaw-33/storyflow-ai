@@ -186,6 +186,8 @@ export function KkRuntimeProvider({
   const explicitToken = useRef(accessToken);
 
   const clearSessionData = useCallback(() => {
+    inflightRefresh.current = false;
+    inflightPull.current = false;
     setRuntime(null);
     setEvents([]);
     setLastSequence(0);
@@ -279,6 +281,7 @@ export function KkRuntimeProvider({
       setConnectionState("live");
       setError(null);
     } catch (err) {
+      if (generation !== sessionGeneration.current) return;
       const clientErr =
         err instanceof KkRuntimeClientError
           ? err
@@ -292,7 +295,7 @@ export function KkRuntimeProvider({
         setConnectionState("reconnecting");
       }
     } finally {
-      inflightRefresh.current = false;
+      if (generation === sessionGeneration.current) inflightRefresh.current = false;
     }
   }, [runtimeAccessToken, sessionResolved]);
 
@@ -330,6 +333,7 @@ export function KkRuntimeProvider({
       // 拉取成功 → live
       setConnectionState((prev) => (prev === "live" ? "live" : "polling"));
     } catch (err) {
+      if (generation !== sessionGeneration.current) return;
       if (err instanceof KkRuntimeClientError) {
         if (err.code === "unauthenticated" || err.code === "service_unavailable") {
           setConnectionState("offline");
@@ -339,7 +343,7 @@ export function KkRuntimeProvider({
       }
       // 静默失败，等下次轮询
     } finally {
-      inflightPull.current = false;
+      if (generation === sessionGeneration.current) inflightPull.current = false;
     }
   }, [runtimeAccessToken, sessionResolved, lastSequence, connectionState, allowFixtureFallback]);
 

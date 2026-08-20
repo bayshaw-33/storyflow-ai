@@ -101,6 +101,8 @@ test("root KK provider authenticates jobs from the browser session and isolates 
   let currentToken = "browser-session-token";
   let currentUser = { id: "user-a" };
   let unsubscribed = false;
+  let jobsCallCount = 0;
+  let releaseFirstJobs;
 
   globalThis.__kkTestSupabaseClient = {
     auth: {
@@ -133,6 +135,31 @@ test("root KK provider authenticates jobs from the browser session and isolates 
     }
     if (url === "/api/v2/kk") return Response.json(runtimeResponse());
     if (url === "/api/v2/jobs") {
+      jobsCallCount += 1;
+      if (jobsCallCount === 1) {
+        return new Promise((resolveResponse) => {
+          releaseFirstJobs = () => resolveResponse(Response.json({
+            success: true,
+            contractVersion: "2.0.0-alpha.1",
+            hasMore: false,
+            items: [{
+              id: "stale-user-a-job",
+              projectId: "project-a",
+              workId: "work-a",
+              workbenchType: "storyboard",
+              resultUrl: "/production?projectId=project-a&workId=work-a&tab=storyboard",
+              jobType: "image",
+              status: "completed",
+              phase: "completed",
+              progress: { completed: 1, total: 1 },
+              resultReferences: [],
+              actions: ["view_results"],
+              createdAt: "2026-08-20T04:00:00.000Z",
+              completedAt: "2026-08-20T04:01:00.000Z",
+            }],
+          }));
+        });
+      }
       return Response.json({ success: true, contractVersion: "2.0.0-alpha.1", hasMore: false, items: [] });
     }
     if (url.startsWith("/api/v2/kk/events")) {
@@ -162,6 +189,7 @@ test("root KK provider authenticates jobs from the browser session and isolates 
 
     assert.ok(authHeaders.some(({ url, authorization }) => url === "/api/v2/jobs" && authorization === "Bearer browser-session-token"));
     assert.equal(observed.at(-1)?.error, null);
+    assert.equal(typeof releaseFirstJobs, "function");
 
     currentToken = "refreshed-session-token";
     await act(async () => {
@@ -175,6 +203,8 @@ test("root KK provider authenticates jobs from the browser session and isolates 
     await act(async () => {
       for (const callback of authCallbacks) callback("SIGNED_IN", { access_token: currentToken, user: currentUser });
     });
+    await settle();
+    releaseFirstJobs();
     await settle();
     assert.equal(observed.at(-1)?.messages.length, 0);
   } finally {
