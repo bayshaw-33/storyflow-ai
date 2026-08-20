@@ -193,6 +193,22 @@
 }
 .stageRailStatus { color: var(--ink-muted); font-size: 11px; font-weight: 600; }
 .stageContent { min-width: 0; }
+.stageEmpty {
+  display: flex;
+  min-height: 520px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+  text-align: center;
+}
+.stageEmpty h2,
+.stageEmpty p { margin: 0; }
+.stageEmpty p { max-width: 520px; color: var(--ink-secondary); }
 .stageRailStart,
 .storyboardTool,
 .storyboardToolActive {

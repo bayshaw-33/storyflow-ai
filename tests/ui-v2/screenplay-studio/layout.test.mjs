@@ -8,6 +8,7 @@
  * Run: node --test tests/ui-v2/screenplay-studio/layout.test.mjs
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -82,6 +83,18 @@ test("STUDIO_LAYOUT declares desktop two columns and contextual drawers", () => 
   assert.equal(STUDIO_LAYOUT.desktopColumns, 2);
   assert.equal(STUDIO_LAYOUT.narrowBehavior, "drawers");
   assert.ok(Array.isArray(STUDIO_LAYOUT.breakpoints));
+});
+
+test("embedded studio owns canonical identity and one main view at a time", () => {
+  const source = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  assert.match(source, /embedded\?: boolean/);
+  assert.match(source, /projectId\?: string/);
+  assert.match(source, /parseUnifiedWorkbenchQuery/);
+  assert.match(source, /type ScreenplayMainView = "conversation" \| "document" \| "diff"/);
+  assert.match(source, /data-testid="main-view-conversation"/);
+  assert.match(source, /data-testid="main-view-document"/);
+  assert.match(source, /data-testid="main-view-diff"/);
+  assert.doesNotMatch(source, /router\.replace\(`\?workId=/);
 });
 
 // ============================================================

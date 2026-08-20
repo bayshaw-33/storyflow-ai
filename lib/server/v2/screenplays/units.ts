@@ -305,11 +305,12 @@ export class ScreenplayUnitsService {
     await this.assertWorkOwner(params.ownerId, params.workId);
     if (!params.projectId) throw new ScreenplayUnitsError("validation_failed", "projectId is required.");
     // Real legacy schema: story_bible lives on storyflow_projects; episodes
-    // and scenes are separate tables (the original select used phantom
-    // work_id/episodes columns that exist in no migration).
+    // and scenes are normally separate tables. Some older exports still keep
+    // nested episodes/scenes on the project row, so read the full row and use
+    // that shape only when the normalized tables have no records.
     const projects = await get<Array<Record<string, unknown>>>(
       this.fetcher,
-      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(params.projectId)}&select=id,owner_id,story_bible&limit=1`,
+      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(params.projectId)}&select=*&limit=1`,
     );
     const project = projects?.[0];
     if (!project) throw new ScreenplayUnitsError("not_found", "Legacy project not found.");
@@ -327,8 +328,26 @@ export class ScreenplayUnitsService {
         `/rest/v1/storyflow_scenes?project_id=eq.${encodeURIComponent(params.projectId)}&select=id,episode_id,scene_no,location,beats&order=scene_no.asc&limit=2000`,
       ).catch(() => []),
     ]);
-    const episodes = episodeRows ?? [];
-    const scenes = sceneRows ?? [];
+    const inlineEpisodes = Array.isArray(project.episodes) ? project.episodes as Array<Record<string, unknown>> : [];
+    const episodes = episodeRows?.length
+      ? episodeRows
+      : inlineEpisodes.map((episode, index) => ({
+          id: String(episode.id ?? `${params.projectId}:episode:${index + 1}`),
+          episode_no: Number(episode.episode_no ?? episode.order ?? index + 1),
+          title: episode.title == null ? null : String(episode.title),
+          summary: episode.summary == null ? null : String(episode.summary),
+        }));
+    const scenes = sceneRows?.length
+      ? sceneRows
+      : inlineEpisodes.flatMap((episode, episodeIndex) =>
+          (Array.isArray(episode.scenes) ? episode.scenes as Array<Record<string, unknown>> : []).map((scene, sceneIndex) => ({
+            id: String(scene.id ?? `${params.projectId}:scene:${episodeIndex + 1}:${sceneIndex + 1}`),
+            episode_id: String(episode.id ?? `${params.projectId}:episode:${episodeIndex + 1}`),
+            scene_no: Number(scene.scene_no ?? scene.order ?? sceneIndex + 1),
+            location: scene.location == null ? null : String(scene.location),
+            beats: Array.isArray(scene.beats) ? scene.beats : scene.content == null ? [] : [String(scene.content)],
+          })),
+        );
 
     // Read existing adapted units (idempotency by legacy_id).
     const existing = await this.listUnits({ ownerId: params.ownerId, workId: params.workId });

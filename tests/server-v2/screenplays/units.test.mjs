@@ -75,12 +75,14 @@ function makeStore() {
       const limit = Number(url.searchParams.get("limit") ?? filtered.length);
       const select = url.searchParams.get("select");
       if (select) {
-        const fields = select.split(",");
-        filtered = filtered.slice(0, limit).map((row) => {
-          const out = {};
-          for (const f of fields) out[f] = row[f];
-          return out;
-        });
+        if (select !== "*") {
+          const fields = select.split(",");
+          filtered = filtered.slice(0, limit).map((row) => {
+            const out = {};
+            for (const f of fields) out[f] = row[f];
+            return out;
+          });
+        }
       }
       return filtered.slice(0, limit);
     }

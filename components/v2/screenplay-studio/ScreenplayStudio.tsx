@@ -6,8 +6,9 @@
  * Focus mode: the global side nav collapses; the page is exactly two
  * columns — the screenplay path rail and the KK-dominant main area. Tools
  * (document editor, similarity review, localization, delivery, continuity,
- * references, versions) open as a bottom dock overlaying ~35% of the main
- * area; KK keeps the primary viewport.
+ * references, versions) open contextually in the main area or a drawer; KK,
+ * the current document, and version review never become a permanent third
+ * column.
  *
  * Conversation history is loaded from the server on mount (refresh-safe);
  * the similarity-review state is derived from persisted messages instead of
@@ -30,6 +31,7 @@ import {
   SCREENPLAY_STUDIO_WORKFLOW_STAGES,
   type StudioWorkflowStage,
 } from "@/lib/client/v2/screenplay-studio/types";
+import { buildUnifiedWorkbenchUrl, parseUnifiedWorkbenchQuery } from "@/lib/contracts/v2/unified-workbench";
 import { UnitNavigator } from "./UnitNavigator";
 import { ScreenplayEditor } from "./ScreenplayEditor";
 import { KkScreenplayRoom, type KkCandidate, type KkMessage, type KkPresetInput } from "./KkScreenplayRoom";
@@ -74,9 +76,28 @@ interface WorkMeta {
   currentVersionId: string | null;
 }
 
-export function ScreenplayStudio() {
+export interface ScreenplayStudioProps {
+  embedded?: boolean;
+  projectId?: string;
+  workId?: string;
+  unitId?: string | null;
+  onUnitChange?: (unitId: string) => void;
+  onUnsavedChange?: (unsaved: boolean) => void;
+}
+
+type ScreenplayMainView = "conversation" | "document" | "diff";
+
+export function ScreenplayStudio({
+  embedded = false,
+  projectId: projectIdProp,
+  workId: workIdProp,
+  unitId: unitIdProp,
+  onUnitChange,
+  onUnsavedChange,
+}: ScreenplayStudioProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const query = parseUnifiedWorkbenchQuery(searchParams);
 
   const [units, setUnits] = useState<ScreenplayUnitClientDto[]>([]);
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
@@ -91,6 +112,7 @@ export function ScreenplayStudio() {
   const [narrow, setNarrow] = useState(false);
   const [leftOpen, setLeftOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<StudioTool>(null);
+  const [mainView, setMainView] = useState<ScreenplayMainView>("conversation");
   const [kkMessages, setKkMessages] = useState<KkMessage[]>([]);
   const [kkCandidate, setKkCandidate] = useState<KkCandidate | null>(null);
   const [preservedInput, setPreservedInput] = useState("");
@@ -103,8 +125,9 @@ export function ScreenplayStudio() {
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const bootstrappedRef = useRef(false);
 
-  const workId = searchParams.get("workId");
-  const urlUnitId = searchParams.get("unitId");
+  const projectId = projectIdProp ?? query.projectId;
+  const workId = workIdProp ?? query.workId;
+  const urlUnitId = unitIdProp !== undefined ? unitIdProp : query.unitId;
   const conversationId = useMemo(() => `kk-${workId ?? "default"}`, [workId]);
 
   // 专注模式：折叠全局侧栏，剧本室独占两栏。
@@ -205,11 +228,19 @@ export function ScreenplayStudio() {
     if (loading || !workId || bootstrappedRef.current) return;
     bootstrappedRef.current = true;
     const initial = urlUnitId && units.some((u) => u.id === urlUnitId) ? urlUnitId : units[0]?.id ?? null;
-    if (initial && initial !== urlUnitId) {
-      router.replace(`?workId=${encodeURIComponent(workId)}&unitId=${encodeURIComponent(initial)}`, { scroll: false });
+    if (!embedded && initial && initial !== urlUnitId) {
+      const nextUrl = projectId
+        ? buildUnifiedWorkbenchUrl({ projectId, workId, tab: "script", unitId: initial })
+        : (() => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("workId", workId);
+            params.set("unitId", initial);
+            return `?${params.toString()}`;
+          })();
+      router.replace(nextUrl, { scroll: false });
     }
     setActiveUnitId(initial);
-  }, [loading, workId, units, urlUnitId, router]);
+  }, [embedded, loading, projectId, workId, units, urlUnitId, searchParams, router]);
 
   const activeUnit = useMemo(() => units.find((u) => u.id === activeUnitId) ?? null, [units, activeUnitId]);
 
@@ -242,11 +273,23 @@ export function ScreenplayStudio() {
     (unitId: string) => {
       setActiveUnitId(unitId);
       setActiveTool("draft");
+      setMainView("conversation");
       setConflict(null);
-      if (workId) router.push(`?workId=${encodeURIComponent(workId)}&unitId=${encodeURIComponent(unitId)}`, { scroll: false });
+      onUnitChange?.(unitId);
+      if (!embedded && workId) {
+        const nextUrl = projectId
+          ? buildUnifiedWorkbenchUrl({ projectId, workId, tab: "script", unitId })
+          : (() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("workId", workId);
+              params.set("unitId", unitId);
+              return `?${params.toString()}`;
+            })();
+        router.push(nextUrl, { scroll: false });
+      }
       if (narrow) setLeftOpen(false);
     },
-    [workId, router, narrow],
+    [embedded, projectId, searchParams, workId, router, narrow, onUnitChange],
   );
 
   const createUnit = useCallback(
@@ -276,8 +319,9 @@ export function ScreenplayStudio() {
     (body: string) => {
       setActiveContent(body);
       if (activeUnitId) setLoadedContent((prev) => ({ ...prev, [activeUnitId]: body }));
+      onUnsavedChange?.(true);
     },
-    [activeUnitId],
+    [activeUnitId, onUnsavedChange],
   );
 
   const handleTitleChange = useCallback(
@@ -299,6 +343,7 @@ export function ScreenplayStudio() {
       });
       const { unit } = await screenplayStudioApi.getUnit(workId, activeUnit.id);
       setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
+      onUnsavedChange?.(false);
     } catch (error) {
       if (error instanceof ScreenplayStudioApiError && error.status === 409) {
         setConflict({ currentVersionId: error.currentVersionId ?? null });
@@ -308,7 +353,7 @@ export function ScreenplayStudio() {
     } finally {
       setSaving(false);
     }
-  }, [workId, activeUnit, activeContent]);
+  }, [workId, activeUnit, activeContent, onUnsavedChange]);
 
   const confirmUsable = useCallback(async () => {
     if (!workId || !activeUnit?.currentVersionId) {
@@ -320,12 +365,13 @@ export function ScreenplayStudio() {
     try {
       const { unit } = await screenplayStudioApi.finalizeUnit(workId, activeUnit.id, activeUnit.currentVersionId);
       setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
+      onUnsavedChange?.(false);
     } catch (error) {
       setLoadError(error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "确认可用失败");
     } finally {
       setConfirming(false);
     }
-  }, [workId, activeUnit]);
+  }, [workId, activeUnit, onUnsavedChange]);
 
   const resolveStaleEdge = useCallback(
     async (edge: StaleEdgeDto, resolution: string) => {
@@ -574,6 +620,29 @@ export function ScreenplayStudio() {
     </div>
   ) : null;
 
+  const kkPanel = (
+    <KkScreenplayRoom
+      workId={workId}
+      conversationId={conversationId}
+      messages={kkMessages}
+      pendingCandidate={kkCandidate}
+      contextSummary={kkContext}
+      presetInput={presetInput}
+      onPresetConsumed={() => setPresetInput(null)}
+      onMessagesChange={setKkMessages}
+      onCandidateChange={(candidate) => {
+        setKkCandidate(candidate);
+        setMainView(candidate ? "diff" : "conversation");
+      }}
+      onAppliedVersion={async () => {
+        try { await refreshUnits(); } catch { /* best-effort refresh */ }
+        setMainView("conversation");
+      }}
+      onInputPreserved={setPreservedInput}
+      preservedInput={preservedInput}
+    />
+  );
+
   return (
     <div className={`${styles.studio} ${narrow ? styles.narrow : ""}`} data-testid="screenplay-studio">
       {narrow ? <button type="button" className={styles.narrowToggle} aria-label="打开结构导航" onClick={() => setLeftOpen(true)}>☰ 结构</button> : null}
@@ -610,7 +679,22 @@ export function ScreenplayStudio() {
           </div>
           <div className={styles.workspaceActions}>
             {(["draft", "similarity", "localization", "delivery", "continuity", "references", "versions"] as const).map((tool) => (
-              <button key={tool} type="button" className={`${styles.toolToggle} ${activeTool === tool ? styles.active : ""}`} onClick={() => setActiveTool(activeTool === tool ? null : tool)}>{TOOL_LABELS[tool]}</button>
+              <button
+                key={tool}
+                type="button"
+                className={`${styles.toolToggle} ${activeTool === tool || (tool === "draft" && mainView === "document") ? styles.active : ""}`}
+                onClick={() => {
+                  if (tool === "draft") {
+                    setActiveTool(null);
+                    setMainView(mainView === "document" ? "conversation" : "document");
+                    return;
+                  }
+                  setMainView("conversation");
+                  setActiveTool(activeTool === tool ? null : tool);
+                }}
+              >
+                {TOOL_LABELS[tool]}
+              </button>
             ))}
           </div>
         </header>
@@ -621,27 +705,32 @@ export function ScreenplayStudio() {
             </div>
           ))}
         </div>
-        <section className={styles.aiPanel} data-testid="studio-ai">
+        <section className={styles.aiPanel} data-testid="studio-ai" data-main-view={mainView}>
           <div className={styles.aiPanelHeader}>
-            <div><span className={styles.aiPanelTitle}>KK 剧本伙伴</span><span className={styles.aiPanelHint}>聊一聊只讨论；生成修改方案必须逐块审阅</span></div>
+            <div><span className={styles.aiPanelTitle}>{mainView === "document" ? "当前文档" : mainView === "diff" ? "版本对比" : "KK 剧本伙伴"}</span><span className={styles.aiPanelHint}>{mainView === "document" ? "编辑当前节点；保存会创建新版本" : mainView === "diff" ? "逐块审阅候选修改，采用后才写入正文" : "聊一聊只讨论；生成修改方案必须逐块审阅"}</span></div>
             <span className={styles.liveBadge}>对话优先</span>
           </div>
-          <KkScreenplayRoom
-            workId={workId}
-            conversationId={conversationId}
-            messages={kkMessages}
-            pendingCandidate={kkCandidate}
-            contextSummary={kkContext}
-            presetInput={presetInput}
-            onPresetConsumed={() => setPresetInput(null)}
-            onMessagesChange={setKkMessages}
-            onCandidateChange={setKkCandidate}
-            onAppliedVersion={async () => { try { await refreshUnits(); } catch { /* best-effort refresh */ } }}
-            onInputPreserved={setPreservedInput}
-            preservedInput={preservedInput}
-          />
+          {mainView === "document" ? (
+            <div data-testid="main-view-document">
+              <ScreenplayEditor
+                unit={activeUnit}
+                content={activeContent}
+                saving={saving}
+                conflict={conflict}
+                confirming={confirming}
+                onContentChange={handleContentChange}
+                onTitleChange={handleTitleChange}
+                onSave={saveActiveUnit}
+                onConfirmUsable={confirmUsable}
+              />
+            </div>
+          ) : mainView === "diff" ? (
+            <div data-testid="main-view-diff">{kkPanel}</div>
+          ) : (
+            <div data-testid="main-view-conversation">{kkPanel}</div>
+          )}
         </section>
-        {activeTool ? (
+        {activeTool && activeTool !== "draft" ? (
           <section className={styles.toolDrawer} data-testid="studio-tool-drawer">
             <div className={styles.toolDrawerHeader}>
               <strong>{TOOL_LABELS[activeTool]}</strong>
@@ -651,8 +740,8 @@ export function ScreenplayStudio() {
           </section>
         ) : (
           <div className={styles.toolTray}>
-            <span>工具在底部抽屉打开，KK 对话始终保持主视区</span>
-            <button type="button" onClick={() => setActiveTool("draft")}>打开当前文档</button>
+            <span>工具在当前主区域打开；KK 对话、当前稿与版本对比不会并列成第三栏</span>
+            <button type="button" onClick={() => { setActiveTool(null); setMainView("document"); }}>打开当前文档</button>
             <button type="button" onClick={() => setActiveTool("similarity")}>在大纲阶段查验雷同</button>
             <button type="button" onClick={() => setActiveTool("localization")}>准备本土化</button>
             <button type="button" onClick={() => setActiveTool("delivery")}>查看定稿与留痕</button>

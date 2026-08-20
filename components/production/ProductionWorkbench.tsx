@@ -74,6 +74,7 @@ import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
 import { DynamicGridEditor } from "./DynamicGridEditor";
+import { ScreenplayStudio } from "@/components/v2/screenplay-studio/ScreenplayStudio";
 import {
   buildUnifiedWorkbenchUrl,
   parseUnifiedWorkbenchQuery,
@@ -1630,18 +1631,22 @@ export function ProductionWorkbench() {
 
           <div className={styles.stageContent}>
             {activeStage === "script" ? (
-              <ScriptInputPanel
-                projectId={projectId}
-                sourceUnitId={sourceUnitId}
-                projectTitle={projectTitle}
-                manuscript={manuscript}
-                sourceFiles={sourceFiles}
-                analyzing={analyzing}
-                analyzeError={analyzeError}
-                onUploadFile={handleFileUpload}
-                onAnalyze={() => analyzeScript("full")}
-                onClearAnalyzeError={() => setAnalyzeError("")}
-              />
+              workId ? (
+                <ScreenplayStudio
+                  embedded
+                  projectId={projectId || undefined}
+                  workId={workId}
+                  unitId={unitId || null}
+                  onUnitChange={setUnitId}
+                  onUnsavedChange={setUnsaved}
+                />
+              ) : (
+                <section className={styles.stageEmpty}>
+                  <h2>剧本工作流尚未启动</h2>
+                  <p>先建立剧本 Work，进入后会在这里打开以 AI 对话为主导的剧本创作台。</p>
+                  <button type="button" className={styles.primaryButton} onClick={() => void startStage("script")}>开始剧本创作</button>
+                </section>
+              )
             ) : null}
             {activeStage === "art" ? (
               <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} />

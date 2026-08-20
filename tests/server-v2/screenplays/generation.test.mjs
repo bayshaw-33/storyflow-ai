@@ -76,8 +76,29 @@ function makeStore() {
     }
 
     if (method === "POST") {
-      // RPC passthrough for context packets
+      // Minimal RPC doubles for the atomic candidate transitions used by the service.
       if (url.pathname.startsWith("/rest/v1/rpc/")) {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        if (rpc === "apply_screenplay_candidate") {
+          const candidate = tables.storyflow_generation_candidates.find((row) => row.id === body.p_candidate_id);
+          if (!candidate) return [];
+          candidate.status = "applied";
+          const version = {
+            id: nextId("version"),
+            work_id: candidate.work_id,
+            kind: "editing_draft",
+            content_json: body.p_content_json,
+          };
+          tables.storyflow_work_versions.push(version);
+          return [{ candidate_id: candidate.id, new_version_id: version.id }];
+        }
+        if (rpc === "reject_generation_candidate") {
+          const candidate = tables.storyflow_generation_candidates.find((row) => row.id === body.p_candidate_id);
+          if (!candidate) return [];
+          candidate.status = "rejected";
+          return [{ candidate_id: candidate.id, status: candidate.status }];
+        }
+        // Context packet RPC passthrough.
         return { rpc, ok: true, packetId: `packet-${++seq}` };
       }
       const body = JSON.parse(String(init?.body ?? "{}"));
