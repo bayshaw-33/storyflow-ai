@@ -28,6 +28,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   fetchKkEvents,
   fetchKkRuntime,
@@ -165,8 +166,9 @@ export function KkRuntimeProvider({
   const [lastSequence, setLastSequence] = useState(0);
   const [browserSession, setBrowserSession] = useState<{
     accessToken: string | null;
+    userId: string | null;
     resolved: boolean;
-  }>({ accessToken: null, resolved: false });
+  }>({ accessToken: null, userId: null, resolved: false });
 
   const runtimeAccessToken = accessToken === undefined ? browserSession.accessToken : accessToken;
   const sessionResolved = accessToken !== undefined || browserSession.resolved;
@@ -179,13 +181,47 @@ export function KkRuntimeProvider({
   // 防止重复并发 fetch
   const inflightRefresh = useRef(false);
   const inflightPull = useRef(false);
+  const sessionGeneration = useRef(0);
+  const sessionIdentity = useRef<string | null>(null);
+  const explicitToken = useRef(accessToken);
+
+  const clearSessionData = useCallback(() => {
+    setRuntime(null);
+    setEvents([]);
+    setLastSequence(0);
+    setError(null);
+    setLegacyMessages([]);
+    setJobMessages([]);
+    setLegacySource("api");
+    setConnectionState("connecting");
+  }, []);
+
+  const applySession = useCallback((session: Session | null) => {
+    const nextIdentity = session?.user?.id ?? null;
+    const identityChanged = sessionIdentity.current !== nextIdentity;
+    sessionIdentity.current = nextIdentity;
+    sessionGeneration.current += 1;
+    if (identityChanged) clearSessionData();
+    setBrowserSession({
+      accessToken: session?.access_token ?? null,
+      userId: nextIdentity,
+      resolved: true,
+    });
+  }, [clearSessionData]);
+
+  useEffect(() => {
+    if (explicitToken.current === accessToken) return;
+    explicitToken.current = accessToken;
+    sessionGeneration.current += 1;
+    clearSessionData();
+  }, [accessToken, clearSessionData]);
 
   useEffect(() => {
     if (accessToken !== undefined) return;
 
     const client = getSupabaseBrowserClient();
     if (!client) {
-      setBrowserSession({ accessToken: null, resolved: true });
+      applySession(null);
       return;
     }
 
@@ -194,30 +230,33 @@ export function KkRuntimeProvider({
     const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       authStateChanged = true;
-      setBrowserSession({ accessToken: session?.access_token ?? null, resolved: true });
+      applySession(session);
     });
 
     void client.auth
       .getSession()
       .then(({ data }) => {
         if (!active || authStateChanged) return;
-        setBrowserSession({ accessToken: data.session?.access_token ?? null, resolved: true });
+        applySession(data.session);
       })
       .catch(() => {
         if (!active || authStateChanged) return;
-        setBrowserSession({ accessToken: null, resolved: true });
+        applySession(null);
       });
 
     return () => {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [accessToken]);
+  }, [accessToken, applySession]);
 
   const refreshJobMessages = useCallback(async () => {
     if (!sessionResolved) return;
+    const generation = sessionGeneration.current;
     try {
-      setJobMessages(await fetchKkJobMessages(runtimeAccessToken));
+      const messages = await fetchKkJobMessages(runtimeAccessToken);
+      if (generation !== sessionGeneration.current) return;
+      setJobMessages(messages);
     } catch {
       // Job messages are additive; a transient jobs failure must not disable KK runtime.
     }
@@ -229,10 +268,12 @@ export function KkRuntimeProvider({
   const refresh = useCallback(async () => {
     if (!sessionResolved) return;
     if (inflightRefresh.current) return;
+    const generation = sessionGeneration.current;
     inflightRefresh.current = true;
     setConnectionState((prev) => (prev === "live" ? "live" : "connecting"));
     try {
       const data = await fetchKkRuntime(runtimeAccessToken);
+      if (generation !== sessionGeneration.current) return;
       setRuntime(data);
       setLastSequence(data.serverCursor);
       setConnectionState("live");
@@ -262,9 +303,11 @@ export function KkRuntimeProvider({
     if (!sessionResolved) return;
     if (inflightPull.current) return;
     if (connectionState === "offline" && !allowFixtureFallback) return;
+    const generation = sessionGeneration.current;
     inflightPull.current = true;
     try {
       const result = await fetchKkEvents(runtimeAccessToken, { afterSequence: lastSequence });
+      if (generation !== sessionGeneration.current) return;
       if (result.events.length > 0) {
         // K21-KK-007: 按 sequence 单调 + 客户端去重
         setEvents((prev) => {
@@ -331,10 +374,11 @@ export function KkRuntimeProvider({
     if (connectionState !== "offline") return;
     if (!allowFixtureFallback) return;
     let cancelled = false;
+    const generation = sessionGeneration.current;
     void (async () => {
       try {
         const result = await fetchKkMessages(runtimeAccessToken);
-        if (cancelled) return;
+        if (cancelled || generation !== sessionGeneration.current) return;
         setLegacyMessages(result.messages);
         setLegacySource(result.source);
       } catch {

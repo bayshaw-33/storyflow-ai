@@ -10,6 +10,7 @@ The root layout mounts `KkRuntimeProvider` without an explicit access token. The
 - Track `getSession()` and `onAuthStateChange()` so refreshes use the current token.
 - Keep explicit `accessToken={null}` behavior for callers that intentionally force an unauthenticated request.
 - Gate runtime, event, fixture, and task-message requests until session resolution completes.
+- Clear account-scoped state on identity changes and ignore responses from an older session generation.
 
 ## Verification
 
@@ -17,4 +18,4 @@ The root layout mounts `KkRuntimeProvider` without an explicit access token. The
 - `pnpm exec tsc --noEmit`
 - `git diff --check`
 
-The regression test is dependency-free and verifies the actual root-layout/provider wiring and all live request call sites.
+The regression test mounts the provider with `react-test-renderer`, resolves a mocked Supabase browser session, verifies Authorization headers for the live job feed, verifies a refreshed token is used, and verifies account changes do not retain old messages.
