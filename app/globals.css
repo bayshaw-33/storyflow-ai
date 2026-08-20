@@ -8649,3 +8649,9 @@ html[data-screenplay-focus="on"] .kk-nav-vertical,
 html[data-screenplay-focus="on"] .kk-nav-settings-corner {
   display: none;
 }
+
+/* 制作工作台专注模式：保留全局导航能力，但不让侧栏挤压四阶段工作区。 */
+html[data-production-focus="on"] .kk-nav-vertical,
+html[data-production-focus="on"] .kk-nav-settings-corner {
+  display: none;
+}

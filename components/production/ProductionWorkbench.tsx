@@ -28,7 +28,7 @@
 
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { AlertTriangle, ArrowLeft, Clock, Cpu, Film, Save, Settings, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock, Cpu, Save, Users, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -53,15 +53,12 @@ import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createProductionId } from "@/lib/production/state";
 import { isScopeActionable, isCloudActionable } from "@/lib/production/scope";
-import { canEnterProduction } from "@/lib/creation/state";
-import { readProjectsFromStorage } from "@/lib/projects";
 
 import type { ProductionSourceFile } from "@/lib/production/types";
 import { VersionHistory, type VersionRecord, type VersionDiffResult } from "./VersionHistory";
 import { TeamPanel } from "./TeamPanel";
 import { ModelRegistryPanel } from "./ModelRegistryPanel";
 import {
-  ArtAssetsPanel,
   ScriptInputPanel,
   ShotFramesPanel,
   StoryboardTablePanel,
@@ -77,9 +74,17 @@ import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
 import { DynamicGridEditor } from "./DynamicGridEditor";
+import {
+  buildUnifiedWorkbenchUrl,
+  parseUnifiedWorkbenchQuery,
+  UNIFIED_PRODUCTION_STAGES,
+  type UnifiedProductionStage,
+  type UnifiedWorkbenchContextV1,
+} from "@/lib/contracts/v2/unified-workbench";
+import { WORK_CONTRACT_VERSION } from "@/lib/contracts/v2/work";
+import { fetchUnifiedWorkbenchContext, ensureUnifiedStage } from "@/lib/client/v2/unified-workbench/api";
+import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
-
-type Tab = "script" | "table" | "assets" | "frames" | "grid";
 
 type StoryboardAssets = {
   characters: StoryboardAssetUsage[];
@@ -87,26 +92,28 @@ type StoryboardAssets = {
   props: StoryboardAssetUsage[];
 };
 
-const tabLabels: Array<{ id: Tab; label: string }> = [
-  { id: "script", label: "剧本" },
-  { id: "assets", label: "美术" },
-  { id: "table", label: "分镜" },
-  { id: "grid", label: "动态分镜" },
-  { id: "frames", label: "视频" },
-];
-
 const EMPTY_ASSETS: StoryboardAssets = { characters: [], locations: [], props: [] };
+
+const STAGE_LABELS: Record<UnifiedProductionStage, string> = {
+  script: "剧本",
+  art: "美术",
+  storyboard: "分镜",
+  video: "视频",
+};
 
 export function ProductionWorkbench() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // --- 顶层状态 ---
-  const [activeTab, setActiveTab] = useState<Tab>("script");
+  const [activeStage, setActiveStage] = useState<UnifiedProductionStage>("script");
+  const [storyboardView, setStoryboardView] = useState<"table" | "grid">("table");
   const [session, setSession] = useState<Session | null>(null);
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient | null>(null);
   const [projectId, setProjectId] = useState<string>("");
-  const [sourceUnitId, setSourceUnitId] = useState<string>("");
+  const [workId, setWorkId] = useState<string | null>(null);
+  const [unitId, setUnitId] = useState<string>("");
+  const sourceUnitId = unitId;
   const [handoffId, setHandoffId] = useState<string>("");
   const [projectTitle, setProjectTitle] = useState<string>("");
   const [manuscript, setManuscript] = useState<string>("");
@@ -124,6 +131,12 @@ export function ProductionWorkbench() {
   // productionGateLoading=true 时表示正在调服务端校验，未收到结果前不显示主界面也不显示阻断
   const [productionGateError, setProductionGateError] = useState<string>("");
   const [productionGateLoading, setProductionGateLoading] = useState<boolean>(false);
+  const [context, setContext] = useState<UnifiedWorkbenchContextV1 | null>(null);
+  const [contextLoading, setContextLoading] = useState<boolean>(false);
+  const [contextError, setContextError] = useState<string>("");
+  const [unsaved, setUnsaved] = useState<boolean>(false);
+  const [pendingStage, setPendingStage] = useState<UnifiedProductionStage | null>(null);
+  const [unsavedDialogOpen, setUnsavedDialogOpen] = useState<boolean>(false);
 
   // --- Storyboard 状态（contracts.ts）---
   const [scenes, setScenes] = useState<StoryboardScene[]>([]);
@@ -192,15 +205,12 @@ export function ProductionWorkbench() {
   }, [projectId, sourceUnitId]);
 
   // --- URL 参数 + scope 校验 + handoff/draft 加载 ---
-  // 任务 4 修复：依赖数组加入 searchParams，避免 URL 变化但 effect 不重新执行（导致点模块失效）
   useEffect(() => {
-    const urlProjectId = searchParams.get("projectId");
-    const urlSourceUnitId = searchParams.get("sourceUnitId");
-    const urlHandoffId = searchParams.get("handoffId") || "";
+    const query = parseUnifiedWorkbenchQuery(searchParams);
     const setup = searchParams.get("setup");
-    const mode = searchParams.get("mode") || "planning";
+    const mode = searchParams.get("mode") || query.tab;
 
-    if (!urlProjectId || !urlSourceUnitId) {
+    if (!query.projectId || (!query.unitId && setup === "1")) {
       // 任务 1.4「先创作后归档」：带 setup=1（从需求墙来）时自动开未命名草稿，立即可用
       if (setup === "1") {
         // PRD §6.1: 用 crypto.randomUUID() 生成稳定 draft ID，立即 router.replace 写回 URL
@@ -211,22 +221,21 @@ export function ProductionWorkbench() {
         const draftId = `draft-production-${uuid}`;
         const draftUnitId = `draft-unit-${uuid}`;
         const universeId = searchParams.get("universeId") || "";
-        // 构造规范化 URL
-        const params = new URLSearchParams();
-        params.set("mode", mode);
-        params.set("projectId", draftId);
-        params.set("sourceUnitId", draftUnitId);
-        if (universeId) params.set("universeId", universeId);
-        // 不再 set setup=1
-        router.replace(`/production?${params.toString()}`, { scroll: false });
+        const draftUrl = buildUnifiedWorkbenchUrl({
+          projectId: draftId,
+          tab: query.tab,
+          unitId: draftUnitId,
+        });
+        router.replace(universeId ? `${draftUrl}&universeId=${encodeURIComponent(universeId)}` : draftUrl, { scroll: false });
         setProjectId(draftId);
-        setSourceUnitId(draftUnitId);
+        setWorkId(null);
+        setUnitId(draftUnitId);
         setIsEmptyState(false);
         setProjectTitle("未命名草稿");
-        // mode → Tab 映射（art → 美术物料 / planning → 分镜表 / editor → 分镜图 / dub|edit → 剧本输入占位）
-        const tabForMode: Tab = mode === "editor" ? "frames" : mode === "art" ? "assets" : mode === "planning" ? "table" : "script";
-        setActiveTab(tabForMode);
+        setActiveStage(query.tab);
+        setStoryboardView("table");
         setEntryMode(mode as EntryMode);
+        setContext(null);
         setHydrationPhase("loading_local");
         return;
       }
@@ -236,13 +245,15 @@ export function ProductionWorkbench() {
       return;
     }
     setIsEmptyState(false);
-    setProjectId(urlProjectId);
-    setSourceUnitId(urlSourceUnitId);
-    setHandoffId(urlHandoffId);
+    setProjectId(query.projectId);
+    setWorkId(query.workId);
+    setUnitId(query.unitId || "");
+    setActiveStage(query.tab);
+    setHandoffId(searchParams.get("handoffId") || "");
     setHydrationPhase("loading_local");
 
     // 优先 handoff
-    const handoff = readCreativeHandoff(urlProjectId, urlSourceUnitId);
+    const handoff = readCreativeHandoff(query.projectId, query.unitId || "");
     if (handoff) {
       setProjectTitle(handoff.title);
       setManuscript(handoff.manuscript);
@@ -253,8 +264,9 @@ export function ProductionWorkbench() {
     // 尝试本地草稿
     const draftScope: StoryboardDraftScope = {
       userId: session?.user?.id || null,
-      projectId: urlProjectId,
-      sourceUnitId: urlSourceUnitId,
+      projectId: query.projectId,
+      workId: query.workId,
+      unitId: query.unitId || "",
     };
     const draft = readStoryboardDraft(draftScope);
     if (draft) {
@@ -272,6 +284,39 @@ export function ProductionWorkbench() {
     // 草稿加载完成，标记 ready（云端加载由 loadFromServer 异步进行，不阻塞 ready）
     setHydrationPhase("ready");
   }, [session?.user?.id, searchParams, router]);
+
+  async function reloadContext() {
+    if (!projectId || projectId.startsWith("draft-")) return;
+    setContextLoading(true);
+    setContextError("");
+    try {
+      const nextContext = await fetchUnifiedWorkbenchContext(projectId);
+      setContext(nextContext);
+      setProjectTitle((current) => current || nextContext.project.title);
+    } catch (error) {
+      setContextError(error instanceof Error ? error.message : "统一工作台上下文暂时不可用。");
+    } finally {
+      setContextLoading(false);
+    }
+  }
+
+  // 正式项目先读取只读上下文；缺失阶段只展示空状态，不在这里创建 Work。
+  useEffect(() => {
+    if (!projectId || projectId.startsWith("draft-")) {
+      setContext(null);
+      setContextLoading(false);
+      return;
+    }
+    void reloadContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, session?.access_token]);
+
+  useEffect(() => {
+    document.documentElement.dataset.productionFocus = "on";
+    return () => {
+      delete document.documentElement.dataset.productionFocus;
+    };
+  }, []);
 
   // --- Supabase session ---
   useEffect(() => {
@@ -319,7 +364,11 @@ export function ProductionWorkbench() {
   // 草稿项目（需求墙 setup=1 流程）跳过门禁；正式项目必须通过服务端校验
   // 服务端校验未返回 ok=true 前，默认阻断（fail-closed），不再"找不到项目就放行"
   useEffect(() => {
-    if (!projectId || !sourceUnitId) return;
+    if (!projectId || !sourceUnitId) {
+      setProductionGateLoading(false);
+      setProductionGateError("");
+      return;
+    }
     if (projectId.startsWith("draft-")) {
       setProductionGateError("");
       setProductionGateLoading(false);
@@ -362,7 +411,8 @@ export function ProductionWorkbench() {
     const scope: StoryboardDraftScope = {
       userId: session?.user?.id || null,
       projectId,
-      sourceUnitId,
+      workId,
+      unitId: sourceUnitId,
     };
     const draftPayload = {
       id: projectId,
@@ -395,7 +445,7 @@ export function ProductionWorkbench() {
       const message = error instanceof Error ? error.message : "本地草稿保存失败";
       setDraftPersistError(message);
     }
-  }, [scenes, assets, revision, projectId, sourceUnitId, session, projectTitle, sourceFiles, manuscript, hydrationPhase, draftPersistError]);
+  }, [scenes, assets, revision, projectId, workId, sourceUnitId, session, projectTitle, sourceFiles, manuscript, hydrationPhase, draftPersistError]);
 
   // -------------------------------------------------------------------
   // 服务端加载/保存
@@ -548,7 +598,7 @@ export function ProductionWorkbench() {
       const newProjectId = data.projectId;
       const newUnitId = data.sourceUnitId;
       setProjectId(newProjectId);
-      setSourceUnitId(newUnitId);
+      setUnitId(newUnitId);
       setProjectTitle(title);
       // 更新 URL（原地 replace 为正式 projectId + sourceUnitId）
       if (typeof window !== "undefined") {
@@ -739,7 +789,8 @@ export function ProductionWorkbench() {
         setDeletedSceneIds([]);
         setDeletedShotIds([]);
         setNotice(`已分析剧本：${response.scenes.length} 场 · ${response.scenes.reduce((n, s) => n + s.shots.length, 0)} 个分镜。`);
-        setActiveTab("table");
+        setActiveStage("storyboard");
+        setStoryboardView("table");
       }
     } catch (err) {
       // BLOCKER 4 contract: 不清场，保留现有 scenes
@@ -1278,13 +1329,88 @@ export function ProductionWorkbench() {
     });
   }
 
+  function navigateToStage(stage: UnifiedProductionStage) {
+    const existingStage = context?.stages[stage] ?? null;
+    const nextWorkId = existingStage?.workId ?? null;
+    router.replace(buildUnifiedWorkbenchUrl({
+      projectId: context?.project.id || projectId,
+      workId: nextWorkId,
+      tab: stage,
+      unitId: unitId || null,
+    }), { scroll: false });
+    setWorkId(nextWorkId);
+    setActiveStage(stage);
+    if (stage === "storyboard") setStoryboardView("table");
+  }
+
+  const handleStageChange = (stage: UnifiedProductionStage) => {
+    if (unsaved) {
+      setPendingStage(stage);
+      setUnsavedDialogOpen(true);
+      return;
+    }
+    navigateToStage(stage);
+  };
+
+  const startStage = async (stage: UnifiedProductionStage) => {
+    if (!projectId) return;
+    try {
+      const ensured = await ensureUnifiedStage(projectId, stage);
+      router.replace(buildUnifiedWorkbenchUrl({
+        projectId,
+        workId: ensured.workId,
+        tab: stage,
+        unitId: unitId || null,
+      }), { scroll: false });
+      setWorkId(ensured.workId);
+      setActiveStage(stage);
+      setUnsaved(false);
+      await reloadContext();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "无法启动该阶段，请稍后重试。");
+    }
+  };
+
   // -------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------
 
+  const displayContext: UnifiedWorkbenchContextV1 = context ?? {
+    contractVersion: WORK_CONTRACT_VERSION,
+    project: { id: projectId, title: projectTitle || "未命名草稿", ownerId: session?.user?.id || "" },
+    universe: null,
+    stages: { script: null, art: null, storyboard: null, video: null },
+    legacy: { sourceUnitId: unitId || null, resolvedFromProjectOnly: !unitId },
+  };
+
   if (isEmptyState) {
     return (
       <ProductionEmptyState entryMode={typeof entryMode === "string" ? entryMode : undefined} />
+    );
+  }
+
+  if (projectId && !projectId.startsWith("draft-") && contextLoading && !context) {
+    return (
+      <main className={styles.shell}>
+        <section className={styles.loadingState} aria-live="polite">
+          <div className="spinner" aria-hidden="true" />
+          <p>正在加载制作工作台上下文…</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (contextError && !context && !projectId.startsWith("draft-")) {
+    return (
+      <main className={styles.shell}>
+        <section className={styles.loadingState} role="alert">
+          <AlertTriangle size={32} color="var(--danger)" />
+          <p>{contextError}</p>
+          <button type="button" className={styles.primaryButton} onClick={() => void reloadContext()}>
+            重新加载
+          </button>
+        </section>
+      </main>
     );
   }
 
@@ -1355,29 +1481,16 @@ export function ProductionWorkbench() {
 
   return (
     <main className={styles.shell}>
-      <header className={styles.header}>
-        <div className={styles.titleBlock}>
-          <p className={styles.eyebrow}>Kiikis Production Workbench · 四区分镜台</p>
-          <input
-            className={styles.titleInput}
-            value={projectTitle}
-            onChange={(e) => setProjectTitle(e.target.value)}
-            aria-label="Project title"
-            placeholder="项目标题"
-          />
-        </div>
-        <nav className={styles.modeSwitch} aria-label="Storyboard zones">
-          {tabLabels.map((tab) => (
-            <button
-              className={`${styles.modeButton} ${activeTab === tab.id ? styles.modeButtonActive : ""}`}
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <UnifiedProductionHeader
+        context={displayContext}
+        activeStage={activeStage}
+        saveStatus={saving ? "saving" : unsaved ? "unsaved" : "saved"}
+        onStageChange={handleStageChange}
+        onVersionClick={() => setShowVersionHistory(true)}
+        onEvidenceClick={() => setNotice("证据记录会随当前版本一并保留。")}
+        onMoreClick={() => setShowSecondaryMenu((value) => !value)}
+      />
+      <div className={styles.actionBar}>
         <div className={styles.actionRow}>
           {backToCreation.visible ? (
             <button
@@ -1412,55 +1525,22 @@ export function ProductionWorkbench() {
             videoJobs={videoJobs}
             accessToken={session?.access_token}
           />
-          <div className={styles.secondaryMenu}>
-            <button
-              type="button"
-              className={`${styles.secondaryMenuTrigger} ${showSecondaryMenu ? styles.secondaryMenuTriggerActive : ""}`}
-              onClick={() => setShowSecondaryMenu((v) => !v)}
-              aria-expanded={showSecondaryMenu}
-              aria-haspopup="menu"
-            >
-              <Settings size={16} /> 更多
-            </button>
-            {showSecondaryMenu ? (
-              <>
-                <button
-                  type="button"
-                  aria-label="关闭菜单"
-                  onClick={() => setShowSecondaryMenu(false)}
-                  style={{ position: "fixed", inset: 0, border: 0, background: "transparent", cursor: "default", zIndex: 25 }}
-                />
-                <div className={styles.secondaryMenuDropdown} role="menu">
-                  <button
-                    type="button"
-                    className={styles.secondaryMenuItem}
-                    onClick={() => { setShowVersionHistory(true); setShowSecondaryMenu(false); }}
-                    role="menuitem"
-                  >
-                    <Clock size={14} /> 版本历史
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.secondaryMenuItem}
-                    onClick={() => { setShowTeamPanel(true); setShowSecondaryMenu(false); }}
-                    role="menuitem"
-                  >
-                    <Users size={14} /> 团队
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.secondaryMenuItem}
-                    onClick={() => { setShowModelRegistry(true); setShowSecondaryMenu(false); }}
-                    role="menuitem"
-                  >
-                    <Cpu size={14} /> 模型注册表
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
         </div>
-      </header>
+      </div>
+
+      {showSecondaryMenu ? (
+        <div className={styles.secondaryMenuFloating} role="menu">
+          <button type="button" className={styles.secondaryMenuItem} onClick={() => { setShowVersionHistory(true); setShowSecondaryMenu(false); }} role="menuitem">
+            <Clock size={14} /> 版本历史
+          </button>
+          <button type="button" className={styles.secondaryMenuItem} onClick={() => { setShowTeamPanel(true); setShowSecondaryMenu(false); }} role="menuitem">
+            <Users size={14} /> 团队
+          </button>
+          <button type="button" className={styles.secondaryMenuItem} onClick={() => { setShowModelRegistry(true); setShowSecondaryMenu(false); }} role="menuitem">
+            <Cpu size={14} /> 模型注册表
+          </button>
+        </div>
+      ) : null}
 
       {notice ? (
         <div
@@ -1516,85 +1596,120 @@ export function ProductionWorkbench() {
       ) : null}
 
       <section className={styles.workspace}>
-        {activeTab === "script" ? (
-          <ScriptInputPanel
-            projectId={projectId}
-            sourceUnitId={sourceUnitId}
-            projectTitle={projectTitle}
-            manuscript={manuscript}
-            sourceFiles={sourceFiles}
-            analyzing={analyzing}
-            analyzeError={analyzeError}
-            onUploadFile={handleFileUpload}
-            onAnalyze={() => analyzeScript("full")}
-            onClearAnalyzeError={() => setAnalyzeError("")}
-          />
-        ) : null}
-        {activeTab === "table" ? (
-          <StoryboardTablePanel
-            scenes={scenes}
-            revision={revision}
-            analyzingSceneId={analyzingSceneId}
-            conflictRevision={conflictRevision}
-            onUpdateScene={updateScene}
-            onUpdateShot={updateShot}
-            onAddShot={addShot}
-            onDeleteShot={deleteShot}
-            onAddScene={addScene}
-            onDeleteScene={deleteScene}
-            onSplitShot={splitShot}
-            onMergeShot={() => { /* TODO: 任务 8 配套 */ }}
-            onMoveShot={moveShot}
-            onToggleShotLock={toggleShotLock}
-            onToggleShotConfirm={toggleShotConfirm}
-            onReanalyzeScene={(sceneId) => analyzeScript("scene", sceneId)}
-            onClearConflict={() => setConflictRevision(null)}
-          />
-        ) : null}
-        {activeTab === "assets" ? (
-          <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} />
-        ) : null}
-        {activeTab === "grid" ? (
-          handoffId ? (
-            <DynamicGridEditor handoffId={handoffId} />
-          ) : (
-            <div style={{ padding: "40px 28px", color: "var(--ink-muted)", textAlign: "center" }}>
-              请先在剧本工作台「定稿并进入分镜」以生成 handoff,再回到此 tab 编辑动态宫格分镜。
-            </div>
-          )
-        ) : null}
-        {activeTab === "frames" ? (
-          <ShotFramesPanel
-            scenes={scenes}
-            assets={assets}
-            frames={frames}
-            prompts={prompts}
-            generatingShotId={generatingShotId}
-            generatingPromptsForShots={generatingPromptsForShots}
-            onGenerateFrame={generateShotFrame}
-            onGeneratePrompts={generatePromptsForShots}
-            onToggleConfirm={(shotId) => {
-              for (const scene of scenes) {
-                const sid = scene.id ?? scene.clientId ?? "";
-                if (scene.shots.some((sh) => (sh.id ?? sh.clientId) === shotId)) {
-                  toggleShotConfirm(sid, shotId);
-                  return;
-                }
-              }
-            }}
-            onUpdateShot={updateShot}
-            videoJobs={videoJobs}
-            submittingVideoShotId={submittingVideoShotId}
-            onGenerateVideo={submitVideo}
-            onPollVideo={pollVideoJob}
-            batchProgress={batchProgress}
-            onBatchAll={batchAll}
-            onBatchScene={batchScene}
-            onBatchUnfinished={batchUnfinished}
-            onBatchRetryFailed={batchRetryFailed}
-            batchRunning={batchRunning}
-          />
-        ) : null}
+        <div className={styles.stageLayout}>
+          <aside className={styles.stageRail} aria-label="制作阶段">
+            <p className={styles.stageRailTitle}>制作流程</p>
+            {UNIFIED_PRODUCTION_STAGES.map((stage) => {
+              const stageContext = displayContext.stages[stage];
+              return (
+                <div key={stage}>
+                  <button
+                    type="button"
+                    className={`${styles.stageRailItem} ${activeStage === stage ? styles.stageRailItemActive : ""}`}
+                    onClick={() => handleStageChange(stage)}
+                  >
+                    <span>{STAGE_LABELS[stage]}</span>
+                    <span className={styles.stageRailStatus}>{stageContext ? "已建立" : "未开始"}</span>
+                  </button>
+                  {activeStage === stage && !stageContext ? (
+                    <button type="button" className={styles.stageRailStart} onClick={() => void startStage(stage)}>
+                      开始{STAGE_LABELS[stage]}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {activeStage === "storyboard" ? (
+              <div className={styles.storyboardTools} aria-label="分镜工具">
+                <p className={styles.stageRailTitle}>分镜工具</p>
+                <button type="button" className={storyboardView === "table" ? styles.storyboardToolActive : styles.storyboardTool} onClick={() => setStoryboardView("table")}>分镜表</button>
+                <button type="button" className={storyboardView === "grid" ? styles.storyboardToolActive : styles.storyboardTool} onClick={() => setStoryboardView("grid")}>动态宫格</button>
+              </div>
+            ) : null}
+          </aside>
+
+          <div className={styles.stageContent}>
+            {activeStage === "script" ? (
+              <ScriptInputPanel
+                projectId={projectId}
+                sourceUnitId={sourceUnitId}
+                projectTitle={projectTitle}
+                manuscript={manuscript}
+                sourceFiles={sourceFiles}
+                analyzing={analyzing}
+                analyzeError={analyzeError}
+                onUploadFile={handleFileUpload}
+                onAnalyze={() => analyzeScript("full")}
+                onClearAnalyzeError={() => setAnalyzeError("")}
+              />
+            ) : null}
+            {activeStage === "art" ? (
+              <ArtWorkbench contextProjectId={projectId || undefined} contextProjectTitle={projectTitle || undefined} contextSourceUnitId={sourceUnitId || undefined} />
+            ) : null}
+            {activeStage === "storyboard" && storyboardView === "table" ? (
+              <StoryboardTablePanel
+                scenes={scenes}
+                revision={revision}
+                analyzingSceneId={analyzingSceneId}
+                conflictRevision={conflictRevision}
+                onUpdateScene={updateScene}
+                onUpdateShot={updateShot}
+                onAddShot={addShot}
+                onDeleteShot={deleteShot}
+                onAddScene={addScene}
+                onDeleteScene={deleteScene}
+                onSplitShot={splitShot}
+                onMergeShot={() => { /* TODO: 任务 8 配套 */ }}
+                onMoveShot={moveShot}
+                onToggleShotLock={toggleShotLock}
+                onToggleShotConfirm={toggleShotConfirm}
+                onReanalyzeScene={(sceneId) => analyzeScript("scene", sceneId)}
+                onClearConflict={() => setConflictRevision(null)}
+              />
+            ) : null}
+            {activeStage === "storyboard" && storyboardView === "grid" ? (
+              handoffId ? (
+                <DynamicGridEditor handoffId={handoffId} />
+              ) : (
+                <div style={{ padding: "40px 28px", color: "var(--ink-muted)", textAlign: "center" }}>
+                  请先在剧本工作台「定稿并进入分镜」以生成 handoff，再回到分镜工具打开动态宫格。
+                </div>
+              )
+            ) : null}
+            {activeStage === "video" ? (
+              <ShotFramesPanel
+                scenes={scenes}
+                assets={assets}
+                frames={frames}
+                prompts={prompts}
+                generatingShotId={generatingShotId}
+                generatingPromptsForShots={generatingPromptsForShots}
+                onGenerateFrame={generateShotFrame}
+                onGeneratePrompts={generatePromptsForShots}
+                onToggleConfirm={(shotId) => {
+                  for (const scene of scenes) {
+                    const sid = scene.id ?? scene.clientId ?? "";
+                    if (scene.shots.some((sh) => (sh.id ?? sh.clientId) === shotId)) {
+                      toggleShotConfirm(sid, shotId);
+                      return;
+                    }
+                  }
+                }}
+                onUpdateShot={updateShot}
+                videoJobs={videoJobs}
+                submittingVideoShotId={submittingVideoShotId}
+                onGenerateVideo={submitVideo}
+                onPollVideo={pollVideoJob}
+                batchProgress={batchProgress}
+                onBatchAll={batchAll}
+                onBatchScene={batchScene}
+                onBatchUnfinished={batchUnfinished}
+                onBatchRetryFailed={batchRetryFailed}
+                batchRunning={batchRunning}
+              />
+            ) : null}
+          </div>
+        </div>
       </section>
 
       {showVersionHistory ? (

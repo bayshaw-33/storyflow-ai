@@ -1,10 +1,11 @@
 /**
- * /production - 第一阶段分镜制作台主入口
+ * /production - 统一四阶段制作台主入口
  *
  * 任务卡：KIIKIS-P1-TRAE-002
  *
- * 必须携带 projectId + sourceUnitId 两个查询参数：
- *   /production?projectId=<id>&sourceUnitId=<stable-unit-id>
+ * 正式项目使用共享工作台查询参数：
+ *   /production?projectId=<id>&workId=<id>&tab=script|art|storyboard|video&unitId=<stable-unit-id>
+ * 新建草稿可以不携带 projectId，由制作台生成本地草稿上下文。
  *
  * 旧 /production-workbench 路由保留作为兼容入口，但不再扩展新功能。
  * 旧 /storyboard-workbench 路由不再扩展，仅保留迁移入口。

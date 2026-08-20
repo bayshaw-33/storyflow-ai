@@ -3,7 +3,7 @@
  *
  * 验证草稿身份与恢复：
  *   1. draft ID 生成用 crypto.randomUUID（不用 Date.now()）；
- *   2. localStorage key scoped by projectId + sourceUnitId（跨集隔离）；
+ *   2. localStorage key scoped by projectId + workId + unitId（跨集隔离）；
  *   3. 草稿读写：空 scope 不写不读；
  *   4. 云端 revision 不被更旧 local revision 覆盖（通过 CAS 409 机制）；
  *   5. 同项目两集互不串数据（key 隔离）。
@@ -33,7 +33,8 @@ function makeScope(overrides = {}) {
   return {
     userId: "user-test-1",
     projectId: "proj-1",
-    sourceUnitId: "ep-1",
+    workId: "work-1",
+    unitId: "ep-1",
     ...overrides,
   };
 }
@@ -84,22 +85,25 @@ function setupLocalStorage() {
 
 // ===== 测试用例 =====
 
-test("buildDraftKey: scoped by userId + projectId + sourceUnitId", () => {
-  const key1 = buildDraftKey({ userId: "u1", projectId: "p1", sourceUnitId: "e1" });
-  const key2 = buildDraftKey({ userId: "u1", projectId: "p1", sourceUnitId: "e2" });
-  const key3 = buildDraftKey({ userId: "u1", projectId: "p2", sourceUnitId: "e1" });
-  const key4 = buildDraftKey({ userId: "u2", projectId: "p1", sourceUnitId: "e1" });
+test("buildDraftKey: scoped by userId + projectId + workId + unitId", () => {
+  const key1 = buildDraftKey({ userId: "u1", projectId: "p1", workId: "w1", unitId: "e1" });
+  const key2 = buildDraftKey({ userId: "u1", projectId: "p1", workId: "w1", unitId: "e2" });
+  const key3 = buildDraftKey({ userId: "u1", projectId: "p2", workId: "w1", unitId: "e1" });
+  const key4 = buildDraftKey({ userId: "u2", projectId: "p1", workId: "w1", unitId: "e1" });
+  const key5 = buildDraftKey({ userId: "u1", projectId: "p1", workId: "w2", unitId: "e1" });
 
-  assert.notEqual(key1, key2, "不同 sourceUnitId 必须不同 key");
+  assert.notEqual(key1, key2, "不同 unitId 必须不同 key");
   assert.notEqual(key1, key3, "不同 projectId 必须不同 key");
   assert.notEqual(key1, key4, "不同 userId 必须不同 key");
+  assert.notEqual(key1, key5, "不同 workId 必须不同 key");
   assert.ok(key1.includes("p1"), "key 包含 projectId");
-  assert.ok(key1.includes("e1"), "key 包含 sourceUnitId");
+  assert.ok(key1.includes("w1"), "key 包含 workId");
+  assert.ok(key1.includes("e1"), "key 包含 unitId");
   assert.ok(key1.includes("u1"), "key 包含 userId");
 });
 
 test("buildDraftKey: 未登录用 anon 占位", () => {
-  const key = buildDraftKey({ userId: null, projectId: "p1", sourceUnitId: "e1" });
+  const key = buildDraftKey({ userId: null, projectId: "p1", workId: null, unitId: "e1" });
   assert.ok(key.includes("anon"), "未登录用户用 anon 占位");
 });
 
@@ -116,14 +120,14 @@ test("writeStoryboardDraft + readStoryboardDraft: 正常读写", () => {
 
 test("readStoryboardDraft: 空 scope 返回 null（禁止全局 fallback）", () => {
   setupLocalStorage();
-  const read = readStoryboardDraft({ userId: "u1", projectId: "", sourceUnitId: "" });
+  const read = readStoryboardDraft({ userId: "u1", projectId: "", workId: null, unitId: "" });
   assert.equal(read, null);
 });
 
 test("readStoryboardDraft: 跨集隔离 —— 同项目两集不串数据", () => {
   setupLocalStorage();
-  const scope1 = makeScope({ sourceUnitId: "ep-1" });
-  const scope2 = makeScope({ sourceUnitId: "ep-2" });
+  const scope1 = makeScope({ unitId: "ep-1" });
+  const scope2 = makeScope({ unitId: "ep-2" });
 
   writeStoryboardDraft(scope1, { ...makeDraftPayload(), title: "第一集" });
   writeStoryboardDraft(scope2, { ...makeDraftPayload(), title: "第二集" });
@@ -136,8 +140,8 @@ test("readStoryboardDraft: 跨集隔离 —— 同项目两集不串数据", () 
 
 test("readStoryboardDraft: 跨项目隔离 —— 两项目同名集不串数据", () => {
   setupLocalStorage();
-  const scope1 = makeScope({ projectId: "proj-A", sourceUnitId: "ep-1" });
-  const scope2 = makeScope({ projectId: "proj-B", sourceUnitId: "ep-1" });
+  const scope1 = makeScope({ projectId: "proj-A", unitId: "ep-1" });
+  const scope2 = makeScope({ projectId: "proj-B", unitId: "ep-1" });
 
   writeStoryboardDraft(scope1, { ...makeDraftPayload("proj-A"), title: "项目A" });
   writeStoryboardDraft(scope2, { ...makeDraftPayload("proj-B"), title: "项目B" });

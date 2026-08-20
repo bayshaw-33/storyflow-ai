@@ -39,8 +39,8 @@ test("getProductionScopeStatus: 只有 projectId 缺 unit → missing_unit", () 
   assert.equal(getProductionScopeStatus("proj-123", ""), "missing_unit");
 });
 
-test("getProductionScopeStatus: 只有 sourceUnitId 缺 project → missing_project", () => {
-  // 注意：sourceUnitId 非空但 projectId 空，projectId.startsWith 不会报错（空字符串）
+test("getProductionScopeStatus: 只有 unitId 缺 project → missing_project", () => {
+  // 注意：unitId 非空但 projectId 空，projectId.startsWith 不会报错（空字符串）
   assert.equal(getProductionScopeStatus("", "ep-123-1"), "missing_project");
 });
 

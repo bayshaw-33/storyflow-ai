@@ -4,10 +4,10 @@
  * 任务卡：KIIKIS-P1-TRAE-002 §2 BLOCKER 3 / §4
  *
  * 草稿 key 格式：
- *   kiikis:storyboard:v1:<userId|anon>:<projectId>:<sourceUnitId>
+ *   kiikis:storyboard:v2:<userId|anon>:<projectId>:<workId|unassigned>:<unitId>
  *
  * 规则：
- *   - 必须绑定 projectId + sourceUnitId，不允许全局 fallback
+ *   - 必须绑定 projectId + unitId，不允许全局 fallback
  *   - userId 未登录时使用 "anon" 占位
  *   - 跨项目 / 跨集 handoff 一律拒绝
  *
@@ -17,26 +17,27 @@
 
 import type { ProductionProjectState } from "@/lib/production/types";
 
-const DRAFT_KEY_PREFIX = "kiikis:storyboard:v1";
+const DRAFT_KEY_PREFIX = "kiikis:storyboard:v2";
 const ANON_USER = "anon";
 
 export interface StoryboardDraftScope {
   userId: string | null;
   projectId: string;
-  sourceUnitId: string;
+  workId: string | null;
+  unitId: string;
 }
 
 export function buildDraftKey(scope: StoryboardDraftScope): string {
   const userSegment = scope.userId || ANON_USER;
-  return `${DRAFT_KEY_PREFIX}:${userSegment}:${scope.projectId}:${scope.sourceUnitId}`;
+  return `${DRAFT_KEY_PREFIX}:${userSegment}:${scope.projectId}:${scope.workId || "unassigned"}:${scope.unitId}`;
 }
 
 /**
  * 读取当前项目 + 当前集 的本地草稿。
- * scope 不完整（projectId 或 sourceUnitId 缺失）时返回 null。
+ * scope 不完整（projectId 或 unitId 缺失）时返回 null。
  */
 export function readStoryboardDraft(scope: StoryboardDraftScope): Partial<ProductionProjectState> | null {
-  if (!scope.projectId || !scope.sourceUnitId) return null;
+  if (!scope.projectId || !scope.unitId) return null;
   try {
     const storage = typeof window !== "undefined" ? window.localStorage : undefined;
     if (!storage) return null;
@@ -54,7 +55,7 @@ export function readStoryboardDraft(scope: StoryboardDraftScope): Partial<Produc
  * scope 不完整时静默跳过（不写入全局 fallback）。
  */
 export function writeStoryboardDraft(scope: StoryboardDraftScope, state: ProductionProjectState): void {
-  if (!scope.projectId || !scope.sourceUnitId) return;
+  if (!scope.projectId || !scope.unitId) return;
   // PRD §6.2: localStorage 写入失败必须抛出，让调用方在通知区域显示错误（不得空 catch）
   const storage = typeof window !== "undefined" ? window.localStorage : undefined;
   if (!storage) throw new Error("本地存储不可用（localStorage 未初始化）");
@@ -65,7 +66,7 @@ export function writeStoryboardDraft(scope: StoryboardDraftScope, state: Product
  * 清空当前作用域草稿（仅手动操作触发，自动保存不得调用）。
  */
 export function clearStoryboardDraft(scope: StoryboardDraftScope): void {
-  if (!scope.projectId || !scope.sourceUnitId) return;
+  if (!scope.projectId || !scope.unitId) return;
   try {
     window.localStorage.removeItem(buildDraftKey(scope));
   } catch {
@@ -93,18 +94,19 @@ export function listStoryboardDrafts(userId: string | null): StoryboardDraftInde
       const key = window.localStorage.key(i);
       if (!key || !key.startsWith(prefix)) continue;
       const parts = key.split(":");
-      // 期待格式 kiikis:storyboard:v1:<user>:<projectId>:<sourceUnitId>
-      if (parts.length < 5) continue;
+      // 期待格式 kiikis:storyboard:v2:<user>:<projectId>:<workId>:<unitId>
+      if (parts.length < 6) continue;
       const projectId = parts[3];
-      const sourceUnitId = parts[4];
-      if (!projectId || !sourceUnitId) continue;
+      const workId = parts[4] === "unassigned" ? null : parts[4];
+      const unitId = parts[5];
+      if (!projectId || !unitId) continue;
       try {
         const raw = window.localStorage.getItem(key);
         if (!raw) continue;
         const parsed = JSON.parse(raw) as Partial<ProductionProjectState>;
         entries.push({
           key,
-          scope: { userId, projectId, sourceUnitId },
+          scope: { userId, projectId, workId, unitId },
           savedAt: parsed.updatedAt || new Date(0).toISOString(),
           title: parsed.title || projectId,
         });
