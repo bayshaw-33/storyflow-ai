@@ -6,6 +6,7 @@
  */
 
 import type { ScreenplayUnitType } from "../../../contracts/v2/screenplay-studio.ts";
+import { buildUnifiedWorkbenchUrl } from "../../../contracts/v2/unified-workbench.ts";
 
 // ---------------------------------------------------------------------------
 // Left navigator groups (stable order)
@@ -76,16 +77,25 @@ export const STUDIO_LAYOUT = {
 // ---------------------------------------------------------------------------
 
 export interface StudioUrlState {
+  projectId?: string | null;
   workId: string | null;
   unitId: string | null;
 }
 
 export function buildStudioUrl(state: StudioUrlState): string {
-  const params = new URLSearchParams();
+  if (state.projectId) {
+    return buildUnifiedWorkbenchUrl({
+      projectId: state.projectId,
+      workId: state.workId,
+      tab: "script",
+      unitId: state.unitId,
+    });
+  }
+
+  const params = new URLSearchParams({ tab: "script" });
   if (state.workId) params.set("workId", state.workId);
   if (state.unitId) params.set("unitId", state.unitId);
-  const query = params.toString();
-  return query ? `/script-workbench?${query}` : "/script-workbench";
+  return `/production?${params.toString()}`;
 }
 
 export function parseStudioUrl(search: string | null | undefined): StudioUrlState {

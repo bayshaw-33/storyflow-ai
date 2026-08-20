@@ -88,8 +88,9 @@ test("STUDIO_LAYOUT declares desktop two columns and contextual drawers", () => 
 // 4. URL state: ?workId=&unitId= restores the writing location
 // ============================================================
 
-test("buildStudioUrl/parseStudioUrl round-trip workId + unitId", () => {
-  const url = buildStudioUrl({ workId: "w1", unitId: "u1" });
+test("buildStudioUrl uses the unified production route when project identity is present", () => {
+  const url = buildStudioUrl({ projectId: "p1", workId: "w1", unitId: "u1" });
+  assert.equal(url, "/production?projectId=p1&workId=w1&tab=script&unitId=u1");
   assert.ok(url.includes("workId=w1"));
   assert.ok(url.includes("unitId=u1"));
   const parsed = parseStudioUrl("?workId=w1&unitId=u1");

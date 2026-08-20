@@ -17,10 +17,14 @@ import {
 } from "../../../lib/client/v2/navigation/resolver.ts";
 import { WORK_TYPES } from "../../../lib/contracts/v2/work.ts";
 
-test("resolveWorkbenchRoute emits /<workbench>?projectId=&workId= for every WorkType", () => {
-  for (const t of WORK_TYPES) {
-    const r = resolveWorkbenchRoute(t, { projectId: "p1", workId: "w1" });
-    assert.match(r, /^\/[a-z-]+\?projectId=p1&workId=w1$/);
+test("resolveWorkbenchRoute keeps non-production work types on professional routes", () => {
+  const expected = {
+    song: "/song-workbench?projectId=p1&workId=w1",
+    voice: "/casting?projectId=p1&workId=w1",
+    editing: "/editor?projectId=p1&workId=w1",
+  };
+  for (const t of WORK_TYPES.filter((type) => type in expected)) {
+    assert.equal(resolveWorkbenchRoute(t, { projectId: "p1", workId: "w1" }), expected[t]);
   }
 });
 

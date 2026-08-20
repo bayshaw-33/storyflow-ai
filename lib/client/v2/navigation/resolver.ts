@@ -9,14 +9,14 @@
  * "外部 URL 只用于'查看结果'，同源应用路由规范化，无开放重定向").
  */
 
-import type { WorkType } from "@/lib/contracts/v2/work";
+import type { WorkType } from "../../../contracts/v2/work.ts";
+import {
+  buildUnifiedWorkbenchUrl,
+  type UnifiedProductionStage,
+} from "../../../contracts/v2/unified-workbench.ts";
 
-const WORKBENCH_ROUTES: Record<WorkType, string> = {
-  script: "/script-workbench",
+const WORKBENCH_ROUTES: Record<Exclude<WorkType, UnifiedProductionStage>, string> = {
   song: "/song-workbench",
-  art: "/art-workbench",
-  storyboard: "/storyboard-workbench",
-  video: "/video-workbench",
   // Phase 0 reuses existing /casting for voice worktype; Phase 5 builds the
   // dedicated voice workbench and this mapping is updated then.
   voice: "/casting",
@@ -25,7 +25,7 @@ const WORKBENCH_ROUTES: Record<WorkType, string> = {
 
 export interface WorkbenchRouteParams {
   projectId: string;
-  workId: string;
+  workId?: string | null;
 }
 
 /**
@@ -36,11 +36,13 @@ export function resolveWorkbenchRoute(
   workType: WorkType,
   params: WorkbenchRouteParams,
 ): string {
+  if (workType === "script" || workType === "art" || workType === "storyboard" || workType === "video") {
+    return buildUnifiedWorkbenchUrl({ ...params, tab: workType });
+  }
+
   const base = WORKBENCH_ROUTES[workType];
-  const sp = new URLSearchParams({
-    projectId: params.projectId,
-    workId: params.workId,
-  });
+  const sp = new URLSearchParams({ projectId: params.projectId });
+  if (params.workId) sp.set("workId", params.workId);
   return `${base}?${sp.toString()}`;
 }
 
