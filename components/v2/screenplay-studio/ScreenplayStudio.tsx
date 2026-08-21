@@ -648,11 +648,8 @@ export function ScreenplayStudio({
       {narrow ? <button type="button" className={`${styles.narrowToggle} ${styles.structureToggle}`} aria-label="打开结构导航" onClick={() => setLeftOpen(true)}>☰ 结构</button> : null}
       <aside className={`${styles.leftPanel} ${narrow && leftOpen ? styles.open : ""}`} data-testid="studio-left">
         <div className={styles.panelHeader}>
-          <div><div className={styles.panelKicker}>KIIKIS V2.2</div><strong>剧本创作路径</strong></div>
+          <strong>剧本流程</strong>
           {narrow ? <button type="button" className={styles.narrowToggle} onClick={() => setLeftOpen(false)}>收起</button> : null}
-        </div>
-        <div className={styles.navigatorIntro}>
-          新节点按顺序创建：世界观 → 角色圣经 → 剧情及大纲 → 分集 → 正文。已创建的节点随时可以回改，不受顺序限制。
         </div>
         <UnitNavigator
           units={units}
@@ -669,38 +666,36 @@ export function ScreenplayStudio({
       </aside>
       {narrow && leftOpen ? <button type="button" className={styles.drawerScrim} aria-label="关闭抽屉" data-open="show" onClick={() => setLeftOpen(false)} /> : null}
       <main className={styles.centerPanel} data-testid="studio-center">
-        <header className={styles.workspaceHeader}>
-          <div className={styles.workspaceHeading}>
-            <div className={styles.workspaceKicker}>AI-FIRST SCREENPLAY STUDIO</div>
-            <nav className={styles.breadcrumb} aria-label="项目位置" data-testid="studio-breadcrumb">
-              {breadcrumb.map((item, index) => (
-                <span key={`${item}-${index}`} className={styles.breadcrumbItem}>{index > 0 ? <span className={styles.breadcrumbSep}>/</span> : null}{item}</span>
-              ))}
-            </nav>
-            <h1>{activeUnit?.title || "从三部曲开始你的剧本"}</h1>
-            <p>和 KK 对话推进创作，正文只在你审阅并采用后改变。</p>
-          </div>
-          <div className={styles.workspaceActions}>
-            {(["draft", "similarity", "localization", "delivery", "continuity", "references", "versions"] as const).map((tool) => (
-              <button
-                key={tool}
-                type="button"
-                className={`${styles.toolToggle} ${activeTool === tool || (tool === "draft" && mainView === "document") ? styles.active : ""}`}
-                onClick={() => {
-                  if (tool === "draft") {
-                    setActiveTool(null);
-                    setMainView(mainView === "document" ? "conversation" : "document");
-                    return;
-                  }
-                  setMainView("conversation");
-                  setActiveTool(activeTool === tool ? null : tool);
-                }}
-              >
-                {TOOL_LABELS[tool]}
-              </button>
+        <div className={styles.workspaceBar}>
+          <nav className={styles.breadcrumb} aria-label="项目位置" data-testid="studio-breadcrumb">
+            {breadcrumb.map((item, index) => (
+              <span key={`${item}-${index}`} className={styles.breadcrumbItem}>{index > 0 ? <span className={styles.breadcrumbSep}>/</span> : null}{item}</span>
             ))}
-          </div>
-        </header>
+          </nav>
+          <details className={styles.workspaceTools}>
+            <summary>工具</summary>
+            <div className={styles.workspaceToolsMenu}>
+              {(["draft", "similarity", "localization", "delivery", "continuity", "references", "versions"] as const).map((tool) => (
+                <button
+                  key={tool}
+                  type="button"
+                  className={`${styles.toolToggle} ${activeTool === tool || (tool === "draft" && mainView === "document") ? styles.active : ""}`}
+                  onClick={() => {
+                    if (tool === "draft") {
+                      setActiveTool(null);
+                      setMainView(mainView === "document" ? "conversation" : "document");
+                      return;
+                    }
+                    setMainView("conversation");
+                    setActiveTool(activeTool === tool ? null : tool);
+                  }}
+                >
+                  {TOOL_LABELS[tool]}
+                </button>
+              ))}
+            </div>
+          </details>
+        </div>
         {!embedded ? (
         <div className={styles.workflowStrip} aria-label="剧本工作流">
           {SCREENPLAY_STUDIO_WORKFLOW_STAGES.map((stage, index) => (
@@ -711,10 +706,6 @@ export function ScreenplayStudio({
         </div>
         ) : null}
         <section className={styles.aiPanel} data-testid="studio-ai" data-main-view={mainView}>
-          <div className={styles.aiPanelHeader}>
-            <div><span className={styles.aiPanelTitle}>{mainView === "document" ? "当前文档" : mainView === "diff" ? "版本对比" : "KK 剧本伙伴"}</span><span className={styles.aiPanelHint}>{mainView === "document" ? "编辑当前节点；保存会创建新版本" : mainView === "diff" ? "逐块审阅候选修改，采用后才写入正文" : "聊一聊只讨论；生成修改方案必须逐块审阅"}</span></div>
-            <span className={styles.liveBadge}>对话优先</span>
-          </div>
           {mainView === "document" ? (
             <div data-testid="main-view-document">
               <ScreenplayEditor
@@ -743,15 +734,7 @@ export function ScreenplayStudio({
             </div>
             {toolContent}
           </section>
-        ) : (
-          <div className={styles.toolTray}>
-            <span>工具在当前主区域打开；KK 对话、当前稿与版本对比不会并列成第三栏</span>
-            <button type="button" onClick={() => { setActiveTool(null); setMainView("document"); }}>打开当前文档</button>
-            <button type="button" onClick={() => setActiveTool("similarity")}>在大纲阶段查验雷同</button>
-            <button type="button" onClick={() => setActiveTool("localization")}>准备本土化</button>
-            <button type="button" onClick={() => setActiveTool("delivery")}>查看定稿与留痕</button>
-          </div>
-        )}
+        ) : null}
         {loadError ? <div className={styles.errorBar} role="alert">{loadError}<button type="button" className={styles.errorDismiss} onClick={() => setLoadError(null)}>关闭</button></div> : null}
       </main>
     </div>

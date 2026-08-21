@@ -133,6 +133,27 @@ test("screenplay chat uses the Work UUID directly instead of a database-invalid 
   assert.doesNotMatch(source, /`kk-\$\{workId/);
 });
 
+test("quiet screenplay workspace keeps conversation essentials and removes repeated promotional copy", () => {
+  const studio = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  const room = readFileSync(new URL("../../../components/v2/screenplay-studio/KkScreenplayRoom.tsx", import.meta.url), "utf8");
+  const navigator = readFileSync(new URL("../../../components/v2/screenplay-studio/UnitNavigator.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.module.css", import.meta.url), "utf8");
+
+  assert.match(studio, /styles\.workspaceBar/);
+  assert.match(studio, /styles\.workspaceTools/);
+  assert.match(room, /styles\.kkStarter/);
+  assert.match(room, /styles\.kkErrorInline/);
+  assert.match(css, /\.kkTranscript[\s\S]*flex:\s*1/);
+
+  for (const source of [studio, room, navigator]) {
+    assert.doesNotMatch(source, /KK · AI 剧本伙伴/);
+    assert.doesNotMatch(source, /从你的意图开始/);
+    assert.doesNotMatch(source, /对话优先/);
+    assert.doesNotMatch(source, /工具在当前主区域打开/);
+    assert.doesNotMatch(source, /完成上一阶段并确认可用后继续/);
+  }
+});
+
 // ============================================================
 // 4. URL state: ?workId=&unitId= restores the writing location
 // ============================================================

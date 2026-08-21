@@ -47,38 +47,53 @@
   background: #080a0c;
 }
 
-.workspaceHeader {
+.workspaceBar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 24px 30px 18px;
+  gap: 12px;
+  min-height: 42px;
+  padding: 8px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.workspaceHeading {
-  min-width: 0;
-}
-
-.workspaceHeading h1 {
-  margin: 8px 0 5px;
-  color: rgba(255, 255, 255, 0.96);
-  font-size: clamp(24px, 3vw, 40px);
-  letter-spacing: -0.04em;
-}
-
-.workspaceHeading p {
+.workspaceBar .breadcrumb {
   margin: 0;
-  color: rgba(255, 255, 255, 0.48);
-  font-size: 13px;
 }
 
-.workspaceActions {
+.workspaceTools {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.workspaceTools summary {
+  list-style: none;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.workspaceTools summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspaceToolsMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  min-width: 150px;
+  flex-direction: column;
   gap: 6px;
-  max-width: 560px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 10px;
+  background: #111618;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
 }
 
 .toolToggle,
@@ -142,41 +157,12 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  margin: 20px 30px 0;
+  margin: 0 18px 14px;
   overflow: hidden;
   border: 1px solid rgba(100, 232, 223, 0.2);
   border-radius: 18px;
   background: linear-gradient(145deg, rgba(15, 27, 28, 0.98), rgba(10, 13, 17, 0.98));
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
-}
-
-.aiPanelHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 15px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.aiPanelTitle {
-  color: rgba(255, 255, 255, 0.95);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.aiPanelHint {
-  margin-left: 10px;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 11px;
-}
-
-.liveBadge {
-  border: 1px solid rgba(100, 232, 223, 0.34);
-  border-radius: 999px;
-  color: #64e8df;
-  font-size: 10px;
-  padding: 5px 8px;
 }
 
 .kkConversation {
@@ -190,35 +176,11 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 24px clamp(18px, 4vw, 64px);
+  padding: 18px clamp(16px, 3vw, 36px);
 }
 
-.kkWelcome {
-  max-width: 650px;
-  margin: 4vh auto 0;
-  padding: 24px 0;
-}
-
-.kkWelcomeEyebrow {
-  color: #64e8df;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.kkWelcome h2 {
-  margin: 12px 0 8px;
-  color: rgba(255, 255, 255, 0.95);
-  font-size: clamp(24px, 3.2vw, 42px);
-  letter-spacing: -0.045em;
-  line-height: 1.08;
-}
-
-.kkWelcome p {
-  max-width: 560px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
-  line-height: 1.8;
+.kkStarter {
+  margin-top: 4px;
 }
 
 .kkMessage {
@@ -256,13 +218,13 @@
 }
 
 .kkComposer {
-  padding: 12px clamp(14px, 3vw, 34px) 18px;
+  padding: 10px clamp(14px, 3vw, 30px) 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.12);
 }
 
 .kkComposer .editorTextarea {
-  min-height: 128px;
+  min-height: 96px;
   margin-top: 10px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 10px;
@@ -918,11 +880,12 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
-  margin: 10px clamp(18px, 4vw, 64px) 0;
-  padding: 8px 12px;
-  border: 1px solid rgba(100, 232, 223, 0.22);
-  border-radius: 10px;
-  background: rgba(100, 232, 223, 0.05);
+  min-height: 36px;
+  margin: 0;
+  padding: 8px clamp(16px, 3vw, 36px);
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .kkContextLabel {
@@ -946,6 +909,19 @@
 .kkModeRow .tabBtn {
   flex: 0 0 auto;
   padding: 6px 12px;
+}
+
+.kkErrorInline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 clamp(14px, 3vw, 30px);
+  padding: 8px 10px;
+  border: 1px solid rgba(224, 164, 74, 0.4);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
 }
 
 /* Project breadcrumb: project / universe / current unit. */

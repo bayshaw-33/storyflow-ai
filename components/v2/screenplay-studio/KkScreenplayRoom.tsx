@@ -204,15 +204,16 @@ export function KkScreenplayRoom({
       {contextSummary ? (
         <div className={styles.kkContextChip} data-testid="kk-context">
           <span className={styles.kkContextLabel}>{contextSummary.label}</span>
-          <span className={styles.kkContextDetail}>{contextSummary.detail}</span>
+          <span className={styles.kkContextDetail}>{contextSummary.detail.split("。")[0]}</span>
         </div>
       ) : null}
       <div className={styles.kkTranscript} ref={transcriptRef}>
         {messages.length === 0 ? (
-          <div className={styles.kkWelcome}>
-            <div className={styles.kkWelcomeEyebrow}>KK · AI 剧本伙伴</div>
-            <h2>从你的意图开始，和剧本一起长出来。</h2>
-            <p>可以先讨论世界观、角色和剧情，也可以让 KK 生成逐块可审阅的修改方案。对话不会静默改动正文。</p>
+          <div className={`${styles.kkMessage} ${styles.kkMessageAssistant} ${styles.kkStarter}`}>
+            <div className={styles.kkMessageRole}>KK</div>
+            <div className={styles.kkMessageContent}>
+              {contextSummary ? `从「${contextSummary.label}」开始。告诉我你的想法。` : "告诉我你想写什么。"}
+            </div>
           </div>
         ) : (
           messages.map((m) => (
@@ -231,17 +232,15 @@ export function KkScreenplayRoom({
             disabled={busy}
           />
         ) : null}
-        {error ? (
-          <div className={styles.staleRow} role="alert">
-            {error.message}
-            <div className={styles.staleActions}>
-              <button type="button" className={styles.staleActionBtn} onClick={() => retryRef.current?.()}>
-                重试（复用同一快照）
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
+      {error ? (
+        <div className={styles.kkErrorInline} role="alert">
+          <span>{error.message}</span>
+          <button type="button" className={styles.staleActionBtn} onClick={() => retryRef.current?.()}>
+            重试
+          </button>
+        </div>
+      ) : null}
       <div className={styles.kkComposer}>
         <div className={styles.kkModeRow}>
           <button

@@ -88,11 +88,7 @@ export function UnitNavigator({
             <div className={`${styles.stageStatus} ${usable ? styles.stageStatusReady : ""}`}>
               {status}
             </div>
-            {list.length === 0 ? (
-              <div className={styles.placeholder}>
-                {canCreate ? "还没有内容，点 ＋ 开始" : "完成上一阶段并确认可用后继续"}
-              </div>
-            ) : (
+            {list.length > 0 ? (
               list.map((unit) => (
                 <button
                   key={unit.id}
@@ -111,7 +107,7 @@ export function UnitNavigator({
                   ) : null}
                 </button>
               ))
-            )}
+            ) : null}
             {group.id === "outline" ? (
               <button
                 type="button"
