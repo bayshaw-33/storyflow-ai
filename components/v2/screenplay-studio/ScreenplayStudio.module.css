@@ -180,10 +180,17 @@
 }
 
 .kkTranscript {
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
   overflow-y: auto;
   padding: 18px clamp(16px, 3vw, 36px);
+}
+
+.kkTranscript::before {
+  content: "";
+  margin-top: auto;
 }
 
 .kkStarter {
@@ -225,13 +232,17 @@
 }
 
 .kkComposer {
+  flex: 0 0 auto;
   padding: 10px clamp(14px, 3vw, 30px) 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.12);
 }
 
 .kkComposer .editorTextarea {
+  height: auto;
   min-height: 96px;
+  max-height: 180px;
+  overflow-y: auto;
   margin-top: 10px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: 10px;

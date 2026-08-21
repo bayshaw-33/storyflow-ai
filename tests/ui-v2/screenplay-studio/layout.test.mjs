@@ -164,6 +164,15 @@ test("screenplay main views complete the AI panel height chain", () => {
   assert.match(css, /\.mainView\s*\{[\s\S]*display:\s*flex[\s\S]*min-height:\s*0[\s\S]*flex:\s*1[\s\S]*flex-direction:\s*column/);
 });
 
+test("screenplay composer stays visible while the transcript owns remaining height", () => {
+  const css = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.module.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.kkTranscript\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column[\s\S]*overflow-y:\s*auto/);
+  assert.match(css, /\.kkTranscript::before\s*\{[\s\S]*content:\s*""[\s\S]*margin-top:\s*auto/);
+  assert.match(css, /\.kkComposer\s*\{[\s\S]*flex:\s*0 0 auto/);
+  assert.match(css, /\.kkComposer \.editorTextarea\s*\{[\s\S]*height:\s*auto[\s\S]*max-height:\s*180px[\s\S]*overflow-y:\s*auto/);
+});
+
 // ============================================================
 // 4. URL state: ?workId=&unitId= restores the writing location
 // ============================================================
