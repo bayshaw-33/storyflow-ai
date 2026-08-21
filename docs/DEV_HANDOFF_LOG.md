@@ -1,5 +1,36 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - Codex / 新增 V2.2 入职交接说明
+
+### 本次目标
+
+- 为下一位 Codex 整理 Kiikis.com 的产品背景、V2.2 核心原则、当前代码入口、环境边界和接手流程。
+
+### 已完成
+
+- 新增 `docs/KIIKIS_CODEX_ONBOARDING_V2.2.md`。
+- 明确 Universe-first、剧本三部曲、两栏 AI 对话剧本台、统一制作工作台和横向 Evidence/导出原则。
+- 记录当前 `origin/main` 基线、Supabase 生产/演练目标、Vercel 部署和目标库门禁。
+- 明确旧 onboarding 文档只作历史参考，不复制其中的过时小说流程或敏感信息。
+
+### 验证结果
+
+- `git diff --check`：通过。
+- 入职文档敏感值扫描：未发现账号、密码、API key 或 service role key。
+- 文档共 951 行，包含产品、工程、部署、测试、风险和接手清单。
+
+### Git 信息
+
+- branch：`codex/v22-unified-workbench-recovery`
+- commit：待提交
+- push：待用户决定
+
+### 给下一位 Codex
+
+- 先阅读 `docs/KIIKIS_CODEX_ONBOARDING_V2.2.md`，再以最新 `origin/main` 和最新 handoff 为准。
+- 任何 Supabase 写操作前运行 `node scripts/verify-supabase-target.mjs production`。
+- 不要把 KIIKIS 改成 Video-first 平台，也不要恢复小说新建入口或三栏剧本室。
+
 ## 2026-07-19 01:28 +08 - TRAE / KIIKIS-TR-ACTOR-P0-005 演员图组生成 400/502 修复
 
 ### 根因
