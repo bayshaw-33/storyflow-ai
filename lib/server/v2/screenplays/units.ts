@@ -269,6 +269,21 @@ export class ScreenplayUnitsService {
     return { version: toVersionDto(row), references: params.references ?? [] };
   }
 
+  async findUnitVersionByIdempotencyKey(params: {
+    ownerId: string;
+    workId: string;
+    unitId: string;
+    idempotencyKey: string;
+  }): Promise<UnitVersionDto | null> {
+    await this.assertWorkOwner(params.ownerId, params.workId);
+    await this.readUnit(params.workId, params.unitId);
+    const rows = await get<UnitVersionRow[]>(
+      this.fetcher,
+      `/rest/v1/storyflow_screenplay_unit_versions?unit_id=eq.${encodeURIComponent(params.unitId)}&idempotency_key=eq.${encodeURIComponent(params.idempotencyKey)}&select=${VERSION_COLUMNS}&limit=1`,
+    );
+    return rows?.[0] ? toVersionDto(rows[0]) : null;
+  }
+
   // ---------------------------------------------------------
   // Reads
   // ---------------------------------------------------------

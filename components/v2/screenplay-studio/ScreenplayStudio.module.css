@@ -929,6 +929,12 @@
   padding: 6px 12px;
 }
 
+.kkModeRow .kkTrilogyAction {
+  margin-left: auto;
+  border-color: rgba(100, 232, 223, 0.45);
+  color: #64e8df;
+}
+
 .kkErrorInline {
   display: flex;
   align-items: center;

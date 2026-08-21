@@ -21,6 +21,7 @@ import {
   screenplayStudioApi,
   ScreenplayStudioApiError,
 } from "@/lib/client/v2/screenplay-studio/api";
+import type { TrilogyState } from "@/lib/contracts/v2/screenplay-trilogy";
 import { CandidateDiffPanel } from "./CandidateDiffPanel";
 import styles from "./ScreenplayStudio.module.css";
 
@@ -48,6 +49,7 @@ export interface KkPresetInput {
 }
 
 export interface KkScreenplayRoomProps {
+  projectId?: string | null;
   workId: string;
   conversationId: string;
   messages: KkMessage[];
@@ -58,11 +60,14 @@ export interface KkScreenplayRoomProps {
   onMessagesChange: (messages: KkMessage[]) => void;
   onCandidateChange: (candidate: KkCandidate | null) => void;
   onAppliedVersion: (versionId: string) => void;
+  trilogyState: TrilogyState;
+  onOpenTrilogyUnit: (unitId: string) => void | Promise<void>;
   onInputPreserved: (text: string) => void;
   preservedInput: string;
 }
 
 export function KkScreenplayRoom({
+  projectId,
   workId,
   conversationId,
   messages,
@@ -73,6 +78,8 @@ export function KkScreenplayRoom({
   onMessagesChange,
   onCandidateChange,
   onAppliedVersion,
+  trilogyState,
+  onOpenTrilogyUnit,
   onInputPreserved,
   preservedInput,
 }: KkScreenplayRoomProps) {
@@ -199,6 +206,36 @@ export function KkScreenplayRoom({
     }
   }, [workId, pendingCandidate, onCandidateChange, describeError]);
 
+  const runTrilogyAction = useCallback(async (idempotencyKey?: string) => {
+    if (trilogyState.status === "complete") return;
+    if (trilogyState.status === "waiting_confirmation") {
+      await onOpenTrilogyUnit(trilogyState.unitId);
+      return;
+    }
+    const key = idempotencyKey ?? `trilogy-${trilogyState.stage}-${crypto.randomUUID()}`;
+    setBusy(true);
+    setError(null);
+    try {
+      const body = await screenplayStudioApi.generateNextTrilogyStage(workId, {
+        conversationId,
+        idempotencyKey: key,
+        projectId,
+      });
+      const history = await screenplayStudioApi.listMessages(workId, conversationId).catch(() => messages);
+      onMessagesChange(history);
+      await onOpenTrilogyUnit(body.unit.id);
+    } catch (e) {
+      const described = describeError(e);
+      setError({
+        message: described.requestId ? `${described.message}（编号 ${described.requestId}）` : described.message,
+        requestId: described.requestId,
+      });
+      retryRef.current = () => void runTrilogyAction(key);
+    } finally {
+      setBusy(false);
+    }
+  }, [trilogyState, workId, conversationId, projectId, messages, onMessagesChange, onOpenTrilogyUnit, describeError]);
+
   return (
     <div className={styles.kkConversation} data-testid="kk-screenplay-room">
       {contextSummary ? (
@@ -259,6 +296,17 @@ export function KkScreenplayRoom({
           >
             生成修改方案
           </button>
+          {trilogyState.status !== "complete" ? (
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${styles.kkTrilogyAction}`}
+              onClick={() => void runTrilogyAction()}
+              disabled={busy}
+              data-testid="generate-trilogy-stage"
+            >
+              {trilogyState.label}
+            </button>
+          ) : null}
         </div>
         <textarea
           className={styles.editorTextarea}

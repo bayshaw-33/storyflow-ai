@@ -32,6 +32,7 @@ import {
   type StudioWorkflowStage,
 } from "@/lib/client/v2/screenplay-studio/types";
 import { buildUnifiedWorkbenchUrl, parseUnifiedWorkbenchQuery } from "@/lib/contracts/v2/unified-workbench";
+import { resolveTrilogyState } from "@/lib/contracts/v2/screenplay-trilogy";
 import { UnitNavigator } from "./UnitNavigator";
 import { ScreenplayEditor } from "./ScreenplayEditor";
 import { KkScreenplayRoom, type KkCandidate, type KkMessage, type KkPresetInput } from "./KkScreenplayRoom";
@@ -243,6 +244,7 @@ export function ScreenplayStudio({
   }, [embedded, loading, projectId, workId, units, urlUnitId, searchParams, router]);
 
   const activeUnit = useMemo(() => units.find((u) => u.id === activeUnitId) ?? null, [units, activeUnitId]);
+  const trilogyState = useMemo(() => resolveTrilogyState(units), [units]);
 
   useEffect(() => {
     if (!workId || !activeUnitId) return;
@@ -366,6 +368,10 @@ export function ScreenplayStudio({
       const { unit } = await screenplayStudioApi.finalizeUnit(workId, activeUnit.id, activeUnit.currentVersionId);
       setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
       onUnsavedChange?.(false);
+      if (unit.type === "world" || unit.type === "character" || unit.type === "outline") {
+        setMainView("conversation");
+        setActiveTool(null);
+      }
     } catch (error) {
       setLoadError(error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "确认可用失败");
     } finally {
@@ -396,6 +402,17 @@ export function ScreenplayStudio({
     const { units: list } = await screenplayStudioApi.listUnits(workId);
     setUnits(list);
   }, [workId]);
+
+  const openTrilogyUnit = useCallback(async (unitId: string) => {
+    await refreshUnits();
+    setLoadedContent((prev) => {
+      const next = { ...prev };
+      delete next[unitId];
+      return next;
+    });
+    openUnit(unitId);
+    setMainView("document");
+  }, [refreshUnits, openUnit]);
 
   const runSimilarityReview = useCallback(async () => {
     if (!workId || !similarityGate.ready || similarityBusy) return;
@@ -622,6 +639,7 @@ export function ScreenplayStudio({
 
   const kkPanel = (
     <KkScreenplayRoom
+      projectId={projectId}
       workId={workId}
       conversationId={conversationId}
       messages={kkMessages}
@@ -638,6 +656,8 @@ export function ScreenplayStudio({
         try { await refreshUnits(); } catch { /* best-effort refresh */ }
         setMainView("conversation");
       }}
+      trilogyState={trilogyState}
+      onOpenTrilogyUnit={openTrilogyUnit}
       onInputPreserved={setPreservedInput}
       preservedInput={preservedInput}
     />

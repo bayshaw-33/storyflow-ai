@@ -318,6 +318,26 @@ export class ScreenplayGenerationService {
     return { messages: (rows ?? []).map(toMessageDto) };
   }
 
+  /** Persist a non-model assistant notice in the same screenplay conversation. */
+  async appendAssistantMessage(params: {
+    ownerId: string;
+    workId: string;
+    conversationId: string;
+    content: string;
+    idempotencyKey: string;
+  }): Promise<MessageDto> {
+    await this.assertWorkOwner(params.ownerId, params.workId);
+    if (!params.content.trim() || !params.idempotencyKey.trim()) {
+      throw new ScreenplayGenerationError("validation_failed", "content and idempotencyKey are required.");
+    }
+    const thread = await this.ensureThread(params.ownerId, params.workId, params.conversationId);
+    const existing = await this.get<MessageRow[]>(
+      `/rest/v1/storyflow_conversation_messages?thread_id=eq.${encodeURIComponent(thread.id)}&idempotency_key=eq.${encodeURIComponent(params.idempotencyKey)}&select=${MSG_COLUMNS}&limit=1`,
+    );
+    if (existing?.[0]) return toMessageDto(existing[0]);
+    return this.appendMessage(thread.id, params.workId, "assistant", params.content.trim(), params.idempotencyKey);
+  }
+
   /** 追加一条证据事件（雷同审查等需留痕的动作）。 */
   async appendEvidence(params: {
     ownerId: string;

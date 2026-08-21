@@ -167,6 +167,16 @@ test("content lives in immutable unit versions; append never mutates prior versi
   assert.equal(rows[0].content_json.body, "第一版"); // untouched
 });
 
+test("an idempotency key can recover the already-saved immutable version", async () => {
+  const { service } = await makeService();
+  const { unit } = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "背景及世界观", parentId: null, order: 1 });
+  const saved = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: unit.id, content: { body: "第一版" }, baseVersionId: null, idempotencyKey: "trilogy:world:v1" });
+
+  const recovered = await service.findUnitVersionByIdempotencyKey({ ownerId: OWNER, workId: WORK, unitId: unit.id, idempotencyKey: "trilogy:world:v1" });
+
+  assert.equal(recovered?.id, saved.version.id);
+});
+
 test("modifying a finalized unit creates a child draft, never in-place", async () => {
   const { service, store } = await makeService();
   const { unit } = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "世界观", parentId: null, order: 1 });

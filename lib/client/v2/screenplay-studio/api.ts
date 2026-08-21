@@ -5,6 +5,7 @@
  */
 
 import type { ScreenplayUnitType } from "../../../contracts/v2/screenplay-studio.ts";
+import type { TrilogyStage, TrilogyState } from "../../../contracts/v2/screenplay-trilogy.ts";
 import { fetchScreenplayStudio } from "./auth.ts";
 
 export interface ScreenplayUnitClientDto {
@@ -114,6 +115,17 @@ export const screenplayStudioApi = {
   createUnit(workId: string, body: { type: string; title: string; parentId: string | null; order: number }) {
     return call<{ unit: ScreenplayUnitClientDto }>(
       `/api/v2/works/${encodeURIComponent(workId)}/screenplay/units`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  generateNextTrilogyStage(workId: string, body: { conversationId: string; idempotencyKey: string; projectId?: string | null }) {
+    return call<{
+      stage: TrilogyStage;
+      unit: ScreenplayUnitClientDto;
+      version: { id: string };
+      nextState: TrilogyState;
+    }>(
+      `/api/v2/works/${encodeURIComponent(workId)}/screenplay/trilogy`,
       { method: "POST", body: JSON.stringify(body) },
     );
   },

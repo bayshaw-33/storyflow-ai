@@ -159,6 +159,29 @@ test("discuss appends user+assistant messages and never creates content versions
   assert.equal(store.tables.storyflow_generation_candidates.length, 0);
 });
 
+test("a generated trilogy document can append a persisted assistant notice without another model call", async () => {
+  let modelCalls = 0;
+  const { service, store } = makeService({
+    modelInvoke: async () => {
+      modelCalls += 1;
+      return { assistantText: "unused", patches: [] };
+    },
+  });
+
+  const message = await service.appendAssistantMessage({
+    ownerId: OWNER,
+    workId: WORK,
+    conversationId: "conv-trilogy-notice",
+    content: "背景及世界观草稿已生成。",
+    idempotencyKey: "trilogy-world-1:assistant",
+  });
+
+  assert.equal(message.role, "assistant");
+  assert.equal(message.content, "背景及世界观草稿已生成。");
+  assert.equal(modelCalls, 0);
+  assert.equal(store.tables.storyflow_conversation_messages.length, 1);
+});
+
 // ============================================================
 // 2. propose_change: snapshot → candidate diff; apply-only persistence
 // ============================================================
