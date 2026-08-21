@@ -154,6 +154,16 @@ test("quiet screenplay workspace keeps conversation essentials and removes repea
   }
 });
 
+test("screenplay main views complete the AI panel height chain", () => {
+  const studio = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.module.css", import.meta.url), "utf8");
+
+  assert.match(studio, /className=\{styles\.mainView\} data-testid="main-view-document"/);
+  assert.match(studio, /className=\{styles\.mainView\} data-testid="main-view-diff"/);
+  assert.match(studio, /className=\{styles\.mainView\} data-testid="main-view-conversation"/);
+  assert.match(css, /\.mainView\s*\{[\s\S]*display:\s*flex[\s\S]*min-height:\s*0[\s\S]*flex:\s*1[\s\S]*flex-direction:\s*column/);
+});
+
 // ============================================================
 // 4. URL state: ?workId=&unitId= restores the writing location
 // ============================================================

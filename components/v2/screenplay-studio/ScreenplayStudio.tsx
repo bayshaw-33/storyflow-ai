@@ -707,7 +707,7 @@ export function ScreenplayStudio({
         ) : null}
         <section className={styles.aiPanel} data-testid="studio-ai" data-main-view={mainView}>
           {mainView === "document" ? (
-            <div data-testid="main-view-document">
+            <div className={styles.mainView} data-testid="main-view-document">
               <ScreenplayEditor
                 unit={activeUnit}
                 content={activeContent}
@@ -721,9 +721,9 @@ export function ScreenplayStudio({
               />
             </div>
           ) : mainView === "diff" ? (
-            <div data-testid="main-view-diff">{kkPanel}</div>
+            <div className={styles.mainView} data-testid="main-view-diff">{kkPanel}</div>
           ) : (
-            <div data-testid="main-view-conversation">{kkPanel}</div>
+            <div className={styles.mainView} data-testid="main-view-conversation">{kkPanel}</div>
           )}
         </section>
         {activeTool && activeTool !== "draft" ? (
