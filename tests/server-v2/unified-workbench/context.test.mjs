@@ -6,7 +6,7 @@ import {
   getUnifiedWorkbenchContext,
 } from "../../../lib/server/v2/unified-workbench/index.ts";
 
-function makeFetcher({ project, works = [], workVersions = [], workVersionResolver, universe = null, universeVersions = [], ensureResult, ensureError } = {}) {
+function makeFetcher({ project, works = [], workVersions = [], workVersionResolver, workManifests = [], universe = null, universeVersions = [], ensureResult, ensureError } = {}) {
   return async (path, init) => {
     if (path.startsWith("/rest/v1/storyflow_projects?")) {
       return project ? [project] : [];
@@ -17,6 +17,9 @@ function makeFetcher({ project, works = [], workVersions = [], workVersionResolv
     if (path.startsWith("/rest/v1/storyflow_work_versions?")) {
       if (workVersionResolver) return workVersionResolver(path);
       return workVersions;
+    }
+    if (path.startsWith("/rest/v1/storyflow_work_inheritance_manifests?")) {
+      return workManifests;
     }
     if (path.startsWith("/rest/v1/storyflow_universes?")) {
       return universe ? [universe] : [];
@@ -96,6 +99,38 @@ test("context returns the highest-priority active work for each stage without cr
     updatedAt: "2026-08-20T00:00:00.000Z",
   });
   assert.equal(result.stages.art, null);
+});
+
+test("context restores Universe identity from an active Work manifest when the legacy project field is empty", async () => {
+  const fetcher = makeFetcher({
+    project: ownedProject,
+    works: [{
+      id: "script-bound",
+      owner_id: "u1",
+      work_type: "script",
+      status: "editing_draft",
+      is_primary: true,
+      current_version_id: "version-1",
+      updated_at: "2026-08-20T00:00:00.000Z",
+    }],
+    workManifests: [{
+      work_id: "script-bound",
+      universe_id: "universe-v22",
+      universe_version_id: "universe-version-v22",
+      created_at: "2026-08-20T01:00:00.000Z",
+    }],
+    universe: { id: "universe-v22", name: "契约之家" },
+    universeVersions: [{ id: "universe-version-v22" }],
+  });
+
+  const result = await getUnifiedWorkbenchContext({ projectId: "p1", ownerId: "u1", fetcher });
+
+  assert.deepEqual(result.universe, {
+    id: "universe-v22",
+    name: "契约之家",
+    versionId: "universe-version-v22",
+    hasUpdate: false,
+  });
 });
 
 test("context falls back to the latest immutable Work Version when a legacy work has no current version pointer", async () => {

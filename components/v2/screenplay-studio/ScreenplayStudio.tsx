@@ -130,14 +130,14 @@ export function ScreenplayStudio({
   const urlUnitId = unitIdProp !== undefined ? unitIdProp : query.unitId;
   const conversationId = useMemo(() => `kk-${workId ?? "default"}`, [workId]);
 
-  // 专注模式：折叠全局侧栏，剧本室独占两栏。
+  // 独立剧本路由使用专注模式；嵌入统一制作台时保留全局导航。
   useEffect(() => {
-    if (!workId) return;
+    if (embedded || !workId) return;
     document.documentElement.dataset.screenplayFocus = "on";
     return () => {
       delete document.documentElement.dataset.screenplayFocus;
     };
-  }, [workId]);
+  }, [embedded, workId]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
@@ -644,8 +644,8 @@ export function ScreenplayStudio({
   );
 
   return (
-    <div className={`${styles.studio} ${narrow ? styles.narrow : ""}`} data-testid="screenplay-studio">
-      {narrow ? <button type="button" className={styles.narrowToggle} aria-label="打开结构导航" onClick={() => setLeftOpen(true)}>☰ 结构</button> : null}
+    <div className={`${styles.studio} ${embedded ? styles.embedded : ""} ${narrow ? styles.narrow : ""}`} data-testid="screenplay-studio">
+      {narrow ? <button type="button" className={`${styles.narrowToggle} ${styles.structureToggle}`} aria-label="打开结构导航" onClick={() => setLeftOpen(true)}>☰ 结构</button> : null}
       <aside className={`${styles.leftPanel} ${narrow && leftOpen ? styles.open : ""}`} data-testid="studio-left">
         <div className={styles.panelHeader}>
           <div><div className={styles.panelKicker}>KIIKIS V2.2</div><strong>剧本创作路径</strong></div>
@@ -662,6 +662,9 @@ export function ScreenplayStudio({
           onCreateUnit={createUnit}
           onOpenSimilarity={() => setActiveTool("similarity")}
           similarityReviewed={similarityReviewed}
+          similarityActive={activeTool === "similarity"}
+          similarityReady={similarityGate.ready}
+          similarityReason={similarityGate.reason}
         />
       </aside>
       {narrow && leftOpen ? <button type="button" className={styles.drawerScrim} aria-label="关闭抽屉" data-open="show" onClick={() => setLeftOpen(false)} /> : null}
@@ -698,6 +701,7 @@ export function ScreenplayStudio({
             ))}
           </div>
         </header>
+        {!embedded ? (
         <div className={styles.workflowStrip} aria-label="剧本工作流">
           {SCREENPLAY_STUDIO_WORKFLOW_STAGES.map((stage, index) => (
             <div key={stage.id} className={`${styles.workflowStage} ${stage.parent ? styles.workflowSubStage : ""}`} data-stage={stage.id}>
@@ -705,6 +709,7 @@ export function ScreenplayStudio({
             </div>
           ))}
         </div>
+        ) : null}
         <section className={styles.aiPanel} data-testid="studio-ai" data-main-view={mainView}>
           <div className={styles.aiPanelHeader}>
             <div><span className={styles.aiPanelTitle}>{mainView === "document" ? "当前文档" : mainView === "diff" ? "版本对比" : "KK 剧本伙伴"}</span><span className={styles.aiPanelHint}>{mainView === "document" ? "编辑当前节点；保存会创建新版本" : mainView === "diff" ? "逐块审阅候选修改，采用后才写入正文" : "聊一聊只讨论；生成修改方案必须逐块审阅"}</span></div>

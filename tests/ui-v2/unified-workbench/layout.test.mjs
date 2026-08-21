@@ -22,12 +22,47 @@ test("production shell owns one approved header and no global third column", asy
   const source = await read("../../../components/production/ProductionWorkbench.tsx");
   const css = await read("../../../components/production/ProductionWorkbench.module.css");
   assert.match(page, /ProductionWorkbench/);
-  assert.match(source, /styles\.actionBar/);
-  assert.doesNotMatch(source, /styles\.header/);
+  assert.match(source, /UnifiedProductionHeader/);
+  assert.doesNotMatch(source, /className=\{styles\.header\}/);
   assert.doesNotMatch(source, /titleInput/);
-  const declarations = [...css.matchAll(/grid-template-columns:\s*([^;]+)/g)].map((match) => match[1].trim());
-  assert.ok(declarations.some((value) => value.includes("minmax(260px, 280px)")));
+  assert.doesNotMatch(source, /styles\.stageRail/);
   assert.doesNotMatch(css, /grid-template-columns:\s*repeat\(3/);
+});
+
+test("production keeps global navigation and removes the duplicate stage rail", async () => {
+  const source = await read("../../../components/production/ProductionWorkbench.tsx");
+  const css = await read("../../../components/production/ProductionWorkbench.module.css");
+  assert.doesNotMatch(source, /dataset\.productionFocus/);
+  assert.doesNotMatch(source, /styles\.stageRail/);
+  assert.doesNotMatch(source, /aria-label=\"制作阶段\"/);
+  assert.match(css, /padding-left:\s*120px/);
+});
+
+test("production header uses compact icon stages instead of a full-width tab row", async () => {
+  const header = await read("../../../components/production/UnifiedProductionHeader.tsx");
+  const css = await read("../../../components/production/ProductionWorkbench.module.css");
+  assert.match(header, /FileText/);
+  assert.match(header, /Palette/);
+  assert.match(header, /PanelsTopLeft/);
+  assert.match(header, /Video/);
+  assert.match(header, /stageIconButton/);
+  assert.doesNotMatch(header, /unifiedStageTabs/);
+  assert.match(css, /\.stageIconButton/);
+  assert.doesNotMatch(css, /\.unifiedStageTabs/);
+});
+
+test("production exposes resident Universe create bind and open actions", async () => {
+  const source = await read("../../../components/production/ProductionWorkbench.tsx");
+  const header = await read("../../../components/production/UnifiedProductionHeader.tsx");
+  const universesPage = await read("../../../app/universes/page.tsx");
+  assert.match(source, /bindWorkToUniverse/);
+  assert.match(source, /UniverseBindingDialog/);
+  assert.match(source, /onCreateUniverse/);
+  assert.match(source, /onBindUniverse/);
+  assert.match(source, /onOpenUniverse/);
+  assert.match(header, /创建 Universe/);
+  assert.match(header, /绑定已有/);
+  assert.match(universesPage, /searchParams\.get\("create"\) === "1"/);
 });
 
 test("production parses the shared query contract and uses context/ensure APIs", async () => {
@@ -36,7 +71,7 @@ test("production parses the shared query contract and uses context/ensure APIs",
   assert.match(source, /fetchUnifiedWorkbenchContext/);
   assert.match(source, /ensureUnifiedStage/);
   assert.match(source, /buildUnifiedWorkbenchUrl/);
-  assert.match(source, /(?:context|displayContext)\.stages\[stage\]/);
+  assert.match(source, /context\?\.stages\[stage\]/);
 });
 
 test("stage switching does not create a missing stage automatically", async () => {
@@ -47,7 +82,7 @@ test("stage switching does not create a missing stage automatically", async () =
   assert.match(source, /const startStage[\s\S]*?ensureUnifiedStage/);
 });
 
-test("production header exposes four tab buttons and a tab panel", async () => {
+test("production header exposes four compact tab buttons and a tab panel", async () => {
   const header = await read("../../../components/production/UnifiedProductionHeader.tsx");
   assert.match(header, /UnifiedProductionHeaderProps/);
   assert.match(header, /role=\"tab\"/);

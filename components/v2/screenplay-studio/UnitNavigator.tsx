@@ -31,6 +31,9 @@ export interface UnitNavigatorProps {
   onCreateUnit: (type: "world" | "character" | "outline" | "episode" | "scene", parentId: string | null) => void;
   onOpenSimilarity?: () => void;
   similarityReviewed?: boolean;
+  similarityActive?: boolean;
+  similarityReady?: boolean;
+  similarityReason?: string;
 }
 
 export function UnitNavigator({
@@ -41,6 +44,9 @@ export function UnitNavigator({
   onCreateUnit,
   onOpenSimilarity,
   similarityReviewed = false,
+  similarityActive = false,
+  similarityReady = false,
+  similarityReason = "请先确认剧情及大纲可用版本",
 }: UnitNavigatorProps) {
   const grouped = useMemo(() => {
     const byGroup = new Map<string, ScreenplayUnitClientDto[]>();
@@ -109,12 +115,15 @@ export function UnitNavigator({
             {group.id === "outline" ? (
               <button
                 type="button"
-                className={`${styles.subStageItem} ${similarityReviewed ? styles.subStageReady : ""}`}
+                className={`${styles.subStageItem} ${similarityActive ? styles.subStageActive : ""} ${similarityReviewed ? styles.subStageReady : ""}`}
                 onClick={() => onOpenSimilarity?.()}
+                disabled={!similarityReady}
+                aria-current={similarityActive ? "step" : undefined}
+                title={similarityReady ? "打开雷同审查" : similarityReason}
               >
                 <span className={styles.subStageMark}>{similarityReviewed ? "✓" : "◇"}</span>
                 <span>雷同审查</span>
-                <span className={styles.subStageHint}>{similarityReviewed ? "已查验" : "待查验"}</span>
+                <span className={styles.subStageHint}>{similarityReviewed ? "已查验" : similarityReady ? "可查验" : "待大纲确认"}</span>
               </button>
             ) : null}
           </div>

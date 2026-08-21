@@ -97,6 +97,36 @@ test("embedded studio owns canonical identity and one main view at a time", () =
   assert.doesNotMatch(source, /router\.replace\(`\?workId=/);
 });
 
+test("embedded screenplay keeps global navigation and uses parent-bounded height", () => {
+  const source = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.module.css", import.meta.url), "utf8");
+  assert.match(source, /if \(embedded \|\| !workId\) return/);
+  assert.match(source, /embedded \? styles\.embedded : ""/);
+  assert.match(source, /styles\.structureToggle/);
+  assert.match(css, /\.studio\.embedded\s*\{[\s\S]*height:\s*auto/);
+  assert.match(css, /\.studio\.embedded\s*\{[\s\S]*min-height:\s*calc\(100dvh/);
+  assert.match(css, /\.studio\.embedded\.narrow\s*\{[\s\S]*min-height:\s*calc\(100dvh/);
+  assert.match(css, /\.narrow \.structureToggle\s*\{[\s\S]*position:\s*absolute/);
+});
+
+test("embedded screenplay relies on the left workflow tree without a duplicate strip", () => {
+  const source = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  assert.match(source, /!embedded \? \([\s\S]*styles\.workflowStrip/);
+});
+
+test("similarity review is muted until explicitly opened and respects its gate", () => {
+  const studio = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  const navigator = readFileSync(new URL("../../../components/v2/screenplay-studio/UnitNavigator.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.module.css", import.meta.url), "utf8");
+  assert.match(studio, /similarityActive=\{activeTool === "similarity"\}/);
+  assert.match(studio, /similarityReady=\{similarityGate\.ready\}/);
+  assert.match(navigator, /similarityActive\?: boolean/);
+  assert.match(navigator, /similarityReady\?: boolean/);
+  assert.match(navigator, /styles\.subStageActive/);
+  assert.match(navigator, /disabled=\{!similarityReady\}/);
+  assert.match(css, /\.subStageActive/);
+});
+
 // ============================================================
 // 4. URL state: ?workId=&unitId= restores the writing location
 // ============================================================

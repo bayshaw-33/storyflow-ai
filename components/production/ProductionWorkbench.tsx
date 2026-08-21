@@ -78,12 +78,14 @@ import { StoryboardFrameGrid, StoryboardPromptList, UnifiedStoryboardStage, type
 import {
   buildUnifiedWorkbenchUrl,
   parseUnifiedWorkbenchQuery,
-  UNIFIED_PRODUCTION_STAGES,
   type UnifiedProductionStage,
   type UnifiedWorkbenchContextV1,
 } from "@/lib/contracts/v2/unified-workbench";
 import { WORK_CONTRACT_VERSION } from "@/lib/contracts/v2/work";
 import { fetchUnifiedWorkbenchContext, ensureUnifiedStage } from "@/lib/client/v2/unified-workbench/api";
+import { bindWorkToUniverse } from "@/lib/client/v2/universe/api";
+import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
+import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
 
@@ -94,13 +96,6 @@ type StoryboardAssets = {
 };
 
 const EMPTY_ASSETS: StoryboardAssets = { characters: [], locations: [], props: [] };
-
-const STAGE_LABELS: Record<UnifiedProductionStage, string> = {
-  script: "剧本",
-  art: "美术",
-  storyboard: "分镜",
-  video: "视频",
-};
 
 export function ProductionWorkbench() {
   const router = useRouter();
@@ -175,6 +170,7 @@ export function ProductionWorkbench() {
   const [showTeamPanel, setShowTeamPanel] = useState(false);
   const [showModelRegistry, setShowModelRegistry] = useState(false);
   const [showSecondaryMenu, setShowSecondaryMenu] = useState(false);
+  const [bindingDialogOpen, setBindingDialogOpen] = useState(false);
   // 任务 1.4「先创作后归档」：draft 草稿保存时弹归档弹窗
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveTitle, setArchiveTitle] = useState("");
@@ -306,6 +302,13 @@ export function ProductionWorkbench() {
     }
   }
 
+  async function handleBindUniverse(input: BindWorkToUniverseInput) {
+    if (!workId) throw new Error("缺少 Work 身份，无法绑定 Universe。");
+    await bindWorkToUniverse(workId, input);
+    await reloadContext();
+    setNotice("Universe 已绑定到当前作品。");
+  }
+
   // 正式项目先读取只读上下文；缺失阶段只展示空状态，不在这里创建 Work。
   useEffect(() => {
     if (!projectId || projectId.startsWith("draft-")) {
@@ -316,13 +319,6 @@ export function ProductionWorkbench() {
     void reloadContext();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, session?.access_token]);
-
-  useEffect(() => {
-    document.documentElement.dataset.productionFocus = "on";
-    return () => {
-      delete document.documentElement.dataset.productionFocus;
-    };
-  }, []);
 
   // --- Supabase session ---
   useEffect(() => {
@@ -1503,15 +1499,17 @@ export function ProductionWorkbench() {
         activeStage={activeStage}
         saveStatus={saving ? "saving" : unsaved ? "unsaved" : "saved"}
         onStageChange={handleStageChange}
+        onCreateUniverse={() => router.push("/universes?create=1")}
+        onBindUniverse={workId ? () => setBindingDialogOpen(true) : undefined}
+        onOpenUniverse={displayContext.universe ? () => router.push(`/universes/${displayContext.universe?.id}`) : undefined}
         onVersionClick={() => setShowVersionHistory(true)}
         onEvidenceClick={() => setNotice("证据记录会随当前版本一并保留。")}
         onMoreClick={() => setShowSecondaryMenu((value) => !value)}
-      />
-      <div className={styles.actionBar}>
-        <div className={styles.actionRow}>
+        primaryActions={(
+          <>
           {backToCreation.visible ? (
             <button
-              className={styles.secondaryButton}
+              className={styles.headerIconButton}
               type="button"
               onClick={() => {
                 if (!backToCreation.ok || !projectId || !sourceUnitId) return;
@@ -1521,17 +1519,17 @@ export function ProductionWorkbench() {
               title={backToCreation.ok ? "返回创作工作台对应单元" : backToCreation.reason}
               aria-label="返回创作工作台"
             >
-              <ArrowLeft size={16} /> 返回创作
+              <ArrowLeft size={15} />
             </button>
           ) : null}
           <button
-            className={styles.primaryButton}
+            className={styles.headerActionButton}
             type="button"
             onClick={saveToServer}
             disabled={saving || !isScopeActionable(projectId, sourceUnitId)}
             title={!isScopeActionable(projectId, sourceUnitId) ? "缺少 projectId 或 sourceUnitId" : undefined}
           >
-            <Save size={16} /> {saving ? "保存中..." : "保存"}
+            <Save size={15} /> <span>{saving ? "保存中..." : "保存"}</span>
           </button>
           <StoryboardExportMenu
             projectId={projectId}
@@ -1542,8 +1540,9 @@ export function ProductionWorkbench() {
             videoJobs={videoJobs}
             accessToken={session?.access_token}
           />
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {showSecondaryMenu ? (
         <div className={styles.secondaryMenuFloating} role="menu">
@@ -1613,32 +1612,7 @@ export function ProductionWorkbench() {
       ) : null}
 
       <section className={styles.workspace}>
-        <div className={styles.stageLayout}>
-          <aside className={styles.stageRail} aria-label="制作阶段">
-            <p className={styles.stageRailTitle}>制作流程</p>
-            {UNIFIED_PRODUCTION_STAGES.map((stage) => {
-              const stageContext = displayContext.stages[stage];
-              return (
-                <div key={stage}>
-                  <button
-                    type="button"
-                    className={`${styles.stageRailItem} ${activeStage === stage ? styles.stageRailItemActive : ""}`}
-                    onClick={() => handleStageChange(stage)}
-                  >
-                    <span>{STAGE_LABELS[stage]}</span>
-                    <span className={styles.stageRailStatus}>{stageContext ? "已建立" : "未开始"}</span>
-                  </button>
-                  {activeStage === stage && !stageContext ? (
-                    <button type="button" className={styles.stageRailStart} onClick={() => void startStage(stage)}>
-                      开始{STAGE_LABELS[stage]}
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </aside>
-
-          <div className={styles.stageContent}>
+        <div className={styles.stageContent}>
             {activeStage === "script" ? (
               workId ? (
                 <ScreenplayStudio
@@ -1743,7 +1717,6 @@ export function ProductionWorkbench() {
                 batchRunning={batchRunning}
               />
             ) : null}
-          </div>
         </div>
       </section>
 
@@ -1762,6 +1735,12 @@ export function ProductionWorkbench() {
       ) : null}
       {showTeamPanel ? <TeamPanel onClose={() => setShowTeamPanel(false)} /> : null}
       {showModelRegistry ? <ModelRegistryPanel onClose={() => setShowModelRegistry(false)} /> : null}
+      <UniverseBindingDialog
+        workId={workId ?? ""}
+        open={bindingDialogOpen}
+        onClose={() => setBindingDialogOpen(false)}
+        onConfirm={handleBindUniverse}
+      />
 
       {archiveOpen ? (
         <div role="dialog" aria-modal="true" aria-label="归档草稿" className={styles.archiveOverlay}>

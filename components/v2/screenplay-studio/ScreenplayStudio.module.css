@@ -1,6 +1,7 @@
 /* Screenplay Studio — V2.2 two-column, AI-first layout (focus mode) */
 
 .studio {
+  position: relative;
   display: grid;
   grid-template-columns: 276px minmax(0, 1fr);
   grid-template-rows: 100%;
@@ -11,11 +12,23 @@
   overflow: hidden;
 }
 
+.studio.embedded {
+  height: auto;
+  min-height: calc(100dvh - 66px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
 .studio.narrow {
   grid-template-columns: minmax(0, 1fr);
   height: auto;
   min-height: 100dvh;
   overflow: visible;
+}
+
+.studio.embedded.narrow {
+  min-height: calc(100dvh - 66px);
 }
 
 .leftPanel {
@@ -438,6 +451,13 @@
   cursor: pointer;
 }
 
+.narrow .structureToggle {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+}
+
 .drawerScrim {
   display: none;
 }
@@ -515,19 +535,29 @@
   width: calc(100% - 12px);
   margin: 5px 6px 0 12px;
   padding: 6px 8px;
-  border: 1px solid rgba(100, 232, 223, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: rgba(100, 232, 223, 0.04);
-  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
   cursor: pointer;
   font-size: 12px;
   text-align: left;
 }
 
-.subStageItem:hover,
+.subStageItem:hover:not(:disabled),
+.subStageActive,
 .subStageReady {
   border-color: rgba(100, 232, 223, 0.42);
   color: #64e8df;
+}
+
+.subStageActive {
+  background: rgba(100, 232, 223, 0.08);
+}
+
+.subStageItem:disabled {
+  cursor: not-allowed;
+  opacity: .62;
 }
 
 .subStageMark {

@@ -11,19 +11,9 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  padding-left: 120px;
   background: var(--bg-void);
   color: var(--ink-primary);
-}
-
-/* ----------------- 版本操作栏 ----------------- */
-.actionBar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 54px;
-  padding: 8px 28px;
-  background: var(--bg-deep);
-  border-bottom: 1px solid var(--divider);
 }
 
 /* ----------------- unified four-stage header ----------------- */
@@ -32,10 +22,11 @@
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto;
-  gap: 18px 24px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 18px;
   align-items: center;
-  padding: 18px 28px 14px;
+  min-height: 66px;
+  padding: 9px 22px;
   background: rgba(10, 10, 11, 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -47,7 +38,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--ink-primary);
-  font-size: clamp(20px, 2vw, 28px);
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
@@ -58,16 +49,18 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 .universeBadge,
-.universeBadgeMuted,
+.universeCreateButton,
+.universeBindButton,
 .saveStatus {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   min-height: 24px;
-  padding: 0 8px;
+  padding: 0 7px;
+  border: 0;
   border-radius: var(--radius-full);
   font-size: 12px;
   font-weight: 700;
@@ -75,10 +68,35 @@
 .universeBadge {
   color: var(--accent-cyan);
   background: rgba(0, 200, 170, 0.12);
+  cursor: pointer;
 }
-.universeBadgeMuted {
-  color: var(--ink-muted);
+.universeActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.universeCreateButton,
+.universeBindButton {
+  cursor: pointer;
+}
+.universeCreateButton {
+  color: var(--accent-cyan);
+  background: rgba(0, 200, 170, 0.10);
+}
+.universeBindButton {
+  color: var(--ink-secondary);
   background: var(--button-secondary-bg);
+}
+.universeCreateButton:hover,
+.universeBindButton:hover,
+.universeBadge:hover {
+  color: var(--ink-primary);
+  background: var(--button-secondary-hover);
+}
+.universeCreateButton:disabled,
+.universeBindButton:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
 .saveStatus { color: var(--success); }
 .saveStatusUnsaved { color: var(--warning); }
@@ -86,14 +104,58 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 5px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.unifiedHeaderActions::-webkit-scrollbar { display: none; }
+.compactStageTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-full);
+  background: var(--bg-deep);
+}
+.stageIconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stageIconButton:hover {
+  color: var(--ink-primary);
+  background: var(--text-hover-bg);
+}
+.stageIconButtonActive {
+  color: var(--accent-cyan);
+  background: rgba(0, 200, 170, .12);
+}
+.headerDivider {
+  width: 1px;
+  height: 24px;
+  margin: 0 2px;
+  background: var(--divider);
+  flex: 0 0 auto;
 }
 .headerActionButton {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 0 9px;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   background: var(--button-secondary-bg);
@@ -102,38 +164,29 @@
   font-weight: 700;
   cursor: pointer;
 }
+.headerIconButton {
+  display: inline-flex;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--button-secondary-bg);
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+.headerIconButton:hover {
+  color: var(--ink-primary);
+  background: var(--button-secondary-hover);
+}
+.headerActionButton:disabled,
+.headerIconButton:disabled { opacity: .45; cursor: not-allowed; }
 .headerActionButton:hover {
   color: var(--ink-primary);
   background: var(--button-secondary-hover);
   border-color: var(--glass-border-hover);
-}
-.unifiedStageTabs {
-  display: flex;
-  grid-column: 1 / -1;
-  gap: 4px;
-  overflow-x: auto;
-  padding: 4px;
-  border: 1px solid var(--divider);
-  border-radius: var(--radius-md);
-  background: var(--bg-deep);
-}
-.unifiedStageTab {
-  flex: 1 0 0;
-  min-height: 40px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink-secondary);
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.unifiedStageTab:hover { color: var(--ink-primary); background: var(--text-hover-bg); }
-.unifiedStageTabActive {
-  color: var(--button-primary-fg);
-  background: var(--button-primary-bg);
 }
 .unifiedStagePanelMarker {
   position: absolute;
@@ -144,54 +197,6 @@
   white-space: nowrap;
 }
 
-.stageLayout {
-  display: grid;
-  grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-.stageRail {
-  position: sticky;
-  top: 150px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-fill);
-}
-.stageRailTitle {
-  margin: 0 0 4px;
-  color: var(--ink-secondary);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.stageRailItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink-secondary);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: left;
-}
-.stageRailItem:hover { color: var(--ink-primary); background: var(--text-hover-bg); }
-.stageRailItemActive {
-  color: var(--ink-primary);
-  border-color: rgba(0, 200, 170, .32);
-  background: rgba(0, 200, 170, .10);
-}
-.stageRailStatus { color: var(--ink-muted); font-size: 11px; font-weight: 600; }
 .stageContent { min-width: 0; }
 .stageEmpty {
   display: flex;
@@ -209,7 +214,6 @@
 .stageEmpty h2,
 .stageEmpty p { margin: 0; }
 .stageEmpty p { max-width: 520px; color: var(--ink-secondary); }
-.stageRailStart,
 .storyboardTool,
 .storyboardToolActive {
   display: flex;
@@ -226,8 +230,6 @@
   cursor: pointer;
   text-align: left;
 }
-.stageRailStart { margin: 4px 0 8px; color: var(--accent-cyan); border-color: rgba(0, 200, 170, .25); }
-.stageRailStart:hover,
 .storyboardTool:hover { color: var(--ink-primary); background: var(--text-hover-bg); }
 .storyboardTools {
   display: flex;
@@ -652,12 +654,8 @@
 
 /* ----------------- 响应式 ----------------- */
 @media (max-width: 980px) {
-  .actionBar { padding-inline: 16px; }
-  .unifiedHeader { grid-template-columns: 1fr; gap: 10px; padding: 12px 16px; }
+  .unifiedHeader { grid-template-columns: 1fr; gap: 8px; padding: 10px 16px; }
   .unifiedHeaderActions { justify-content: flex-start; }
-  .unifiedStageTabs { grid-column: auto; }
-  .stageLayout { grid-template-columns: 1fr; }
-  .stageRail { position: static; }
   .modeSwitch {
     overflow-x: auto;
   }
@@ -671,8 +669,14 @@
   }
 }
 
+@media (max-width: 768px) {
+  .shell { padding-left: 0; }
+}
+
 @media (max-width: 600px) {
-  .unifiedStageTab { flex-basis: 112px; padding-inline: 12px; }
-  .stageLayout { display: block; }
-  .stageRail { margin-bottom: 14px; }
+  .stageIconButton span,
+  .headerActionButton span { display: none; }
+  .stageIconButton { width: 34px; padding: 0; }
+  .universeCreateButton,
+  .universeBindButton { font-size: 10px; }
 }

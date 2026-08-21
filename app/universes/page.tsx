@@ -73,6 +73,14 @@ export default function UniversesPage() {
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("create") === "1") {
+      setCreateForm(EMPTY_FORM);
+      setCreateOpen(true);
+    }
+  }, []);
+
   // 滚动位置恢复（详情返回时）
   useEffect(() => {
     if (typeof window === "undefined") return;

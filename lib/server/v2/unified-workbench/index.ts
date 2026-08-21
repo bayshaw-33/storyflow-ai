@@ -57,6 +57,7 @@ type WorkRow = {
 };
 
 type WorkVersionRow = { id: string; work_id: string };
+type WorkInheritanceManifestRow = { work_id: string; universe_id: string };
 type UniverseRow = { id: string; name: string };
 type UniverseVersionRow = { id: string };
 type EnsureStageWorkRpcRow = { work_id?: string; created?: boolean };
@@ -84,10 +85,18 @@ export async function getUnifiedWorkbenchContext(input: {
   const legacyStageWorks = Object.values(selectedStageWorks).filter(
     (work): work is WorkRow => work !== null && !work.current_version_id,
   );
-  const [versions, universe] = await Promise.all([
+  const selectedWorks = Object.values(selectedStageWorks).filter(
+    (work): work is WorkRow => work !== null,
+  );
+  const [versions, universeId] = await Promise.all([
     readWorkVersions(input.fetcher, legacyStageWorks),
-    readUniverseContext(input.fetcher, project.universe_id ?? null),
+    resolveUniverseId(
+      input.fetcher,
+      project.universe_id ?? null,
+      selectedWorks.map((work) => work.id),
+    ),
   ]);
+  const universe = await readUniverseContext(input.fetcher, universeId);
 
   const latestVersionByWorkId = new Map<string, string>();
   for (const version of versions) {
@@ -234,6 +243,30 @@ async function readWorkVersions(
     return versions.filter((version): version is WorkVersionRow => version !== null);
   } catch (error) {
     throw toUnifiedWorkbenchError(error, "Work version service is unavailable.");
+  }
+}
+
+async function resolveUniverseId(
+  fetcher: UnifiedWorkbenchFetcher,
+  projectUniverseId: string | null,
+  selectedWorkIds: string[],
+): Promise<string | null> {
+  if (projectUniverseId) return projectUniverseId;
+  if (!selectedWorkIds.length) return null;
+  try {
+    const workFilter = selectedWorkIds.map(encodeURIComponent).join(",");
+    const manifests = await fetcher<WorkInheritanceManifestRow[]>(
+      `/rest/v1/storyflow_work_inheritance_manifests?work_id=in.(${workFilter})&is_active=eq.true&select=work_id,universe_id&limit=100`,
+    );
+    if (!Array.isArray(manifests)) return null;
+    const manifestByWorkId = new Map(manifests.map((manifest) => [manifest.work_id, manifest]));
+    for (const workId of selectedWorkIds) {
+      const universeId = manifestByWorkId.get(workId)?.universe_id;
+      if (universeId) return universeId;
+    }
+    return null;
+  } catch (error) {
+    throw toUnifiedWorkbenchError(error, "Work Universe binding service is unavailable.");
   }
 }
 
