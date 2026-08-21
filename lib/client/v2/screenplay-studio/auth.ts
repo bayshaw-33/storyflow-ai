@@ -63,6 +63,6 @@ export async function fetchScreenplayStudio(input: RequestInfo | URL, init: Requ
   return fetchWithScreenplayStudioAuth(input, init, {
     getAccessToken: getScreenplayStudioAccessToken,
     refreshAccessToken: refreshScreenplayStudioAccessToken,
-    fetcher: fetch,
+    fetcher: (request, options) => globalThis.fetch(request, options),
   });
 }

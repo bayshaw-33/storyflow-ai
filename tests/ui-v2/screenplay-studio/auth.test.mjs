@@ -11,6 +11,7 @@ import test from "node:test";
 import {
   buildScreenplayStudioHeaders,
   fetchWithScreenplayStudioAuth,
+  fetchScreenplayStudio,
 } from "../../../lib/client/v2/screenplay-studio/auth.ts";
 
 test("screenplay requests carry the Supabase access token", () => {
@@ -76,4 +77,19 @@ test("a second unauthenticated response stops after the single retry", async () 
 
   assert.equal(response.status, 401);
   assert.equal(calls, 2);
+});
+
+test("the browser fetch wrapper preserves the Window fetch receiver", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = function fetchWithWindowReceiver() {
+    assert.equal(this, globalThis);
+    return Promise.resolve(new Response("{}", { status: 200 }));
+  };
+
+  try {
+    const response = await fetchScreenplayStudio("/screenplay");
+    assert.equal(response.status, 200);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
