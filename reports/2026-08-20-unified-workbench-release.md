@@ -1,6 +1,6 @@
 # KIIKIS V2.2 统一制作工作台验收与发布证据
 
-日期：2026-08-20
+日期：2026-08-20（2026-08-21 完成生产发布）
 分支：`codex/v22-unified-workbench-recovery`
 基线：`e8f1e581`
 当前验收范围：统一入口、剧本 AI 工作台、制作工作台四阶段、分镜子视图、旧链接恢复、旧项目兼容。
@@ -37,23 +37,37 @@
 
 ## 目标库门禁与发布状态
 
-本轮仅执行了只读目标检查。检查结果是 Supabase CLI 当前未链接目标库；因此本轮没有执行 migration、没有写入生产数据库、没有创建或切换 `kiikis-staging`，也没有声称线上发布已完成。
+2026-08-21 收到用户明确的 `RELEASE APPROVED` 后，在隔离工作树中将 Supabase CLI 显式链接至 production；未使用主工作区中指向 staging 的链接或环境地址。
 
 目标库登记信息：
 
 - production：`vgcafbzksizlwmylphzu`（StoryFlow / kiikis.com 实际生产库）
 - staging：`cwpyolxitkcpitqizgtq`（演练库）
 
-在 CLI 明确链接 production、完成真实账号验收，并收到明确的 `RELEASE APPROVED` 前，不执行生产 migration 或线上部署。该限制是为了防止把测试库、演练库或错误 Supabase 项目当成生产目标。
+生产数据库只应用了 `20260830000000_K22_unified_workbench_stage_identity.sql`。执行后确认：
+
+- `ensure_project_stage_work(uuid,text,text,text,text)` 已存在；
+- 函数为 `SECURITY DEFINER` 且固定 `search_path=public`；
+- anon/authenticated 无直接执行权限；
+- `supabase_migrations.schema_migrations` 已记录版本 `20260830000000`。
+
+Vercel production 部署：
+
+- 源代码提交：`dd6e602f11bb8ee0dcc297f89e77703baced03ff`
+- deployment：`dpl_B98cw1wAA95BcCgPePJj8k3Zqjzw`
+- deployment URL：`https://storyflow-pnhoj8tr0-bay-shaw-s-projects.vercel.app`
+- production alias：`https://www.kiikis.com`
+- Vercel 状态：`READY`
+
+发布后 smoke 确认首页、项目入口、剧本/美术/分镜/视频四阶段均返回 HTTP 200；未认证的工作台上下文、阶段创建和项目创建 API 均返回 401，而不是 500。部署后 20 分钟窗口未发现 HTTP 500 运行日志。
 
 ## 回滚边界
 
 - 代码回滚目标为本分支合并前的基线 `e8f1e581`。
-- 本轮没有执行破坏性数据迁移，因此不存在需要反向删除生产数据的回滚动作。
+- migration 仅创建或替换阶段 Work RPC 并收紧执行权限，不删除、更新或迁移既有项目数据。
 - 若真实库验收发现问题，优先回滚统一入口路由与工作台壳层代码；保留已有项目、Work、版本和创作留痕数据。
 
-## 未完成的发布前动作
+## 发布后待办
 
-1. 在正确的生产目标上完成只读 schema 检查与 migration dry-run。
-2. 注入真实但受控的验收账号，执行新增 Playwright happy path 和旧链接恢复测试。
-3. 由授权人明确给出 `RELEASE APPROVED` 后，才进行生产部署并重新做线上 smoke/UAT。
+1. 使用真实但受控的验收账号，执行新增 Playwright happy path 和旧链接恢复测试。
+2. 将当前发布分支同步到 GitHub `main`，避免下一次 main 自动部署覆盖本次直接 Vercel 发布。
