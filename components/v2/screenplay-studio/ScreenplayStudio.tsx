@@ -128,7 +128,7 @@ export function ScreenplayStudio({
   const projectId = projectIdProp ?? query.projectId;
   const workId = workIdProp ?? query.workId;
   const urlUnitId = unitIdProp !== undefined ? unitIdProp : query.unitId;
-  const conversationId = useMemo(() => `kk-${workId ?? "default"}`, [workId]);
+  const conversationId = useMemo(() => workId ?? "", [workId]);
 
   // 独立剧本路由使用专注模式；嵌入统一制作台时保留全局导航。
   useEffect(() => {

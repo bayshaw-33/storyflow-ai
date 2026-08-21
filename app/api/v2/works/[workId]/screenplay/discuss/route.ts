@@ -20,6 +20,7 @@ import { buildContextPacket } from "@/lib/server/v2/context-packets";
 import { getWork } from "@/lib/server/v2/works/versions";
 import { ScreenplayUnitsService } from "@/lib/server/v2/screenplays/units";
 import { classifyServiceError } from "@/lib/server/v2/service-errors";
+import { normalizeScreenplayConversationId } from "@/lib/server/v2/screenplays/conversation-id";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,9 +82,12 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Authentication required.", code: "unauthenticated" }, { status: 401 });
     }
     const { workId } = await params;
-    const conversationId = request.nextUrl.searchParams.get("conversationId") ?? "";
+    const conversationId = normalizeScreenplayConversationId(
+      workId,
+      request.nextUrl.searchParams.get("conversationId"),
+    );
     if (!conversationId) {
-      return NextResponse.json({ success: false, error: "conversationId is required.", code: "validation_failed" }, { status: 422 });
+      return NextResponse.json({ success: false, error: "conversationId must be a UUID.", code: "validation_failed" }, { status: 422 });
     }
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
     const { messages } = await service.listMessages({ ownerId: viewer.id, workId, conversationId });
@@ -107,12 +111,16 @@ export async function POST(
     }
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));
+    const conversationId = normalizeScreenplayConversationId(workId, String(body.conversationId ?? ""));
+    if (!conversationId) {
+      return NextResponse.json({ success: false, error: "conversationId must be a UUID.", code: "validation_failed" }, { status: 422 });
+    }
     const purpose = (String(body.purpose ?? "discuss") === "similarity_review" ? "similarity_review" : "discuss") as KkPurpose;
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
     const result = await service.discuss({
       ownerId: viewer.id,
       workId,
-      conversationId: String(body.conversationId ?? ""),
+      conversationId,
       userMessage: String(body.userMessage ?? ""),
       purpose,
       clientContext: body.clientContext ? String(body.clientContext).slice(0, 200) : null,
@@ -129,7 +137,7 @@ export async function POST(
           workId,
           kind: "similarity_review",
           payload: {
-            threadId: String(body.conversationId ?? ""),
+            threadId: conversationId,
             assistantMessageId: result.assistantMessage.id,
             outlineVersionId,
             reviewedAt: new Date().toISOString(),

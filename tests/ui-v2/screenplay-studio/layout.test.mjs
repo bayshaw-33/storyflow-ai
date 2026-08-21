@@ -127,6 +127,12 @@ test("similarity review is muted until explicitly opened and respects its gate",
   assert.match(css, /\.subStageActive/);
 });
 
+test("screenplay chat uses the Work UUID directly instead of a database-invalid prefixed id", () => {
+  const source = readFileSync(new URL("../../../components/v2/screenplay-studio/ScreenplayStudio.tsx", import.meta.url), "utf8");
+  assert.match(source, /const conversationId = useMemo\(\(\) => workId \?\? "", \[workId\]\)/);
+  assert.doesNotMatch(source, /`kk-\$\{workId/);
+});
+
 // ============================================================
 // 4. URL state: ?workId=&unitId= restores the writing location
 // ============================================================
