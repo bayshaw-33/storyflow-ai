@@ -259,6 +259,19 @@ async function parseCodexResponse<T>(
 }
 
 // 构造请求 headers（带 Authorization Bearer）。
+import { defaultAuthFetchDeps, fetchWithAuthRetry } from "../auth-fetch.ts";
+
+/**
+ * P0-03：把注入的 fetchImpl 包一层共享认证 fetch（每次调用取最新 session
+ * token，401 → refreshSession → 重试一次）。这些端点全部是 Bearer-only
+ * 鉴权，旧的 cookie-only 调用在生产恒 401。node 测试注入 fetchImpl 时
+ * 无浏览器 session → 不带 Authorization，行为与旧实现一致。
+ */
+function authedFetchImpl(fetchImpl: typeof fetch) {
+  return (input: RequestInfo | URL, init?: RequestInit) =>
+    fetchWithAuthRetry(input, init ?? {}, { ...defaultAuthFetchDeps, fetcher: fetchImpl });
+}
+
 function authHeaders(accessToken: string | null): Record<string, string> {
   return {
     Authorization: `Bearer ${accessToken ?? ""}`,
@@ -609,7 +622,7 @@ export interface InboxActionResult {
 }
 
 // Inbox 操作：USE_FIXTURE 时本地模拟，否则 PATCH proposals/:proposalId。
-// 注意：UI 调用未传 accessToken，真实模式依赖同源 session cookie 鉴权。
+// P0-03 修复：改走共享认证 fetch（Bearer + 401 刷新重试），不再依赖 cookie。
 export async function applyInboxAction(
   universeId: string,
   proposalId: string,
@@ -627,12 +640,11 @@ export async function applyInboxAction(
       message: "操作已提交（fixture 预览模式，不会真正写入）。",
     };
   }
-  const fetchImpl = options.fetchImpl || fetch;
-  const res = await fetchImpl(
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const res = await fetcher(
     `${API_PATH}/${encodeURIComponent(universeId)}/proposals/${encodeURIComponent(proposalId)}`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ action }),
     },
@@ -669,12 +681,11 @@ export async function toggleCanonFactLock(
         : "Canon Fact 已解锁（fixture 预览模式）。",
     };
   }
-  const fetchImpl = options.fetchImpl || fetch;
-  const res = await fetchImpl(
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const res = await fetcher(
     `${API_PATH}/${encodeURIComponent(universeId)}/canon-facts/${encodeURIComponent(canonFactId)}/lock`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ locked }),
     },
@@ -773,8 +784,8 @@ export async function fetchWorkInheritanceState(
   workId: string,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<WorkInheritanceStateV22> {
-  const fetchImpl = options.fetchImpl || fetch;
-  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance`, {
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance`, {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
   });
@@ -794,10 +805,10 @@ export async function bindWorkToUniverse(
   input: BindWorkToUniverseInput,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<WorkInheritanceManifestV22> {
-  const fetchImpl = options.fetchImpl || fetch;
-  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/universe/bind`, {
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/universe/bind`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { Accept: "application/json" },
     credentials: "same-origin",
     body: JSON.stringify(input),
   });
@@ -815,8 +826,8 @@ export async function fetchInheritanceDiff(
   workId: string,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<InheritanceDiffResultV22> {
-  const fetchImpl = options.fetchImpl || fetch;
-  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/diff`, {
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/diff`, {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
   });
@@ -834,10 +845,10 @@ export async function adoptInheritanceDiffs(
   input: AdoptDiffsInput,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<AdoptResultV22> {
-  const fetchImpl = options.fetchImpl || fetch;
-  const res = await fetchImpl(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/adopt`, {
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/adopt`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { Accept: "application/json" },
     credentials: "same-origin",
     body: JSON.stringify(input),
   });

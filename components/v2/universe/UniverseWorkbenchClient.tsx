@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   fetchUniverseBundle,
   isUnauthenticatedError,
@@ -82,12 +83,49 @@ export function UniverseWorkbenchClient() {
   const [status, setStatus] = useState<UniverseBundleStatus>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
 
+  // P0-03 修复：详情页此前把 null token 传给适配器，客户端直接抛
+  // UNAUTHENTICATED → 已登录用户看到"请登录后查看宇宙"。现在与列表页
+  // 同源：挂载时解析 supabase session，并跟随 onAuthStateChange 刷新。
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
+
+  useEffect(() => {
+    const client = getSupabaseBrowserClient();
+    if (!client) {
+      setSessionResolved(true);
+      return;
+    }
+    let active = true;
+    const applySession = (token: string | null) => {
+      if (!active) return;
+      setAccessToken(token);
+      setSessionResolved(true);
+    };
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      applySession(session?.access_token ?? null);
+    });
+    void client.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        applySession(data.session?.access_token ?? null);
+      })
+      .catch(() => {
+        if (!active) return;
+        applySession(null);
+      });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setStatus("loading");
     setErrorMsg("");
     try {
       const options: FetchUniverseBundleOptions = fixtureParam ? { fixture: fixtureParam } : {};
-      const result = await fetchUniverseBundle(params.universeId, null, options);
+      const result = await fetchUniverseBundle(params.universeId, accessToken, options);
       setBundle(result);
       setStatus("ready");
     } catch (err) {
@@ -98,11 +136,13 @@ export function UniverseWorkbenchClient() {
       setErrorMsg(err instanceof Error ? err.message : isZh ? "加载宇宙数据失败。" : "Failed to load universe.");
       setStatus("error");
     }
-  }, [params.universeId, fixtureParam, isZh]);
+  }, [params.universeId, fixtureParam, isZh, accessToken]);
 
   useEffect(() => {
+    // session 解析完成后再拉取，避免首帧 null token 触发伪"未登录"
+    if (!sessionResolved) return;
     void load();
-  }, [load]);
+  }, [load, sessionResolved]);
 
   // 切换 tab：同步到 URL ?tab=，replace 不污染历史。
   const switchTab = useCallback((next: TabKey) => {

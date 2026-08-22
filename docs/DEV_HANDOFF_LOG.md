@@ -1,5 +1,30 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 3（P0-03 Universe 认证一致）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+1. **详情页 null token**：`UniverseWorkbenchClient` 从不解析 supabase session，`fetchUniverseBundle(id, null, …)` 在适配器内客户端即抛 UNAUTHENTICATED → 已登录用户看到"请登录后查看宇宙"（列表页正常，因其解析了 session）。
+2. **cookie-only 写调用**：applyInboxAction / toggleCanonFactLock / fetchWorkInheritanceState / bindWorkToUniverse / fetchInheritanceDiff / adoptInheritanceDiffs 只带 cookie 调 Bearer-only 端点 → 生产恒 401（注释自认"依赖同源 session cookie 鉴权"，但 app 从不写 ssr cookie）。
+
+服务端本就正确：/api/v2/universes/[id] 区分 401 unauthenticated（MISSING/INVALID_AUTH_TOKEN）、readUniverse 对非 owner 返回 403 forbidden、缺失 404 —— 无需改动。
+
+### 变更
+
+- `components/v2/universe/UniverseWorkbenchClient.tsx`：挂载时 getSession + onAuthStateChange → 传真实 token；session 解析完成后再拉取（避免首帧 null token 伪未登录）。
+- `lib/client/v2/universe/api.ts`：新增 `authedFetchImpl` 包装（共享 fetchWithAuthRetry：最新 token + 401 刷新重试一次），接入上述 6 个调用点；fetchImpl 注入保持不变（node 测试无浏览器 session 时不带 Authorization，行为同旧实现）。
+
+### 验证
+
+Gate A "universe detail workbench resolves the real session" 转 GREEN；tests/ui-v2/universe/api-adapter.test.mjs 15 通过（4 个失败为基线预存：fixture 收紧后的陈旧断言，见下）；contracts-v22 仅剩后续切片预期 RED；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. **基线预存失败清单（累计）**：`tests/ui-v2/universe/api-adapter.test.mjs` 4 个 fixture 模式断言（期望 USE_FIXTURE 默认 true，与 Phase 6 Task 6.2 fail-closed 决策矛盾）；`tests/ui-v2/task-center/task-center.test.mjs` computeStats 2 个 fixture 统计漂移断言。
+2. UniverseBindingDialog 仍按手输 Universe ID 绑定；bindWorkToUniverse 现在带真实认证可用。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 2（P0-01 KK 认证与真实错误）
 
 **分支：** `fix/K22-p0p1-trust`
