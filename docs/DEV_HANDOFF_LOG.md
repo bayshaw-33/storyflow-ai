@@ -1,5 +1,28 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 7（P1-06 遗留入口不丢 projectId）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+script/production/storyboard/video/art 五个遗留入口的 resolve 失败兜底都是 `router.replace("/projects/new-v2")`：未登录首帧、服务未配置、旧项目无 Work（P0-02 已修）、retired-novel 410 等场景全部把带 projectId 的访问甩进"新建项目"选择态，projectId 丢失且误导用户再建新项目。
+
+### 变更
+
+- 新增 `components/v2/navigation/LegacyEntryNotice.tsx`：failed（保留 projectId + 原因 + 重试 + 返回项目库/新建链接）/ no-project 两种态。
+- 五个入口页：解析失败 → 停留本页显示 LegacyEntryNotice（URL 保留 projectId，可重试）；无 projectId → no-project 提示（不再自动跳转）。成功路径的 router.replace(href) 不变。
+- script-workbench / production-workbench 为整页重写；storyboard/video/art 只改 redirect 组件。
+
+### 验证
+
+Gate A 13/13 全部转 GREEN（含本切片）；screenplay-entry-routing/v2-e2e/production-e2e 65 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. retired-novel 410 会显示"该遗留小说项目已退役"原因（英文原文透传），可后续本地化。
+2. e2e/legacy-redirects.spec.ts 未覆盖 `-workbench?projectId=` 失败路径的新断言（Playwright 需线上验证）。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 6（P0-06 确认式项目创建）
 
 **分支：** `fix/K22-p0p1-trust`

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { Suspense, type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { Download, Loader2, Play, Plus, RefreshCw, Save, Trash2, UploadCloud } from "lucide-react";
@@ -11,6 +11,7 @@ import { readProjectFromSupabase, syncProjectsWithSupabase, upsertProjectToSupab
 import { buildProjectLink, listUniverses, saveInboxItems, upsertUniverseProjectLink, type Universe } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
 import { resolveUnifiedWorkbenchRoute } from "@/lib/client/v2/unified-workbench/api";
+import { LegacyEntryNotice } from "@/components/v2/navigation/LegacyEntryNotice";
 
 type VideoStatus = "draft" | "queued" | "running" | "done" | "error";
 
@@ -903,13 +904,37 @@ function ProjectBoundVideoRedirect() {
   const workId = searchParams.get("workId");
   const unitId = searchParams.get("unitId") ?? searchParams.get("sourceUnitId");
 
+  // P1-06：解析失败停留本页（保留 projectId），不再甩回新建选择态
+  const [failed, setFailed] = useState(false);
+  const [reason, setReason] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
+
+  const retry = useCallback(() => {
+    setFailed(false);
+    setReason(null);
+    setRetryToken((token) => token + 1);
+  }, []);
+
   useEffect(() => {
     if (!projectId) return;
-    void resolveUnifiedWorkbenchRoute({ projectId, workId, tab: "video", unitId })
-      .then((href) => router.replace(href))
-      .catch(() => router.replace("/projects/new-v2"));
-  }, [projectId, router, unitId, workId]);
+    let cancelled = false;
+    setFailed(false);
+    setReason(null);
+    resolveUnifiedWorkbenchRoute({ projectId, workId, tab: "video", unitId })
+      .then((href) => {
+        if (!cancelled) router.replace(href);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setReason(error instanceof Error ? error.message : null);
+        setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, router, unitId, workId, retryToken]);
 
+  if (failed) return <LegacyEntryNotice kind="failed" projectId={projectId} message={reason} onRetry={retry} />;
   return <main className="cosmic-page" aria-busy="true" />;
 }
 
