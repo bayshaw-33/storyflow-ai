@@ -76,7 +76,8 @@ export default function JobDetailPage() {
       const response = await fetch(`/api/v2/jobs/${encodeURIComponent(jobId)}`, { headers });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || isZh ? "加载任务详情失败" : "Failed to load job detail");
+        // 优先级修复：服务端错误文案优先，其次按语言给兜底（原 || 与三元结合会丢弃服务端错误）
+        throw new Error(payload?.error || (isZh ? "加载任务详情失败" : "Failed to load job detail"));
       }
       setJob(payload.job);
     } catch (err) {

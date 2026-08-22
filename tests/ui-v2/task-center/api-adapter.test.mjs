@@ -15,8 +15,7 @@
  *      - jobType → type + workbenchType（粗粒度映射）
  *      - name/projectName 降级（Codex 不提供）
  *   4. 错误响应（401/404/503/网络异常）抛出带 code 的 JobsApiError
- *   5. cancelJob 调用 1.0 POST /api/production/jobs action=cancel
- *   6. retryJob 抛 not_implemented
+ *   5. cancelJob/retryJob 调用 PATCH /api/v2/jobs/[id] {action}（P0-05 重接线）
  *   7. stats 基于映射后的 jobs 计算
  *
  * 运行：node --test tests/ui-v2/task-center/*.test.mjs
@@ -409,7 +408,7 @@ test("resultReferences 含 http URL 时优先作为 resultUrl", async () => {
 // 5. 错误状态抛 JobsApiError
 // ============================================================
 
-test("401 响应抛 JobsApiError code=unauthenticated", async () => {
+test("401 响应抛 JobsApiError code=unauthenticated 且中文文案", async () => {
   mockFetchOnce(
     { success: false, error: "Authentication is required.", code: "unauthenticated" },
     401,
@@ -420,7 +419,7 @@ test("401 响应抛 JobsApiError code=unauthenticated", async () => {
       err instanceof JobsApiError &&
       err.code === "unauthenticated" &&
       err.httpStatus === 401 &&
-      err.message.includes("Authentication"),
+      err.message.includes("请先登录"),
   );
 });
 
@@ -482,18 +481,17 @@ test("success=false 但无 code 时按 HTTP 状态回退", async () => {
 });
 
 // ============================================================
-// 6. cancelJob 调用 1.0 API
+// 6. cancelJob 走服务端 PATCH /api/v2/jobs/[id]（K22 Task 0.3 状态机）
 // ============================================================
 
-test("cancelJob 调用 POST /api/production/jobs action=cancel", async () => {
+test("cancelJob 调用 PATCH /api/v2/jobs/[id] action=cancel", async () => {
   mockFetchOnce({ success: true, job: { id: "job-1", status: "cancelled" } });
   await cancelJob("job-1", "token");
   const call = getLastCall();
-  assert.equal(call.url, "/api/production/jobs", "cancel 复用 1.0 API 路径");
-  assert.equal(call.init.method, "POST");
+  assert.equal(call.url, "/api/v2/jobs/job-1", "cancel 走 v2 PATCH 端点");
+  assert.equal(call.init.method, "PATCH");
   const body = JSON.parse(call.init.body);
   assert.equal(body.action, "cancel");
-  assert.equal(body.jobId, "job-1");
   assert.equal(call.init.headers.Authorization, "Bearer token");
 });
 
@@ -522,31 +520,32 @@ test("cancelJob 网络异常抛 network_error", async () => {
 });
 
 // ============================================================
-// 7. retryJob 抛 not_implemented
+// 7. retryJob 走服务端 PATCH /api/v2/jobs/[id]（P0-05 重接线）
 // ============================================================
 
-test("retryJob 在非 fixture 模式抛 not_implemented 错误", async () => {
+test("retryJob 调用 PATCH /api/v2/jobs/[id] action=retry", async () => {
+  mockFetchOnce({ success: true, job: { id: "job-1", status: "queued" } });
+  await retryJob("job-1", "token");
+  const call = getLastCall();
+  assert.equal(call.url, "/api/v2/jobs/job-1");
+  assert.equal(call.init.method, "PATCH");
+  const body = JSON.parse(call.init.body);
+  assert.equal(body.action, "retry");
+  assert.equal(call.init.headers.Authorization, "Bearer token");
+});
+
+test("retryJob 服务端校验失败时抛中文 JobsApiError", async () => {
+  mockFetchOnce(
+    { success: false, error: "Cannot retry job in status \"completed\".", code: "validation_failed" },
+    422,
+  );
   await assert.rejects(
     () => retryJob("job-1", "t"),
     (err) =>
       err instanceof JobsApiError &&
-      err.message.includes("尚未实现") &&
-      err.code === "service_unavailable",
+      err.code === "validation_failed" &&
+      err.message.includes("不支持该操作"),
   );
-});
-
-test("retryJob 不调用 fetch", async () => {
-  let called = false;
-  globalThis.fetch = async () => {
-    called = true;
-    return new Response("{}", { status: 200 });
-  };
-  try {
-    await retryJob("job-1", "t");
-  } catch {
-    // 预期抛错
-  }
-  assert.equal(called, false, "retryJob 不应发起网络请求");
 });
 
 // ============================================================

@@ -83,8 +83,66 @@ test("listUnifiedJobs hides jobs whose project has an explicit retired novel mar
 test("missing jobs are distinguishable from service errors", async () => {
   const emptyFetcher = async () => [];
   await assert.rejects(readUnifiedJob({ fetcher: emptyFetcher, userId: "u-1", jobId: "missing" }), (error) => error instanceof V2JobsError && error.code === "not_found");
+  // 网络类失败经 classifyServiceError 归为 provider_failed / service_unavailable，但绝不与 not_found 混淆
   const failingFetcher = async () => { throw new Error("network down"); };
-  await assert.rejects(listUnifiedJobs({ fetcher: failingFetcher, userId: "u-1" }), (error) => error instanceof V2JobsError && error.code === "service_unavailable");
+  await assert.rejects(listUnifiedJobs({ fetcher: failingFetcher, userId: "u-1" }), (error) => error instanceof V2JobsError && (error.code === "service_unavailable" || error.code === "provider_failed"));
+});
+
+// ============================================================
+// P0-05: storyflow_exports schema alignment (baseline.sql:521 —
+// the table has NO updated_at / completed_at columns)
+// ============================================================
+
+test("exports queries select only columns that exist on storyflow_exports", async () => {
+  const calls = [];
+  const fetcher = async (path) => {
+    calls.push(path);
+    return [];
+  };
+  await listUnifiedJobs({ fetcher, userId: "u-1" });
+  const exportsCalls = calls.filter((path) => path.includes("storyflow_exports"));
+  assert.ok(exportsCalls.length >= 1, "listUnifiedJobs should query storyflow_exports");
+  for (const path of exportsCalls) {
+    const select = /select=([a-z_,]+)/.exec(path)?.[1] ?? "";
+    const columns = select.split(",");
+    assert.ok(!columns.includes("updated_at"), `storyflow_exports has no updated_at column: ${path}`);
+    assert.ok(!columns.includes("completed_at"), `storyflow_exports has no completed_at column: ${path}`);
+  }
+});
+
+test("completed export rows without metadata report no fabricated 1/1 progress", () => {
+  const mapped = mapLegacyJob({
+    id: "export-no-meta", user_id: "u-1", export_type: "docx", status: "completed", created_at: "2026-08-12T00:00:00Z",
+  });
+  assert.equal(mapped.progress.total, 0);
+  assert.equal(mapped.progress.completed, 0);
+});
+
+test("cancel PATCH to storyflow_exports writes only existing columns", async () => {
+  const row = { id: "export-q1", user_id: "u-1", project_id: "p-1", export_type: "docx", status: "queued", created_at: "2026-08-14T00:00:00Z" };
+  const fetcher = makeTransitionFetcher({ row, ownerId: "u-1" });
+  await transitionJob({ fetcher, userId: "u-1", jobId: "export-q1", action: "cancel" });
+  const exportsPatch = fetcher.patches.find((p) => p.path.includes("storyflow_exports"));
+  assert.ok(exportsPatch, "should PATCH the exports table");
+  const body = JSON.parse(exportsPatch.body);
+  assert.equal(body.status, "cancelled");
+  assert.ok(!("completed_at" in body), "storyflow_exports has no completed_at column to write");
+});
+
+test("supabase schema errors surface as schema_not_deployed without leaking SQL", async () => {
+  const rawSql = "Could not find the 'updated_at' column of 'storyflow_exports' in the 'public' schema";
+  const failingFetcher = async () => {
+    throw new Error(`SUPABASE_SERVICE_ERROR:400:${JSON.stringify({ code: "PGRST204", message: rawSql })}`);
+  };
+  await assert.rejects(
+    listUnifiedJobs({ fetcher: failingFetcher, userId: "u-1" }),
+    (error) => {
+      assert.equal(error.code, "schema_not_deployed");
+      assert.ok(!error.message.includes("PGRST204"));
+      assert.ok(!error.message.includes(rawSql));
+      return true;
+    },
+  );
 });
 
 // ============================================================

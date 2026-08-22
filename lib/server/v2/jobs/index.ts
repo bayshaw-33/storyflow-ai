@@ -1,5 +1,6 @@
 import type { GenerationJob, GenerationJobStatus, JobAction, JobTiming } from "@/lib/contracts/v2";
 import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
+import { classifyServiceError } from "../service-errors.ts";
 
 /**
  * Fetcher for Supabase REST. The optional `init` makes the fetcher capable of
@@ -8,14 +9,39 @@ import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
  */
 export type JobsFetcher = <T = unknown>(path: string, init?: { method?: string; body?: string; headers?: Record<string, string> }) => Promise<T>;
 
-export class V2JobsError extends Error {
-  readonly code: "unauthenticated" | "forbidden" | "not_found" | "conflict" | "service_unavailable" | "validation_failed";
+export type V2JobsErrorCode =
+  | "unauthenticated"
+  | "forbidden"
+  | "not_found"
+  | "conflict"
+  | "service_unavailable"
+  | "validation_failed"
+  | "schema_not_deployed"
+  | "rate_limited"
+  | "provider_failed";
 
-  constructor(code: V2JobsError["code"], message: string) {
+export class V2JobsError extends Error {
+  readonly code: V2JobsErrorCode;
+  /** Correlation id from classifyServiceError — safe to expose to the client. */
+  readonly requestId?: string;
+
+  constructor(code: V2JobsErrorCode, message: string, requestId?: string) {
     super(`${code}: ${message}`);
     this.name = "V2JobsError";
     this.code = code;
+    this.requestId = requestId;
   }
+}
+
+/**
+ * Wrap raw fetcher/service errors with classifyServiceError so the response
+ * body carries a safe code + message. Raw PostgREST payloads (PGRST204 etc.)
+ * stay in server logs only — never in V2JobsError.message (P0-05).
+ */
+function toServiceJobsError(error: unknown): V2JobsError {
+  if (error instanceof V2JobsError) return error;
+  const classified = classifyServiceError(error, "v2/jobs");
+  return new V2JobsError(classified.code as V2JobsErrorCode, classified.message, classified.requestId);
 }
 
 type LegacyJobRow = {
@@ -46,8 +72,11 @@ type ProjectMarkerRow = { id: string; workflow_type?: string | null; mode?: stri
 export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob {
   const status = mapStatus(row.status);
   const metadata = row.result_metadata || {};
-  const completed = numberValue(metadata.completedCount) ?? (status === "completed" ? 1 : 0);
-  const total = numberValue(metadata.totalCount) ?? (status === "completed" ? 1 : 0);
+  // P0-05: progress counts come from server-owned metadata only. A completed
+  // export/text row without counts reports 0/0 (UI hides the fraction) —
+  // fabricating 1/1 masked the absence of real progress facts.
+  const completed = numberValue(metadata.completedCount) ?? 0;
+  const total = numberValue(metadata.totalCount) ?? 0;
   const resultReferences = Array.isArray(metadata.results) ? metadata.results.map(String).filter(Boolean) : [];
   const inputParams = row.input_params || {};
   const workId = stringValue(metadata.workId) ?? stringValue(inputParams.workId);
@@ -83,7 +112,8 @@ export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: st
     const [textTasks, mediaJobs, exports] = await Promise.all([
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_tasks?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,step_key,phase_key,status,error_message,output_snapshot,created_at,started_at,completed_at,latency_ms&order=created_at.desc&limit=200`),
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,owner_id,project_id,job_type,status,error,input_params,result_url,result_metadata,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
-      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,export_type,status,created_at,updated_at,completed_at&order=created_at.desc&limit=200`),
+      // P0-05: storyflow_exports (baseline.sql:521) has no updated_at / completed_at columns.
+      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,export_type,status,created_at&order=created_at.desc&limit=200`),
     ]);
     const rawItems = [
       ...(textTasks || []).map((row) => mapLegacyJob({ ...row, job_type: "text" }, params.now)),
@@ -98,7 +128,7 @@ export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: st
     return { items, hasMore: false };
   } catch (error) {
     if (error instanceof V2JobsError) throw error;
-    throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable.");
+    throw toServiceJobsError(error);
   }
 }
 
@@ -109,7 +139,8 @@ export async function readUnifiedJob(params: { fetcher: JobsFetcher; userId: str
     const sources = await Promise.all([
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_tasks?id=eq.${encodeURIComponent(params.jobId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=id,user_id,project_id,step_key,phase_key,status,error_message,output_snapshot,created_at,started_at,completed_at,latency_ms&limit=1`),
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(params.jobId)}&owner_id=eq.${encodeURIComponent(params.userId)}&select=id,owner_id,project_id,job_type,status,error,input_params,result_url,result_metadata,created_at,updated_at,completed_at&limit=1`),
-      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?id=eq.${encodeURIComponent(params.jobId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=id,user_id,project_id,export_type,status,created_at,updated_at,completed_at&limit=1`),
+      // P0-05: no updated_at / completed_at — see listUnifiedJobs.
+      query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?id=eq.${encodeURIComponent(params.jobId)}&user_id=eq.${encodeURIComponent(params.userId)}&select=id,user_id,project_id,export_type,status,created_at&limit=1`),
     ]);
     const row = sources[0][0] || sources[1][0] || sources[2][0];
     if (!row) throw new V2JobsError("not_found", "Job not found.");
@@ -118,7 +149,7 @@ export async function readUnifiedJob(params: { fetcher: JobsFetcher; userId: str
     return { job: mapLegacyJob({ ...row, job_type: row.job_type || (row.export_type ? "export" : "text") }, params.now) };
   } catch (error) {
     if (error instanceof V2JobsError) throw error;
-    throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable.");
+    throw toServiceJobsError(error);
   }
 }
 
@@ -155,7 +186,7 @@ function stringValue(value: unknown): string | null {
 
 async function query<T>(fetcher: JobsFetcher, path: string): Promise<T> {
   try { return await fetcher<T>(path); }
-  catch (error) { if (error instanceof V2JobsError) throw error; throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable."); }
+  catch (error) { if (error instanceof V2JobsError) throw error; throw toServiceJobsError(error); }
 }
 
 async function readRetiredProjectIds(fetcher: JobsFetcher, projectIds: Array<string | null | undefined>): Promise<Set<string>> {
@@ -223,9 +254,10 @@ export async function transitionJob(params: {
     }
     // PATCH all three legacy tables; only the one holding the row updates.
     // jobs table also records cancelRequested in result_metadata.
+    // P0-05: tasks/jobs tables have completed_at; storyflow_exports does not.
     const taskBody = JSON.stringify({ status: "cancelled", completed_at: nowIso });
     const jobBody = JSON.stringify({ status: "cancelled", completed_at: nowIso, result_metadata: { cancelRequested: true } });
-    const exportBody = JSON.stringify({ status: "cancelled", completed_at: nowIso });
+    const exportBody = JSON.stringify({ status: "cancelled" });
     await Promise.all([
       patchRow(params.fetcher, `/rest/v1/storyflow_generation_tasks?id=eq.${encJobId}&user_id=eq.${encUserId}`, taskBody),
       patchRow(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encJobId}&owner_id=eq.${encUserId}`, jobBody),
@@ -244,7 +276,7 @@ export async function transitionJob(params: {
     }
     const taskBody = JSON.stringify({ status: "queued", error_message: null, completed_at: null });
     const jobBody = JSON.stringify({ status: "queued", error: null, completed_at: null });
-    const exportBody = JSON.stringify({ status: "queued", completed_at: null });
+    const exportBody = JSON.stringify({ status: "queued" });
     await Promise.all([
       patchRow(params.fetcher, `/rest/v1/storyflow_generation_tasks?id=eq.${encJobId}&user_id=eq.${encUserId}`, taskBody),
       patchRow(params.fetcher, `/rest/v1/storyflow_generation_jobs?id=eq.${encJobId}&owner_id=eq.${encUserId}`, jobBody),
@@ -263,6 +295,6 @@ async function patchRow(fetcher: JobsFetcher, path: string, body: string): Promi
     await fetcher(path, { method: "PATCH", body, headers: { "Content-Type": "application/json" } });
   } catch (error) {
     if (error instanceof V2JobsError) throw error;
-    throw new V2JobsError("service_unavailable", error instanceof Error ? error.message : "Job service unavailable.");
+    throw toServiceJobsError(error);
   }
 }

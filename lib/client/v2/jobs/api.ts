@@ -6,9 +6,8 @@
  * 真实模式对接 Codex 的 GET /api/v2/jobs（统一任务列表），
  * Codex GenerationJob DTO 在此映射为 TRAE UnifiedJob。
  *
- * 写操作（cancel/retry）：Codex v2 暂未提供 POST 端点，
- * - cancel 复用 1.0 POST /api/production/jobs action=cancel；
- * - retry 抛 not_implemented，待 Codex 提供 POST /api/v2/jobs/[id]/retry 后接入。
+ * 写操作（cancel/retry）：PATCH /api/v2/jobs/[id] {action}（K22 Task 0.3
+ * transitionJob 状态机，覆盖 text/media/export 三类表）。
  *
  * 错误处理：解析 Codex 的 { success:false, error, code }，
  * 抛出带 code 的 JobsApiError，便于 UI 区分 401/503 等场景。
@@ -27,10 +26,8 @@ export interface JobsResult {
   source: "fixture" | "api";
 }
 
-/** Codex v2 任务列表 / 详情 API（GET） */
+/** Codex v2 任务列表 / 详情 / 写操作 API */
 const API_BASE = "/api/v2/jobs";
-/** 1.0 任务写操作 API（cancel 复用，POST action 模式） */
-const LEGACY_WRITE_API = "/api/production/jobs";
 
 // ============ Codex GenerationJob DTO（contracts/v2 镜像，仅用于 API 响应解析） ============
 
@@ -46,7 +43,30 @@ type CodexJobStatus =
   | "failed"
   | "cancelled";
 type CodexJobAction = "retry" | "cancel" | "view_details" | "view_results";
-type CodexErrorCode = "unauthenticated" | "forbidden" | "not_found" | "validation_failed" | "service_unavailable";
+type CodexErrorCode =
+  | "unauthenticated"
+  | "forbidden"
+  | "not_found"
+  | "validation_failed"
+  | "service_unavailable"
+  | "schema_not_deployed"
+  | "rate_limited"
+  | "provider_failed";
+
+/**
+ * P0-05/P1-03: 用户可见错误统一中文可行动文案。服务端只回安全 code +
+ * 英文 message；此处按 code 映射中文，避免英文内部文案直接抛给用户。
+ */
+const ZH_MESSAGE_BY_CODE: Record<string, string> = {
+  unauthenticated: "请先登录后再查看任务。",
+  forbidden: "没有权限查看该任务。",
+  not_found: "任务不存在或已被移除。",
+  validation_failed: "当前任务状态不支持该操作。",
+  service_unavailable: "任务服务暂时不可用，请稍后重试。",
+  schema_not_deployed: "任务服务的数据结构尚未就绪，请稍后重试。",
+  rate_limited: "操作过于频繁，请稍后重试。",
+  provider_failed: "生成服务暂时不可用，请稍后重试。",
+};
 
 interface CodexJobTiming {
   elapsedSeconds: number;
@@ -268,13 +288,13 @@ function getFixtureModule(): Promise<typeof import("./fixtures.ts")> {
   return fixtureModulePromise;
 }
 
-/** 从 Codex 错误响应构造 JobsApiError（含 HTTP 状态码回退） */
+/** 从 Codex 错误响应构造 JobsApiError（含 HTTP 状态码回退 + 中文文案映射） */
 function buildApiError(
   payload: unknown,
   httpStatus: number,
   fallbackMessage: string,
 ): JobsApiError {
-  const errPayload = payload as CodexErrorResponse | null;
+  const errPayload = payload as (CodexErrorResponse & { requestId?: string | null }) | null;
   const code: CodexErrorCode =
     errPayload?.code ||
     (httpStatus === 401
@@ -286,7 +306,8 @@ function buildApiError(
           : httpStatus === 422
             ? "validation_failed"
             : "service_unavailable");
-  const message = errPayload?.error || fallbackMessage;
+  // 服务端英文 message 仅作兜底；已知 code 一律显示中文可行动文案
+  const message = ZH_MESSAGE_BY_CODE[code] ?? errPayload?.error ?? fallbackMessage;
   return new JobsApiError(message, code, httpStatus);
 }
 
@@ -368,11 +389,36 @@ export async function fetchJobs(
 }
 
 /**
- * 取消任务。
- * Codex v2 暂无 POST 端点，复用 1.0 POST /api/production/jobs action=cancel。
- * 1.0 仅能取消 storyflow_generation_jobs 表的行（media 类），
- * text/export 类任务的取消可能不生效，由后端返回 not_found 时 UI 提示。
+ * 任务写操作（cancel/retry）统一走服务端 PATCH /api/v2/jobs/[id]
+ * （K22 Task 0.3 的 transitionJob 状态机，覆盖 text/media/export 三类表）。
+ * 不再复用 1.0 POST /api/production/jobs（仅覆盖 media 表）。
  */
+async function transitionJobRequest(
+  jobId: string,
+  action: "cancel" | "retry",
+  accessToken: string | null,
+  failureMessage: string,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/${encodeURIComponent(jobId)}`, {
+      method: "PATCH",
+      headers: buildHeaders(accessToken),
+      body: JSON.stringify({ action }),
+    });
+  } catch (err) {
+    throw new JobsApiError(
+      err instanceof Error ? `网络错误：${err.message}` : failureMessage,
+      "network_error",
+    );
+  }
+  const payload = (await parseJsonSafely(response)) as { success?: boolean } | null;
+  if (!response.ok || !payload?.success) {
+    throw buildApiError(payload, response.status, failureMessage);
+  }
+}
+
+/** 取消任务（queued/running/result_ingesting → cancelled，服务端状态机校验）。 */
 export async function cancelJob(
   jobId: string,
   accessToken?: string | null,
@@ -381,36 +427,10 @@ export async function cancelJob(
     await new Promise((resolve) => setTimeout(resolve, 80));
     return;
   }
-  let response: Response;
-  try {
-    response = await fetch(LEGACY_WRITE_API, {
-      method: "POST",
-      headers: buildHeaders(accessToken || null),
-      body: JSON.stringify({ action: "cancel", jobId }),
-    });
-  } catch (err) {
-    throw new JobsApiError(
-      err instanceof Error ? `网络错误：${err.message}` : "取消任务失败，网络异常。",
-      "network_error",
-    );
-  }
-  const payload = (await parseJsonSafely(response)) as
-    | { success?: boolean; error?: string }
-    | null;
-  if (!response.ok || !payload?.success) {
-    throw buildApiError(
-      payload,
-      response.status,
-      "取消任务失败，请稍后再试。",
-    );
-  }
+  await transitionJobRequest(jobId, "cancel", accessToken || null, "取消任务失败，请稍后再试。");
 }
 
-/**
- * 重试任务（失败 / 部分失败）。
- * Codex v2 与 1.0 均未提供 retry 写端点，当前抛 not_implemented，
- * UI 会显示该错误；待 Codex 提供 POST /api/v2/jobs/[id]/retry 后接入。
- */
+/** 重试任务（failed/partial_failure → queued，服务端状态机校验）。 */
 export async function retryJob(
   jobId: string,
   accessToken?: string | null,
@@ -419,11 +439,5 @@ export async function retryJob(
     await new Promise((resolve) => setTimeout(resolve, 80));
     return;
   }
-  // 预留：未来接入 Codex POST /api/v2/jobs/[id]/retry
-  void jobId;
-  void accessToken;
-  throw new JobsApiError(
-    "重试任务尚未实现，请在原工作台重新发起。",
-    "service_unavailable",
-  );
+  await transitionJobRequest(jobId, "retry", accessToken || null, "重试任务失败，请稍后再试。");
 }

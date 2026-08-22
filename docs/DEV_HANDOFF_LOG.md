@@ -1,5 +1,36 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 1（P0-05 任务中心 schema 对齐）
+
+**分支：** `fix/K22-p0p1-trust`（base: origin/main `b3ba9c1a`）；**PRD：** `/Users/kiikis000/Downloads/KIIKIS_P0_P1_Fix_PRD_v1.0.md`；**计划：** `docs/superpowers/plans/2026-08-22-kiikis-p0p1-trust-fix.md`
+
+### 根因
+
+`storyflow_exports`（baseline.sql:521）只有 id/user_id/project_id/export_type/format/storage_path/metadata/created_at/file_url/payload_json/status —— **没有 `updated_at`/`completed_at`**。这两列只存在于未应用的 `supabase/migrations/drafts/20260718020000_exports_compliance_fields.sql`（draft 目录不执行）。而任务中心：
+
+1. `lib/server/v2/jobs/index.ts` 的列表/详情 select 均带 `updated_at,completed_at` → PostgREST 400 PGRST204。
+2. `jobsErrorResponse` 把 `SUPABASE_SERVICE_ERROR:400:{...}` 原文塞进响应体 → 原始 SQL 泄露到页面。
+3. `transitionJob` cancel/retry 对 exports 表 PATCH `completed_at`（不存在的列）。
+4. completed 行无 metadata 计数时伪造 `1/1` 进度。
+5. 客户端 cancelJob 仍走 1.0 POST /api/production/jobs（只覆盖 media 表）；retryJob 直接抛"尚未实现"——而服务端 PATCH /api/v2/jobs/[id] 状态机（Task 0.3）已存在但未接线。
+
+### 变更
+
+- `lib/server/v2/jobs/index.ts`：exports select/PATCH 去掉不存在列；错误包装走 `classifyServiceError`（PGRST204/205/206 → `schema_not_deployed`，原始 payload 只进服务端日志）；V2JobsError 增加 `schema_not_deployed/rate_limited/provider_failed` code 与 requestId；completed 无计数 → 0/0（不伪造）。
+- `lib/server/v2/jobs/http.ts`：扩展 code→HTTP 映射；未知错误不再回显原始 message；响应带 requestId。
+- `lib/client/v2/jobs/api.ts`：错误码→中文可行动文案映射；cancel/retry 重接线到 `PATCH /api/v2/jobs/[id] {action}`。
+- `app/job-center/[jobId]/page.tsx`：修复 `payload?.error || isZh ? zh : en` 三元优先级（原先永远丢弃服务端错误）。
+
+### 验证
+
+`node --test tests/server-v2/jobs/jobs.test.mjs tests/ui-v2/task-center/api-adapter.test.mjs` → 58 pass 0 fail；`tests/contracts-v22/p0p1-trust-contracts.test.mjs` 中 P0-05 两断言转 GREEN；`npx tsc --noEmit` 0 错误；`git diff --check` 干净。无 migration、无数据写入。
+
+### 已知风险 / 遗留
+
+1. **exports 合规流超出本切片**：`app/api/exports/request|status|download` 与 `lib/exports/types.ts` 仍按 draft-only 的 14 列（jurisdiction_profile、updated_at 等）读写 → 这些路由在线上会 500/写失败。需专项决策：要么升格 draft migration（staging 先行），要么把合规字段折叠进已存在的 `metadata` jsonb。
+2. **基线预存失败**（非本切片引入）：`tests/ui-v2/task-center/task-center.test.mjs` 的 computeStats byStatus/byType 两断言在 origin/main 上即失败（fixture 统计漂移 17≠18）。
+3. `storyflow_exports` 的 RLS 已 REVOKE 写权限（hardening migration），任务中心 PATCH 走 serviceFetch（service role）不受影响；如未来改用户态 fetcher 需重新评估。
+
 ## 2026-07-19 01:28 +08 - TRAE / KIIKIS-TR-ACTOR-P0-005 演员图组生成 400/502 修复
 
 ### 根因
