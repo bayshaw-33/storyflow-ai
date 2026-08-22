@@ -1,5 +1,30 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 4（P0-04 标题+正文原子保存）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+ScreenplayStudio 的 `handleTitleChange` 只更新本地 React state；保存按钮只 POST 正文；保存成功后的 `getUnit` 刷新用服务器旧标题覆盖本地（用户看到标题"跳回"）。标题改动也不标记 unsaved，未保存守卫对标题失效。`updateUnitIdentity` PATCH 端点与客户端函数一直存在但零调用。
+
+### 变更
+
+- `components/v2/screenplay-studio/ScreenplayStudio.tsx`：
+  - 新增 `titleDrafts: Record<unitId, title>` 草稿态；标题编辑 → 记草稿 + `onUnsavedChange(true)`。
+  - `saveActiveUnit`：标题脏 → 先 `updateUnitIdentity` PATCH → 再 `saveUnitContent` POST（CAS baseVersionId 不变）→ 全部成功才 `getUnit` 刷新并清草稿；任一步失败进入 catch，不刷新、不覆盖本地标题/正文，unsaved 保持 true。
+  - 保存失败信息附 request ID（ScreenplayStudioApiError.requestId）。
+- 新测试 `tests/ui-v2/screenplay-studio/title-persistence.test.mjs`（4 断言：标题标记 unsaved、identity PATCH 先于 content POST、刷新在二者之后、catch 路径不重置本地态）。
+
+### 验证
+
+title-persistence 4 pass；Gate A "screenplay studio persists the edited title" 转 GREEN；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. 服务端 `saveUnitContent` 内部仍是"插版本→插依赖边→PATCH 指针"三个串行请求（无事务）；失败窗口可能留下未被指向的版本行（append-only，不影响正确性但占存储）。DB 端 RPC 化可彻底消除，属后续项。
+2. 嵌入式工作台的保存徽标（未保存/保存中/已保存）由 ProductionWorkbench 传入；独立 /script 页无徽标，未在本切片扩 UI。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 3（P0-03 Universe 认证一致）
 
 **分支：** `fix/K22-p0p1-trust`

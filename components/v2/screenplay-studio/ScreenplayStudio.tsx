@@ -104,6 +104,8 @@ export function ScreenplayStudio({
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
   const [activeContent, setActiveContent] = useState("");
   const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
+  // P0-04：按 unitId 记录未持久化的标题草稿（存在即脏）
+  const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -330,8 +332,12 @@ export function ScreenplayStudio({
     (title: string) => {
       if (!activeUnit) return;
       setUnits((prev) => prev.map((u) => (u.id === activeUnit.id ? { ...u, title } : u)));
+      // P0-04：标题改动同样是未保存状态；此前标题只进本地 state，
+      // 保存按钮不感知、离开也不被未保存守卫拦截。
+      setTitleDrafts((prev) => ({ ...prev, [activeUnit.id]: title }));
+      onUnsavedChange?.(true);
     },
-    [activeUnit],
+    [activeUnit, onUnsavedChange],
   );
 
   const saveActiveUnit = useCallback(async () => {
@@ -339,23 +345,40 @@ export function ScreenplayStudio({
     setSaving(true);
     setConflict(null);
     try {
+      // P0-04：标题与正文一起保存。标题脏时先 PATCH identity（任一步失败
+      // 整体按失败处理，不做服务器回写，本地输入全部保留），
+      // 成功后才 POST 正文并做一次刷新 —— 修复"保存后标题被服务器
+      // 旧值回滚"。
+      const titleDraft = titleDrafts[activeUnit.id];
+      if (titleDraft !== undefined) {
+        await screenplayStudioApi.updateUnitIdentity(workId, activeUnit.id, { title: titleDraft });
+      }
       await screenplayStudioApi.saveUnitContent(workId, activeUnit.id, {
         content: { body: activeContent },
         baseVersionId: activeUnit.currentVersionId,
       });
       const { unit } = await screenplayStudioApi.getUnit(workId, activeUnit.id);
       setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
+      setTitleDrafts((prev) => {
+        if (!(activeUnit.id in prev)) return prev;
+        const next = { ...prev };
+        delete next[activeUnit.id];
+        return next;
+      });
       onUnsavedChange?.(false);
     } catch (error) {
       if (error instanceof ScreenplayStudioApiError && error.status === 409) {
         setConflict({ currentVersionId: error.currentVersionId ?? null });
       } else {
-        setLoadError(error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "保存失败");
+        const requestId = error instanceof ScreenplayStudioApiError && error.requestId ? `（request ID: ${error.requestId}）` : "";
+        setLoadError(
+          (error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "保存失败") + requestId,
+        );
       }
     } finally {
       setSaving(false);
     }
-  }, [workId, activeUnit, activeContent, onUnsavedChange]);
+  }, [workId, activeUnit, activeContent, titleDrafts, onUnsavedChange]);
 
   const confirmUsable = useCallback(async () => {
     if (!workId || !activeUnit?.currentVersionId) {
