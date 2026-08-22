@@ -44,10 +44,71 @@ export async function listProjectLibrary(
   const artRows = settledRows(childResults[1]);
   const viralRows = settledRows(childResults[2]);
 
+  // P1-01：以真实 Work/Unit 事实聚合进度与空壳标记。
+  // - works 覆盖全部 base 项目：无任何 Work 行 → possiblyEmpty（候选清理标记，不删除）
+  // - 剧本 Work 的 screenplay units：usable(readiness∈{checkpoint,finalized})/total
+  // 查询失败降级为不附加事实（进度显示"暂无可计算进度"，不伪造）。
+  const baseIds = projects.map((project) => project.id).filter(Boolean);
+  let factsByProject = new Map<string, { screenplayUnits?: { total: number; usable: number }; possiblyEmpty?: boolean }>();
+  if (baseIds.length) {
+    try {
+      const idFilter = `(${baseIds.map(encodeURIComponent).join(",")})`;
+      const workRows = await fetcher<Array<{ id: string; project_id: string | null; work_type: string | null }>>(
+        `/rest/v1/storyflow_works?project_id=in.${idFilter}&owner_id=eq.${owner}&select=id,project_id,work_type&order=created_at.asc&limit=400`,
+      );
+      const worksByProject = new Map<string, Array<{ id: string; work_type: string | null }>>();
+      for (const work of Array.isArray(workRows) ? workRows : []) {
+        const key = String(work.project_id ?? "");
+        if (!key) continue;
+        if (!worksByProject.has(key)) worksByProject.set(key, []);
+        worksByProject.get(key)!.push({ id: work.id, work_type: work.work_type ?? null });
+      }
+      const scriptWorkIds = [...worksByProject.values()].flat()
+        .filter((work) => work.work_type === "script").map((work) => work.id);
+      const unitsByWork = new Map<string, Array<{ readiness: string | null }>>();
+      if (scriptWorkIds.length) {
+        const unitRows = await fetcher<Array<{ work_id: string; readiness: string | null }>>(
+          `/rest/v1/storyflow_screenplay_units?work_id=in.(${scriptWorkIds.map(encodeURIComponent).join(",")})&select=work_id,readiness&limit=2000`,
+        );
+        for (const unit of Array.isArray(unitRows) ? unitRows : []) {
+          if (!unitsByWork.has(unit.work_id)) unitsByWork.set(unit.work_id, []);
+          unitsByWork.get(unit.work_id)!.push({ readiness: unit.readiness ?? null });
+        }
+      }
+      for (const project of projects) {
+        const works = worksByProject.get(project.id) ?? [];
+        const entry: { screenplayUnits?: { total: number; usable: number }; possiblyEmpty?: boolean } = {};
+        entry.possiblyEmpty = works.length === 0;
+        const scriptUnits = works
+          .filter((work) => work.work_type === "script")
+          .flatMap((work) => unitsByWork.get(work.id) ?? []);
+        if (scriptUnits.length) {
+          entry.screenplayUnits = {
+            total: scriptUnits.length,
+            usable: scriptUnits.filter((unit) => unit.readiness === "checkpoint" || unit.readiness === "finalized").length,
+          };
+        }
+        factsByProject.set(project.id, entry);
+      }
+    } catch {
+      factsByProject = new Map();
+    }
+  }
+
   return [...projects, ...productionRows.map(productionRow), ...artRows.map(artRow), ...viralRows.map(viralRow)]
+    .map((project) => {
+      const facts = factsByProject.get(project.id);
+      if (!facts) return project;
+      return {
+        ...project,
+        ...(facts.screenplayUnits ? { screenplayUnits: facts.screenplayUnits } : {}),
+        ...(facts.possiblyEmpty ? { possiblyEmpty: true } : {}),
+      } as ProjectLibraryProject;
+    })
     .filter((project) => !isRetiredNovelRecord(project))
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
+
 
 function settledRows(result: PromiseSettledResult<Row[]>): Row[] {
   return result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
@@ -106,7 +167,7 @@ function artRow(row: Row): ProjectLibraryProject {
     id: `art-${id}`,
     title: stringValue(row.name) || "未命名美术项目",
     workflowType: "art",
-    status: stringValue(row.status) === "archived" ? "draft" : "ready",
+    status: stringValue(row.status) === "archived" ? "archived" : "ready",
     universeId: stringValue(row.universe_id) || null,
     createdAt: dateValue(row.created_at),
     updatedAt: dateValue(row.updated_at),
@@ -155,7 +216,8 @@ function normalizeProductionWorkflow(workflowType: unknown, mode: unknown) {
 }
 
 function normalizeStatus(value: unknown) {
-  if (value === "ready" || value === "generating" || value === "error") return value;
+  // P1-01：archived 独立保留（归档不删除任何数据，见 PRD §5 P1-01）
+  if (value === "ready" || value === "generating" || value === "error" || value === "archived") return value;
   return "draft";
 }
 

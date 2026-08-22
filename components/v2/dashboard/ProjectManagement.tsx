@@ -61,8 +61,11 @@ const WORKFLOW_LABELS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   draft: "草稿",
   generating: "生成中",
-  ready: "已完成",
+  // P1-01：ready 表示"工作台就绪/有产出"，不是"已完成"——
+  // 不能与"暂无可计算进度"同时出现在一张卡上误导用户
+  ready: "可进入制作",
   error: "需要处理",
+  archived: "已归档",
 };
 
 const JOB_STAGE_LABELS: Record<string, string> = {
@@ -303,9 +306,18 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
                         <span><Clock3 size={13} />{formatDate(project.updatedAt)}</span>
                       </div>
                       <div className={styles.projectCardProgress}>
-                        <span>{progress === null ? "暂无可计算进度" : `${progress}% 已完成`}</span>
+                        <span>{progress === null ? "暂无可计算进度" : progress === 0 ? "尚未开始" : `${progress}% 已完成`}</span>
                         {progress !== null ? <span className={styles.progressTrack}><i style={{ width: `${progress}%` }} /></span> : null}
                       </div>
+                      {project.possiblyEmpty ? (
+                        <span
+                          className={styles.statusBadge}
+                          title="该项目没有任何工作台数据（无 Work 行），疑似历史空壳项目；仅作候选清理标记，不会自动删除。"
+                          style={{ alignSelf: "flex-start", marginTop: 4, cursor: "help" }}
+                        >
+                          疑似空项目
+                        </span>
+                      ) : null}
                       <span className={styles.projectCardAction}>打开项目 <ArrowRight size={14} /></span>
                     </Link>
                     <button

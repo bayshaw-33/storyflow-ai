@@ -1,5 +1,33 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 8（P1-01 真实进度与状态整理）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+1. 进度只认 legacy 向导文本字段（idea/brief/characters/…），V2 剧本项目的真实事实源 storyflow_screenplay_units 从不参与计算 → 恒 null/0%。
+2. `STATUS_LABELS.ready = "已完成"`（语义是"工作台就绪"）与"暂无可计算进度"并存于一张卡。
+3. normalizeStatus 把 archived 压成 draft；artRow 归档信息丢失。
+4. 无空壳项目标记（PRD 要求候选清理标记，不删除）。
+
+### 变更
+
+- `lib/server/v2/project-library/index.ts` listProjectLibrary：批量查 storyflow_works（全部 base 项目）+ storyflow_screenplay_units（script Works）→ 每项目附 `screenplayUnits {total, usable}`（usable = readiness∈{checkpoint,finalized}，规则可审计）与 `possiblyEmpty`（无任何 Work 行）；查询失败降级为不附事实（不伪造）。normalizeStatus/artRow 保留 archived。
+- `lib/client/v2/project-library/types.ts`：新增 screenplayUnits / possiblyEmpty 字段。
+- `lib/client/v2/project-library/helpers.ts` getProjectProgress：screenplayUnits 优先（total=0 → null）；legacy 字段回退；其余 workflow 无事实 → null。
+- `components/v2/dashboard/ProjectManagement.tsx`：ready → "可进入制作"、archived → "已归档"；progress 0 → "尚未开始"；空壳项目显示"疑似空项目"标记（tooltip 说明仅候选、不自动删除）。
+- 重命名能力已存在（项目卡内联编辑标题，未改动）；单项目删除为既有产品能力（带确认），本切片未触碰（PRD 仅禁止批量清理）。
+
+### 验证
+
+新测试 `tests/contracts-v22/p0p1-real-progress.test.mjs` 6 断言全 GREEN；project-library/dashboard 套件 31 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. 进度聚合对大账户增加 2 个批量查询（works ≤400 / units ≤2000，in-filter）；超出上限的账户进度退化为"暂无可计算进度"（诚实但不精确），分页化属后续项。
+2. song/art/storyboard/video 等 workflow 的进度事实源（各自 Work/Job 状态）未接入 —— 显示"暂无可计算进度"，符合 PRD"缺少可计算事实"的诚实要求。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 7（P1-06 遗留入口不丢 projectId）
 
 **分支：** `fix/K22-p0p1-trust`

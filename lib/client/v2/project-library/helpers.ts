@@ -44,6 +44,15 @@ function isRetiredNovelProject(project: ProjectLibraryProject) {
 }
 
 export function getProjectProgress(project: ProjectLibraryProject): number | null {
+  // P1-01：优先用真实节点事实（storyflow_screenplay_units 聚合，
+  // usable = readiness ∈ {checkpoint, finalized}）。规则可审计：
+  // progress = round(usable / total * 100)；total=0 → null（尚无可计算进度）。
+  if (project.screenplayUnits) {
+    const { total, usable } = project.screenplayUnits;
+    if (!Number.isFinite(total) || total <= 0) return null;
+    return Math.round((Math.min(usable, total) / total) * 100);
+  }
+
   const fields = project.workflowType === "continuation"
     ? CONTINUATION_PROGRESS_FIELDS
     : project.workflowType === "creation"

@@ -33,6 +33,13 @@ export type ProjectLibraryProject = {
   sourceProjectId?: string | null;
   sourceUnitId?: string | null;
   libraryKey?: string;
+  /**
+   * P1-01：剧本项目进度事实（storyflow_screenplay_units 聚合）。
+   * usable = readiness ∈ {checkpoint, finalized}。total=0 表示尚无可计算事实。
+   */
+  screenplayUnits?: { total: number; usable: number } | null;
+  /** P1-01：无任何 Work 行的空壳项目候选（仅标记，不删除）。 */
+  possiblyEmpty?: boolean;
 };
 
 export function toProjectLibraryRecord(
