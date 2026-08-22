@@ -1,5 +1,30 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 6（P0-06 确认式项目创建）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+Phase 0 Task 0.2 删除了多步创建流，模块卡 onClick 直接调用 startProject：默认标题"未命名X"落库、每次点击生成新幂等键（顺序重试不去重）、取消/关闭/返回时 Project/Work/project_starts 行已提交。
+
+### 变更
+
+- `components/v2/project-start/ProjectStartFlow.tsx` 重写为确认式：
+  - 点击模块 → 打开确认面板（项目名输入，placeholder=默认标题；起始模块固定展示；Universe 可选下拉，列表加载失败降级为"稍后绑定"提示不阻塞）。
+  - 取消/点击遮罩 → 只清本地状态，零 API、零导航；失败重试保留输入并复用同一幂等键（idempotencyKeyRef，成功后才丢弃）。
+  - 确认创建 → startProject（服务端原子 RPC create_project_with_primary_work 不变）。
+- 新测试 `tests/contracts-v22/p0p1-project-start-confirm.test.mjs`（5 断言：点击不开 API、面板三要素、取消零副作用、幂等键复用、确认按钮才触发）。
+
+### 验证
+
+p0p1-project-start-confirm 5 pass；Gate A "module card click opens a confirmation step" 转 GREEN；v2-e2e/creation-handoff 49 pass；`npx tsc --noEmit` 0 错误。PRD 验收（20 次取消零持久对象）待部署后线上核对——结构上取消路径无任何网络调用，必然满足。
+
+### 已知风险 / 遗留
+
+1. 服务端 route 在缺 Idempotency-Key 头时仍自动生成（兜底直接 API 调用者）；客户端现在总是带键。收紧为 400 属破坏性变更，未在本轮做。
+2. 历史空壳项目的"候选清理"标记在 P1-01 切片实现；本切片不清理数据（PRD §9）。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 5（P0-02 路由与自由进入）
 
 **分支：** `fix/K22-p0p1-trust`
