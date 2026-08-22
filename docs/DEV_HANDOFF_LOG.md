@@ -1,5 +1,31 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 10（P1-03 全局 KK 状态降噪）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+1. `app/layout.tsx` 恒传 `<KkRuntimeProvider allowFixtureFallback>` —— 生产环境 offline 时也触发兜底加载。
+2. 状态条只有红色"KK 服务离线"：无影响范围、无最近成功时间；未登录与服务故障共用同一文案（登录态误判）。
+3. 遮挡主体是 FAB 面板内状态条随每次打开常驻（P0-01 修复后 503 伪离线大幅减少，本切片进一步降噪文案与准确度）。
+
+### 变更
+
+- `components/v2/kk/KkRuntimeProvider.tsx`：context 新增 `lastSuccessAt`（bootstrap 与补拉成功时更新）。
+- `components/v2/kk/KkPanel.tsx`：新增 errorCode/lastSuccessAt props；unauthenticated → "请先登录后使用 KK（实时推送需要登录）"；故障 → "实时推送暂停，历史消息仍可查看 · 最近成功 HH:MM"；重试按钮保留。
+- `components/v2/kk/KkCompanion.tsx`：透传 errorCode/lastSuccessAt。
+- `app/layout.tsx`：`allowFixtureFallback={process.env.NODE_ENV === "development"}`（生产不再触发兜底加载）。
+
+### 验证
+
+新测试 `tests/contracts-v22/p0p1-kk-status.test.mjs` 4 断言 GREEN；kk runtime/api 套件 46 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. 页面级登录状态文案统一为"以 supabase session 为唯一事实源"的原则性修复（DiscoveryFeed/P0-01 已做）；其余页面零散文案（如 ArtWorkbench 的"请先登录后再使用 KK 美术助理"）在真实未登录时仍准确，保留。
+2. FAB 位置（右下 z-40 低于 modal）符合"不遮挡关键操作"，未改动。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 9（P1-02 版本面板与恢复）
 
 **分支：** `fix/K22-p0p1-trust`

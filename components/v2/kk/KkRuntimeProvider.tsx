@@ -58,6 +58,8 @@ import {
 export interface KkRuntimeContextValue {
   /** K21-KK-003 连接状态机 */
   readonly connectionState: KkConnectionState;
+  /** P1-03：最近一次成功 bootstrap/补拉的时间戳（ms）；null=尚无成功记录 */
+  readonly lastSuccessAt: number | null;
   /** K21-KK-020 账号级 profile */
   readonly profile: KkRuntimeResponse["profile"] | null;
   /** K21-KK-021 净持有 */
@@ -112,6 +114,7 @@ const DEFAULT_SETTINGS: KkSettings = {
 
 const DEFAULT_CONTEXT: KkRuntimeContextValue = {
   connectionState: "connecting",
+    lastSuccessAt: null,
   profile: null,
   entitlements: [],
   taskProjection: DEFAULT_TASK_PROJECTION,
@@ -160,6 +163,8 @@ export function KkRuntimeProvider({
   allowFixtureFallback = true,
 }: KkRuntimeProviderProps) {
   const [connectionState, setConnectionState] = useState<KkConnectionState>("connecting");
+  // P1-03：最近成功时间（用于状态条降噪展示）
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
   const [runtime, setRuntime] = useState<KkRuntimeResponse | null>(null);
   const [events, setEvents] = useState<KkEventEntry[]>([]);
   const [error, setError] = useState<KkRuntimeClientError | null>(null);
@@ -280,6 +285,7 @@ export function KkRuntimeProvider({
       setLastSequence(data.serverCursor);
       setConnectionState("live");
       setError(null);
+      setLastSuccessAt(Date.now());
     } catch (err) {
       if (generation !== sessionGeneration.current) return;
       const clientErr =
@@ -332,6 +338,7 @@ export function KkRuntimeProvider({
       }
       // 拉取成功 → live
       setConnectionState((prev) => (prev === "live" ? "live" : "polling"));
+      setLastSuccessAt(Date.now());
     } catch (err) {
       if (generation !== sessionGeneration.current) return;
       if (err instanceof KkRuntimeClientError) {
@@ -427,6 +434,7 @@ export function KkRuntimeProvider({
       (connectionState === "live" && legacySource === "fixture");
     return {
       connectionState,
+      lastSuccessAt,
       profile: runtime?.profile ?? null,
       entitlements: runtime?.entitlements ?? [],
       taskProjection: runtime?.taskProjection ?? DEFAULT_TASK_PROJECTION,
@@ -449,6 +457,7 @@ export function KkRuntimeProvider({
     runtime,
     events,
     lastSequence,
+    lastSuccessAt,
     error,
     connectionState,
     forceEnabled,

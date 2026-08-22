@@ -23,6 +23,10 @@ interface KkPanelProps {
   connectionState?: KkConnectionState;
   /** K21-KK-002 启动错误信息（offline 时展示给用户） */
   errorMessage?: string | null;
+  /** P1-03：稳定错误码 —— unauthenticated 与服务故障的文案分开 */
+  errorCode?: string | null;
+  /** P1-03：最近一次成功同步的时间戳（ms） */
+  lastSuccessAt?: number | null;
   onClose: () => void;
   onRead: (id: string) => void;
   onChangeFrequency: (freq: KkFrequency) => void;
@@ -40,6 +44,8 @@ export function KkPanel({
   loading,
   connectionState = "live",
   errorMessage,
+  errorCode = null,
+  lastSuccessAt = null,
   onClose,
   onRead,
   onChangeFrequency,
@@ -52,7 +58,12 @@ export function KkPanel({
   const muted = isMuted(settings);
 
   // K21-KK-003: 根据 connectionState 显示状态条
+  // P1-03：降噪 + 准确 —— 未登录与故障分开；说明受影响能力与最近成功时间
   const showOfflineBar = connectionState === "offline" || connectionState === "reconnecting";
+  const unauthenticated = errorCode === "unauthenticated";
+  const lastSuccessLabel = lastSuccessAt
+    ? new Date(lastSuccessAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
   const showPollingBar = connectionState === "polling";
 
   return (
@@ -88,12 +99,23 @@ export function KkPanel({
       {/* 连接状态条 */}
       {showOfflineBar && (
         <div className={styles.connectionBar} role="status">
-          <WifiOff size={12} />
-          <span>
-            {connectionState === "offline"
-              ? (isZh ? "KK 服务离线" : "KK offline")
-              : (isZh ? "正在重连..." : "Reconnecting...")}
-          </span>
+          {unauthenticated ? (
+            <>
+              <WifiOff size={12} />
+              <span>{isZh ? "请先登录后使用 KK（实时推送需要登录）" : "Sign in to use KK realtime"}</span>
+            </>
+          ) : (
+            <>
+              <WifiOff size={12} />
+              <span>
+                {connectionState === "offline"
+                  ? (isZh ? "实时推送暂停" : "Realtime paused")
+                  : (isZh ? "正在重连..." : "Reconnecting...")}
+                {isZh ? "，历史消息仍可查看" : ""}
+                {lastSuccessLabel ? (isZh ? ` · 最近成功 ${lastSuccessLabel}` : ` · last ok ${lastSuccessLabel}`) : ""}
+              </span>
+            </>
+          )}
           {errorMessage && (
             <span className={styles.connectionError} title={errorMessage}>
               {isZh ? "（点击刷新重试）" : " (click refresh to retry)"}

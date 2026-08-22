@@ -95,6 +95,8 @@ export function KkCompanion() {
         loading={loading}
         connectionState={runtime.connectionState}
         errorMessage={runtime.error?.message ?? null}
+        errorCode={runtime.error?.code ?? null}
+        lastSuccessAt={runtime.lastSuccessAt}
         onClose={() => setOpen(false)}
         onRead={handleRead}
         onChangeFrequency={handleChangeFrequency}
