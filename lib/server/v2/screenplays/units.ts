@@ -114,12 +114,8 @@ export class ScreenplayUnitsService {
     if (typeof params.order !== "number" || !Number.isInteger(params.order) || params.order < 0) {
       throw new ScreenplayUnitsError("validation_failed", "order must be a non-negative integer.");
     }
-    if (!params.allowIncomplete) {
-      const existing = await this.readUnits(params.workId);
-      if (!canCreateUnitAfter(existing, params.type)) {
-        throw new ScreenplayUnitsError("validation_failed", creationGateMessage(params.type));
-      }
-    }
+    // P0-02（PRD §2.2）：五个剧本节点自由创建；上游未确认只构成
+    // 非阻塞的上下文建议，不再是服务端门禁。
     if (params.parentId) {
       const parent = await this.readUnit(params.workId, params.parentId);
       void parent;
@@ -528,27 +524,6 @@ function beatsToText(beats: unknown): string {
     })
     .filter((line) => line.trim())
     .join("\n");
-}
-
-function isUsableCheckpoint(row: Pick<UnitRow, "readiness" | "finalized_version_id">): boolean {
-  return row.readiness === "checkpoint" || (row.readiness === "finalized" && Boolean(row.finalized_version_id));
-}
-
-function canCreateUnitAfter(units: UnitRow[], type: string): boolean {
-  const hasUsable = (unitType: ScreenplayUnitType) => units.some((unit) => unit.type === unitType && isUsableCheckpoint(unit));
-  if (type === "world") return true;
-  if (type === "character") return hasUsable("world");
-  if (type === "outline") return hasUsable("world") && hasUsable("character");
-  if (type === "episode") return hasUsable("world") && hasUsable("character") && hasUsable("outline");
-  return hasUsable("world") && hasUsable("character") && hasUsable("outline") && hasUsable("episode");
-}
-
-function creationGateMessage(type: string): string {
-  if (type === "character") return "请先确认世界观为可用版本，再创建角色圣经。";
-  if (type === "outline") return "请先确认世界观和角色圣经为可用版本，再创建剧情及大纲。";
-  if (type === "episode") return "请先完成三部曲并确认可用版本，再创建分集计划。";
-  if (type === "scene") return "请先完成三部曲和分集计划，并确认可用版本，再创建剧本正文。";
-  return "请先完成当前工作流的前置可用版本。";
 }
 
 async function get<T>(fetcher: UnitsFetcher, path: string): Promise<T> {

@@ -27,7 +27,6 @@ import {
 } from "@/lib/client/v2/screenplay-studio/api";
 import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
 import {
-  canCreateUnit,
   SCREENPLAY_STUDIO_WORKFLOW_STAGES,
   type StudioWorkflowStage,
 } from "@/lib/client/v2/screenplay-studio/types";
@@ -63,12 +62,6 @@ const UNIT_TYPE_LABELS: Record<string, string> = {
 /** Marker persisted inside the review prompt; used to restore review state. */
 const SIMILARITY_REVIEW_PROMPT_PREFIX = "请执行剧情及大纲阶段的雷同审查";
 
-const GATE_MESSAGES: Record<string, string> = {
-  character: "新节点按顺序创建：请先在世界观上保存并「确认可用」，再新建角色圣经。（已创建的节点随时可回改）",
-  outline: "新节点按顺序创建：请先确认世界观、角色圣经为可用版本，再新建剧情及大纲。（已创建的节点随时可回改）",
-  episode: "新节点按顺序创建：请先完成三部曲（世界观 → 角色圣经 → 剧情及大纲）并确认可用，再新建分集计划。",
-  scene: "新节点按顺序创建：请先确认分集计划为可用版本，再新建剧本正文。",
-};
 
 interface WorkMeta {
   title: string | null;
@@ -299,10 +292,8 @@ export function ScreenplayStudio({
   const createUnit = useCallback(
     async (type: "world" | "character" | "outline" | "episode" | "scene", parentId: string | null) => {
       if (!workId) return;
-      if (!canCreateUnit(type, units)) {
-        setLoadError(GATE_MESSAGES[type] ?? "新节点按顺序创建；已创建的节点随时可回改。");
-        return;
-      }
+      // P0-02：五个剧本节点自由创建（PRD §2.2）；顺序仅作为建议提示，
+      // 不再用禁用按钮或客户端校验阻止创建。
       try {
         const { unit } = await screenplayStudioApi.createUnit(workId, {
           type,

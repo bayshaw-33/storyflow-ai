@@ -118,16 +118,15 @@ async function makeService() {
 // 1. Ordered creation & identity
 // ============================================================
 
-test("creates new units in trilogy order after usable checkpoints", async () => {
+test("creates units in trilogy order; every node type is freely creatable (P0-02 / PRD §2.2)", async () => {
   const { service } = await makeService();
   const world = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "世界观", parentId: null, order: 1 });
-  await assert.rejects(
-    () => service.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "主角", parentId: null, order: 1 }),
-    (error) => error instanceof ScreenplayUnitsError && error.code === "validation_failed",
-  );
+  // P0-02：上游未确认不再是服务端门禁 —— 角色圣经可在世界观定稿前直接创建
+  const earlyCharacter = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "提前的主角", parentId: null, order: 1 });
+  assert.equal(earlyCharacter.unit.type, "character");
   const worldVersion = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: world.unit.id, content: { body: "世界规则" }, baseVersionId: null });
   await service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: world.unit.id, versionId: worldVersion.version.id });
-  const character = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "主角", parentId: null, order: 1 });
+  const character = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "character", title: "主角", parentId: null, order: 2 });
   const characterVersion = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: character.unit.id, content: { body: "人物圣经" }, baseVersionId: null });
   await service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: character.unit.id, versionId: characterVersion.version.id });
   const outline = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "outline", title: "剧情及大纲", parentId: null, order: 1 });

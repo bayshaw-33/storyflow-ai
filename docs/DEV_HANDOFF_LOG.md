@@ -1,5 +1,38 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 5（P0-02 路由与自由进入）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+1. **伪造 unitId 触发硬门禁**：`getProjectWorkbenchHref` 无 sourceUnitId 时伪造 `project-<id>` → verify-entry 查不到该集 → "该集未定稿或非剧本集，不能进入制作" 整页阻断（且 verify-entry fetch 无 Authorization 头，恒 401 加重误判）。
+2. **verify-entry fail-closed**：校验中/失败/未过都整页阻断四 tab 工作台。
+3. **resolve-work 404**：pre-K22 项目无 Work 行 → 404 → 遗留入口 catch 甩回新建页。
+4. **伪造 art id**：project-library artRow 把 `art-<uuid>`（storyflow_art_projects 主键）当 storyflow projectId 喂给 /production → readProject 404。
+5. **Dashboard USE_FIXTURE=true** 默认演示数据源（preview 模式渲染 fixture 项目 id）。
+6. **五节点门禁**：UnitNavigator 禁用按钮 + ScreenplayStudio 客户端校验 + units.ts 服务端 validation_failed 拒绝（违反 PRD §2.2 自由创建）。
+
+### 变更
+
+- `lib/client/v2/project-library/helpers.ts`：unitId 只用真实 sourceUnitId；editing 无 unit 不带参数；art 行有关联 sourceProjectId 走 /production?tab=art，否则进 /art-workbench。
+- `lib/server/v2/project-library/index.ts`：artRow 填充 sourceProjectId（source_project_id）。
+- `components/production/ProductionWorkbench.tsx`：verify-entry 降级为可关闭的非阻塞警示条（文案改建议式）；fetch 走 fetchWithAuthRetry（带认证）；移除整页 loading/阻断渲染。
+- `app/api/v2/project-start/resolve-work/route.ts`：项目存在但无 Work → 幂等 RPC `ensure_project_stage_work`（确定性幂等键 `resolve:<owner>:<project>:script`）自动补建；项目行缺失 → 410 `migration_issue`（中文可追踪），不再 404。
+- `lib/client/v2/dashboard/api.ts`：USE_FIXTURE 默认 false（NEXT_PUBLIC_USE_DASHBOARD_FIXTURE === "true" 才启用）。
+- 五节点自由创建：UnitNavigator 按钮不再 disabled（title 改建议文案）；ScreenplayStudio createUnit 移除客户端 gate；units.ts 移除 canCreateUnitAfter 服务端拒绝（结构校验 type/order/parent 保留）。
+- 测试更新：units.test.mjs 三部曲门禁断言改为"角色圣经可提前创建"；project-library 路由断言改为无伪造 unitId + art 双路径。
+
+### 验证
+
+Gate A 六项 P0-02 断言全部转 GREEN；受影响套件（units/screenplay-studio 全家/project-library/dashboard/production/v2-e2e）184+116 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. resolve-work 幂等补建依赖生产库已部署 `ensure_project_stage_work` RPC（20260830000000 migration；unified-workbench 发布时已应用，若个别环境缺失会返回 503 schema_not_deployed 而非死页）。
+2. verify-entry 服务端仍保留"未定稿/非剧本集"判定逻辑（现在只产生提示文案）；后续可考虑精简该接口。
+3. 五节点自由创建后，下游节点在上游为空时创建的上下文质量依赖 KK 提示词引导（非阻塞建议）。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 4（P0-04 标题+正文原子保存）
 
 **分支：** `fix/K22-p0p1-trust`

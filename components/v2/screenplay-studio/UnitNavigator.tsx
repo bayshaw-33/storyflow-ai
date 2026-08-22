@@ -79,8 +79,7 @@ export function UnitNavigator({
                 className={styles.navGroupAdd}
                 aria-label={`新建${group.label}`}
                 onClick={() => onCreateUnit(group.id, null)}
-                disabled={!canCreate}
-                title={canCreate ? `新建${group.label}` : "请先确认上一阶段可用"}
+                title={canCreate ? `新建${group.label}` : `新建${group.label}（建议先确认上一阶段为可用版本）`}
               >
                 ＋
               </button>

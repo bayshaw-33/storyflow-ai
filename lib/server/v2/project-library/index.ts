@@ -112,6 +112,7 @@ function artRow(row: Row): ProjectLibraryProject {
     updatedAt: dateValue(row.updated_at),
     source: "art",
     sourceId: id,
+    // P0-02：保留与 storyflow_projects 的真实关联，供工作台路由使用
     sourceProjectId: stringValue(row.source_project_id) || null,
     libraryKey: `art:${id}`,
   });

@@ -78,14 +78,25 @@ export function filterAndSortProjects(
 
 export function getProjectWorkbenchHref(project: ProjectLibraryProject) {
   const projectId = encodeURIComponent(project.id);
-  const unitId = project.sourceUnitId || `project-${project.id}`;
-  const sourceUnitId = encodeURIComponent(unitId);
+  // P0-02：unitId 只用真实 sourceUnitId；此前伪造 `project-<id>` 会让
+  // verify-entry 必然失败并触发"该集未定稿"整页阻断。
+  const unitId = project.sourceUnitId || null;
   if (project.workflowType === "song") return `/song-workbench?projectId=${projectId}`;
   if (project.workflowType === "storyboard") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "storyboard", unitId });
   if (project.workflowType === "video") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "video", unitId });
-  if (project.workflowType === "art") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "art", unitId });
+  if (project.workflowType === "art") {
+    // P0-02：legacy 美术库行是 storyflow_art_projects（id 形如 art-<uuid>），
+    // 不是 storyflow_projects 主键 —— 伪造 id 进 /production 必然 404。
+    // 有关联源项目走统一路由，否则进独立美术工作台。
+    const linkedProjectId = project.sourceProjectId || null;
+    return linkedProjectId
+      ? buildUnifiedWorkbenchUrl({ projectId: linkedProjectId, tab: "art", unitId })
+      : "/art-workbench";
+  }
   if (project.workflowType === "voice") return `/casting?projectId=${projectId}`;
-  if (project.workflowType === "editing") return `/editor?projectId=${projectId}&sourceUnitId=${sourceUnitId}`;
+  if (project.workflowType === "editing") {
+    return `/editor?projectId=${projectId}${unitId ? `&sourceUnitId=${encodeURIComponent(unitId)}` : ""}`;
+  }
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
     return `/viral-workbench?projectId=${encodeURIComponent(viralProjectId)}&dashboardProjectId=${projectId}`;

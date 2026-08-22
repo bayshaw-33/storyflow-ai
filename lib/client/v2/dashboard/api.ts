@@ -1,12 +1,12 @@
 // Kiikis 2.0 Dashboard API 适配器
-// 当前 K2-C-01 后端契约尚未冻结，默认走 fixture 兜底，便于 UI 独立预览。
-// 真实 API 上线后把 USE_FIXTURE 切到 false 即可。
+// 正常模式渲染真实项目库（ProjectManagement）；fixture 仅服务显式预览。
 
 import { loadDashboardFixture, type FixtureName } from "./fixtures.ts";
 import type { DashboardData } from "./types.ts";
 
-// 全局开关：true 走 fixture，false 走真实 API。
-export const USE_FIXTURE = true;
+// P0-02：fixture 不再是默认数据源（PRD §2.6 禁止演示数据冒充真实）。
+// 仅显式 NEXT_PUBLIC_USE_DASHBOARD_FIXTURE=true 时启用（本地预览）。
+export const USE_FIXTURE = process.env.NEXT_PUBLIC_USE_DASHBOARD_FIXTURE === "true";
 
 // 真实 API 路径（预留）。
 const API_PATH = "/api/v2/dashboard";
@@ -18,7 +18,7 @@ export interface FetchDashboardOptions {
   fetchImpl?: typeof fetch;
 }
 
-// 拉取 Dashboard 数据：USE_FIXTURE=true 时走 fixture，否则走真实 API。
+// 拉取 Dashboard 数据：启用 fixture 时走演示数据，否则走真实 API。
 export async function fetchDashboard(
   accessToken: string | null,
   options: FetchDashboardOptions = {},

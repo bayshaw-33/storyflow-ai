@@ -31,6 +31,7 @@ import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, ArrowLeft, Clock, Cpu, Save, Users, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 
 import type {
   AnalyzeRequest,
@@ -124,9 +125,9 @@ export function ProductionWorkbench() {
   const [draftPersistError, setDraftPersistError] = useState<string>("");
   const [notice, setNotice] = useState<string>("");
   // PRD V1.0 验收 P0-05：制作台门禁 — 服务端 fail-closed 校验
-  // productionGateLoading=true 时表示正在调服务端校验，未收到结果前不显示主界面也不显示阻断
+  // P0-02：入口校验结果仅作非阻塞提示（productionGateError 为空串表示无提示）
   const [productionGateError, setProductionGateError] = useState<string>("");
-  const [productionGateLoading, setProductionGateLoading] = useState<boolean>(false);
+  const [gateWarningDismissed, setGateWarningDismissed] = useState<boolean>(false);
   const [context, setContext] = useState<UnifiedWorkbenchContextV1 | null>(null);
   const [contextLoading, setContextLoading] = useState<boolean>(false);
   const [contextError, setContextError] = useState<string>("");
@@ -362,48 +363,39 @@ export function ProductionWorkbench() {
     setNotice(draftPersistError);
   }, [draftPersistError]);
 
-  // PRD V1.0 验收 P0-05：制作台门禁 — 服务端 fail-closed 双重校验
-  // 草稿项目（需求墙 setup=1 流程）跳过门禁；正式项目必须通过服务端校验
-  // 服务端校验未返回 ok=true 前，默认阻断（fail-closed），不再"找不到项目就放行"
+  // P0-02（PRD §2.2/§4）：入口校验降级为非阻塞上下文提示 ——
+  // 未定稿/非剧本集只提醒下游可能需要重生成，不再整页阻断工作台；
+  // 校验失败（网络/认证）同样不拦截进入。fetch 带认证（共享 401 刷新重试），
+  // 旧实现无 Authorization 头，verify-entry 恒 401 → 伪"该集未定稿"阻断。
   useEffect(() => {
-    if (!projectId || !sourceUnitId) {
-      setProductionGateLoading(false);
+    if (!projectId || !sourceUnitId || projectId.startsWith("draft-")) {
       setProductionGateError("");
-      return;
-    }
-    if (projectId.startsWith("draft-")) {
-      setProductionGateError("");
-      setProductionGateLoading(false);
       return;
     }
     let cancelled = false;
     setProductionGateError("");
-    setProductionGateLoading(true);
     (async () => {
       try {
-        const res = await fetch("/api/production/verify-entry", {
+        const res = await fetchWithAuthRetry("/api/production/verify-entry", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId, sourceUnitId }),
         });
-        const data = await res.json() as { ok: boolean; reason?: string; projectTitle?: string };
+        const data = await res.json() as { ok?: boolean; reason?: string; projectTitle?: string };
         if (cancelled) return;
-        if (!data.ok) {
-          setProductionGateError(data.reason || "该集未满足制作条件，不能进入制作。");
+        if (data.ok === false) {
+          setProductionGateError(data.reason || "该集尚未定稿；可继续制作，定稿后下游内容可能需要重新生成。");
         } else {
           setProductionGateError("");
           if (data.projectTitle && !projectTitle) setProjectTitle(data.projectTitle);
         }
       } catch {
         if (!cancelled) {
-          setProductionGateError("制作入口校验失败，请检查网络后重试。");
+          setProductionGateError("制作入口校验暂时不可用；可继续制作，不影响保存。");
         }
-      } finally {
-        if (!cancelled) setProductionGateLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, sourceUnitId]);
+  }, [projectId, sourceUnitId, projectTitle]);
 
   // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
   // PRD §6.2: hydration gate —— ready 之前禁止把空初始 state 写入 localStorage
@@ -1427,73 +1419,38 @@ export function ProductionWorkbench() {
     );
   }
 
-  // PRD V1.0 验收 P0-05：服务端校验进行中 — 不显示主界面，避免校验未完成时暴露
-  if (productionGateLoading) {
-    return (
-      <main className={styles.shell}>
-        <section
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 14,
-            minHeight: "60vh",
-            padding: "32px",
-            textAlign: "center",
-          }}
-        >
-          <div className="spinner" style={{ width: 28, height: 28, border: "3px solid var(--border)", borderTopColor: "#14B8A6", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-          <p style={{ margin: 0, fontSize: 13, color: "var(--ink-secondary)" }}>正在校验制作入口…</p>
-        </section>
-      </main>
-    );
-  }
-
-  // PRD V1.0 验收 P0-05：制作台门禁阻断 — sourceUnit 非剧本版定稿集时显示阻断提示
-  if (productionGateError) {
-    return (
-      <main className={styles.shell}>
-        <section
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 14,
-            minHeight: "60vh",
-            padding: "32px",
-            textAlign: "center",
-          }}
-        >
-          <AlertTriangle size={36} color="#ffd166" />
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>该集未定稿或非剧本集，不能进入制作</h2>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--ink-secondary)", maxWidth: 460 }}>
-            {productionGateError}
-          </p>
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => router.back()}
-            >
-              <ArrowLeft size={15} />返回
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => router.push("/dashboard")}
-            >
-              返回工作台
-            </button>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className={styles.shell}>
+      {productionGateError && !gateWarningDismissed ? (
+        <div
+          role="status"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 14px",
+            margin: "0 auto 12px",
+            maxWidth: 1080,
+            width: "100%",
+            borderRadius: 10,
+            border: "1px solid rgba(255, 209, 102, 0.45)",
+            background: "rgba(255, 209, 102, 0.08)",
+            color: "var(--ink-secondary)",
+            fontSize: 13,
+          }}
+        >
+          <AlertTriangle size={15} color="#ffd166" style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{productionGateError}</span>
+          <button
+            type="button"
+            aria-label="关闭提示"
+            onClick={() => setGateWarningDismissed(true)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-secondary)", display: "inline-flex", padding: 2 }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
       <UnifiedProductionHeader
         context={displayContext}
         activeStage={activeStage}

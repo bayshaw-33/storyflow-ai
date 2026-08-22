@@ -75,13 +75,28 @@ test("project library sorts by title, creation time, and update time", () => {
 });
 
 test("project library routes audiovisual projects into production and preserves professional routes", () => {
-  assert.equal(getProjectWorkbenchHref(project({ id: "script-1", workflowType: "creation" })), "/production?projectId=script-1&tab=script&unitId=project-script-1");
+  // P0-02：不再伪造 unitId（`project-<id>` 会触发 verify-entry 伪阻断）；
+  // 只有真实 sourceUnitId 才进入 URL。
+  assert.equal(getProjectWorkbenchHref(project({ id: "script-1", workflowType: "creation" })), "/production?projectId=script-1&tab=script");
+  assert.equal(
+    getProjectWorkbenchHref(project({ id: "script-2", workflowType: "creation", sourceUnitId: "unit-9" })),
+    "/production?projectId=script-2&tab=script&unitId=unit-9",
+  );
   assert.equal(getProjectWorkbenchHref(project({ id: "song-1", workflowType: "song" })), "/song-workbench?projectId=song-1");
-  assert.equal(getProjectWorkbenchHref(project({ id: "storyboard-1", workflowType: "storyboard" })), "/production?projectId=storyboard-1&tab=storyboard&unitId=project-storyboard-1");
-  assert.equal(getProjectWorkbenchHref(project({ id: "video-1", workflowType: "video" })), "/production?projectId=video-1&tab=video&unitId=project-video-1");
-  assert.equal(getProjectWorkbenchHref(project({ id: "art-1", workflowType: "art" })), "/production?projectId=art-1&tab=art&unitId=project-art-1");
+  assert.equal(getProjectWorkbenchHref(project({ id: "storyboard-1", workflowType: "storyboard" })), "/production?projectId=storyboard-1&tab=storyboard");
+  assert.equal(getProjectWorkbenchHref(project({ id: "video-1", workflowType: "video" })), "/production?projectId=video-1&tab=video");
+  // legacy 美术库行（无关联源项目）→ 独立美术工作台，不把伪造 id 喂给 /production
+  assert.equal(getProjectWorkbenchHref(project({ id: "art-uuid-1", workflowType: "art" })), "/art-workbench");
+  assert.equal(
+    getProjectWorkbenchHref(project({ id: "art-uuid-2", workflowType: "art", sourceProjectId: "script-9" })),
+    "/production?projectId=script-9&tab=art",
+  );
   assert.equal(getProjectWorkbenchHref(project({ id: "voice-1", workflowType: "voice" })), "/casting?projectId=voice-1");
-  assert.equal(getProjectWorkbenchHref(project({ id: "editing-1", workflowType: "editing" })), "/editor?projectId=editing-1&sourceUnitId=project-editing-1");
+  assert.equal(getProjectWorkbenchHref(project({ id: "editing-1", workflowType: "editing" })), "/editor?projectId=editing-1");
+  assert.equal(
+    getProjectWorkbenchHref(project({ id: "editing-2", workflowType: "editing", sourceUnitId: "unit-7" })),
+    "/editor?projectId=editing-2&sourceUnitId=unit-7",
+  );
   assert.equal(getProjectWorkbenchHref(project({ id: "viral-source", workflowType: "viral" })), "/viral-workbench?projectId=source&dashboardProjectId=viral-source");
 });
 
