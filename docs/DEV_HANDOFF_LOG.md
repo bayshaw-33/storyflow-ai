@@ -1,5 +1,31 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 9（P1-02 版本面板与恢复）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+ScreenplayStudio 版本抽屉直接打印 `currentVersionId/finalizedVersionId` 裸 UUID；单元版本表（storyflow_screenplay_unit_versions）有完整事实（source/created_at/content_hash/created_by）但无列表 API、无 UI 消费、无恢复入口。
+
+### 变更
+
+- 服务 `lib/server/v2/screenplays/units.ts`：
+  - `listUnitVersions`：新→旧历史，含 source、preview（body 前 60 字）、isCurrent/isFinalized 标记。
+  - `restoreUnitVersion`：以目标版本内容创建新子版本（source=restore，确定性幂等键 `restore:<versionId>:<baseVersionId>`），复用 saveUnitContent 的 CAS/幂等/指针推进；目标即当前版本时零操作返回。append-only，不回写历史。
+- 新路由：GET `/api/v2/works/[workId]/screenplay/units/[unitId]/versions`、POST `.../versions/[versionId]/restore`（getViewerFromRequest 认证 + classifyServiceError 净化）。
+- 客户端 `screenplayStudioApi.listUnitVersions/restoreUnitVersion`（走 fetchScreenplayStudio：带认证 + 401 刷新重试）。
+- 工作室版本抽屉重写：V 序号、创建时间、来源中文标签（手动编辑/AI 生成/导入/恢复）、摘要、hash 前 8 位、当前/已定稿标记、恢复按钮（恢复当前版本禁用）；恢复成功后刷新单元内容与历史。
+
+### 验证
+
+新测试 `tests/contracts-v22/p0p1-version-panel.test.mjs` 4 断言（含 in-memory store 的 append-only/无操作/CAS 行为）全 GREEN；units + screenplay-studio 套件 51 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. 面板为单元级版本（编辑器的事实源）；Work 级版本链（checkpoints/finalize）沿用既有 /api/v2/works/[workId]/versions，未在本切片重复建 UI。
+2. Diff 视图（逐块对比两个版本）未实现 —— Candidate Diff 面板已覆盖"AI 建议 vs 原文"场景；任意两历史版本的并排对比属后续增强。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 8（P1-01 真实进度与状态整理）
 
 **分支：** `fix/K22-p0p1-trust`

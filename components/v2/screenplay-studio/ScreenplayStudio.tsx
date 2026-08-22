@@ -24,6 +24,7 @@ import {
   clientErrorMessage,
   type ScreenplayUnitClientDto,
   type StaleEdgeDto,
+  type UnitVersionHistoryClientDto,
 } from "@/lib/client/v2/screenplay-studio/api";
 import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
 import {
@@ -40,6 +41,14 @@ import { ReferenceList, type PacketReferenceDto } from "./ReferenceList";
 import styles from "./ScreenplayStudio.module.css";
 
 type StudioTool = "draft" | "similarity" | "localization" | "delivery" | "continuity" | "references" | "versions" | null;
+
+/** P1-02：版本来源的中文标签。 */
+const VERSION_SOURCE_LABELS: Record<string, string> = {
+  manual: "手动编辑",
+  ai: "AI 生成",
+  import: "导入",
+  restore: "恢复",
+};
 
 const TOOL_LABELS: Record<Exclude<StudioTool, null>, string> = {
   draft: "当前文档",
@@ -99,6 +108,11 @@ export function ScreenplayStudio({
   const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
   // P0-04：按 unitId 记录未持久化的标题草稿（存在即脏）
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
+  // P1-02：版本面板 —— 当前单元的不可变版本历史
+  const [unitVersions, setUnitVersions] = useState<UnitVersionHistoryClientDto[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -309,6 +323,45 @@ export function ScreenplayStudio({
     },
     [workId, units, openUnit],
   );
+
+  const loadUnitVersions = useCallback(async () => {
+    if (!workId || !activeUnitId) return;
+    setVersionsLoading(true);
+    setVersionsError(null);
+    try {
+      const result = await screenplayStudioApi.listUnitVersions(workId, activeUnitId);
+      setUnitVersions(result.versions ?? []);
+    } catch (error) {
+      setVersionsError(error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "版本历史加载失败");
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [workId, activeUnitId]);
+
+  // 打开版本面板时加载历史
+  useEffect(() => {
+    if (activeTool !== "versions") return;
+    void loadUnitVersions();
+  }, [activeTool, loadUnitVersions]);
+
+  const restoreVersion = useCallback(async (versionId: string) => {
+    if (!workId || !activeUnitId || restoringVersionId) return;
+    setRestoringVersionId(versionId);
+    setVersionsError(null);
+    try {
+      await screenplayStudioApi.restoreUnitVersion(workId, activeUnitId, versionId);
+      const { unit, content } = await screenplayStudioApi.getUnit(workId, activeUnitId);
+      setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
+      const body = (content as { body?: string } | null)?.body ?? "";
+      setActiveContent(body);
+      if (activeUnitId) setLoadedContent((prev) => ({ ...prev, [activeUnitId]: body }));
+      await loadUnitVersions();
+    } catch (error) {
+      setVersionsError(error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "恢复失败");
+    } finally {
+      setRestoringVersionId(null);
+    }
+  }, [workId, activeUnitId, restoringVersionId, loadUnitVersions]);
 
   const handleContentChange = useCallback(
     (body: string) => {
@@ -645,9 +698,62 @@ export function ScreenplayStudio({
     <div className={styles.toolContent}>
       <div className={styles.toolEyebrow}>不可变版本</div>
       <h2>{TOOL_LABELS.versions}</h2>
-      <p>当前版本：{activeUnit?.currentVersionId ?? "未保存"}</p>
-      <p>可用版本：{activeUnit?.finalizedVersionId ?? "尚未确认"}</p>
-      <div className={styles.toolNotice}>修改会创建子版本，不覆盖历史版本；上游更新只标 stale，保留下游内容。</div>
+      {versionsLoading ? (
+        <div className={styles.toolNotice}>正在加载版本历史…</div>
+      ) : versionsError ? (
+        <div className={styles.toolNotice} role="alert">{versionsError}</div>
+      ) : unitVersions.length === 0 ? (
+        <div className={styles.toolNotice}>该节点还没有保存过版本；保存后会在这里形成可追溯的历史。</div>
+      ) : (
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+          {unitVersions.map((version, index) => (
+            <li
+              key={version.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: version.isCurrent ? "1px solid rgba(20,184,166,0.55)" : "1px solid var(--border, rgba(255,255,255,0.12))",
+                background: version.isCurrent ? "rgba(20,184,166,0.07)" : "rgba(255,255,255,0.02)",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 12.5 }}>
+                  <strong>V{unitVersions.length - index}</strong>
+                  <span style={{ color: "var(--ink-secondary, #9aa3b2)" }}>{new Date(version.createdAt).toLocaleString()}</span>
+                  <span>{VERSION_SOURCE_LABELS[version.source] ?? version.source}</span>
+                  {version.isCurrent ? <span style={{ color: "#14B8A6" }}>当前</span> : null}
+                  {version.isFinalized ? <span style={{ color: "#ffd166" }}>已定稿</span> : null}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-secondary, #9aa3b2)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {version.preview ? `摘要：${version.preview}` : "（无正文摘要）"} · 校验 {version.contentHash.slice(0, 8)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void restoreVersion(version.id)}
+                disabled={version.isCurrent || restoringVersionId !== null}
+                title={version.isCurrent ? "已是当前版本" : "以此版本内容创建新版本（不改动历史）"}
+                style={{
+                  flexShrink: 0,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border, rgba(255,255,255,0.14))",
+                  background: "transparent",
+                  color: version.isCurrent ? "var(--ink-secondary, #9aa3b2)" : "inherit",
+                  fontSize: 12,
+                  cursor: version.isCurrent || restoringVersionId !== null ? "not-allowed" : "pointer",
+                }}
+              >
+                {restoringVersionId === version.id ? "恢复中…" : "恢复此版本"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className={styles.toolNotice}>修改与恢复都会创建子版本，不覆盖历史版本；上游更新只标 stale，保留下游内容。</div>
     </div>
   ) : null;
 

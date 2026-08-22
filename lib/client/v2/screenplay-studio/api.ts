@@ -103,6 +103,19 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+
+/** P1-02：版本面板 DTO（服务端 UnitVersionHistoryDto 镜像）。 */
+export interface UnitVersionHistoryClientDto {
+  id: string;
+  parentVersionId: string | null;
+  contentHash: string;
+  createdAt: string;
+  source: string;
+  isCurrent: boolean;
+  isFinalized: boolean;
+  preview: string;
+}
+
 export const screenplayStudioApi = {
   listUnits(workId: string) {
     return call<{ units: ScreenplayUnitClientDto[] }>(`/api/v2/works/${encodeURIComponent(workId)}/screenplay`);
@@ -149,6 +162,19 @@ export const screenplayStudioApi = {
     return call<{ unit: ScreenplayUnitClientDto }>(
       `/api/v2/works/${encodeURIComponent(workId)}/screenplay/units/${encodeURIComponent(unitId)}`,
       { method: "PUT", body: JSON.stringify({ versionId }) },
+    );
+  },
+  /** P1-02：单元版本历史（新→旧，含来源/摘要/当前与定稿标记）。 */
+  listUnitVersions(workId: string, unitId: string) {
+    return call<{ versions: UnitVersionHistoryClientDto[] }>(
+      `/api/v2/works/${encodeURIComponent(workId)}/screenplay/units/${encodeURIComponent(unitId)}/versions`,
+    );
+  },
+  /** P1-02：恢复到指定版本 —— 服务端创建新的 restore 子版本，不回写历史。 */
+  restoreUnitVersion(workId: string, unitId: string, versionId: string) {
+    return call<{ version: { id: string } }>(
+      `/api/v2/works/${encodeURIComponent(workId)}/screenplay/units/${encodeURIComponent(unitId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { method: "POST", body: JSON.stringify({}) },
     );
   },
   listStale(workId: string) {

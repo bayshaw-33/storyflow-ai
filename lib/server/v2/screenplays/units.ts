@@ -83,6 +83,21 @@ export interface UnitVersionDto {
   createdAt: string;
 }
 
+/**
+ * P1-02：版本面板 DTO —— 人类可读事实（来源/摘要/作者），不暴露裸 UUID。
+ */
+export interface UnitVersionHistoryDto {
+  id: string;
+  parentVersionId: string | null;
+  contentHash: string;
+  createdAt: string;
+  source: string;
+  isCurrent: boolean;
+  isFinalized: boolean;
+  /** 正文前 60 字（无正文为空串），仅作摘要展示。 */
+  preview: string;
+}
+
 const UNIT_COLUMNS = "id,work_id,type,parent_id,order_index,title,readiness,current_version_id,finalized_version_id,legacy_id";
 const VERSION_COLUMNS = "id,work_id,unit_id,parent_version_id,content_schema,content_json,content_hash,source,source_message_ids,created_at";
 
@@ -263,6 +278,67 @@ export class ScreenplayUnitsService {
     void unit;
 
     return { version: toVersionDto(row), references: params.references ?? [] };
+  }
+
+  /**
+   * P1-02：列出单元的不可变版本历史（新→旧），含来源与内容摘要。
+   */
+  async listUnitVersions(params: {
+    ownerId: string;
+    workId: string;
+    unitId: string;
+    limit?: number;
+  }): Promise<UnitVersionHistoryDto[]> {
+    await this.assertWorkOwner(params.ownerId, params.workId);
+    const unit = await this.readUnit(params.workId, params.unitId);
+    const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+    const rows = await get<UnitVersionRow[]>(
+      this.fetcher,
+      `/rest/v1/storyflow_screenplay_unit_versions?unit_id=eq.${encodeURIComponent(params.unitId)}&select=${VERSION_COLUMNS}&order=created_at.desc&limit=${limit}`,
+    );
+    return (rows ?? []).map((row) => ({
+      id: row.id,
+      parentVersionId: row.parent_version_id,
+      contentHash: row.content_hash,
+      createdAt: row.created_at,
+      source: row.source ?? "manual",
+      isCurrent: row.id === unit.current_version_id,
+      isFinalized: row.id === unit.finalized_version_id,
+      preview: unitVersionPreview(row.content_json),
+    }));
+  }
+
+  /**
+   * P1-02：恢复 = 以目标版本内容创建新的子版本（source=restore），
+   * 不回写/覆盖旧版本；确定性幂等键防止同基线重复恢复。
+   */
+  async restoreUnitVersion(params: {
+    ownerId: string;
+    workId: string;
+    unitId: string;
+    versionId: string;
+  }): Promise<{ version: UnitVersionDto }> {
+    await this.assertWorkOwner(params.ownerId, params.workId);
+    const unit = await this.readUnit(params.workId, params.unitId);
+    const rows = await get<UnitVersionRow[]>(
+      this.fetcher,
+      `/rest/v1/storyflow_screenplay_unit_versions?id=eq.${encodeURIComponent(params.versionId)}&unit_id=eq.${encodeURIComponent(params.unitId)}&select=${VERSION_COLUMNS}&limit=1`,
+    );
+    const target = rows?.[0];
+    if (!target) throw new ScreenplayUnitsError("not_found", "Version not found for this unit.");
+    if (target.id === unit.current_version_id) {
+      return { version: { id: target.id, unitId: target.unit_id, parentVersionId: target.parent_version_id, contentHash: target.content_hash, createdAt: target.created_at } };
+    }
+    const content = (target.content_json ?? {}) as Record<string, unknown>;
+    return this.saveUnitContent({
+      ownerId: params.ownerId,
+      workId: params.workId,
+      unitId: params.unitId,
+      content,
+      baseVersionId: unit.current_version_id,
+      source: "restore",
+      idempotencyKey: `restore:${params.versionId}:${unit.current_version_id ?? "root"}`,
+    });
   }
 
   async findUnitVersionByIdempotencyKey(params: {
@@ -497,6 +573,16 @@ function toUnitDto(row: UnitRow): ScreenplayUnitDto {
     finalizedVersionId: row.finalized_version_id,
     legacyId: row.legacy_id,
   };
+}
+
+/** P1-02：版本内容摘要 —— 取 body 前 60 字。 */
+function unitVersionPreview(content: unknown): string {
+  if (content && typeof content === "object" && "body" in content) {
+    const body = (content as { body?: unknown }).body;
+    if (typeof body === "string") return body.replace(/\s+/g, " ").trim().slice(0, 60);
+  }
+  const text = typeof content === "string" ? content : "";
+  return text.replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
 function toVersionDto(row: UnitVersionRow): UnitVersionDto {
