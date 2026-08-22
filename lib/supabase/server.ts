@@ -394,7 +394,11 @@ export async function serviceFetch<T = unknown>(path: string, init: RequestInit 
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(`SUPABASE_SERVICE_ERROR:${response.status}:${text.slice(0, 240)}`);
+    // P0-01：附带 .status（如 profile 406 判定），message 契约保持不变
+    // （classifyServiceError 仍按 SUPABASE_SERVICE_ERROR:<status>: 前缀解析）。
+    const error = new Error(`SUPABASE_SERVICE_ERROR:${response.status}:${text.slice(0, 240)}`);
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
   }
 
   if (response.status === 204) return null as T;

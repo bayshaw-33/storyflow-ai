@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import type { PublicationProjection } from "@/lib/contracts/v2/community";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PublicationCard } from "./PublicationCard";
 import styles from "@/app/community/community.module.css";
 
@@ -37,16 +38,18 @@ export function DiscoveryFeed({ initialItems, loadError }: DiscoveryFeedProps) {
   const offsetRef = useRef(initialItems.length);
 
   // 加载当前 viewer (匿名则 null)
+  // P0-01 修复：原实现裸 fetch /api/v2/kk（无 Bearer，Bearer-only 鉴权下恒失败），
+  // 改为直接读浏览器 supabase session —— 与其他页面同一认证事实源。
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // 复用 KK runtime 接口获取 viewer（已认证用户才有）
-        const res = await fetch("/api/v2/kk", { credentials: "include" });
-        if (!res.ok) return;
-        const json = (await res.json().catch(() => ({}))) as { profile?: { userId?: string }; success?: boolean };
-        if (!cancelled && json.success && json.profile?.userId) {
-          setViewerId(json.profile.userId);
+        const client = getSupabaseBrowserClient();
+        if (!client) return;
+        const { data } = await client.auth.getSession();
+        const userId = data.session?.user?.id;
+        if (!cancelled && userId) {
+          setViewerId(userId);
         }
       } catch {
         // 匿名访问

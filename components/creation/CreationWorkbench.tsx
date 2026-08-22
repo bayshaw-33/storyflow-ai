@@ -91,6 +91,7 @@ import {
   type NovelChapter,
 } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { syncProjectsWithSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import {
   createUniverseFromProject,
@@ -1139,9 +1140,8 @@ export function CreationWorkbench() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), getAiTimeoutMs(taskType));
     try {
-      const response = await fetch("/api/ai/generate", {
+      const response = await fetchWithAuthRetry("/api/ai/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         signal: controller.signal,
         body: JSON.stringify({
           taskType,
@@ -1444,9 +1444,8 @@ export function CreationWorkbench() {
 
   async function sendUniverseInbox() {
     if (!session?.access_token || !project.universeId) return;
-    const response = await fetch("/api/universe/extract", {
+    const response = await fetchWithAuthRetry("/api/universe/extract", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ universeId: project.universeId, project }),
     });
     const payload = await response.json();

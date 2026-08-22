@@ -34,8 +34,20 @@ export async function POST(request: Request) {
   try {
     const user = await authenticateRequest(request);
     userId = user.id;
-  } catch {
-    return NextResponse.json({ success: false, error: "请先登录。" }, { status: 401 });
+  } catch (error) {
+    // P0-01：区分"未登录/token 无效"（401）与"认证服务/配置故障"（503）。
+    // 旧行为把网络失败也映射成 401"请先登录"，制造已登录用户的伪错误。
+    const message = error instanceof Error ? error.message : "";
+    if (message === "MISSING_AUTH_TOKEN" || message === "INVALID_AUTH_TOKEN") {
+      return NextResponse.json(
+        { success: false, error: "请先登录后再使用分镜助理。", code: "unauthenticated" },
+        { status: 401 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, error: "登录校验服务暂时不可用，请稍后重试。", code: "service_unavailable" },
+      { status: 503 },
+    );
   }
 
   try {

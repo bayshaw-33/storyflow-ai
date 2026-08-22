@@ -83,8 +83,16 @@ export async function getProfile(
     `/rest/v1/storyflow_kk_profiles?owner_id=eq.${encodeURIComponent(ownerId)}&limit=1`,
     { headers: { Accept: "application/vnd.pgrst.object+json" } },
   ).catch((err: unknown) => {
-    // 406 表示无匹配行 (pgrst.object 返回单行，无匹配返回 406)
-    if (err && typeof err === "object" && "status" in err && err.status === 406) {
+    // 406 表示无匹配行 (pgrst.object 返回单行，无匹配返回 406)。
+    // serviceFetch 抛的是普通 Error（message 前缀 SUPABASE_SERVICE_ERROR:<status>），
+    // 需同时识别带 .status 的对象与 message 前缀两种形状（P0-01 首用户建号修复）。
+    const statusFromMessage = /^SUPABASE_SERVICE_ERROR:(\d{3}):/.exec(
+      err instanceof Error ? err.message : ""
+    )?.[1];
+    const upstreamStatus =
+      (err && typeof err === "object" && "status" in err ? Number((err as { status: unknown }).status) : NaN) ||
+      (statusFromMessage ? Number(statusFromMessage) : NaN);
+    if (upstreamStatus === 406) {
       return null;
     }
     throw new KkProfileServiceError("service_unavailable", "failed to fetch kk profile", 503, err);

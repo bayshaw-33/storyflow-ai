@@ -1,5 +1,39 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 2（P0-01 KK 认证与真实错误）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+1. **认证失败伪装 503**：`authenticateRequest` 抛 `MISSING_AUTH_TOKEN/INVALID_AUTH_TOKEN`（普通 Error），`kkProfileErrorResponse` 兜底成 503 → 客户端先判 503 → 已登录用户看到"KK 不可用/离线"，而非引导重登。
+2. **过期 token 无重试**：session 存 localStorage，调用点捕获 `session.access_token`；唯一带 401→refresh→retry 的封装（screenplay-studio）未共享。KK runtime/美术助理/分镜/创作台全部过期即失败。
+3. **首用户建号失败**：`serviceFetch` 抛的 406 是无 `.status` 的普通 Error，`getProfile` 的 `err.status === 406` 永远 false → 新用户 503。
+4. **catch-all 401**：storyboard-chat 把认证服务网络故障也映射 401"请先登录"。
+5. **死端点**：客户端 POST /api/v2/kk {action:list|update_settings}，路由只有 GET → 405。
+6. **裸 fetch /api/v2/kk**：DiscoveryFeed 无 Bearer 调 Bearer-only 路由，viewer 永远解析不出。
+
+### 变更
+
+- 新增 `lib/client/v2/auth-fetch.ts`：共享 401→refreshSession→重试一次（FormData 不覆盖 Content-Type；deps 可注入可测）。
+- 新增 `lib/server/v2/kk/error-classify.ts`（纯函数）：认证错 → 401 unauthenticated；其余走 classifyServiceError + requestId。`kk/http.ts` 接线。
+- `lib/supabase/server.ts` serviceFetch：抛错附 `.status`（message 契约不变）。
+- `lib/server/v2/kk/profile.ts` getProfile：兼容 message 前缀 `SUPABASE_SERVICE_ERROR:406` → 返回 null → ensureProfile 自动建号。
+- `app/api/production/storyboard-chat/route.ts`：认证错 401 / 基础设施故障 503 分开。
+- `lib/client/v2/kk/api.ts`：runtime 调用走 fetchWithAuthRetry；fetchKkMessages 真实模式改为组合任务中心真实 Job 投影（不再 POST 死端点）；updateKkSettings 按Task 3.6 决策本地回显。
+- `components/v2/community/DiscoveryFeed.tsx`：viewer 直接读浏览器 supabase session。
+- 三个对话面（ArtWorkbench×3、storyboard-workbench×2、CreationWorkbench×2 处 fetch）接入 fetchWithAuthRetry。
+
+### 验证
+
+`node --test tests/contracts-v22/p0p1-kk-auth.test.mjs tests/kiikis-21-kk-*.test.mjs` → 51 pass；相邻套件（community/art/chat-focus/screenplay-entry/contracts-v22）176 pass，唯一失败为后续切片的 Gate A RED；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. video/viral/song 等工作台仍有捕获 token 的直连 fetch（非 KK 对话核心面），可后续逐面接入 fetchWithAuthRetry。
+2. KkRuntimeProvider 收到 unauthenticated 后的 UI 引导（提示重登文案）依赖客户端映射，provider 层未做专门重登弹窗——当前显示真实错误信息，不再伪装离线。
+3. e2e 登录对话 10 连发验收需部署后在线上执行（PRD §7 矩阵）。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 1（P0-05 任务中心 schema 对齐）
 
 **分支：** `fix/K22-p0p1-trust`（base: origin/main `b3ba9c1a`）；**PRD：** `/Users/kiikis000/Downloads/KIIKIS_P0_P1_Fix_PRD_v1.0.md`；**计划：** `docs/superpowers/plans/2026-08-22-kiikis-p0p1-trust-fix.md`

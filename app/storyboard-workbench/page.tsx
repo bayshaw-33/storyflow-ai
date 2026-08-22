@@ -7,6 +7,7 @@ import type { Session } from "@supabase/supabase-js";
 import { ArrowRight, Download, ImagePlus, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { readProjectFromSupabase, syncProjectsWithSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import {
@@ -549,12 +550,8 @@ function StandaloneStoryboardWorkbenchPage() {
 
     setConceptBusy(type);
     try {
-      const response = await fetch("/api/ai/concept-image", {
+      const response = await fetchWithAuthRetry("/api/ai/concept-image", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
         body: JSON.stringify({
           kind: type,
           projectTitle: state.projectTitle,
@@ -811,12 +808,8 @@ function StandaloneStoryboardWorkbenchPage() {
     setUniverseStatus(isZh ? "正在发送到 Universe Inbox..." : "Sending to Universe Inbox...");
     try {
       await saveStoryboardProjectToList({ universeId: selectedUniverseId, silent: true });
-      const response = await fetch("/api/universe/extract", {
+      const response = await fetchWithAuthRetry("/api/universe/extract", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
         body: JSON.stringify({ universeId: selectedUniverseId, creativePackage: buildStoryboardPackage(selectedUniverseId) }),
       });
       const data = await response.json().catch(() => ({}));

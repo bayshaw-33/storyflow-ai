@@ -1,10 +1,12 @@
 /**
  * KIIKIS 2.1 Phase 3 — KK API HTTP 错误响应封装 (Task 3.2)
  *
- * 与 dynamic-storyboards/http.ts 模式一致，集中处理 service 错误 → HTTP 响应。
+ * P0-01：认证失败必须回 401（客户端引导重登），不得伪装 503"服务不可用"；
+ * 其余错误经 classifyKkHttpError 净化并附 requestId，不泄露上游 payload。
  */
 import { NextResponse } from "next/server";
 import { KkProfileServiceError } from "./profile.ts";
+import { classifyKkHttpError } from "./error-classify.ts";
 
 export function kkProfileErrorResponse(error: unknown, defaultMessage: string) {
   if (error instanceof KkProfileServiceError) {
@@ -17,13 +19,14 @@ export function kkProfileErrorResponse(error: unknown, defaultMessage: string) {
       { status: error.status },
     );
   }
-  const message = error instanceof Error ? error.message : defaultMessage;
+  const classified = classifyKkHttpError(error);
   return NextResponse.json(
     {
       success: false,
-      error: message,
-      code: "service_unavailable",
+      error: classified.message === "Service is temporarily unavailable." ? defaultMessage : classified.message,
+      code: classified.code,
+      requestId: classified.requestId,
     },
-    { status: 503 },
+    { status: classified.status },
   );
 }

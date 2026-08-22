@@ -6,6 +6,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Send, Sparkles, Trash2, Upload, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
@@ -359,7 +360,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     try {
       const form = new FormData();
       form.append("file", file);
-      const response = await fetch("/api/art/upload-reference", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
+      const response = await fetchWithAuthRetry("/api/art/upload-reference", { method: "POST", body: form });
       const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
       if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "参考图上传失败");
       setPendingImage({ id: crypto.randomUUID(), name: file.name, url: payload.previewUrl, storagePath: payload.storagePath });
@@ -392,7 +393,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
 
     setBusy("extract");
     try {
-      const response = await fetch("/api/art/extract-assets", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ title: state.title, visualStyle: state.visualStyle, sourceText: effectiveSourceText }) });
+      const response = await fetchWithAuthRetry("/api/art/extract-assets", { method: "POST", body: JSON.stringify({ title: state.title, visualStyle: state.visualStyle, sourceText: effectiveSourceText }) });
       const payload = await response.json() as ExtractedArtAssets & { success?: boolean; error?: string; warning?: string; degraded?: boolean; sourceTextPreview?: string; sourceTextLength?: number };
       if (!response.ok || !payload.success) throw new Error(payload.error || "拆解失败");
       const assets = assetsFromExtraction(payload);
@@ -416,7 +417,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     setMessage("");
     setBusy("chat");
     try {
-      const response = await fetch("/api/art/chat", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ message: userMessage, projectTitle: state.title, assets: state.assets, attachments: pendingImage ? [{ id: pendingImage.id, name: pendingImage.name, kind: "image", url: pendingImage.url, storagePath: pendingImage.storagePath }] : [] }) });
+      const response = await fetchWithAuthRetry("/api/art/chat", { method: "POST", body: JSON.stringify({ message: userMessage, projectTitle: state.title, assets: state.assets, attachments: pendingImage ? [{ id: pendingImage.id, name: pendingImage.name, kind: "image", url: pendingImage.url, storagePath: pendingImage.storagePath }] : [] }) });
       const payload = await response.json() as { success?: boolean; assistantText?: string; actions?: ArtAction[]; error?: string; warning?: string };
       if (!response.ok || !payload.success) throw new Error(payload.error || "KK 暂时无法处理这条指令");
       applyActions(payload.actions || [], pendingImage);
