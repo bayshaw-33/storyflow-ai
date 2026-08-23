@@ -5,6 +5,8 @@ export const UNIFIED_PRODUCTION_STAGES = [
   "art",
   "storyboard",
   "video",
+  // 剪辑阶段：编辑器消费 projectId/sourceUnitId，不 provision Work
+  "editing",
 ] as const;
 export type UnifiedProductionStage = (typeof UNIFIED_PRODUCTION_STAGES)[number];
 
@@ -67,9 +69,11 @@ export function parseUnifiedWorkbenchQuery(search: string | URLSearchParams): {
         ? "storyboard"
         : rawTab === "editor"
           ? "video"
-          : isUnifiedProductionStage(rawTab)
-            ? rawTab
-            : "script",
+          : rawTab === "edit"
+            ? "editing"
+            : isUnifiedProductionStage(rawTab)
+              ? rawTab
+              : "script",
     unitId: query.get("unitId") ?? query.get("sourceUnitId"),
   };
 }

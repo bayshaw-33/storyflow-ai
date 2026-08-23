@@ -92,10 +92,15 @@ test("project library routes audiovisual projects into production and preserves 
     "/production?projectId=script-9&tab=art",
   );
   assert.equal(getProjectWorkbenchHref(project({ id: "voice-1", workflowType: "voice" })), "/casting?projectId=voice-1");
-  assert.equal(getProjectWorkbenchHref(project({ id: "editing-1", workflowType: "editing" })), "/editor?projectId=editing-1");
+  // 剪辑自五阶段起进统一工作台（/editor 独立页保留为深链兼容）
+  assert.equal(getProjectWorkbenchHref(project({ id: "editing-1", workflowType: "editing" })), "/production?projectId=editing-1&tab=editing");
   assert.equal(
-    getProjectWorkbenchHref(project({ id: "editing-2", workflowType: "editing", sourceUnitId: "unit-7" })),
-    "/editor?projectId=editing-2&sourceUnitId=unit-7",
+    getProjectWorkbenchHref(project({ id: "editing-2", workflowType: "editing", sourceUnitId: "unit-3" })),
+    "/production?projectId=editing-2&tab=editing&unitId=unit-3",
+  );
+  assert.equal(
+    getProjectWorkbenchHref(project({ id: "editing-3", workflowType: "editing", sourceUnitId: "unit-7" })),
+    "/production?projectId=editing-3&tab=editing&unitId=unit-7",
   );
   assert.equal(getProjectWorkbenchHref(project({ id: "viral-source", workflowType: "viral" })), "/viral-workbench?projectId=source&dashboardProjectId=viral-source");
 });

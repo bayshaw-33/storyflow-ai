@@ -1,21 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import {
-  Check,
-  CircleAlert,
-  ExternalLink,
-  FileClock,
-  FileText,
-  Link2,
-  MoreHorizontal,
-  Palette,
-  PanelsTopLeft,
-  Plus,
-  ShieldCheck,
-  Video,
-  type LucideIcon,
-} from "lucide-react";
+import { Check, CircleAlert, ExternalLink, FileClock, FileText, Link2, MoreHorizontal, Palette, PanelsTopLeft, Plus, Scissors, ShieldCheck, Video, type LucideIcon } from "lucide-react";
 
 import {
   UNIFIED_PRODUCTION_STAGES,
@@ -43,6 +29,7 @@ const STAGE_META: Record<UnifiedProductionStage, { label: string; icon: LucideIc
   art: { label: "美术", icon: Palette },
   storyboard: { label: "分镜", icon: PanelsTopLeft },
   video: { label: "视频", icon: Video },
+  editing: { label: "剪辑", icon: Scissors },
 };
 
 function SaveStatus({ status }: { status: UnifiedProductionHeaderProps["saveStatus"] }) {

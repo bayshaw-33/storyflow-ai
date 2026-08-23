@@ -67,6 +67,7 @@ const STAGE_TITLES: Record<UnifiedProductionStage, string> = {
   art: DEFAULT_WORK_TITLES.art,
   storyboard: DEFAULT_WORK_TITLES.storyboard,
   video: DEFAULT_WORK_TITLES.video,
+  editing: DEFAULT_WORK_TITLES.editing,
 };
 
 export async function getUnifiedWorkbenchContext(input: {
@@ -140,6 +141,14 @@ export async function ensureStageWork(input: {
     throw new UnifiedWorkbenchServiceError(
       "validation_failed",
       `Unsupported production stage: ${String(input.stage)}`,
+    );
+  }
+  // 剪辑阶段不 provision Work：EditorFramework 消费 projectId/sourceUnitId，
+  // ensure_project_stage_work RPC 的类型白名单也不含 editing。
+  if (input.stage === "editing") {
+    throw new UnifiedWorkbenchServiceError(
+      "validation_failed",
+      "The editing stage does not provision a Work; the editor binds to the project unit directly.",
     );
   }
   if (!input.idempotencyKey) {

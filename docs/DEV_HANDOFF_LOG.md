@@ -1,5 +1,31 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-23 - ZCode / 剪辑功能回归制作工作台（五阶段集成）
+
+### 背景（用户报告"之前部署过但前端看不到了"）
+
+剪辑功能本体从未丢失：`/editor`（EditorFramework + TimelineEditorV22，WebAV + react-timeline-editor，commit fe0f89aa/beae6d5e）一直在生产运行。消失的是**入口**：统一工作台重构（3adc1ab9 四阶段壳 / 12ff5c0f 导航恢复）后，全局导航无剪辑项、/production 只有四阶段（video 阶段是视频生成 ShotFramesPanel），仅剩新建"剪辑"模块卡和项目库 editing 卡两条冷僻路径可达。
+
+### 实现（方案 A：editing 作为第五阶段，零 schema 改动）
+
+EditorFramework 只消费 projectId/sourceUnitId（不消费 workId），因此**无需扩展 ensure_project_stage_work RPC**，无 migration：
+
+- `lib/contracts/v2/unified-workbench.ts`：UNIFIED_PRODUCTION_STAGES + `"editing"`；`tab=edit` 别名 → editing（旧别名 `editor`→video 保持不变）。
+- `lib/server/v2/unified-workbench/index.ts`：STAGE_TITLES 补 editing；ensureStageWork 对 editing 显式 validation_failed（"editing 阶段不 provision Work"，防误调 RPC）；workbench-context 的 works 查询仍只取四类型 → stages.editing 恒为 null（编辑器不依赖）。
+- `components/production/UnifiedProductionHeader.tsx`：STAGE_META 补"剪辑"（Scissors 图标）；顶栏自动出现第五阶段按钮（由 UNIFIED_PRODUCTION_STAGES 驱动）。
+- `components/production/ProductionWorkbench.tsx`：fallback stages 补 editing:null；`activeStage === "editing"` 渲染 `<EditorFramework projectId sourceUnitId||"legacy" accessToken/>`；剪辑阶段无需求墙（随时可进）。
+- 路由统一：`resolver.ts` editing 加入统一阶段分支（新建"剪辑"模块项目 → `/production?tab=editing`）；项目库 editing 卡同改。**`/editor` 独立页原样保留**为深链兼容。
+
+### 验证
+
+新契约测试 `tests/contracts-v22/editing-stage.test.mjs` 6 断言（五阶段、tab 解析+别名、URL 构造、header meta、PW 渲染接线、ensureStageWork 拒绝且零 RPC 调用）全绿；contracts 210 pass；顶层 1906/1906；tsc 0 错误；build 成功；项目库路由断言更新到统一路由。
+
+### 已知边界
+
+1. EditorFramework 文案含"预览占位（本轮不提供剪辑能力）"——v2-06 框架的剪辑交互成熟度有限（时间线展示 + 版本化保存）；深度剪辑交互属后续迭代。
+2. 剪辑阶段无保存徽标/未保存守卫（时间线保存走 /api/editor 自有端点，与 PW 的 saveStatus 状态机独立）。
+3. 视频生成产物 → 时间线的"Selected Takes"链路依赖 Production 中已有 confirmed takes，无数据时编辑器显示空时间线提示（既有行为）。
+
 ## 2026-08-23 - ZCode / 顶层测试套件清零（23 个预存失败逐项根因修复）
 
 **结果：`node --test tests/*.test.mjs` 1906/1906 全绿**（原 1843 测试/25 失败 + 10 个文件级崩溃；崩溃文件恢复后新增 63 个可运行测试，全部通过）。contracts-v22 198/198 不变；creation 家族 127 pass；tsc 0 错误；build 成功。

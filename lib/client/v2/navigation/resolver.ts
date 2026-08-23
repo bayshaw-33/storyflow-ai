@@ -22,7 +22,6 @@ const WORKBENCH_ROUTES: Record<Exclude<WorkType, UnifiedProductionStage>, string
   // Phase 0 reuses existing /casting for voice worktype; Phase 5 builds the
   // dedicated voice workbench and this mapping is updated then.
   voice: "/casting",
-  editing: "/editor",
 };
 
 export interface WorkbenchRouteParams {
@@ -41,14 +40,14 @@ export function resolveWorkbenchRoute(
   workType: WorkType,
   params: WorkbenchRouteParams,
 ): string {
-  if (workType === "script" || workType === "art" || workType === "storyboard" || workType === "video") {
+  // 剪辑自 K2.2 五阶段起走统一工作台（/editor 独立页保留为深链兼容）
+  if (workType === "script" || workType === "art" || workType === "storyboard" || workType === "video" || workType === "editing") {
     return buildUnifiedWorkbenchUrl({ ...params, tab: workType });
   }
 
   const base = WORKBENCH_ROUTES[workType];
   const sp = new URLSearchParams({ projectId: params.projectId });
   if (params.workId) sp.set("workId", params.workId);
-  if (workType === "editing" && params.unitId) sp.set("sourceUnitId", params.unitId);
   return `${base}?${sp.toString()}`;
 }
 

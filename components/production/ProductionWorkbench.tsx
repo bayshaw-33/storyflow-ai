@@ -32,6 +32,7 @@ import { AlertTriangle, ArrowLeft, Clock, Cpu, Save, Users, X } from "lucide-rea
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
+import { EditorFramework } from "@/components/editor/EditorFramework";
 
 import type {
   AnalyzeRequest,
@@ -1384,7 +1385,7 @@ export function ProductionWorkbench() {
     contractVersion: WORK_CONTRACT_VERSION,
     project: { id: projectId, title: projectTitle || "未命名草稿", ownerId: session?.user?.id || "" },
     universe: null,
-    stages: { script: null, art: null, storyboard: null, video: null },
+    stages: { script: null, art: null, storyboard: null, video: null, editing: null },
     legacy: { sourceUnitId: unitId || null, resolvedFromProjectOnly: !unitId },
   };
 
@@ -1672,6 +1673,13 @@ export function ProductionWorkbench() {
                 onBatchUnfinished={batchUnfinished}
                 onBatchRetryFailed={batchRetryFailed}
                 batchRunning={batchRunning}
+              />
+            ) : null}
+            {activeStage === "editing" ? (
+              <EditorFramework
+                projectId={projectId}
+                sourceUnitId={sourceUnitId || "legacy"}
+                accessToken={session?.access_token ?? null}
               />
             ) : null}
         </div>

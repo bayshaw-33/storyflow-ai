@@ -104,7 +104,7 @@ export function getProjectWorkbenchHref(project: ProjectLibraryProject) {
   }
   if (project.workflowType === "voice") return `/casting?projectId=${projectId}`;
   if (project.workflowType === "editing") {
-    return `/editor?projectId=${projectId}${unitId ? `&sourceUnitId=${encodeURIComponent(unitId)}` : ""}`;
+    return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "editing", unitId });
   }
   if (project.workflowType === "viral") {
     const viralProjectId = project.id.startsWith("viral-") ? project.id.slice("viral-".length) : project.id;
