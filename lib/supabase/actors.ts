@@ -1,3 +1,4 @@
+import { dedupeActorsByName } from "./actor-dedupe";
 import {
   assertCanSetPlatformVisibility,
   buildActorBasePrompt,
@@ -151,7 +152,9 @@ async function listStructuredActorsForUser(userId: string) {
     `/rest/v1/storyflow_actor_profiles?${accessQuery}&status=neq.archived&select=${encodeURIComponent(listSelect)}&order=updated_at.desc&limit=50`,
   );
 
-  return hydrateActorAssets(actors);
+  // P1-04：同名去重 —— 重复导入/种子数据会产生同名行（如 13 张同名卡）；
+  // 按 name 归一化（大小写/空白不敏感）保留 updated_at 最新的一条。
+  return hydrateActorAssets(dedupeActorsByName(actors));
 }
 
 export async function getActorForUser(userId: string, actorId: string) {
@@ -841,3 +844,5 @@ function isNotFound(error: unknown) {
 function ensureServiceRole() {
   if (!hasServiceRoleConfig()) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
 }
+
+export { dedupeActorsByName } from "./actor-dedupe";

@@ -1,5 +1,32 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 11（P1-04 真实 Feed 与资产页）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+1. marketplace `USE_FIXTURE = env !== "false"` 默认开启 —— 生产 env 未设时整站渲染 45 个演示资产（CI 反而显式设 false，掩盖了生产行为）。
+2. PublishFlowClient 提交不发任何请求即显示"资产已提交发布"（假成功）。
+3. 演员个人库查询包含平台共享演员（产品语义保留），但无同名去重 —— 重复导入/种子数据渲染 13 张同名卡。
+
+### 变更
+
+- `lib/client/v2/marketplace/api.ts`：USE_FIXTURE 改为显式 `=== "true"`（opt-in）。
+- `components/v2/marketplace/PublishFlowClient.tsx`：提交走 fetchWithAuthRetry POST /api/v2/assets（createAsset 建 draft 资产；权利状态映射 portrait_confirmed/portrait_pending/ai_generated；表单字段随 metadata 保留；ai_actor→character 等 kind 映射）。成功显示真实资产 ID 与"资产草稿已创建"；失败停留当前步骤显示真实错误 + 提交中禁用。
+- 新增 `lib/supabase/actor-dedupe.ts`（纯函数，node 可测）：按 name 归一化去重保留 updated_at 最新；`listStructuredActorsForUser` 输出经去重；actors.ts re-export。
+- 更新 tests/ui-v2/marketplace/api-adapter.test.mjs：fixture 路径显式设 env true（新 opt-in 契约）。
+
+### 验证
+
+新测试 `tests/contracts-v22/p0p1-real-feeds.test.mjs` 4 断言 GREEN（含去重行为级验证）；marketplace 全套 133 pass；actor 套件 64 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. 发布流的"审核队列"消费端（管理员审核 UI）不在本切片；draft 资产可通过资产管理查看。
+2. 去重仅显示层；同名行仍在库中（清理需走候选清理流程，PRD 不授权删除）。
+3. PublishFlowClient 的步骤说明文案仍取自 fixtures 模块（静态选项表：类型/授权/可见范围枚举），属配置常量而非数据 feed，保留。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 10（P1-03 全局 KK 状态降噪）
 
 **分支：** `fix/K22-p0p1-trust`

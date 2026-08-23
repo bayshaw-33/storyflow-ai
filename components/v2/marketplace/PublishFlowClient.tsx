@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ShieldAlert } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { loadFixturePublishFlow } from "@/lib/client/v2/marketplace/fixtures";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import type {
   LicenseType,
   MarketplaceAssetType,
@@ -32,6 +33,16 @@ const STEPS_EN = [
   "License",
   "Rights",
 ];
+
+/** P1-04：市场资产类型 → storyflow_v2_assets.kind 映射 */
+const ASSET_KIND_BY_MARKETPLACE_TYPE: Record<MarketplaceAssetType, string> = {
+  ai_actor: "character",
+  character: "character",
+  scene: "scene",
+  prop: "prop",
+  style_pack: "style",
+  universe_setting: "universe_package",
+};
 
 interface PublishForm {
   type: MarketplaceAssetType | null;
@@ -76,6 +87,10 @@ export function PublishFlowClient() {
   const [form, setForm] = useState<PublishForm>({ ...INITIAL_FORM });
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // P1-04：真实提交 —— 旧实现不发任何请求即显示"已提交发布"（假成功）
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [createdAssetId, setCreatedAssetId] = useState<string | null>(null);
 
   const validateStep = (currentStep: number): boolean => {
     setError(null);
@@ -142,7 +157,58 @@ export function PublishFlowClient() {
     if (step < steps.length - 1) {
       setStep(step + 1);
     } else {
+      void handleSubmit();
+    }
+  };
+
+  /**
+   * P1-04：提交创建真实的 draft 资产（POST /api/v2/assets）。
+   * 表单收集的字段随 metadata 保留；成功后展示真实资产 ID，
+   * 失败保留当前步骤并显示真实错误 —— 不再伪造"已提交发布"。
+   */
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const response = await fetchWithAuthRetry("/api/v2/assets", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: ASSET_KIND_BY_MARKETPLACE_TYPE[form.type ?? "character"] ?? "character",
+          name: (form.description.trim().split("\n")[0] || "未命名资产").slice(0, 60),
+          rightsState: form.portraitBased
+            ? (form.rightsStatus === "confirmed" ? "portrait_confirmed" : "portrait_pending")
+            : "ai_generated",
+          metadata: {
+            source: "marketplace-publish-flow",
+            marketplaceType: form.type,
+            versionMode: form.versionMode,
+            versionId: form.versionId || null,
+            description: form.description,
+            tags: form.tags,
+            allowedUses: form.allowedUses,
+            forbiddenUses: form.forbiddenUses,
+            visibility: form.visibility,
+            licenseType: form.licenseType,
+            price: (form.licenseType ? publishFlow.licenseTypes.find((l) => l.value === form.licenseType)?.paid ?? false : false) ? form.price : null,
+            modificationScope: form.modificationScope,
+            portraitBased: form.portraitBased,
+            rightsStatus: form.rightsStatus,
+          },
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; asset?: { id?: string }; error?: string }
+        | null;
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || (isZh ? "提交失败，请稍后重试。" : "Submit failed."));
+      }
+      setCreatedAssetId(payload.asset?.id ?? null);
       setDone(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : (isZh ? "提交失败，请稍后重试。" : "Submit failed."));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -166,13 +232,21 @@ export function PublishFlowClient() {
           <div style={{ textAlign: "center", padding: "40px 0" }}>
             <CheckCircle2 size={48} style={{ color: "#7dd181", marginBottom: 16 }} />
             <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 8px" }}>
-              {isZh ? "资产已提交发布" : "Asset submitted for publish"}
+              {isZh ? "资产草稿已创建" : "Asset draft created"}
             </h1>
             <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", margin: "0 0 24px" }}>
               {isZh
                 ? "平台将审核资产与权利声明，通过后发布到市场。"
                 : "The platform will review the asset and rights declaration before publishing."}
             </p>
+            {createdAssetId ? (
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", margin: "0 0 24px" }} data-testid="created-asset-id">
+                {isZh ? "资产 ID：" : "Asset ID: "}{createdAssetId}
+              </p>
+            ) : null}
+            {submitError ? (
+              <p role="alert" style={{ fontSize: 12.5, color: "#ff8b8b", margin: "0 0 16px" }}>{submitError}</p>
+            ) : null}
             <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
               <button
                 type="button"
@@ -501,19 +575,26 @@ export function PublishFlowClient() {
           {error && <div className={styles.errorBox} style={{ marginTop: 14 }}>{error}</div>}
 
           {/* 步骤导航 */}
+          {submitError ? (
+            <div role="alert" style={{ color: "#ff8b8b", fontSize: 12.5, marginTop: 10 }} data-testid="submit-error">
+              {isZh ? "提交失败：" : "Submit failed: "}{submitError}
+            </div>
+          ) : null}
           <div className={styles.stepNav}>
             <button
               type="button"
               className={styles.button}
               onClick={handleBack}
-              disabled={step === 0}
+              disabled={step === 0 || submitting}
             >
               {isZh ? "上一步" : "Back"}
             </button>
-            <button type="button" className={styles.buttonPrimary} onClick={handleNext}>
-              {step === steps.length - 1
-                ? isZh ? "提交发布" : "Submit"
-                : isZh ? "下一步" : "Next"}
+            <button type="button" className={styles.buttonPrimary} onClick={handleNext} disabled={submitting}>
+              {submitting
+                ? isZh ? "提交中…" : "Submitting…"
+                : step === steps.length - 1
+                  ? isZh ? "提交发布" : "Submit"
+                  : isZh ? "下一步" : "Next"}
             </button>
           </div>
         </div>

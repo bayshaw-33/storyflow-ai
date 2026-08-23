@@ -14,8 +14,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// 在加载 api 模块前确保默认走 fixture（不受外部 env 干扰）。
-delete process.env.NEXT_PUBLIC_USE_MARKETPLACE_FIXTURE;
+// P1-04：fixture 改为显式开启（生产默认真实 API）。fixture 路径测试
+// 在此显式设 true；默认值断言见 tests/contracts-v22/p0p1-real-feeds.test.mjs。
+process.env.NEXT_PUBLIC_USE_MARKETPLACE_FIXTURE = "true";
 
 const {
   fetchMarketplace,
@@ -162,8 +163,8 @@ function makeCodexGrant(overrides = {}) {
 // 1. fixture 路径
 // ============================================================
 
-test("USE_FIXTURE 默认为 true", () => {
-  assert.equal(USE_FIXTURE, true);
+test("USE_FIXTURE 随显式 env 开启（P1-04 opt-in 契约）", () => {
+  assert.equal(USE_FIXTURE, true, "本文件显式设置 NEXT_PUBLIC_USE_MARKETPLACE_FIXTURE=true");
 });
 
 test("fixture 模式 fetchMarketplace 返回 fixture 数据集", async () => {

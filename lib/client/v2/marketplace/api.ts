@@ -61,9 +61,12 @@ import {
 // 开关与常量
 // ============================================================
 
-/** 是否使用 fixture 演示数据（默认开启） */
+/**
+ * P1-04：fixture 仅显式开启（本地预览）。生产默认走真实 /api/v2/assets ——
+ * 旧默认（!== "false"）在生产 env 未设时整站渲染演示数据。
+ */
 export const USE_FIXTURE =
-  process.env.NEXT_PUBLIC_USE_MARKETPLACE_FIXTURE !== "false";
+  process.env.NEXT_PUBLIC_USE_MARKETPLACE_FIXTURE === "true";
 
 /** 资产 API 基础路径（Codex 端，注意不是 /api/v2/marketplace） */
 const ASSETS_API_BASE = "/api/v2/assets";
