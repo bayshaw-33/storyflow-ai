@@ -27,12 +27,17 @@
  */
 
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, ArrowLeft, Clock, Cpu, Save, Users, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
-import { EditorFramework } from "@/components/editor/EditorFramework";
+// P95 加载优化：重阶段组件按需加载（剪辑台/剧本 Studio 不再进首屏包）
+const EditorFramework = dynamic(
+  () => import("@/components/editor/EditorFramework").then((m) => m.EditorFramework),
+  { ssr: false, loading: () => <div style={{ padding: 48, textAlign: "center", color: "var(--ink-muted)", fontSize: 13 }}>剪辑台加载中…</div> },
+);
 
 import type {
   AnalyzeRequest,
@@ -75,7 +80,10 @@ import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
 import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
-import { ScreenplayStudio } from "@/components/v2/screenplay-studio/ScreenplayStudio";
+const ScreenplayStudio = dynamic(
+  () => import("@/components/v2/screenplay-studio/ScreenplayStudio").then((m) => m.ScreenplayStudio),
+  { ssr: false, loading: () => <div style={{ padding: 48, textAlign: "center", color: "var(--ink-muted)", fontSize: 13 }}>剧本工作台加载中…</div> },
+);
 import { StoryboardFrameGrid, StoryboardPromptList, UnifiedStoryboardStage, type StoryboardSubview } from "./UnifiedStoryboardStage";
 import { StoryboardCanvas } from "./StoryboardCanvas";
 import type { StoryboardCanvasState } from "@/lib/production/types";

@@ -43,7 +43,8 @@ test("header stage metadata includes 剪辑 for editing", () => {
 
 test("production workbench renders EditorFramework for the editing stage", () => {
   const pw = read("../../components/production/ProductionWorkbench.tsx");
-  assert.match(pw, /import \{ EditorFramework \} from "@\/components\/editor\/EditorFramework"/);
+  // P95 优化后为 next/dynamic 按需加载（不再静态 import 进首屏包）
+  assert.match(pw, /import\("@\/components\/editor\/EditorFramework"\)/);
   assert.match(pw, /activeStage === "editing"/);
   assert.match(pw, /<EditorFramework\s+projectId=\{projectId\}/);
   assert.match(pw, /sourceUnitId=\{sourceUnitId \|\| "legacy"\}/);

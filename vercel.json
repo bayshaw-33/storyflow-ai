@@ -4,5 +4,8 @@
       "path": "/api/cron/settle-revenue",
       "schedule": "0 0 1 * *"
     }
+  ],
+  "regions": [
+    "icn1"
   ]
 }
