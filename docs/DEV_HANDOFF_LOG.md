@@ -1,5 +1,38 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-23 - ZCode / 顶层测试套件清零（23 个预存失败逐项根因修复）
+
+**结果：`node --test tests/*.test.mjs` 1906/1906 全绿**（原 1843 测试/25 失败 + 10 个文件级崩溃；崩溃文件恢复后新增 63 个可运行测试，全部通过）。contracts-v22 198/198 不变；creation 家族 127 pass；tsc 0 错误；build 成功。
+
+### A 类：next/headers 在裸 node 不可解析（10 个文件级崩溃，根因 1 个）
+
+`lib/supabase/server.ts` 顶层 `import { cookies } from "next/headers"` 使所有传递引入它的测试文件（actor-portrayal-auth、teams-auth、storyboard-state/video、universe-actor/aggregate/assets/summaries/works、kk-api 传递路径）在 node --test 下 ERR_MODULE_NOT_FOUND。修复：改为 `readAccessTokenFromCookie` 内惰性动态导入（仅 SSR cookie 回退路径需要；Next 运行时行为不变）。连带修复本分支切片 11 引入的 `actors.ts` import 缺 `.ts` 扩展名（被上述错误掩盖）。
+
+### B 类：admin 集成测试假默认值（admin-users-api 2 + admin-stats 1）
+
+`BASE = env || "http://localhost:3000"` 使 `{ skip: !BASE }` 永不生效，无服务器时 ECONNREFUSED。修复：默认空串，仅显式 ADMIN_TEST_BASE 时运行（对齐 e2e 环境变量注入模式；设假 BASE 验证过测试确会真跑）。admin-roles-guard 实际通过（此前误报归类）。
+
+### C 类：grid 契约断言过时（dynamic-grid-ui-contract 7 个）
+
+grid 从 ProductionWorkbench 独立 Tab 迁入 UnifiedStoryboardStage（"grids"/motion 子视图）后，7 个静态断言仍指向旧位置。重写为现行契约：stage 引入 DynamicGridEditor、grids 子视图、PW 读 URL handoffId 下传、缺失时提示、四阶段不破坏。
+
+### D 类：creation PRD V1.0 语义变更（3 个，其中 1 个是真 Bug）
+
+- 真Bug：`applyUnitGeneration` 锁守卫只查 `"locked"`，而状态归一化把 locked 恒映射为 finalized → AI 生成可静默覆盖定稿单元。修复：守卫扩展到 finalized（批量路径记为该单元失败；用户手动编辑仍走自动降级）。
+- 陈旧断言 ×2：`reviewed` 直通期望改为归一化后 `finalized`；"locked 不可编辑抛错"改为现行"编辑应用 + 自动降级 draft + 原工作区不可变"。
+
+### E 类：kk-realtime 旧 API 段落（1 个文件）
+
+Phase 0 重写后 task-projection 不再导出 computeTaskProjection/TASK_EVENT_TYPES 等事件投影 API。过时段落重写为现行 Job→KkMessage 契约（同 id 去重、kk-job-<id>、unified DTO 映射、STATUS_MAPPING）；realtime.ts 部分原样保留（22/22）。
+
+### 附带：creation-workbench-ui 剧本路由断言（1 个）
+
+本分支 P1-06 把 /script-workbench 改为纯重定向入口（统一路由方向），旧断言"<ScreenplayStudio /> 直挂载"更新为重定向 + LegacyEntryNotice 契约。
+
+### 提交与验证
+
+单项 commit；全量 node --test 1906/1906；contracts 198/198；tsc/build 通过后合入 main 触发部署。
+
 ## 2026-08-23 - ZCode / P0/P1 遗留事项处理（基线测试修复 + staging 审计状态）
 
 ### 基线预存测试失败修复（8 个，origin/main 上即失败）

@@ -183,7 +183,12 @@ export function applyUnitGeneration(
   const unitIndex = track.units.findIndex((unit) => unit.id === unitId);
   if (unitIndex < 0) throw new Error(`Creation unit not found: ${unitId}`);
   const current = track.units[unitIndex];
-  if (current.status === "locked") throw new Error(`Creation unit is locked: ${unitId}`);
+  // PRD V1.0 状态归一化后 locked 恒映射为 finalized，旧守卫成为死代码；
+  // AI 生成不得覆盖定稿单元（批量路径记录为该单元失败），用户手动编辑
+  // 仍走 updateCreationUnit 的自动降级为草稿。
+  if (current.status === "locked" || current.status === "finalized") {
+    throw new Error(`Creation unit is locked: ${unitId}`);
+  }
 
   const parsed = mode === "screenplay" ? parseScreenplayUnitOutput(output) : parseNovelUnitOutput(output);
   const createdAt = metadata.createdAt || new Date().toISOString();

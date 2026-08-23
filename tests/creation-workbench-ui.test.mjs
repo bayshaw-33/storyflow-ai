@@ -11,10 +11,15 @@ test("the retired novel route no longer mounts the legacy creation workbench", a
   assert.doesNotMatch(page, /script-workbench\?projectId=/);
 });
 
-test("the active screenplay route mounts the V2.2 screenplay studio", async () => {
+test("the legacy screenplay entry redirects to the unified production route (P1-06)", async () => {
   const page = await read("../app/script-workbench/page.tsx");
-  assert.match(page, /<ScreenplayStudio \/>/);
-  assert.match(page, /resolve-work\?projectId=/);
-  assert.match(page, /projects\/new-v2/);
+  // K2.2 统一工作台：studio 由 /production 的 script tab 挂载；
+  // 遗留入口只做解析重定向，不再直接挂载 ScreenplayStudio。
+  assert.doesNotMatch(page, /<ScreenplayStudio \/>/);
+  assert.match(page, /resolveUnifiedWorkbenchRoute/);
+  assert.match(page, /tab: "script"/);
+  // 解析失败停留本页保留 projectId（LegacyEntryNotice），不再甩回新建选择态
+  assert.match(page, /LegacyEntryNotice/);
+  assert.doesNotMatch(page, /router\.replace\("\/projects\/new-v2"\)/);
   assert.doesNotMatch(page, /novel-workbench\?new=/);
 });

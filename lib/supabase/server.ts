@@ -1,4 +1,6 @@
-import { cookies } from "next/headers";
+// P0 遗留修复：next/headers 只在 Next 运行时存在，裸 node（node --test 直连
+// 本模块的服务端代码路径）无法解析该子路径导出。改为调用点惰性动态导入 ——
+// 仅 getViewerFromCookies 这条 SSR 回退路径需要 cookies，普通测试路径不触发。
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { GeneratePayload, TaskType } from "@/lib/ai/prompts";
 import type { AIUsage } from "@/lib/ai/providers";
@@ -105,6 +107,8 @@ export async function getViewerFromRequest(request: Request): Promise<Authentica
 }
 
 async function readAccessTokenFromCookie(): Promise<string> {
+  // next/headers 惰性导入：见文件头注释
+  const { cookies } = await import("next/headers");
   const cookieStore = await cookies();
   const ref = getSupabaseProjectRef();
   if (!ref) return "";

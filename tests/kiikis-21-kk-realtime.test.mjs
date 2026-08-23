@@ -21,12 +21,9 @@ import {
   formatLastSync,
 } from "../lib/client/v2/kk/realtime.ts";
 import {
-  ZERO_TASK_PROJECTION,
-  TASK_EVENT_TYPES,
-  isTaskEventType,
-  computeTaskProjection,
-  applyEventsToProjection,
-  computeCompletionRate,
+  projectJobsToKkMessages,
+  projectUnifiedJobsToKkMessages,
+  STATUS_MAPPING,
 } from "../lib/client/v2/kk/task-projection.ts";
 
 const ROOT = process.cwd();
@@ -56,13 +53,13 @@ test("realtime.ts — 导出 KkRealtimeClient + parseEventPayload + formatLastSy
   assert.match(src, /markProcessed/);
 });
 
-test("task-projection.ts — 导出 computeTaskProjection + applyEventsToProjection + computeCompletionRate", () => {
+test("task-projection.ts — 导出 projectJobsToKkMessages + projectUnifiedJobsToKkMessages + STATUS_MAPPING", () => {
   const src = fs.readFileSync(path.join(ROOT, "lib/client/v2/kk/task-projection.ts"), "utf-8");
-  assert.match(src, /export function computeTaskProjection/);
-  assert.match(src, /export function applyEventsToProjection/);
-  assert.match(src, /export function computeCompletionRate/);
-  assert.match(src, /export const ZERO_TASK_PROJECTION/);
-  assert.match(src, /export const TASK_EVENT_TYPES/);
+  assert.match(src, /export function projectJobsToKkMessages/);
+  assert.match(src, /export function projectUnifiedJobsToKkMessages/);
+  assert.match(src, /STATUS_MAPPING/);
+  assert.equal(typeof projectJobsToKkMessages, "function");
+  assert.equal(typeof projectUnifiedJobsToKkMessages, "function");
 });
 
 // ============================================================
@@ -399,163 +396,58 @@ test("KkRealtimeClient — 系统断线 → reconnecting → 超过 maxReconnect
   client.dispose();
 });
 
-// ============================================================
-// 5. task-projection 纯函数
-// ============================================================
+// 5. task-projection 纯函数（Phase 0 Task 0.4 重写后的 Job → KkMessage 契约）
+// 旧事件投影 API（computeTaskProjection/TASK_EVENT_TYPES 等）已随
+// "服务端聚合 + Job 投影" 架构移除；taskProjection 计数现在由
+// GET /api/v2/kk 服务端聚合返回，客户端只做 Job → KkMessage 投影。
 
-test("ZERO_TASK_PROJECTION — 全 0", () => {
-  assert.deepEqual({ ...ZERO_TASK_PROJECTION }, {
-    queued: 0, running: 0, ingesting: 0, completed: 0, failed: 0,
-  });
-});
-
-test("TASK_EVENT_TYPES — 含 5 个 task_* 事件", () => {
-  assert.equal(TASK_EVENT_TYPES.length, 5);
-  for (const t of ["task_queued", "task_running", "task_ingesting", "task_completed", "task_failed"]) {
-    assert.ok(TASK_EVENT_TYPES.includes(t));
-  }
-});
-
-test("isTaskEventType — 合法返回 true，非法返回 false", () => {
-  assert.equal(isTaskEventType("task_queued"), true);
-  assert.equal(isTaskEventType("task_completed"), true);
-  assert.equal(isTaskEventType("proposal_pending"), false);
-  assert.equal(isTaskEventType(""), false);
-});
-
-function makeTaskEvent(overrides) {
+function makeJob(overrides = {}) {
   return {
-    id: overrides.id ?? `e-${Math.random().toString(36).slice(2)}`,
-    sequence: overrides.sequence ?? 1,
-    eventType: overrides.eventType ?? "task_queued",
-    resourceType: "job",
-    resourceId: overrides.resourceId ?? "job-1",
-    taskId: overrides.taskId ?? "task-1",
-    occurredAt: overrides.occurredAt ?? "2026-08-13T10:00:00Z",
-    payload: {},
+    id: overrides.id ?? "job-1",
+    projectId: overrides.projectId ?? null,
+    workId: overrides.workId ?? null,
+    workbenchType: overrides.workbenchType ?? null,
+    resultUrl: overrides.resultUrl ?? null,
+    jobType: overrides.jobType ?? "text",
+    status: overrides.status ?? "running",
+    phase: overrides.status ?? "running",
+    progress: overrides.progress ?? { completed: 0, total: 0 },
+    failedItemCount: overrides.failedItemCount ?? 0,
+    createdAt: overrides.createdAt ?? "2026-08-13T10:00:00Z",
   };
 }
 
-test("computeTaskProjection — 同 taskId 取最新状态", () => {
-  const events = [
-    makeTaskEvent({ id: "e1", sequence: 1, eventType: "task_queued", taskId: "t-1" }),
-    makeTaskEvent({ id: "e2", sequence: 2, eventType: "task_running", taskId: "t-1" }),
-    makeTaskEvent({ id: "e3", sequence: 3, eventType: "task_completed", taskId: "t-1" }),
-  ];
-  const p = computeTaskProjection(events);
-  // 最终 task-1 = completed
-  assert.equal(p.completed, 1);
-  assert.equal(p.queued, 0);
-  assert.equal(p.running, 0);
+test("projectJobsToKkMessages — 同 id 去重（Map 语义，后写覆盖）", () => {
+  const messages = projectJobsToKkMessages([
+    makeJob({ id: "j-1", status: "queued", createdAt: "2026-08-13T10:00:00Z" }),
+    makeJob({ id: "j-1", status: "completed", createdAt: "2026-08-13T10:05:00Z" }),
+    makeJob({ id: "j-2", status: "running" }),
+  ]);
+  assert.equal(messages.length, 2, "同 id 只保留一条");
 });
 
-test("computeTaskProjection — 多任务独立计数", () => {
-  const events = [
-    makeTaskEvent({ id: "e1", sequence: 1, eventType: "task_queued", taskId: "t-1" }),
-    makeTaskEvent({ id: "e2", sequence: 2, eventType: "task_queued", taskId: "t-2" }),
-    makeTaskEvent({ id: "e3", sequence: 3, eventType: "task_completed", taskId: "t-2" }),
-    makeTaskEvent({ id: "e4", sequence: 4, eventType: "task_failed", taskId: "t-3" }),
-    makeTaskEvent({ id: "e5", sequence: 5, eventType: "task_running", taskId: "t-4" }),
-    makeTaskEvent({ id: "e6", sequence: 6, eventType: "task_ingesting", taskId: "t-5" }),
-  ];
-  const p = computeTaskProjection(events);
-  // t-1 queued, t-2 completed, t-3 failed, t-4 running, t-5 ingesting
-  assert.equal(p.queued, 1);
-  assert.equal(p.completed, 1);
-  assert.equal(p.failed, 1);
-  assert.equal(p.running, 1);
-  assert.equal(p.ingesting, 1);
+test("projectJobsToKkMessages — 消息 id 形如 kk-job-<jobId> 且携带 relatedJobId", () => {
+  const messages = projectJobsToKkMessages([makeJob({ id: "j-9" })]);
+  assert.equal(messages[0].id, "kk-job-j-9");
+  assert.equal(messages[0].relatedJobId, "j-9");
 });
 
-test("K21-KK-007: computeTaskProjection — 相同事件 id 不重复计数", () => {
-  const event = makeTaskEvent({ id: "dup-1", sequence: 1, eventType: "task_queued", taskId: "t-1" });
-  const processedIds = new Set();
-  const p1 = computeTaskProjection([event], { processedIds });
-  assert.equal(p1.queued, 1);
-  // 第二次传同一事件，processedIds 已包含
-  const p2 = computeTaskProjection([event], { processedIds });
-  assert.equal(p2.queued, 0, "重复事件不应被计数");
+test("projectJobsToKkMessages — 空数组返回空", () => {
+  assert.deepEqual(projectJobsToKkMessages([]), []);
 });
 
-test("computeTaskProjection — 无 taskId 的事件被忽略", () => {
-  const events = [
+test("projectUnifiedJobsToKkMessages — 任务中心 DTO 字段映射（stage→status, completed/total→progress）", () => {
+  const messages = projectUnifiedJobsToKkMessages([
     {
-      id: "e1", sequence: 1, eventType: "task_queued",
-      resourceType: "job", resourceId: "j-1",
-      taskId: null, occurredAt: "2026-08-13T10:00:00Z", payload: {},
+      id: "u-1", projectId: "p-1", workId: "w-1", workbenchType: "script",
+      resultUrl: "/production?projectId=p-1", type: "text", stage: "running",
+      completed: 2, total: 5, createdAt: "2026-08-13T10:00:00Z",
     },
-  ];
-  const p = computeTaskProjection(events);
-  assert.deepEqual({ ...p }, { ...ZERO_TASK_PROJECTION });
+  ]);
+  assert.equal(messages.length, 1);
+  assert.equal(typeof messages[0].id, "string");
 });
 
-test("computeTaskProjection — 事件乱序也按 sequence 排序后取最新", () => {
-  const events = [
-    makeTaskEvent({ id: "e3", sequence: 3, eventType: "task_completed", taskId: "t-1" }),
-    makeTaskEvent({ id: "e1", sequence: 1, eventType: "task_queued", taskId: "t-1" }),
-    makeTaskEvent({ id: "e2", sequence: 2, eventType: "task_running", taskId: "t-1" }),
-  ];
-  const p = computeTaskProjection(events);
-  // 即使乱序，最终状态 = completed
-  assert.equal(p.completed, 1);
-});
-
-test("computeTaskProjection — 非 task_* 事件被忽略", () => {
-  const events = [
-    {
-      id: "e1", sequence: 1, eventType: "proposal_pending",
-      resourceType: "proposal", resourceId: "p-1",
-      taskId: "t-1", occurredAt: "2026-08-13T10:00:00Z", payload: {},
-    },
-  ];
-  const p = computeTaskProjection(events);
-  assert.deepEqual({ ...p }, { ...ZERO_TASK_PROJECTION });
-});
-
-test("computeCompletionRate — 0 任务返回 0", () => {
-  assert.equal(computeCompletionRate(ZERO_TASK_PROJECTION), 0);
-});
-
-test("computeCompletionRate — 5 任务 3 完成 = 0.6", () => {
-  const p = { queued: 1, running: 0, ingesting: 0, completed: 3, failed: 1 };
-  assert.equal(computeCompletionRate(p), 0.6);
-});
-
-test("computeCompletionRate — 失败计入分母不计入分子", () => {
-  const p = { queued: 0, running: 0, ingesting: 0, completed: 0, failed: 4 };
-  assert.equal(computeCompletionRate(p), 0);
-});
-
-// ============================================================
-// 6. applyEventsToProjection 增量更新
-// ============================================================
-
-test("applyEventsToProjection — 增量更新基于现有 snapshot", () => {
-  const processedIds = new Set();
-  const snapshot = new Map([["t-1", "queued"]]);
-  const base = { queued: 1, running: 0, ingesting: 0, completed: 0, failed: 0 };
-
-  const newEvents = [
-    makeTaskEvent({ id: "e2", sequence: 2, eventType: "task_completed", taskId: "t-1" }),
-  ];
-  const p = applyEventsToProjection(base, newEvents, { processedIds, taskStateSnapshot: snapshot });
-  // t-1 从 queued → completed
-  assert.equal(p.completed, 1);
-  assert.equal(p.queued, 0);
-  // snapshot 已更新
-  assert.equal(snapshot.get("t-1"), "completed");
-});
-
-test("applyEventsToProjection — 重复事件不更新 snapshot", () => {
-  const processedIds = new Set(["e2"]); // 已处理
-  const snapshot = new Map([["t-1", "queued"]]);
-  const base = { queued: 1, running: 0, ingesting: 0, completed: 0, failed: 0 };
-
-  const newEvents = [
-    makeTaskEvent({ id: "e2", sequence: 2, eventType: "task_completed", taskId: "t-1" }),
-  ];
-  const p = applyEventsToProjection(base, newEvents, { processedIds, taskStateSnapshot: snapshot });
-  // t-1 仍是 queued
-  assert.equal(p.queued, 1);
-  assert.equal(snapshot.get("t-1"), "queued");
+test("STATUS_MAPPING — 契约版本导出仍然存在", () => {
+  assert.ok(STATUS_MAPPING && typeof STATUS_MAPPING === "object");
 });

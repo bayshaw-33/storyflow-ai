@@ -1,4 +1,4 @@
-import { dedupeActorsByName } from "./actor-dedupe";
+import { dedupeActorsByName } from "./actor-dedupe.ts";
 import {
   assertCanSetPlatformVisibility,
   buildActorBasePrompt,
@@ -845,4 +845,4 @@ function ensureServiceRole() {
   if (!hasServiceRoleConfig()) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
 }
 
-export { dedupeActorsByName } from "./actor-dedupe";
+export { dedupeActorsByName } from "./actor-dedupe.ts";

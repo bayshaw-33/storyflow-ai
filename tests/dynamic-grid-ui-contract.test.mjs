@@ -25,6 +25,9 @@ const PROD_DIR = path.join(ROOT, "components/production");
 const EDITOR_SRC = fs.readFileSync(path.join(PROD_DIR, "DynamicGridEditor.tsx"), "utf-8");
 const DIALOG_SRC = fs.readFileSync(path.join(PROD_DIR, "DynamicGridDiffDialog.tsx"), "utf-8");
 const WORKBENCH_SRC = fs.readFileSync(path.join(PROD_DIR, "ProductionWorkbench.tsx"), "utf-8");
+// K2.2 统一工作台重构后，grid 不再是 ProductionWorkbench 的独立 Tab，
+// 而是统一分镜阶段（UnifiedStoryboardStage）的子视图（宫格 + 运动预览）。
+const STORYBOARD_STAGE_SRC = fs.readFileSync(path.join(PROD_DIR, "UnifiedStoryboardStage.tsx"), "utf-8");
 
 // ============================================================
 // 1. dynamic-grid-client 契约
@@ -259,38 +262,33 @@ test("DynamicGridDiffDialog 无差异时显示 'no changes' 提示", () => {
 // 4. ProductionWorkbench 接入契约
 // ============================================================
 
-test("ProductionWorkbench 引入 DynamicGridEditor", () => {
-  assert.match(WORKBENCH_SRC, /import \{ DynamicGridEditor \} from "\.\/DynamicGridEditor"/);
+test("UnifiedStoryboardStage 引入 DynamicGridEditor（grid 从独立 Tab 迁入分镜阶段）", () => {
+  assert.match(STORYBOARD_STAGE_SRC, /import \{ DynamicGridEditor \} from "\.\/DynamicGridEditor"/);
 });
 
-test("ProductionWorkbench Tab 类型新增 'grid' 选项", () => {
-  assert.match(WORKBENCH_SRC, /type Tab = "script" \| "table" \| "assets" \| "frames" \| "grid"/);
+test("分镜阶段子视图含 'grids'（宫格）", () => {
+  assert.match(STORYBOARD_STAGE_SRC, /type StoryboardSubview = "shot_table" \| "grids" \| "motion" \| "prompts"/);
+  assert.match(STORYBOARD_STAGE_SRC, /\{ id: "grids", label: "宫格" \}/);
 });
 
-test("ProductionWorkbench tabLabels 包含 'grid' -> '动态分镜'", () => {
-  assert.match(WORKBENCH_SRC, /\{ id: "grid", label: "动态分镜" \}/);
-});
-
-test("ProductionWorkbench 从 URL 读取 handoffId 参数", () => {
+test("ProductionWorkbench 从 URL 读取 handoffId 参数并传给分镜阶段", () => {
   assert.match(WORKBENCH_SRC, /searchParams\.get\("handoffId"\)/);
   assert.match(WORKBENCH_SRC, /const \[handoffId, setHandoffId\] = useState/);
-  assert.match(WORKBENCH_SRC, /setHandoffId\(urlHandoffId\)/);
+  assert.match(WORKBENCH_SRC, /handoffId=\{handoffId \|\| null\}/);
 });
 
-test("ProductionWorkbench activeTab === 'grid' 时渲染 DynamicGridEditor 并传入 handoffId", () => {
-  assert.match(WORKBENCH_SRC, /activeTab === "grid"/);
-  assert.match(WORKBENCH_SRC, /<DynamicGridEditor handoffId=\{handoffId\} \/>/);
+test("分镜阶段在 handoffId 存在时渲染 DynamicGridEditor 并传入 handoffId", () => {
+  assert.match(STORYBOARD_STAGE_SRC, /const fallbackMotion = handoffId \? \(/);
+  assert.match(STORYBOARD_STAGE_SRC, /<DynamicGridEditor handoffId=\{handoffId\} \/>/);
 });
 
-test("ProductionWorkbench 缺少 handoffId 时显示提示 (不渲染编辑器)", () => {
-  assert.match(WORKBENCH_SRC, /请先在剧本工作台「定稿并进入分镜」以生成 handoff/);
+test("缺少 handoffId 时显示提示 (不渲染编辑器)", () => {
+  assert.match(STORYBOARD_STAGE_SRC, /请先在剧本阶段确认可用版本，再生成分镜运动预览。/);
 });
 
-test("ProductionWorkbench 接入不破坏现有 tabs (script/assets/table/frames 仍存在)", () => {
-  assert.match(WORKBENCH_SRC, /activeTab === "script"/);
-  assert.match(WORKBENCH_SRC, /activeTab === "assets"/);
-  assert.match(WORKBENCH_SRC, /activeTab === "table"/);
-  assert.match(WORKBENCH_SRC, /activeTab === "frames"/);
+test("ProductionWorkbench 接入不破坏统一四阶段（script/art/storyboard/video 仍可切换）", () => {
+  assert.match(WORKBENCH_SRC, /<UnifiedStoryboardStage/);
+  assert.match(WORKBENCH_SRC, /"script" \| "art" \| "storyboard" \| "video"|parseUnifiedWorkbenchQuery/);
 });
 
 test("DynamicGridEditor.module.css 包含 4/6/9/12 宫格布局样式", () => {

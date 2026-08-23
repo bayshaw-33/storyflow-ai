@@ -43,7 +43,8 @@ test("maps legacy creation fields into the V2 shared documents", () => {
   assert.equal(project.creationWorkspace?.documents.plotOutline.content, "Legacy plot");
   assert.equal(project.creationWorkspace?.novel.units.length, 1);
   assert.equal(project.creationWorkspace?.novel.units[0].content, "Chapter body");
-  assert.equal(project.creationWorkspace?.novel.units[0].status, "reviewed");
+  // PRD V1.0：reviewed/locked 归一化为 finalized（内容原样保留）
+  assert.equal(project.creationWorkspace?.novel.units[0].status, "finalized");
   assert.deepEqual(project.creationWorkspace?.screenplay.units, []);
 
   assert.equal(project.novelBrief, "Legacy background");
@@ -109,7 +110,7 @@ test("keeps novel and screenplay units in independent stores", () => {
   assert.equal(screenplayUpdated.screenplay.units[0].content, "Script revision");
 });
 
-test("does not overwrite a locked unit", () => {
+test("editing a finalized unit applies the edit and demotes it to draft (PRD V1.0)", () => {
   const workspace = createCreationWorkspace({
     novelChapters: [
       {
@@ -122,18 +123,21 @@ test("does not overwrite a locked unit", () => {
         pov: "",
         wordCount: 2,
         continuityNotes: "",
-        status: "locked",
+        status: "locked", // 归一化后为 finalized
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     ],
   });
+  assert.equal(workspace.novel.units[0].status, "finalized", "locked 归一化为 finalized");
 
-  assert.throws(
-    () => updateCreationUnit(workspace, "novel", "locked-chapter", { content: "Accidental overwrite" }),
-    /locked/i,
-  );
+  // 用户手动编辑：内容应用且状态自动降级为草稿（不再抛错阻断）
+  const edited = updateCreationUnit(workspace, "novel", "locked-chapter", { content: "Deliberate revision" });
+  assert.equal(edited.novel.units[0].content, "Deliberate revision");
+  assert.equal(edited.novel.units[0].status, "draft");
+  // 原工作区不可变（append-only 语义）
   assert.equal(workspace.novel.units[0].content, "Approved text");
+  // AI 生成路径的定稿保护见 tests/creation-parsers.test.mjs（finalize 单元记为失败，不覆盖）
 });
 
 test("records and normalizes the last creation position", () => {

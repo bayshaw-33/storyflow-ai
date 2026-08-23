@@ -2,7 +2,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-const BASE = process.env.ADMIN_TEST_BASE || "http://localhost:3000";
+// 集成测试：仅在显式提供 ADMIN_TEST_BASE（如本地 dev server）时运行；
+// 无服务器环境下 skip，不再因默认 localhost:3000 产生 ECONNREFUSED 假失败。
+const BASE = process.env.ADMIN_TEST_BASE || "";
 const VIEWER_TOKEN = process.env.ADMIN_TEST_VIEWER_TOKEN || "";
 const SUPER_ADMIN_TOKEN = process.env.ADMIN_TEST_SUPER_ADMIN_TOKEN || "";
 
