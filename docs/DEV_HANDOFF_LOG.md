@@ -1,5 +1,52 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 收尾（全量验证与交付物）
+
+**分支：** `fix/K22-p0p1-trust`（base: origin/main `b3ba9c1a`，12 个切片提交）
+
+### 全量验证结果
+
+| 验证项 | 结果 |
+|---|---|
+| `audit:kiikis22`（contracts + runtime + migrations，production env，9 fixture 开关 fail-closed） | ✅ 全部通过（48 PRD ID 覆盖、28 表 RLS、12 表 append-only 触发器） |
+| `node --test tests/contracts-v22/*.test.mjs` | ✅ 198 pass / 0 fail（Gate A 13 断言由 RED 全部转 GREEN） |
+| 顶层全量 `node --test tests/*.test.mjs`（1843 tests） | 1818 pass / 25 fail —— **与 origin/main 基线对比：新增失败 0，修复 1**（song ledger appendUserMessage） |
+| `npx tsc --noEmit` | ✅ 0 错误 |
+| `pnpm build` | ✅ 成功 |
+| `git diff --check` + 敏感信息扫描 | ✅ 干净（无 token/key/密码/私有正文；唯一命中为既有错误码常量名） |
+
+### 基线预存失败清单（非本分支引入，建议后续单独处理）
+
+1. `tests/ui-v2/task-center/task-center.test.mjs` computeStats byStatus/byType（fixture 统计漂移 17≠18）。
+2. `tests/ui-v2/universe/api-adapter.test.mjs` 4 个 fixture 模式断言（期望默认 true，与 Phase 6 Task 6.2 fail-closed 矛盾）。
+3. 顶层套件其余 ~20 个失败（admin API 守卫、grid tab、teams-auth、storyboard 等）在 origin/main 上即失败。
+
+### 交付物（PRD §10 对应）
+
+1. **根因说明与变更清单**：本日志切片 1-12 各条目（文件/API/数据影响逐项列出）。共 62 文件，+3005/-457 行；无 migration、无 schema/data 写入、无历史对象修改。
+2. **契约/回归测试证据**：新增 7 个契约测试文件（Gate A 13 断言 + kk-auth 8 + project-start 5 + real-progress 6 + version-panel 4 + kk-status 4 + real-feeds 4 + song-session 4），更新 4 个既有测试到新契约。
+3. **每切片独立 commit**：a4a167f3(Gate A) → 99c47b83(P0-05) → 289f325f(P0-01) → 374df8cf(P0-03) → 4cfda449(P0-04) → 2f769574(P0-02) → 7a5f87b9(P0-06) → 45f5cc4e(P1-06) → 98a4cf46(P1-01) → 63fa86f8(P1-02) → acbe9618(P1-03) → aed32836(P1-04) → 53c38b96(P1-05)。
+4. **部署验证**：合入 main 后由 Vercel 部署；线上验证清单见下。
+5. **空壳项目候选清理报告**：`supabase/migrations/audits/audit_empty_project_candidates.sql`（只读关联检查：Works/Units/Versions/Candidates/Threads/Messages/Assets×3/UniverseLinks/Evidence/Exports 计数 + retired-novel 标记）。先 staging 执行核对，生产需目标库门禁 + 人工确认；**不含任何删除执行**。UI 侧"疑似空项目"标记已上线（P1-01）。
+
+### 线上验证清单（部署后执行，PRD §7）
+
+- [ ] 已登录 KK 对话 10 连发成功率 ≥98%（剧本 KK 房间 + 美术助理 + 分镜助理）
+- [ ] 4 类既有项目（剧本/美术/分镜/视频）直链 /production 打开对应 tab
+- [ ] 五个剧本节点在 上游为空时逐一创建/进入
+- [ ] 标题+正文保存 → 刷新/重开一致；断网保存失败本地输入仍在
+- [ ] Universe 列表 → 详情 → 返回一致；无权 URL 显示权限提示
+- [ ] 20 次打开创建确认后取消 → 数据库 Project/Work/Unit 新增为 0
+- [ ] 任务中心四种状态（无任务/成功/失败/DB 异常）无 SQL 泄露
+- [ ] `/script-workbench?projectId=<既有>` 直接进入且不新建项目
+- [ ] 歌曲项目重开后消息按真实顺序恢复；legacy notes 只导入一次
+- [ ] marketplace 无演示数据（空态/错误态）；发布流提交产生真实 draft 资产
+- [ ] `https://www.kiikis.com/` HTTP 200 + 受影响页面抽查
+
+### 合入建议
+
+分支已通过全部本地 Gate（audit/contracts/tsc/build/敏感扫描），零新增回归。建议按切片顺序 squash-merge 或逐 commit 合入 main；合入后按上面清单完成线上验证再关闭 PRD。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 12（P1-05 歌曲会话恢复）
 
 **分支：** `fix/K22-p0p1-trust`
