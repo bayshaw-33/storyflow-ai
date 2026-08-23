@@ -7,6 +7,7 @@ import { Copy, ExternalLink, Globe, Languages, Loader2, MoreHorizontal, Package,
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { readProjectFromSupabase, readProjectsFromSupabase, upsertProjectToSupabase } from "@/lib/supabase/projects";
 import { getUniverseBundle, listUniverses, saveInboxItems, type Universe, type UniverseBundle } from "@/lib/universe";
 import type { CreativePackage } from "@/lib/universe/creative-package";
@@ -568,6 +569,9 @@ export default function SongWorkbenchPage() {
   const [universeStatus, setUniverseStatus] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [songProjectId, setSongProjectId] = useState<string | null>(null);
+  // P1-05：歌曲会话账本 —— 真实消息序列的事实源（storyflow_conversation_messages）
+  const [ledgerWorkId, setLedgerWorkId] = useState<string | null>(null);
+  const ledgerWorkIdRef = useRef<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
@@ -825,12 +829,12 @@ export default function SongWorkbenchPage() {
     setAudit(snapshot.audit);
     setSongDevelopmentNotes(snapshot.songDevelopmentNotes);
     setChatInput("");
+    // P1-05：本地 notes 只是回退展示；真实历史由 restoreSongLedger 从会话账本
+    // 按时间顺序恢复（notes 不再被压成单条"摘要"消息）。
     setChatMessages(snapshot.songDevelopmentNotes
-      ? [
-          createSongAssistantMessage(isZh ? "我已读取这个歌曲项目之前保存的创作沟通记录，可以继续聊，也可以直接生成/更新歌曲。" : "I loaded the saved music development notes. We can keep talking or generate/update the song."),
-          createSongAssistantMessage(snapshot.songDevelopmentNotes),
-        ]
+      ? [createSongAssistantMessage(isZh ? "正在恢复这个歌曲项目的创作对话记录…" : "Restoring the saved music development conversation…")]
       : [createSongAssistantMessage(getSongOpeningMessage(isZh))]);
+    void restoreSongLedger(project.id, snapshot.songDevelopmentNotes || "");
     setVersions([]);
     setSongProjectId(project.id);
     setSelectedUniverseId(project.universeId || "");
@@ -974,6 +978,70 @@ export default function SongWorkbenchPage() {
     });
   }
 
+  /**
+   * P1-05：把消息追加到会话账本（append-only）。尽力而为：账本失败不阻塞
+   * 对话本身，只在控制台留痕；重开时以账本为准恢复真实顺序。
+   */
+  async function appendSongLedgerMessage(role: "user" | "assistant", content: string, idempotencyKey: string) {
+    const workId = ledgerWorkIdRef.current;
+    if (!workId || !session?.access_token) return;
+    try {
+      await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(workId)}/conversations/${encodeURIComponent(workId)}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ role, content, idempotencyKey }),
+      });
+    } catch (error) {
+      console.warn("[song-ledger] append failed (non-blocking)", error);
+    }
+  }
+
+  /**
+   * P1-05：重开恢复 —— 从账本按时间顺序恢复真实 user/assistant 消息；
+   * 无账本记录且存在 legacy notes 时，导入一次（确定性幂等键）。
+   * 失败时静默降级为本地展示（不阻塞工作台）。
+   */
+  async function restoreSongLedger(projectId: string, legacyNotes: string) {
+    if (!session?.access_token) return;
+    try {
+      const resolveRes = await fetchWithAuthRetry(`/api/v2/project-start/resolve-work?projectId=${encodeURIComponent(projectId)}`);
+      const resolvePayload = (await resolveRes.json().catch(() => null)) as { success?: boolean; workId?: string } | null;
+      if (!resolveRes.ok || !resolvePayload?.success || !resolvePayload.workId) return;
+      const workId = resolvePayload.workId;
+      ledgerWorkIdRef.current = workId;
+      setLedgerWorkId(workId);
+      // 确保线程存在（threadId = workId，与剧本侧默认会话身份一致）
+      await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(workId)}/conversations`, {
+        method: "POST",
+        body: JSON.stringify({ threadId: workId, title: "歌曲创作对话" }),
+      }).catch(() => undefined);
+      const listRes = await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(workId)}/conversations/${encodeURIComponent(workId)}/messages?limit=500`);
+      const listPayload = (await listRes.json().catch(() => null)) as
+        | { success?: boolean; messages?: Array<{ role?: string; content?: string }> }
+        | null;
+      let rows = listRes.ok && listPayload?.success ? (listPayload.messages ?? []) : [];
+      if (rows.length === 0 && legacyNotes.trim()) {
+        // legacy notes 只导入一次（幂等键跨重开稳定）
+        const importRes = await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(workId)}/conversations/${encodeURIComponent(workId)}/messages`, {
+          method: "POST",
+          body: JSON.stringify({
+            role: "assistant",
+            content: `【legacy_import】${legacyNotes.trim()}`,
+            idempotencyKey: `song-legacy-import:${workId}`,
+          }),
+        });
+        const importPayload = (await importRes.json().catch(() => null)) as { success?: boolean; message?: { role?: string; content?: string } } | null;
+        if (importRes.ok && importPayload?.success && importPayload.message) rows = [importPayload.message];
+      }
+      if (rows.length > 0) {
+        setChatMessages(rows.map((row) =>
+          createSongChatMessage(row.role === "user" ? "user" : "assistant", row.content ?? ""),
+        ));
+      }
+    } catch (error) {
+      console.warn("[song-ledger] restore failed (non-blocking)", error);
+    }
+  }
+
   function validateForm() {
     return Boolean(form.title.trim() || form.concept.trim() || songDevelopmentNotes.trim());
   }
@@ -988,6 +1056,7 @@ export default function SongWorkbenchPage() {
 
     const userMessage = createSongChatMessage("user", trimmed);
     setChatMessages((current) => [...current, userMessage]);
+    void appendSongLedgerMessage("user", trimmed, `song-input:${userMessage.id}`);
     const notesWithUser = appendSongNotes(songDevelopmentNotes, "USER", trimmed);
     setSongDevelopmentNotes(notesWithUser);
     if (!form.concept.trim()) updateForm("concept", trimmed);
@@ -1003,12 +1072,8 @@ export default function SongWorkbenchPage() {
 
     setChatGenerating(true);
     try {
-      const response = await fetch("/api/ai/generate", {
+      const response = await fetchWithAuthRetry("/api/ai/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
         body: JSON.stringify({
           taskType: "song_development_chat",
           projectTitle: form.title || "Song development chat",
@@ -1022,6 +1087,7 @@ export default function SongWorkbenchPage() {
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI chat failed.");
       const reply = createSongAssistantMessage(payload.output || "");
       setChatMessages((current) => [...current, reply]);
+      void appendSongLedgerMessage("assistant", reply.content, `song-reply:${reply.id}`);
       setSongDevelopmentNotes((current) => appendSongNotes(current, "AI", reply.content));
     } catch (chatError) {
       setError(chatError instanceof Error ? chatError.message : isZh ? "AI 对话失败。" : "AI chat failed.");

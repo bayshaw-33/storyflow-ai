@@ -1,5 +1,33 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 12（P1-05 歌曲会话恢复）
+
+**分支：** `fix/K22-p0p1-trust`
+
+### 根因
+
+song-workbench 仍以 `songDevelopmentNotes` 单串为事实源（追加后硬截 24k）；重开时 `applySongProject` 把全部历史压成一条 assistant"摘要"消息。Phase 5 Task 5.2 写好的会话账本（storyflow_conversation_threads/messages，append-only）从未接线。
+
+### 变更
+
+- `app/song-workbench/page.tsx`：
+  - 新增 `restoreSongLedger`：resolve-work 解析/补建 Work（threadId=workId，与剧本侧默认会话身份一致）→ ensureThread → GET messages 按时间顺序恢复真实 user/assistant 消息；无记录且有 legacy notes 时以确定性幂等键 `song-legacy-import:<workId>` 导入一次（标记【legacy_import】）。失败静默降级本地展示，不阻塞工作台。
+  - `appendSongLedgerMessage`：发送与 AI 回复追加进账本（尽力而为，失败不阻塞对话）。
+  - applySongProject 本地回退改为"正在恢复…"占位，不再回放 notes 单条消息。
+  - sendChatMessage 的 /api/ai/generate 改走 fetchWithAuthRetry（401 刷新重试）。
+  - notes 保留为派生 prompt 缓存（24k 截断只影响缓存，不再是恢复源）。
+- `app/api/v2/project-start/resolve-work/route.ts`：补建 Work 类型按项目 workflow 映射（song → song Work，其余 script），幂等键含类型。
+
+### 验证
+
+新测试 `tests/contracts-v22/p0p1-song-session.test.mjs` 4 断言 GREEN；song 相关套件 16 pass；`npx tsc --noEmit` 0 错误。
+
+### 已知风险 / 遗留
+
+1. legacy song 项目首次重开会自动补建 song Work（幂等）并导入一次 notes —— 这是一次性数据迁移行为，符合 PRD"项目可见即可解析"与 append-only 约束。
+2. 账本追加失败仅 console.warn（不阻塞对话）；下次发送仍会追加新消息，中间缺口由 legacy notes 已导入内容与后续消息衔接。
+3. `lib/client/v2/song-workbench/session.ts`（PostgREST 版 ledger）保持未用 —— 页面走 API 路由版实现；该模块的去留待后续清理决策。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 切片 11（P1-04 真实 Feed 与资产页）
 
 **分支：** `fix/K22-p0p1-trust`

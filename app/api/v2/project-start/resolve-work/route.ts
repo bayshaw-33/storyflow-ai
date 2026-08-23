@@ -73,6 +73,8 @@ export async function GET(request: NextRequest) {
     if (!primary) {
       // P0-02：既有项目尚无 Work（pre-K22 数据）→ 幂等补建 script stage Work。
       // 幂等键确定性派生（owner+project+stage），重复调用不会产生多余 Work。
+      // P1-05：song 项目补建 song Work（其余默认 script），幂等键含类型
+      const provisionType = projects[0]?.workflow_type === "song" ? "song" : "script";
       const ensured = await serviceFetch<EnsureStageWorkRpcRow | EnsureStageWorkRpcRow[]>(
         "/rest/v1/rpc/ensure_project_stage_work",
         {
@@ -81,9 +83,9 @@ export async function GET(request: NextRequest) {
           body: JSON.stringify({
             p_owner_id: viewer.id,
             p_project_id: projectId,
-            p_work_type: "script",
-            p_title: "剧本",
-            p_idempotency_key: `resolve:${viewer.id}:${projectId}:script`,
+            p_work_type: provisionType,
+            p_title: provisionType === "song" ? "歌曲" : "剧本",
+            p_idempotency_key: `resolve:${viewer.id}:${projectId}:${provisionType}`,
           }),
         },
       );
