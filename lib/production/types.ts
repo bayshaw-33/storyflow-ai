@@ -110,6 +110,19 @@ export type ProductionChatMessage = {
   createdAt: string;
 };
 
+/**
+ * 分镜画布（自由排布）状态：随分镜草稿管线持久化。
+ * 镜头卡只存 shotId + 画布坐标，展示数据（帧图/场次标题）实时取自 scenes/frames；
+ * 便签为画布自有内容。viewport 为画布平移/缩放。
+ */
+export type StoryboardCanvasShotRef = { shotId: string; x: number; y: number };
+export type StoryboardCanvasNote = { id: string; text: string; x: number; y: number };
+export type StoryboardCanvasState = {
+  viewport: { x: number; y: number; zoom: number };
+  shots: StoryboardCanvasShotRef[];
+  notes: StoryboardCanvasNote[];
+};
+
 export type ProductionProjectState = {
   id: string;
   projectId?: string;
@@ -130,6 +143,7 @@ export type ProductionProjectState = {
   chatMessages: ProductionChatMessage[];
   history: ProductionHistoryItem[];
   casting: Record<string, string>;
+  storyboardCanvas?: StoryboardCanvasState | null;
   updatedAt: string;
 };
 

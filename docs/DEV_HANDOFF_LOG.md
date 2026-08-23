@@ -1,5 +1,30 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-23 - ZCode / 分镜画布（第五子视图：自由排布画布）
+
+### 形态（用户选定）
+
+Figma/Miro 风格自由排布画布：镜头卡 + 文字便签自由拖放；背景拖拽平移、滚轮缩放（0.25–2.5 夹取）、重置视图；"全部镜头上画布"一键网格铺场、"添加便签"记录构思。持久化跟随现有分镜草稿管线（用户选定）。
+
+### 实现（零 schema 改动、零新依赖）
+
+- `lib/production/types.ts`：`StoryboardCanvasState`（viewport + shots[shotId+坐标] + notes）挂 `ProductionProjectState.storyboardCanvas?` 可选字段。
+- `components/production/StoryboardCanvas.tsx`（新，~380 行纯手写）：Pointer Events 实现拖拽/平移，transform 实现视口；镜头卡只存 shotId+坐标，展示数据实时取自 scenes/frames（帧图、场/镜号），已删除镜头降级为"镜头已删除"占位；便签点击编辑/删除。
+- `UnifiedStoryboardStage`：`StoryboardSubview` + `"canvas"`，子视图栏出现"画布"。
+- `ProductionWorkbench`：canvas 状态；URL 别名 `storyboardView=canvas|board`；草稿水合恢复 storyboardCanvas；自动草稿保存 payload 与依赖数组并入 canvas；content map 传 StoryboardCanvas。
+
+### 持久化边界（与现有字段一致）
+
+scenes/assets/revision 的现行管线即 scoped 本地草稿（`kiikis:storyboard:v2:<用户>:<项目>:<work>:<单元>`，归档恢复走云端流）——画布完全同路径，多设备不互踢（按作用域隔离）。云端实时同步不在本轮（与 scenes 现状一致）。
+
+### 验证
+
+新契约测试 `tests/contracts-v22/storyboard-canvas.test.mjs` 5 断言全绿；contracts+storyboard+production 家族 395 pass；顶层 1906/1906；tsc 0 错误；build 成功。
+
+### 后续可选增强（未做）
+
+参考图上传到画布（需接 storage 上传链路）、画布导出长图、多画布页、云端实时同步。
+
 ## 2026-08-23 - ZCode / 剪辑功能回归制作工作台（五阶段集成）
 
 ### 背景（用户报告"之前部署过但前端看不到了"）

@@ -77,6 +77,8 @@ import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump
 import type { ProductionProjectState } from "@/lib/production/types";
 import { ScreenplayStudio } from "@/components/v2/screenplay-studio/ScreenplayStudio";
 import { StoryboardFrameGrid, StoryboardPromptList, UnifiedStoryboardStage, type StoryboardSubview } from "./UnifiedStoryboardStage";
+import { StoryboardCanvas } from "./StoryboardCanvas";
+import type { StoryboardCanvasState } from "@/lib/production/types";
 import {
   buildUnifiedWorkbenchUrl,
   parseUnifiedWorkbenchQuery,
@@ -106,6 +108,8 @@ export function ProductionWorkbench() {
   // --- 顶层状态 ---
   const [activeStage, setActiveStage] = useState<UnifiedProductionStage>("script");
   const [storyboardSubview, setStoryboardSubview] = useState<StoryboardSubview>("shot_table");
+  // 分镜画布：自由排布状态，随分镜草稿管线持久化
+  const [canvas, setCanvas] = useState<StoryboardCanvasState | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient | null>(null);
   const [projectId, setProjectId] = useState<string>("");
@@ -253,6 +257,7 @@ export function ProductionWorkbench() {
     else if (requestedStoryboardSubview === "dynamic" || requestedStoryboardSubview === "motion") setStoryboardSubview("motion");
     else if (requestedStoryboardSubview === "prompts" || requestedStoryboardSubview === "video_prompt") setStoryboardSubview("prompts");
     else if (requestedStoryboardSubview === "shot_table" || requestedStoryboardSubview === "shots") setStoryboardSubview("shot_table");
+    else if (requestedStoryboardSubview === "canvas" || requestedStoryboardSubview === "board") setStoryboardSubview("canvas");
     setHandoffId(searchParams.get("handoffId") || "");
     setHydrationPhase("loading_local");
 
@@ -279,6 +284,8 @@ export function ProductionWorkbench() {
       setSourceFiles(draft.sourceFiles || []);
       // 草稿中的 storyboard 字段（如果之前保存过）
       const draftScenes = (draft as ProductionProjectState & { storyboardScenes?: StoryboardScene[] }).storyboardScenes;
+      const draftCanvas = (draft as ProductionProjectState & { storyboardCanvas?: StoryboardCanvasState | null }).storyboardCanvas ?? null;
+      setCanvas(draftCanvas);
       if (Array.isArray(draftScenes)) setScenes(draftScenes);
       const draftAssets = (draft as ProductionProjectState & { storyboardAssets?: StoryboardAssets }).storyboardAssets;
       if (draftAssets) setAssets(draftAssets);
@@ -431,6 +438,7 @@ export function ProductionWorkbench() {
       storyboardScenes: scenes,
       storyboardAssets: assets,
       storyboardRevision: revision,
+      storyboardCanvas: canvas,
     } as unknown as ProductionProjectState;
     try {
       writeStoryboardDraft(scope, draftPayload);
@@ -440,7 +448,7 @@ export function ProductionWorkbench() {
       const message = error instanceof Error ? error.message : "本地草稿保存失败";
       setDraftPersistError(message);
     }
-  }, [scenes, assets, revision, projectId, workId, sourceUnitId, session, projectTitle, sourceFiles, manuscript, hydrationPhase, draftPersistError]);
+  }, [scenes, assets, revision, canvas, projectId, workId, sourceUnitId, session, projectTitle, sourceFiles, manuscript, hydrationPhase, draftPersistError]);
 
   // -------------------------------------------------------------------
   // 服务端加载/保存
@@ -1632,6 +1640,14 @@ export function ProductionWorkbench() {
                       />
                     ),
                     grids: <StoryboardFrameGrid scenes={scenes} frames={frames} />,
+                    canvas: (
+                      <StoryboardCanvas
+                        scenes={scenes}
+                        frames={frames}
+                        canvas={canvas}
+                        onChange={setCanvas}
+                      />
+                    ),
                     prompts: <StoryboardPromptList scenes={scenes} prompts={prompts} onGenerate={() => void generatePromptsForShots(scenes.flatMap((scene) => scene.shots.map((shot) => shot.id ?? shot.clientId ?? "")))} />,
                   }}
                 />

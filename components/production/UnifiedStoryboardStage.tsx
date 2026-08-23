@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { DynamicGridEditor } from "./DynamicGridEditor";
 import type { StoryboardScene } from "@/lib/storyboard/contracts";
 
-export type StoryboardSubview = "shot_table" | "grids" | "motion" | "prompts";
+export type StoryboardSubview = "shot_table" | "grids" | "motion" | "prompts" | "canvas";
 
 export interface UnifiedStoryboardStageProps {
   projectId: string;
@@ -68,6 +68,7 @@ const SUBVIEWS: Array<{ id: StoryboardSubview; label: string }> = [
   { id: "grids", label: "宫格" },
   { id: "motion", label: "运动预览" },
   { id: "prompts", label: "视频提示词" },
+  { id: "canvas", label: "画布" },
 ];
 
 export function UnifiedStoryboardStage({
