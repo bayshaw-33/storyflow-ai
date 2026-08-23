@@ -1,5 +1,30 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-23 - ZCode / P0/P1 可信度修复 · 发布与线上验证记录
+
+### 发布
+
+- 之前 Vercel 无部署的原因：全部提交只在本地分支，未推送。现已在 GitHub 建分支 `fix/K22-p0p1-trust` 并快进合入 `main`（`b3ba9c1a..5823997a`，2026-08-23 10:05 +08）。
+- GitHub Actions CI（main, run 32611952733）：**success**（2m12s，tsc + 三项 KIIKIS 审计 + 单测 + build）。
+- Vercel 生产部署于 10:07 +08 生效（站点缓存 age 重置确认），`https://www.kiikis.com/` HTTP 200。
+
+### 线上验证（匿名可查项，全部通过）
+
+| 页面 | HTTP | 演示数据标记（星河工作室/proj-umbral-pact 等） | SQL 泄露标记（PGRST/storyflow_exports） |
+|---|---|---|---|
+| / | 200 | 0 | 0 |
+| /community | 200 | 0 | 0 |
+| /business/marketplace | 200 | 0 | 0 |
+| /job-center | 200 | 0 | 0 |
+| /login | 200 | 0 | 0 |
+
+marketplace 页已不再输出 45 个演示资产；任务中心无 SQL 泄露 —— P0-05 / P1-04 的线上表现符合预期。
+
+### 待办（需人工/凭证）
+
+1. **登录态线上验收**（PRD §7 清单其余项）：KK 对话 10 连发、4 类项目直链 /production、五节点空上游创建、保存刷新一致性、Universe 列表↔详情、20 次取消创建零残留、legacy 入口不建新项目、歌曲会话恢复 —— 需测试账号登录操作。
+2. **staging 空壳项目审计**：`supabase db query --linked -f supabase/migrations/audits/audit_empty_project_candidates.sql` 连续两次 Management API 超时（status 544，staging 库疑似自动暂停）。恢复 staging 项目后执行；只读 SELECT，无数据风险。
+
 ## 2026-08-22 - ZCode / KIIKIS P0/P1 可信度修复 · 收尾（全量验证与交付物）
 
 **分支：** `fix/K22-p0p1-trust`（base: origin/main `b3ba9c1a`，12 个切片提交）
