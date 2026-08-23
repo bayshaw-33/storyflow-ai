@@ -14,7 +14,10 @@
       "elapsedMs": 0,
       "currentResult": "草稿尚未提交",
       "actions": [
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T01:00:00.000Z"
     },
@@ -31,8 +34,14 @@
       "elapsedMs": 5000,
       "currentResult": "等待用户确认提示词",
       "actions": [
-        { "type": "cancel", "label": "取消" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "cancel",
+          "label": "取消"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T01:05:00.000Z"
     },
@@ -47,11 +56,21 @@
       "completed": 0,
       "total": 10,
       "elapsedMs": 120000,
-      "estimatedRangeMs": { "min": 240000, "max": 480000, "confidence": 0.7 },
+      "estimatedRangeMs": {
+        "min": 240000,
+        "max": 480000,
+        "confidence": 0.7
+      },
       "currentResult": "排队中，尚未开始",
       "actions": [
-        { "type": "cancel", "label": "取消" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "cancel",
+          "label": "取消"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T01:10:00.000Z"
     },
@@ -66,11 +85,21 @@
       "completed": 3,
       "total": 10,
       "elapsedMs": 150000,
-      "estimatedRangeMs": { "min": 300000, "max": 480000, "confidence": 0.8 },
+      "estimatedRangeMs": {
+        "min": 300000,
+        "max": 480000,
+        "confidence": 0.8
+      },
       "currentResult": "已生成 3 段分镜视频",
       "actions": [
-        { "type": "cancel", "label": "取消" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "cancel",
+          "label": "取消"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T01:12:00.000Z"
     },
@@ -87,8 +116,14 @@
       "elapsedMs": 200000,
       "currentResult": "8 张概念图入库中",
       "actions": [
-        { "type": "cancel", "label": "取消" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "cancel",
+          "label": "取消"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T01:15:00.000Z"
     },
@@ -105,7 +140,10 @@
       "elapsedMs": 1800000,
       "currentResult": "已生成 1 个片头动画",
       "actions": [
-        { "type": "view_detail", "label": "查看结果" }
+        {
+          "type": "view_detail",
+          "label": "查看结果"
+        }
       ],
       "createdAt": "2026-08-11T22:00:00.000Z",
       "resultUrl": "/projects/p-101/production?shot=opening"
@@ -124,8 +162,14 @@
       "currentResult": "已生成 7 张立绘，3 张失败",
       "failureReason": "图像提供商超时，3 张重试后仍失败",
       "actions": [
-        { "type": "retry", "label": "重试失败项" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "retry",
+          "label": "重试失败项"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T00:30:00.000Z",
       "resultUrl": "/projects/p-102/art?batch=supporting-cast"
@@ -144,8 +188,14 @@
       "currentResult": "未生成任何结果",
       "failureReason": "API 超时，已重试 2 次",
       "actions": [
-        { "type": "retry", "label": "重试" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "retry",
+          "label": "重试"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-11T20:00:00.000Z"
     },
@@ -162,7 +212,10 @@
       "elapsedMs": 30000,
       "currentResult": "用户主动取消",
       "actions": [
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-11T18:00:00.000Z"
     },
@@ -179,7 +232,10 @@
       "elapsedMs": 240000,
       "currentResult": "已生成 1 首 BGM",
       "actions": [
-        { "type": "view_detail", "label": "查看结果" }
+        {
+          "type": "view_detail",
+          "label": "查看结果"
+        }
       ],
       "createdAt": "2026-08-12T00:00:00.000Z",
       "resultUrl": "/projects/p-104/song?asset=bgm-01"
@@ -197,7 +253,10 @@
       "elapsedMs": 7200000,
       "currentResult": "已导出 1 个 MP4 成片",
       "actions": [
-        { "type": "view_detail", "label": "下载成片" }
+        {
+          "type": "view_detail",
+          "label": "下载成片"
+        }
       ],
       "createdAt": "2026-08-10T10:00:00.000Z",
       "resultUrl": "/exports/ex-001"
@@ -216,8 +275,14 @@
       "currentResult": "导出失败",
       "failureReason": "PDF 模板渲染异常",
       "actions": [
-        { "type": "retry", "label": "重试" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "retry",
+          "label": "重试"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T02:00:00.000Z"
     },
@@ -232,11 +297,21 @@
       "completed": 12,
       "total": 20,
       "elapsedMs": 300000,
-      "estimatedRangeMs": { "min": 180000, "max": 360000, "confidence": 0.75 },
+      "estimatedRangeMs": {
+        "min": 180000,
+        "max": 360000,
+        "confidence": 0.75
+      },
       "currentResult": "已转存 12 个素材",
       "actions": [
-        { "type": "cancel", "label": "取消" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "cancel",
+          "label": "取消"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T01:30:00.000Z"
     },
@@ -253,7 +328,10 @@
       "elapsedMs": 60000,
       "currentResult": "已生成合规报告",
       "actions": [
-        { "type": "view_detail", "label": "查看报告" }
+        {
+          "type": "view_detail",
+          "label": "查看报告"
+        }
       ],
       "createdAt": "2026-08-12T02:30:00.000Z",
       "resultUrl": "/projects/p-101/analysis?report=compliance-01"
@@ -271,8 +349,14 @@
       "elapsedMs": 180000,
       "currentResult": "排队中，无明确总量",
       "actions": [
-        { "type": "cancel", "label": "取消" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "cancel",
+          "label": "取消"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T02:35:00.000Z"
     },
@@ -289,7 +373,10 @@
       "elapsedMs": 0,
       "currentResult": "草稿尚未提交",
       "actions": [
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-12T02:40:00.000Z"
     },
@@ -307,28 +394,34 @@
       "currentResult": "4 个视频合成成功，2 个失败",
       "failureReason": "2 个镜头因内容审核拦截失败",
       "actions": [
-        { "type": "retry", "label": "重试失败项" },
-        { "type": "view_detail", "label": "查看详情" }
+        {
+          "type": "retry",
+          "label": "重试失败项"
+        },
+        {
+          "type": "view_detail",
+          "label": "查看详情"
+        }
       ],
       "createdAt": "2026-08-11T16:00:00.000Z",
       "resultUrl": "/projects/p-103/video?batch=extras"
     }
   ],
   "stats": {
-    "total": 18,
+    "total": 17,
     "byStatus": {
-      "draft": 2,
-      "pending_confirm": 1,
-      "queued": 2,
       "running": 2,
+      "queued": 2,
+      "pending_confirm": 1,
       "result_ingesting": 1,
-      "completed": 5,
+      "draft": 2,
       "partial_failure": 2,
       "failed": 2,
-      "cancelled": 1
+      "cancelled": 1,
+      "completed": 4
     },
     "byType": {
-      "text": 3,
+      "text": 2,
       "image": 4,
       "video": 4,
       "audio": 2,

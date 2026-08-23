@@ -121,9 +121,10 @@ test("K21-FF-002: detectRuntimeMode 返回 development/preview/production", () =
   );
 });
 
-test("K21-FF-002: isFixtureAllowed 仅在 development/preview 为 true (需显式 env)", () => {
-  // development 默认允许
-  assert.equal(isFixtureAllowed({ NODE_ENV: "development" }), true);
+test("K21-FF-002: isFixtureAllowed 仅在显式开启时为 true（Phase 6 Task 6.2 fail-closed）", () => {
+  // development 也需显式开启（fail-closed：默认关闭，避免误用 fixture 冒充真实）
+  assert.equal(isFixtureAllowed({ NODE_ENV: "development" }), false);
+  assert.equal(isFixtureAllowed({ NODE_ENV: "development", NEXT_PUBLIC_USE_FIXTURE: "true" }), true);
   // preview 需显式启用
   assert.equal(
     isFixtureAllowed({ NODE_ENV: "production", VERCEL_ENV: "preview" }),
@@ -148,9 +149,13 @@ test("K21-FF-002: isFixtureAllowed 仅在 development/preview 为 true (需显�
   );
 });
 
-test("K21-FF-002: shouldShowFixtureBadge 在 fixture 启用时返回 true", () => {
+test("K21-FF-002: shouldShowFixtureBadge 在 fixture 显式启用时返回 true（fail-closed）", () => {
   assert.equal(
     shouldShowFixtureBadge({ NODE_ENV: "development" }),
+    false
+  );
+  assert.equal(
+    shouldShowFixtureBadge({ NODE_ENV: "development", NEXT_PUBLIC_USE_FIXTURE: "true" }),
     true
   );
   assert.equal(

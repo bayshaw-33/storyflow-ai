@@ -5,8 +5,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// 在加载 api 模块前确保默认走 fixture（不受外部 env 干扰）。
-delete process.env.NEXT_PUBLIC_USE_UNIVERSE_FIXTURE;
+// P1-04 同款契约：fixture 为显式开启（fail-closed，production 恒关）。
+// 本文件覆盖 fixture 路径：development 模式 + 显式变量才能开启；
+// 默认关闭契约见 runtime-mode 审计。
+process.env.NODE_ENV = "development";
+process.env.NEXT_PUBLIC_USE_UNIVERSE_FIXTURE = "true";
 
 const {
   fetchUniverseBundle,
@@ -117,7 +120,7 @@ function okRoutes() {
 
 // ============ fixture 路径 ============
 
-test("USE_FIXTURE 默认为 true", () => {
+test("USE_FIXTURE 在显式 dev+env 下开启（fail-closed 契约）", () => {
   assert.equal(USE_FIXTURE, true);
 });
 

@@ -1,5 +1,36 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-23 - ZCode / P0/P1 遗留事项处理（基线测试修复 + staging 审计状态）
+
+### 基线预存测试失败修复（8 个，origin/main 上即失败）
+
+1. `tests/ui-v2/task-center/task-center.test.mjs`（2 个）：fixture stats 块陈旧（写 18、实际 17 个 job，completed/text 各漂移 1）。用生产 `computeStats` 对同一 fixture jobs 重算并写回 `tests/fixtures/kiikis-v2/jobs.json` —— fixture 内部一致性恢复，非改断言。现在 21/21。
+2. `tests/ui-v2/universe/api-adapter.test.mjs`（4 个）：断言"USE_FIXTURE 默认 true"与 Phase 6 Task 6.2 fail-closed 决策矛盾（且 production mode 下 isFixtureEnabled 恒关，删 env 也没用）。测试改为显式 `NODE_ENV=development + NEXT_PUBLIC_USE_UNIVERSE_FIXTURE=true` 后走 fixture 路径断言。现在 19/19。
+3. `tests/kiikis-21-runtime-mode.test.mjs`（2 个）：断言旧 K21-FF-002 契约（dev 默认允许 fixture）；代码已被 Task 6.2 改为 fail-closed（runtime 审计 + CI 强制该语义）。测试对齐现行契约（dev 也需显式开启）。现在 19/19。
+
+验证：contracts-v22 198/198 不变；`npx tsc --noEmit` 0 错误。顶层 `tests/*.test.mjs` 剩余 23 个失败为另一批更深的预存问题（grid tab 静态断言、admin 守卫、teams-auth、storyboard API、kk-realtime 等），各自需独立根因分析，不属于本轮范围，留待专项。
+
+### staging 审计状态
+
+staging 项目 `cwpyolxitkcpitqizgtq`（kiikis-staging）当前 **INACTIVE**（Supabase 自动暂停），`supabase db query --linked` 三次 Management API 544 超时。恢复路径（一键）：Supabase Dashboard → kiikis-staging → Restore project；或 Management API `POST /v1/projects/cwpyolxitkcpitqizgtq/restore`。恢复后执行只读审计：
+
+```
+supabase db query --linked -f supabase/migrations/audits/audit_empty_project_candidates.sql
+```
+
+（CLI 当前链接已确认指向 staging，不会误触生产；恢复动作需要 Dashboard 权限，未在本次代执行。）
+
+### 登录态线上验收（需测试账号，人工执行）
+
+PRD §7 清单的登录态项（KK 10 连发、项目直链、保存一致性、20 次取消零残留、歌曲会话恢复等）无法匿名执行——仓库 e2e 令牌均为环境变量注入（EXPORT_E2E_TOKEN 等），不落盘。按 `docs/DEV_HANDOFF_LOG.md` 前一节的清单逐项操作即可。
+
+### exports 合规流专项（决策建议，未执行）
+
+`app/api/exports/request|status|download` 仍读写 14 个 draft-only 列（drafts/20260718020000_exports_compliance_fields.sql）。两个选项：
+- **A（建议）**：按 forward-only 流程升格该 draft migration（staging 先行 → 生产目标门禁）。理由：合规字段需要列级约束/审计语义，且代码已按该 schema 编写。
+- B：折叠进既有 `metadata` jsonb（无 schema 变更，但失去类型约束与直查能力）。
+执行需单独 PR + Gate B；本 PRD 明确排除（§9）。
+
 ## 2026-08-23 - ZCode / P0/P1 可信度修复 · 发布与线上验证记录
 
 ### 发布
