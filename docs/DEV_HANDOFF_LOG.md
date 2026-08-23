@@ -1,5 +1,26 @@
 # DEV_HANDOFF_LOG.md - KIIKIS Storyflow AI
 
+## 2026-08-23 - ZCode / 运维处置：剧本工作台"AI 服务暂时不可用"（provider_failed）
+
+### 现象与定位
+
+剧本 KK 房间报"AI 服务暂时不可用，你的输入已保留，请重试。（编号 req_…）"= `provider_failed`（DeepSeek 调用失败，服务端分类后返回）。排除项：不是余额页面可查的配额、不是登录/数据库链路（带 req 编号说明服务端正常分类响应，也排除 Vercel 函数 504）。
+
+### 验证（本地实测，key 有效）
+
+- 本地 .env.local 的 DEEPSEEK_API_KEY 对 deepseek-v4-flash / v4-pro 均 HTTP 200（content 正常，v4 为推理模型，content 与 reasoning_content 分离）。
+- 真实尺寸 discuss 调用（6000 字上下文包 + 12 条历史 + 4096 maxTokens）：flash 10.6s、pro 55.3s，均低于 120s 内部超时。
+
+### 处置
+
+生产/Preview 环境的 DEEPSEEK_API_KEY 为 83 天前写入（CLI 值打码无法比对）。已通过 Vercel CLI 将**实测可用**的本地 key 更新到 Production 并推送空提交（f4f35b8b）重建生效——若根因是线上 key 失效（401/402/429），此步即修复。
+
+### 遗留与后续
+
+1. **验证**：请在线上剧本工作台重试一次 KK 对话；若仍失败，根因收敛为 Vercel 机房 → api.deepseek.com 网络问题（DEEPSEEK_NETWORK_ERROR）。后台已挂 `vercel logs --follow` 持续采集（/tmp/vercel-follow.log），重试后可从中读到原始 DEEPSEEK_* 错误。
+2. **Preview 环境缺 DEEPSEEK_API_KEY**：旧值已删、CLI 交互限制未能非交互补写（branch 选择提示）；如需 preview 可用请在 Dashboard 手动添加（值=本地 .env.local 同款）。
+3. discuss 路由未设 `maxDuration`（trilogy 与 /api/ai/generate 设了 300）；pro 模型 55s+ 接近 hobby 默认上限，建议后续补 `export const maxDuration = 120` 与 DEEPSEEK_TIMEOUT 对齐。
+
 ## 2026-08-23 - ZCode / 分镜画布（第五子视图：自由排布画布）
 
 ### 形态（用户选定）
