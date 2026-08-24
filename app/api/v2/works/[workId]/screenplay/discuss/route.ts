@@ -89,9 +89,12 @@ export async function GET(
     if (!conversationId) {
       return NextResponse.json({ success: false, error: "conversationId must be a UUID.", code: "validation_failed" }, { status: 422 });
     }
+    const rawLimit = Number(request.nextUrl.searchParams.get("limit") ?? "30");
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50) : 30;
+    const before = request.nextUrl.searchParams.get("before");
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
-    const { messages } = await service.listMessages({ ownerId: viewer.id, workId, conversationId });
-    return NextResponse.json({ success: true, contractVersion: "2.2.0-alpha.1", messages });
+    const page = await service.listMessages({ ownerId: viewer.id, workId, conversationId, limit, before });
+    return NextResponse.json({ success: true, contractVersion: "2.2.0-alpha.1", ...page });
   } catch (error) {
     return errorResponse(error);
   }

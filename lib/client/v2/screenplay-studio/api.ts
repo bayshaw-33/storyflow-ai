@@ -32,6 +32,13 @@ export interface KkMessageDto {
   id: string;
   role: string;
   content: string;
+  createdAt: string | null;
+}
+
+export interface KkMessagePageDto {
+  messages: KkMessageDto[];
+  hasMore: boolean;
+  nextBefore: string | null;
 }
 
 export interface KkCandidateDto {
@@ -168,15 +175,19 @@ export const screenplayStudioApi = {
       { method: "POST", body: JSON.stringify({ action: "resolve", ...body }) },
     );
   },
-  /** 会话历史（刷新恢复）。404/空线程 → 空列表。 */
-  async listMessages(workId: string, conversationId: string): Promise<KkMessageDto[]> {
+  /** 会话历史按最新页读取；旧记录仅在用户请求时加载。 */
+  async listMessages(workId: string, conversationId: string, options: { limit?: number; before?: string | null } = {}): Promise<KkMessagePageDto> {
     try {
-      const { messages } = await call<{ messages: KkMessageDto[] }>(
-        `/api/v2/works/${encodeURIComponent(workId)}/screenplay/discuss?conversationId=${encodeURIComponent(conversationId)}`,
+      const params = new URLSearchParams({ conversationId, limit: String(options.limit ?? 30) });
+      if (options.before) params.set("before", options.before);
+      const page = await call<KkMessagePageDto>(
+        `/api/v2/works/${encodeURIComponent(workId)}/screenplay/discuss?${params.toString()}`,
       );
-      return messages ?? [];
+      return { messages: page.messages ?? [], hasMore: Boolean(page.hasMore), nextBefore: page.nextBefore ?? null };
     } catch (error) {
-      if (error instanceof ScreenplayStudioApiError && (error.status === 404 || error.code === "not_found")) return [];
+      if (error instanceof ScreenplayStudioApiError && (error.status === 404 || error.code === "not_found")) {
+        return { messages: [], hasMore: false, nextBefore: null };
+      }
       throw error;
     }
   },

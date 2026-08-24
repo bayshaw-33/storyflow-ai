@@ -26,6 +26,7 @@
  *   - /api/storyboard/shots/:id/generate-image — 单 shot 分镜图
  */
 
+import dynamic from "next/dynamic";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, ArrowLeft, Clock, Cpu, Save, Users, X } from "lucide-react";
@@ -70,11 +71,9 @@ import {
 import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 import { StoryboardExportMenu } from "./StoryboardExportMenu";
 import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
-import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
-import { ScreenplayStudio } from "@/components/v2/screenplay-studio/ScreenplayStudio";
-import { StoryboardFrameGrid, StoryboardPromptList, UnifiedStoryboardStage, type StoryboardSubview } from "./UnifiedStoryboardStage";
+import type { StoryboardSubview } from "./UnifiedStoryboardStage";
 import {
   buildUnifiedWorkbenchUrl,
   parseUnifiedWorkbenchQuery,
@@ -88,6 +87,25 @@ import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
 import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
+
+const StageLoading = () => <div className={styles.stageLoading}>正在打开工作区…</div>;
+const ScreenplayStudio = dynamic(
+  () => import("@/components/v2/screenplay-studio/ScreenplayStudio").then((module) => module.ScreenplayStudio),
+  { loading: StageLoading },
+);
+const ArtWorkbench = dynamic(() => import("@/components/art/ArtWorkbench"), { loading: StageLoading });
+const UnifiedStoryboardStage = dynamic(
+  () => import("./UnifiedStoryboardStage").then((module) => module.UnifiedStoryboardStage),
+  { loading: StageLoading },
+);
+const StoryboardFrameGrid = dynamic(
+  () => import("./UnifiedStoryboardStage").then((module) => module.StoryboardFrameGrid),
+  { loading: StageLoading },
+);
+const StoryboardPromptList = dynamic(
+  () => import("./UnifiedStoryboardStage").then((module) => module.StoryboardPromptList),
+  { loading: StageLoading },
+);
 
 type StoryboardAssets = {
   characters: StoryboardAssetUsage[];
@@ -318,7 +336,7 @@ export function ProductionWorkbench() {
     }
     void reloadContext();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, session?.access_token]);
+  }, [projectId]);
 
   // --- Supabase session ---
   useEffect(() => {
@@ -366,6 +384,11 @@ export function ProductionWorkbench() {
   // 草稿项目（需求墙 setup=1 流程）跳过门禁；正式项目必须通过服务端校验
   // 服务端校验未返回 ok=true 前，默认阻断（fail-closed），不再"找不到项目就放行"
   useEffect(() => {
+    if (activeStage !== "storyboard" && activeStage !== "video") {
+      setProductionGateLoading(false);
+      setProductionGateError("");
+      return;
+    }
     if (!projectId || !sourceUnitId) {
       setProductionGateLoading(false);
       setProductionGateError("");
@@ -403,7 +426,7 @@ export function ProductionWorkbench() {
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, sourceUnitId]);
+  }, [activeStage, projectId, sourceUnitId]);
 
   // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
   // PRD §6.2: hydration gate —— ready 之前禁止把空初始 state 写入 localStorage

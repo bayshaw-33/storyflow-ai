@@ -263,6 +263,14 @@
   color: var(--ink-secondary);
   text-align: center;
 }
+
+.stageLoading {
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+  color: var(--ink-secondary);
+  font-size: 13px;
+}
 .loadingState p { margin: 0; }
 
 .eyebrow {
