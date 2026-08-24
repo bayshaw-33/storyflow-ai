@@ -52,10 +52,17 @@ export async function getProjectDeletePreflight(
   }
 
   const relatedCounts = await readRelatedCounts(fetcher, ownerId, sourceId);
-  if (hasPrimaryContent(row) || Object.values(relatedCounts).some((count) => count > 0)) {
+  if (hasPrimaryContent(row) || hasMeaningfulPrimaryRelations(relatedCounts)) {
     return archiveOnly(source, sourceId, titleFor(source, row), relatedCounts);
   }
   return safeToDelete(source, sourceId, titleFor(source, row), relatedCounts);
+}
+
+function hasMeaningfulPrimaryRelations(counts: ProjectDeletePreflight["relatedCounts"]) {
+  return counts.screenplayUnits > 0
+    || counts.generationTasks > 0
+    || counts.assets > 0
+    || counts.universeLinks > 0;
 }
 
 export async function setPrimaryProjectArchiveState(
@@ -137,12 +144,17 @@ async function readRelatedCounts(
 ): Promise<ProjectDeletePreflight["relatedCounts"]> {
   const owner = encodeURIComponent(ownerId);
   const project = encodeURIComponent(projectId);
-  const [works, screenplayUnits, generationTasks, assets, universeLinks] = await Promise.all([
-    fetcher<Row[]>(`/rest/v1/storyflow_works?project_id=eq.${project}&owner_id=eq.${owner}&select=id`),
-    fetcher<Row[]>(`/rest/v1/storyflow_screenplay_units?project_id=eq.${project}&owner_id=eq.${owner}&select=id`),
+  const works = await fetcher<Row[]>(`/rest/v1/storyflow_works?project_id=eq.${project}&owner_id=eq.${owner}&select=id`);
+  const workIds = Array.isArray(works)
+    ? works.map((work) => stringValue(work.id)).filter(Boolean)
+    : [];
+  const screenplayUnits = workIds.length > 0
+    ? await fetcher<Row[]>(`/rest/v1/storyflow_screenplay_units?work_id=in.(${workIds.map(encodeURIComponent).join(",")})&select=id`)
+    : [];
+  const [generationTasks, assets, universeLinks] = await Promise.all([
     fetcher<Row[]>(`/rest/v1/storyflow_generation_tasks?project_id=eq.${project}&user_id=eq.${owner}&select=id`),
-    fetcher<Row[]>(`/rest/v1/storyflow_assets?project_id=eq.${project}&owner_id=eq.${owner}&select=id`),
-    fetcher<Row[]>(`/rest/v1/storyflow_universe_project_links?project_id=eq.${project}&owner_id=eq.${owner}&select=id`),
+    fetcher<Row[]>(`/rest/v1/storyflow_assets?project_id=eq.${project}&user_id=eq.${owner}&select=id`),
+    fetcher<Row[]>(`/rest/v1/storyflow_universe_project_links?project_id=eq.${project}&user_id=eq.${owner}&select=id`),
   ]);
   return {
     works: rowCount(works),

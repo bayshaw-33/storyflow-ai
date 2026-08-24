@@ -69,6 +69,25 @@ test("project library excludes archived primary projects", async () => {
   assert.match(calls[0], /deleted_at=is\.null/);
 });
 
+test("archived project view returns only archived primary projects", async () => {
+  const calls = [];
+  const projects = await listProjectLibrary(async (path) => {
+    calls.push(path);
+    return [{
+      id: "archived-1",
+      title: "已归档测试项目",
+      workflow_type: "creation",
+      status: "draft",
+      data: {},
+      created_at: "2026-08-20T00:00:00.000Z",
+      updated_at: "2026-08-20T00:00:00.000Z",
+    }];
+  }, "owner-1", { archived: true });
+  assert.equal(projects.length, 1);
+  assert.match(calls[0], /deleted_at=not\.is\.null/);
+  assert.equal(calls.length, 1);
+});
+
 test("empty owned primary project is safe to permanently delete", async () => {
   const calls = [];
   const result = await getProjectDeletePreflight(async (path) => {
@@ -95,6 +114,20 @@ test("empty owned primary project is safe to permanently delete", async () => {
     universeLinks: 0,
   });
   assert.ok(calls.some((path) => path.startsWith("/rest/v1/storyflow_works")));
+});
+
+test("blank primary Work identity does not block deletion of an otherwise empty project", async () => {
+  const result = await getProjectDeletePreflight(async (path) => {
+    if (path.startsWith("/rest/v1/storyflow_projects")) {
+      return [{ id: "empty-work-1", title: "空白测试项目", owner_id: "owner-1", data: {} }];
+    }
+    if (path.startsWith("/rest/v1/storyflow_works")) return [{ id: "work-1" }];
+    return [];
+  }, "owner-1", { source: "project", sourceId: "empty-work-1" });
+
+  assert.equal(result.decision, "safe_to_delete");
+  assert.equal(result.relatedCounts.works, 1);
+  assert.equal(result.relatedCounts.screenplayUnits, 0);
 });
 
 test("creative or linked primary project is archive-only", async () => {

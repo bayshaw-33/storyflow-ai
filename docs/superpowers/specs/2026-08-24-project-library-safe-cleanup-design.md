@@ -35,10 +35,10 @@ Before a permanent delete request, the server returns a preflight result with:
 - source identity and owner match;
 - project title and timestamps;
 - meaningful-content flags (three-part screenplay content, script body, or source-specific output);
-- related-work counts where the source has a primary project identity;
+- related-work counts where the source has a primary project identity; an automatically created empty primary Work alone is treated as scaffolding, not creative content;
 - a decision: `safe_to_delete`, `archive_only`, or `not_found`.
 
-Only `safe_to_delete` records expose the final permanent-delete confirmation. Any content or linked work changes the result to `archive_only`.
+Only `safe_to_delete` records expose the final permanent-delete confirmation. Any creative content, screenplay unit, generation task, asset, or Universe link changes the result to `archive_only`.
 
 ### 3. Deletion and archive APIs
 

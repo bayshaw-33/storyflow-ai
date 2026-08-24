@@ -631,6 +631,75 @@
   opacity: 0.6;
 }
 
+.archiveToggle {
+  border: 1px solid rgba(109, 231, 223, 0.32);
+  border-radius: 8px;
+  background: transparent;
+  color: #a9f4ef;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.projectCardMenu {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.projectCardMenu button,
+.projectCleanupReview button {
+  border: 1px solid rgba(109, 231, 223, 0.32);
+  border-radius: 6px;
+  background: rgba(109, 231, 223, 0.06);
+  color: #c9fffb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.projectCleanupReview {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(255, 211, 112, 0.3);
+  border-radius: 7px;
+  color: rgba(255, 231, 175, 0.92);
+  font-size: 12px;
+  padding: 8px;
+}
+
+.cleanupCandidateList {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgba(109, 231, 223, 0.22);
+  border-radius: 10px;
+  background: rgba(109, 231, 223, 0.04);
+  color: rgba(226, 255, 252, 0.9);
+  font-size: 13px;
+}
+
+.cleanupCandidateList > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.cleanupCandidateList > div:first-child span {
+  color: rgba(214, 229, 228, 0.62);
+}
+
+.cleanupCandidateRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(109, 231, 223, 0.12);
+}
+
 .projectCardTop,
 .projectCardMeta,
 .projectCardAction {

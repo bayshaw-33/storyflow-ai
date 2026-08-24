@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
     ensureServiceConfig();
-    const projects = await listProjectLibrary(serviceFetch, user.id);
+    const archived = new URL(request.url).searchParams.get("view") === "archived";
+    const projects = await listProjectLibrary(serviceFetch, user.id, { archived });
     return NextResponse.json({ success: true, projects, contractVersion: "2.0.0-alpha.1" });
   } catch (error) {
     return errorResponse(error, "项目数据加载失败。");

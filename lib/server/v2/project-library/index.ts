@@ -17,15 +17,17 @@ const CHILD_SELECT = "*";
 export async function listProjectLibrary(
   fetcher: ProjectLibraryFetcher,
   ownerId: string,
+  options: { archived?: boolean } = {},
 ): Promise<ProjectLibraryProject[]> {
   if (!ownerId) throw new Error("PROJECT_LIBRARY_OWNER_REQUIRED");
 
   const owner = encodeURIComponent(ownerId);
+  const archivedFilter = options.archived ? "deleted_at=not.is.null" : "deleted_at=is.null";
   const baseRows = await fetcher<Row[]>(
-    `/rest/v1/storyflow_projects?or=(owner_id.eq.${owner},user_id.eq.${owner})&deleted_at=is.null&select=${PROJECT_SELECT}&order=updated_at.desc`,
+    `/rest/v1/storyflow_projects?or=(owner_id.eq.${owner},user_id.eq.${owner})&${archivedFilter}&select=${PROJECT_SELECT}&order=updated_at.desc`,
   );
 
-  const childResults = await Promise.allSettled([
+  const childResults: PromiseSettledResult<Row[]>[] = options.archived ? [] : await Promise.allSettled([
     fetcher<Row[]>(
       `/rest/v1/storyflow_production_projects?owner_id=eq.${owner}&select=${CHILD_SELECT}&order=updated_at.desc`,
     ),
@@ -49,8 +51,8 @@ export async function listProjectLibrary(
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
-function settledRows(result: PromiseSettledResult<Row[]>): Row[] {
-  return result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
+function settledRows(result: PromiseSettledResult<Row[]> | undefined): Row[] {
+  return result?.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
 }
 
 function projectRow(row: Row): ProjectLibraryProject {
