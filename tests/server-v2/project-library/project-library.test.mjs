@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { listProjectLibrary } from "../../../lib/server/v2/project-library/index.ts";
+import { getProjectDeletePreflight } from "../../../lib/server/v2/project-library/lifecycle.ts";
 
 test("project library aggregates primary projects and legacy child project tables", async () => {
   const calls = [];
@@ -57,6 +58,70 @@ test("project library aggregates primary projects and legacy child project table
   assert.equal(result.find((item) => item.source === "production").sourceUnitId, "episode-1");
   assert.equal(result.find((item) => item.source === "art").sourceId, "art-1");
   assert.ok(calls.every((path) => path.includes("owner-1")));
+});
+
+test("project library excludes archived primary projects", async () => {
+  const calls = [];
+  await listProjectLibrary(async (path) => {
+    calls.push(path);
+    return [];
+  }, "owner-1");
+  assert.match(calls[0], /deleted_at=is\.null/);
+});
+
+test("empty owned primary project is safe to permanently delete", async () => {
+  const calls = [];
+  const result = await getProjectDeletePreflight(async (path) => {
+    calls.push(path);
+    if (path.startsWith("/rest/v1/storyflow_projects")) {
+      return [{
+        id: "empty-1",
+        title: "测试空项目",
+        owner_id: "owner-1",
+        user_id: "owner-1",
+        data: {},
+      }];
+    }
+    return [];
+  }, "owner-1", { source: "project", sourceId: "empty-1" });
+
+  assert.equal(result.decision, "safe_to_delete");
+  assert.equal(result.title, "测试空项目");
+  assert.deepEqual(result.relatedCounts, {
+    works: 0,
+    screenplayUnits: 0,
+    generationTasks: 0,
+    assets: 0,
+    universeLinks: 0,
+  });
+  assert.ok(calls.some((path) => path.startsWith("/rest/v1/storyflow_works")));
+});
+
+test("creative or linked primary project is archive-only", async () => {
+  const result = await getProjectDeletePreflight(async (path) => {
+    if (path.startsWith("/rest/v1/storyflow_projects")) {
+      return [{
+        id: "script-1",
+        title: "真实剧本",
+        owner_id: "owner-1",
+        data: { outline: "有内容的大纲" },
+      }];
+    }
+    if (path.startsWith("/rest/v1/storyflow_works")) return [{ id: "work-1" }];
+    return [];
+  }, "owner-1", { source: "project", sourceId: "script-1" });
+
+  assert.equal(result.decision, "archive_only");
+  assert.match(result.reason, /内容或关联/);
+  assert.equal(result.relatedCounts.works, 1);
+});
+
+test("preflight hides foreign or absent project identity", async () => {
+  const result = await getProjectDeletePreflight(async () => [], "owner-1", {
+    source: "project",
+    sourceId: "not-owned",
+  });
+  assert.equal(result.decision, "not_found");
 });
 
 test("project library delete route exposes source-aware deletion", async () => {

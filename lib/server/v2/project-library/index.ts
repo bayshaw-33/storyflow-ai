@@ -22,7 +22,7 @@ export async function listProjectLibrary(
 
   const owner = encodeURIComponent(ownerId);
   const baseRows = await fetcher<Row[]>(
-    `/rest/v1/storyflow_projects?or=(owner_id.eq.${owner},user_id.eq.${owner})&select=${PROJECT_SELECT}&order=updated_at.desc`,
+    `/rest/v1/storyflow_projects?or=(owner_id.eq.${owner},user_id.eq.${owner})&deleted_at=is.null&select=${PROJECT_SELECT}&order=updated_at.desc`,
   );
 
   const childResults = await Promise.allSettled([
