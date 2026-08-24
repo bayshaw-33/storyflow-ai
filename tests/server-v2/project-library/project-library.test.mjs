@@ -124,11 +124,19 @@ test("preflight hides foreign or absent project identity", async () => {
   assert.equal(result.decision, "not_found");
 });
 
-test("project library delete route exposes source-aware deletion", async () => {
-  const source = await import("node:fs").then(({ readFileSync }) => readFileSync("app/api/v2/project-library/route.ts", "utf8"));
+test("project library lifecycle routes verify ownership and affected rows", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync("app/api/v2/project-library/route.ts", "utf8");
+  const preflightSource = readFileSync("app/api/v2/project-library/preflight-delete/route.ts", "utf8");
+  const lifecycleSource = readFileSync("lib/server/v2/project-library/lifecycle.ts", "utf8");
   assert.match(source, /export async function DELETE/);
-  assert.match(source, /storyflow_projects/);
-  assert.match(source, /storyflow_production_projects/);
-  assert.match(source, /storyflow_art_projects/);
-  assert.match(source, /storyflow_viral_projects/);
+  assert.match(source, /export async function PATCH/);
+  assert.match(source, /deletePreflightedProject/);
+  assert.match(lifecycleSource, /storyflow_projects/);
+  assert.match(lifecycleSource, /storyflow_production_projects/);
+  assert.match(lifecycleSource, /storyflow_art_projects/);
+  assert.match(lifecycleSource, /storyflow_viral_projects/);
+  assert.match(lifecycleSource, /return=representation/);
+  assert.match(lifecycleSource, /rows\.length !== 1/);
+  assert.match(preflightSource, /getProjectDeletePreflight/);
 });

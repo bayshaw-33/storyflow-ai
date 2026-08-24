@@ -58,6 +58,59 @@ export async function getProjectDeletePreflight(
   return safeToDelete(source, sourceId, titleFor(source, row), relatedCounts);
 }
 
+export async function setPrimaryProjectArchiveState(
+  fetcher: ProjectLibraryFetcher,
+  ownerId: string,
+  sourceId: string,
+  action: "archive" | "restore",
+) {
+  const id = encodeURIComponent(sourceId);
+  const owner = encodeURIComponent(ownerId);
+  const rows = await fetcher<Row[]>(
+    `/rest/v1/storyflow_projects?id=eq.${id}&or=(owner_id.eq.${owner},user_id.eq.${owner})`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        deleted_at: action === "archive" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+  if (!Array.isArray(rows) || rows.length !== 1) throw new Error("PROJECT_NOT_FOUND_OR_FORBIDDEN");
+  return rows[0];
+}
+
+export async function deletePreflightedProject(
+  fetcher: ProjectLibraryFetcher,
+  ownerId: string,
+  input: ProjectDeleteInput,
+) {
+  const preflight = await getProjectDeletePreflight(fetcher, ownerId, input);
+  if (preflight.decision === "not_found") throw new Error("PROJECT_NOT_FOUND_OR_FORBIDDEN");
+  if (preflight.decision !== "safe_to_delete") throw new Error("PROJECT_ARCHIVE_ONLY");
+
+  const owner = encodeURIComponent(ownerId);
+  const sourceId = encodeURIComponent(input.sourceId);
+  const table = projectLibraryTable(input.source);
+  const ownerFilter = input.source === "project"
+    ? `or=(owner_id.eq.${owner},user_id.eq.${owner})`
+    : `${input.source === "viral" ? "user_id" : "owner_id"}=eq.${owner}`;
+  const rows = await fetcher<Row[]>(`/rest/v1/${table}?id=eq.${sourceId}&${ownerFilter}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  });
+  if (!Array.isArray(rows) || rows.length !== 1) throw new Error("PROJECT_NOT_FOUND_OR_FORBIDDEN");
+  return { preflight, deleted: rows[0] };
+}
+
+export function projectLibraryTable(source: ProjectLibrarySource) {
+  if (source === "production") return "storyflow_production_projects";
+  if (source === "art") return "storyflow_art_projects";
+  if (source === "viral") return "storyflow_viral_projects";
+  return "storyflow_projects";
+}
+
 async function readOwnedRow(
   fetcher: ProjectLibraryFetcher,
   ownerId: string,

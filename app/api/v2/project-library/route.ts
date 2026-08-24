@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { listProjectLibrary, projectLibrarySource } from "@/lib/server/v2/project-library";
+import { deletePreflightedProject, setPrimaryProjectArchiveState } from "@/lib/server/v2/project-library/lifecycle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,21 +26,36 @@ export async function DELETE(request: NextRequest) {
     const sourceId = typeof body.sourceId === "string" ? body.sourceId.trim() : "";
     if (!sourceId) return NextResponse.json({ success: false, error: "缺少项目标识。" }, { status: 422 });
 
-    const table = source === "project"
-      ? "storyflow_projects"
-      : source === "production"
-        ? "storyflow_production_projects"
-        : source === "art"
-          ? "storyflow_art_projects"
-          : "storyflow_viral_projects";
-    const userId = encodeURIComponent(user.id);
-    const ownerFilter = source === "project"
-      ? `or=(owner_id.eq.${userId},user_id.eq.${userId})`
-      : `${source === "viral" ? "user_id" : "owner_id"}=eq.${userId}`;
-    await serviceFetch(`/rest/v1/${table}?id=eq.${encodeURIComponent(sourceId)}&${ownerFilter}`, { method: "DELETE" });
+    await deletePreflightedProject(serviceFetch, user.id, { source, sourceId });
     return NextResponse.json({ success: true, source, sourceId });
   } catch (error) {
+    if (error instanceof Error && error.message === "PROJECT_ARCHIVE_ONLY") {
+      return NextResponse.json({ success: false, error: "项目含有创作内容或关联记录，请归档而不是永久删除。", code: "archive_only" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "PROJECT_NOT_FOUND_OR_FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "项目不存在或你无权删除。", code: "not_found" }, { status: 404 });
+    }
     return errorResponse(error, "项目删除失败。");
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = await authenticateRequest(request);
+    ensureServiceConfig();
+    const body = await request.json().catch(() => ({})) as { source?: unknown; sourceId?: unknown; action?: unknown };
+    const source = projectLibrarySource(body.source);
+    const sourceId = typeof body.sourceId === "string" ? body.sourceId.trim() : "";
+    const action = body.action === "restore" ? "restore" : body.action === "archive" ? "archive" : null;
+    if (!sourceId || !action) return NextResponse.json({ success: false, error: "归档请求无效。" }, { status: 422 });
+    if (source !== "project") return NextResponse.json({ success: false, error: "当前仅支持归档主项目。" }, { status: 422 });
+    await setPrimaryProjectArchiveState(serviceFetch, user.id, sourceId, action);
+    return NextResponse.json({ success: true, source, sourceId, action });
+  } catch (error) {
+    if (error instanceof Error && error.message === "PROJECT_NOT_FOUND_OR_FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "项目不存在或你无权管理。", code: "not_found" }, { status: 404 });
+    }
+    return errorResponse(error, "项目归档失败。");
   }
 }
 
