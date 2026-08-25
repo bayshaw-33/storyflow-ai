@@ -224,6 +224,11 @@ test("dashboard project management uses real project data and card-plus-table la
   assert.match(clientSrc, /ProjectManagement/);
   assert.match(managementSrc, /fetchProjectLibrary/);
   assert.match(managementSrc, /deleteProjectFromLibrary/);
+  assert.match(managementSrc, /fetchProjectDeletePreflight/);
+  assert.match(managementSrc, /archiveProjectFromLibrary/);
+  assert.match(managementSrc, /已归档/);
+  assert.match(managementSrc, /检查空白项目/);
+  assert.match(managementSrc, /supportsArchive/);
   assert.match(managementSrc, /projectGrid/);
   assert.match(managementSrc, /<table/);
   assert.match(managementSrc, /getProjectWorkbenchHref/);

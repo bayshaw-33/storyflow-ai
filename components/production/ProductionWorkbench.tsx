@@ -26,8 +26,8 @@
  *   - /api/storyboard/shots/:id/generate-image — 单 shot 分镜图
  */
 
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, ArrowLeft, Clock, Cpu, Save, Users, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -77,14 +77,9 @@ import {
 import { type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 import { StoryboardExportMenu } from "./StoryboardExportMenu";
 import { ProductionEmptyState, type EntryMode } from "./ProductionEmptyState";
-import ArtWorkbench from "@/components/art/ArtWorkbench";
 import { canJumpToCreation, buildCreationJumpUrl } from "@/lib/workflow/can-jump";
 import type { ProductionProjectState } from "@/lib/production/types";
-const ScreenplayStudio = dynamic(
-  () => import("@/components/v2/screenplay-studio/ScreenplayStudio").then((m) => m.ScreenplayStudio),
-  { ssr: false, loading: () => <div style={{ padding: 48, textAlign: "center", color: "var(--ink-muted)", fontSize: 13 }}>剧本工作台加载中…</div> },
-);
-import { StoryboardFrameGrid, StoryboardPromptList, UnifiedStoryboardStage, type StoryboardSubview } from "./UnifiedStoryboardStage";
+import type { StoryboardSubview } from "./UnifiedStoryboardStage";
 import { StoryboardCanvas } from "./StoryboardCanvas";
 import type { StoryboardCanvasState } from "@/lib/production/types";
 import {
@@ -100,6 +95,25 @@ import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
 import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
+
+const StageLoading = () => <div className={styles.stageLoading}>正在打开工作区…</div>;
+const ScreenplayStudio = dynamic(
+  () => import("@/components/v2/screenplay-studio/ScreenplayStudio").then((module) => module.ScreenplayStudio),
+  { loading: StageLoading },
+);
+const ArtWorkbench = dynamic(() => import("@/components/art/ArtWorkbench"), { loading: StageLoading });
+const UnifiedStoryboardStage = dynamic(
+  () => import("./UnifiedStoryboardStage").then((module) => module.UnifiedStoryboardStage),
+  { loading: StageLoading },
+);
+const StoryboardFrameGrid = dynamic(
+  () => import("./UnifiedStoryboardStage").then((module) => module.StoryboardFrameGrid),
+  { loading: StageLoading },
+);
+const StoryboardPromptList = dynamic(
+  () => import("./UnifiedStoryboardStage").then((module) => module.StoryboardPromptList),
+  { loading: StageLoading },
+);
 
 type StoryboardAssets = {
   characters: StoryboardAssetUsage[];
@@ -335,7 +349,7 @@ export function ProductionWorkbench() {
     }
     void reloadContext();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, session?.access_token]);
+  }, [projectId]);
 
   // --- Supabase session ---
   useEffect(() => {
@@ -384,6 +398,10 @@ export function ProductionWorkbench() {
   // 校验失败（网络/认证）同样不拦截进入。fetch 带认证（共享 401 刷新重试），
   // 旧实现无 Authorization 头，verify-entry 恒 401 → 伪"该集未定稿"阻断。
   useEffect(() => {
+    if (activeStage !== "storyboard" && activeStage !== "video") {
+      setProductionGateError("");
+      return;
+    }
     if (!projectId || !sourceUnitId || projectId.startsWith("draft-")) {
       setProductionGateError("");
       return;
@@ -411,7 +429,7 @@ export function ProductionWorkbench() {
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, sourceUnitId, projectTitle]);
+  }, [activeStage, projectId, sourceUnitId, projectTitle]);
 
   // --- 自动写本地草稿（每次 scenes/assets/revision 变更）---
   // PRD §6.2: hydration gate —— ready 之前禁止把空初始 state 写入 localStorage

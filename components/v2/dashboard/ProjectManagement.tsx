@@ -9,10 +9,10 @@ import {
   FileText,
   Globe2,
   Loader2,
+  MoreHorizontal,
   Plus,
   Search,
   SlidersHorizontal,
-  Trash2,
 } from "lucide-react";
 
 import { fetchJobs } from "@/lib/client/v2/jobs/api";
@@ -20,8 +20,9 @@ import type { UnifiedJob } from "@/lib/client/v2/jobs/types";
 import { fetchKkRuntime } from "@/lib/client/v2/kk/api";
 import type { KkPendingConfirmation } from "@/lib/client/v2/kk/types";
 import { deleteProject, readProjectsFromStorage } from "@/lib/projects";
-import { deleteProjectFromLibrary, fetchProjectLibrary } from "@/lib/client/v2/project-library/api";
-import { asProjectLibraryRecord, type ProjectLibraryProject } from "@/lib/client/v2/project-library/types";
+import { archiveProjectFromLibrary, deleteProjectFromLibrary, fetchProjectDeletePreflight, fetchProjectLibrary } from "@/lib/client/v2/project-library/api";
+import { getCleanupCandidateLabel, getCleanupCandidateSummary } from "@/lib/client/v2/project-library/lifecycle";
+import { asProjectLibraryRecord, type ProjectDeletePreflight, type ProjectLibraryProject } from "@/lib/client/v2/project-library/types";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
   filterAndSortProjects,
@@ -37,6 +38,7 @@ type ProjectManagementProps = {
 };
 
 type LoadStatus = "loading" | "ready" | "error";
+type LibraryView = "active" | "archived";
 
 const EMPTY_FILTERS: ProjectLibraryFilters = {
   query: "",
@@ -122,7 +124,12 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
   const isZh = locale === "zh-CN";
   const [filters, setFilters] = useState<ProjectLibraryFilters>(EMPTY_FILTERS);
   const [projects, setProjects] = useState<ProjectLibraryProject[]>([]);
-  const [deletingProjectKey, setDeletingProjectKey] = useState<string | null>(null);
+  const [libraryView, setLibraryView] = useState<LibraryView>("active");
+  const [actionProjectKey, setActionProjectKey] = useState<string | null>(null);
+  const [workingProjectKey, setWorkingProjectKey] = useState<string | null>(null);
+  const [preflights, setPreflights] = useState<Record<string, ProjectDeletePreflight>>({});
+  const [cleanupReview, setCleanupReview] = useState<ReadonlyArray<{ project: ProjectLibraryProject; preflight: ProjectDeletePreflight }> | null>(null);
+  const [checkingCleanupCandidates, setCheckingCleanupCandidates] = useState(false);
   const [jobs, setJobs] = useState<UnifiedJob[]>([]);
   const [confirmations, setConfirmations] = useState<ReadonlyArray<KkPendingConfirmation>>([]);
   const [status, setStatus] = useState<LoadStatus>("loading");
@@ -133,9 +140,9 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
     setStatus("loading");
     setProjectError("");
     setSecondaryNotice("");
-    const localProjects = readProjectsFromStorage().map(asProjectLibraryRecord);
+    const localProjects = libraryView === "active" ? readProjectsFromStorage().map(asProjectLibraryRecord) : [];
     const [cloudResult, jobsResult, kkResult] = await Promise.allSettled([
-      fetchProjectLibrary(accessToken),
+      fetchProjectLibrary(accessToken, libraryView),
       fetchJobs(accessToken),
       fetchKkRuntime(accessToken),
     ]);
@@ -164,7 +171,7 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
     }
 
     setStatus(cloudResult.status === "fulfilled" || localProjects.length > 0 ? "ready" : "error");
-  }, [accessToken]);
+  }, [accessToken, libraryView]);
 
   useEffect(() => {
     void load();
@@ -174,19 +181,75 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
     () => filterAndSortProjects(projects, filters),
     [filters, projects],
   );
+  const likelyEmptyProjects = useMemo(
+    () => projects.filter((project) => !project.universeId && projectStage(project) === "尚未开始"),
+    [projects],
+  );
   const runningJobs = useMemo(() => activeJobs(jobs), [jobs]);
 
   function setFilter<K extends keyof ProjectLibraryFilters>(key: K, value: ProjectLibraryFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
 
-  async function handleDeleteProject(event: React.MouseEvent<HTMLButtonElement>, project: ProjectLibraryProject) {
-    event.preventDefault();
-    event.stopPropagation();
-    const confirmed = window.confirm(`确认删除项目“${project.title || "未命名项目"}”？删除后无法在项目管理中恢复。`);
-    if (!confirmed) return;
+  async function handleArchiveProject(project: ProjectLibraryProject, action: "archive" | "restore") {
     const key = project.libraryKey || `${project.source || "project"}:${project.id}`;
-    setDeletingProjectKey(key);
+    const confirmed = window.confirm(`${action === "archive" ? "归档" : "恢复"}项目“${project.title || "未命名项目"}”？`);
+    if (!confirmed) return;
+    setWorkingProjectKey(key);
+    setProjectError("");
+    try {
+      await archiveProjectFromLibrary(accessToken, project, action);
+      setProjects((current) => current.filter((item) => (item.libraryKey || `${item.source || "project"}:${item.id}`) !== key));
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "项目归档失败，请稍后重试。");
+    } finally {
+      setWorkingProjectKey(null);
+      setActionProjectKey(null);
+    }
+  }
+
+  async function handleDeletePreflight(project: ProjectLibraryProject) {
+    const key = project.libraryKey || `${project.source || "project"}:${project.id}`;
+    setWorkingProjectKey(key);
+    setProjectError("");
+    try {
+      const preflight = await fetchProjectDeletePreflight(accessToken, project);
+      setPreflights((current) => ({ ...current, [key]: preflight }));
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "项目清理检查失败，请稍后重试。");
+    } finally {
+      setWorkingProjectKey(null);
+    }
+  }
+
+  async function handleCleanupReview() {
+    if (libraryView !== "active" || likelyEmptyProjects.length === 0) return;
+    setCheckingCleanupCandidates(true);
+    setProjectError("");
+    try {
+      const reviewed = await Promise.all(likelyEmptyProjects.map(async (project) => ({
+        project,
+        preflight: await fetchProjectDeletePreflight(accessToken, project),
+      })));
+      const nextPreflights = Object.fromEntries(reviewed.map(({ project, preflight }) => [
+        project.libraryKey || `${project.source || "project"}:${project.id}`,
+        preflight,
+      ]));
+      setPreflights((current) => ({ ...current, ...nextPreflights }));
+      setCleanupReview(reviewed.filter(({ preflight }) => preflight.decision !== "not_found"));
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "空白项目检查失败，请稍后重试。");
+    } finally {
+      setCheckingCleanupCandidates(false);
+    }
+  }
+
+  async function handlePermanentDelete(project: ProjectLibraryProject) {
+    const key = project.libraryKey || `${project.source || "project"}:${project.id}`;
+    const preflight = preflights[key];
+    if (!preflight || preflight.decision !== "safe_to_delete") return;
+    if (!window.confirm(`确认永久删除“${project.title || "未命名项目"}”？此操作无法恢复。`)) return;
+    setWorkingProjectKey(key);
     setProjectError("");
     try {
       await deleteProjectFromLibrary(accessToken, project);
@@ -195,7 +258,8 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : "项目删除失败，请稍后重试。");
     } finally {
-      setDeletingProjectKey(null);
+      setWorkingProjectKey(null);
+      setActionProjectKey(null);
     }
   }
 
@@ -238,6 +302,26 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
               {Object.entries(WORKFLOW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
+          <button
+            type="button"
+            className={styles.archiveToggle}
+            onClick={() => {
+              setCleanupReview(null);
+              setLibraryView((current) => current === "active" ? "archived" : "active");
+            }}
+          >
+            {libraryView === "active" ? "已归档" : "返回项目"}
+          </button>
+          {libraryView === "active" ? (
+            <button
+              type="button"
+              className={styles.archiveToggle}
+              onClick={() => void handleCleanupReview()}
+              disabled={checkingCleanupCandidates || likelyEmptyProjects.length === 0}
+            >
+              {checkingCleanupCandidates ? "检查中…" : "检查空白项目"}
+            </button>
+          ) : null}
           <label className={styles.filterControl}>
             <span className={styles.srOnly}>{isZh ? "状态" : "Status"}</span>
             <select value={filters.status} onChange={(event) => setFilter("status", event.target.value)}>
@@ -267,7 +351,7 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
           <div className={styles.projectSectionHeader}>
             <div>
               <p className={styles.sectionKicker}>PROJECTS</p>
-              <h2 id="project-library-title" className={styles.sectionTitle}>{isZh ? "我的项目" : "My projects"}</h2>
+              <h2 id="project-library-title" className={styles.sectionTitle}>{libraryView === "archived" ? "已归档项目" : (isZh ? "我的项目" : "My projects")}</h2>
             </div>
             <span className={styles.cardCount}>{visibleProjects.length} / {projects.length}</span>
           </div>
@@ -290,6 +374,7 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
               {visibleProjects.map((project) => {
                 const progress = getProjectProgress(project);
                 const projectKey = project.libraryKey || `${project.source || "project"}:${project.id}`;
+                const supportsArchive = (project.source || "project") === "project";
                 return (
                   <article key={projectKey} className={styles.projectCard}>
                     <Link href={getProjectWorkbenchHref(project)} className={styles.projectCardLink}>
@@ -323,18 +408,55 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
                     <button
                       type="button"
                       className={styles.projectCardDelete}
-                      onClick={(event) => void handleDeleteProject(event, project)}
-                      disabled={deletingProjectKey === projectKey}
-                      aria-label={`删除项目 ${project.title || "未命名项目"}`}
+                      onClick={() => setActionProjectKey((current) => current === projectKey ? null : projectKey)}
+                      disabled={workingProjectKey === projectKey}
+                      aria-label={`项目操作 ${project.title || "未命名项目"}`}
                     >
-                      {deletingProjectKey === projectKey ? <Loader2 size={13} className={styles.spin} /> : <Trash2 size={13} />}
-                      删除
+                      <MoreHorizontal size={15} />
+                      更多
                     </button>
+                    {actionProjectKey === projectKey ? (
+                      <div className={styles.projectCardMenu}>
+                        {libraryView === "archived" ? (
+                          <button type="button" onClick={() => void handleArchiveProject(project, "restore")} disabled={workingProjectKey === projectKey}>恢复项目</button>
+                        ) : (
+                          <>
+                            {supportsArchive ? <button type="button" onClick={() => void handleArchiveProject(project, "archive")} disabled={workingProjectKey === projectKey}>归档项目</button> : null}
+                            {preflights[projectKey] ? (
+                              <CleanupAction
+                                project={project}
+                                preflight={preflights[projectKey]}
+                                working={workingProjectKey === projectKey}
+                                canArchive={supportsArchive}
+                                onArchive={() => void handleArchiveProject(project, "archive")}
+                                onDelete={() => void handlePermanentDelete(project)}
+                              />
+                            ) : (
+                              <button type="button" onClick={() => void handleDeletePreflight(project)} disabled={workingProjectKey === projectKey}>检查是否可永久删除</button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ) : null}
                   </article>
                 );
               })}
             </div>
           )}
+          {cleanupReview && libraryView === "active" ? (
+            <div className={styles.cleanupCandidateList}>
+              <div>
+                <strong>空白项目检查结果</strong>
+                <span>仅完成只读核验；请在对应项目的“更多”中确认处理。</span>
+              </div>
+              {cleanupReview.length === 0 ? <span>没有找到可处理的空白项目。</span> : cleanupReview.map(({ project, preflight }) => (
+                <div key={project.libraryKey || `${project.source || "project"}:${project.id}`} className={styles.cleanupCandidateRow}>
+                  <span>{project.title || "未命名项目"}</span>
+                  <span>{getCleanupCandidateLabel(preflight)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {projectError && status === "ready" ? <p className={styles.syncNotice}>{projectError}</p> : null}
         </section>
 
@@ -388,5 +510,33 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
         {secondaryNotice ? <p className={styles.syncNotice}>{secondaryNotice}</p> : null}
       </div>
     </main>
+  );
+}
+
+function CleanupAction({
+  project,
+  preflight,
+  working,
+  canArchive,
+  onArchive,
+  onDelete,
+}: {
+  project: ProjectLibraryProject;
+  preflight: ProjectDeletePreflight;
+  working: boolean;
+  canArchive: boolean;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className={styles.projectCleanupReview}>
+      <strong>{getCleanupCandidateLabel(preflight)}</strong>
+      <span>{getCleanupCandidateSummary(preflight)}</span>
+      {preflight.decision === "safe_to_delete" ? <button type="button" onClick={onDelete} disabled={working}>确认永久删除</button> : null}
+      {preflight.decision === "archive_only" && canArchive ? <button type="button" onClick={onArchive} disabled={working}>归档项目</button> : null}
+      {preflight.decision === "archive_only" && !canArchive ? <span>该项目已有内容，当前不能永久删除。</span> : null}
+      {preflight.decision === "not_found" ? <span>项目不可用，请刷新后重试。</span> : null}
+      <span className={styles.srOnly}>{project.id}</span>
+    </div>
   );
 }

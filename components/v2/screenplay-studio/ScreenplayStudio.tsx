@@ -124,6 +124,9 @@ export function ScreenplayStudio({
   const [activeTool, setActiveTool] = useState<StudioTool>(null);
   const [mainView, setMainView] = useState<ScreenplayMainView>("conversation");
   const [kkMessages, setKkMessages] = useState<KkMessage[]>([]);
+  const [kkHistoryHasMore, setKkHistoryHasMore] = useState(false);
+  const [kkHistoryNextBefore, setKkHistoryNextBefore] = useState<string | null>(null);
+  const [kkHistoryLoadingOlder, setKkHistoryLoadingOlder] = useState(false);
   const [kkCandidate, setKkCandidate] = useState<KkCandidate | null>(null);
   const [preservedInput, setPreservedInput] = useState("");
   const [findings, setFindings] = useState<ContinuityFindingDto[]>([]);
@@ -183,6 +186,8 @@ export function ScreenplayStudio({
     setLoadedContent({});
     setStaleEdges([]);
     setKkMessages([]);
+    setKkHistoryHasMore(false);
+    setKkHistoryNextBefore(null);
     setKkCandidate(null);
     setPreservedInput("");
     setFindings([]);
@@ -195,15 +200,25 @@ export function ScreenplayStudio({
     setLoadError(null);
     (async () => {
       try {
-        const [{ units: list }, { stale }, history] = await Promise.all([
+        const [{ units: list }, { stale }, history, workResponse] = await Promise.all([
           screenplayStudioApi.listUnits(workId),
           screenplayStudioApi.listStale(workId).catch(() => ({ stale: [] as StaleEdgeDto[] })),
-          screenplayStudioApi.listMessages(workId, conversationId).catch(() => [] as KkMessage[]),
+          screenplayStudioApi.listMessages(workId, conversationId, { limit: 30 }).catch(() => ({ messages: [] as KkMessage[], hasMore: false, nextBefore: null })),
+          fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}`).catch(() => null),
         ]);
         if (cancelled) return;
         setUnits(list);
         setStaleEdges(stale);
-        setKkMessages(history);
+        setKkMessages(history.messages);
+        setKkHistoryHasMore(history.hasMore);
+        setKkHistoryNextBefore(history.nextBefore);
+        if (workResponse) {
+          const body = (await workResponse.json().catch(() => ({}))) as {
+            success?: boolean;
+            work?: WorkMeta;
+          };
+          if (body.success && body.work) setWorkMeta(body.work);
+        }
       } catch (error) {
         if (!cancelled) {
           setLoadError(
@@ -215,24 +230,26 @@ export function ScreenplayStudio({
       } finally {
         if (!cancelled) setLoading(false);
       }
-      // 面包屑：项目名 + Universe（best-effort，不阻断工作台）。
-      try {
-        const response = await fetchScreenplayStudio(`/api/v2/works/${encodeURIComponent(workId)}`);
-        const body = (await response.json().catch(() => ({}))) as {
-          success?: boolean;
-          work?: { title: string | null; projectTitle: string | null; universeName: string | null; currentVersionId: string | null };
-        };
-        if (!cancelled && body.success && body.work) {
-          setWorkMeta(body.work);
-        }
-      } catch {
-        /* 面包屑缺失不阻断 */
-      }
     })();
     return () => {
       cancelled = true;
     };
   }, [workId, conversationId]);
+
+  const loadOlderKkMessages = useCallback(async () => {
+    if (!workId || !kkHistoryHasMore || !kkHistoryNextBefore || kkHistoryLoadingOlder) return;
+    setKkHistoryLoadingOlder(true);
+    try {
+      const page = await screenplayStudioApi.listMessages(workId, conversationId, { limit: 30, before: kkHistoryNextBefore });
+      setKkMessages((current) => [...page.messages, ...current.filter((message) => !page.messages.some((older) => older.id === message.id))]);
+      setKkHistoryHasMore(page.hasMore);
+      setKkHistoryNextBefore(page.nextBefore);
+    } catch (error) {
+      setLoadError(error instanceof ScreenplayStudioApiError ? error.userMessage : "更早的对话暂时无法加载。");
+    } finally {
+      setKkHistoryLoadingOlder(false);
+    }
+  }, [conversationId, kkHistoryHasMore, kkHistoryLoadingOlder, kkHistoryNextBefore, workId]);
 
   useEffect(() => {
     if (loading || !workId || bootstrappedRef.current) return;
@@ -763,6 +780,9 @@ export function ScreenplayStudio({
       workId={workId}
       conversationId={conversationId}
       messages={kkMessages}
+      hasMoreMessages={kkHistoryHasMore}
+      loadingOlderMessages={kkHistoryLoadingOlder}
+      onLoadOlder={() => void loadOlderKkMessages()}
       pendingCandidate={kkCandidate}
       contextSummary={kkContext}
       presetInput={presetInput}

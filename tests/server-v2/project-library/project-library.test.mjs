@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { listProjectLibrary } from "../../../lib/server/v2/project-library/index.ts";
+import { getProjectDeletePreflight } from "../../../lib/server/v2/project-library/lifecycle.ts";
 
 test("project library aggregates primary projects and legacy child project tables", async () => {
   const calls = [];
@@ -59,11 +60,116 @@ test("project library aggregates primary projects and legacy child project table
   assert.ok(calls.every((path) => path.includes("owner-1")));
 });
 
-test("project library delete route exposes source-aware deletion", async () => {
-  const source = await import("node:fs").then(({ readFileSync }) => readFileSync("app/api/v2/project-library/route.ts", "utf8"));
+test("project library excludes archived primary projects", async () => {
+  const calls = [];
+  await listProjectLibrary(async (path) => {
+    calls.push(path);
+    return [];
+  }, "owner-1");
+  assert.match(calls[0], /deleted_at=is\.null/);
+});
+
+test("archived project view returns only archived primary projects", async () => {
+  const calls = [];
+  const projects = await listProjectLibrary(async (path) => {
+    calls.push(path);
+    return [{
+      id: "archived-1",
+      title: "已归档测试项目",
+      workflow_type: "creation",
+      status: "draft",
+      data: {},
+      created_at: "2026-08-20T00:00:00.000Z",
+      updated_at: "2026-08-20T00:00:00.000Z",
+    }];
+  }, "owner-1", { archived: true });
+  assert.equal(projects.length, 1);
+  assert.match(calls[0], /deleted_at=not\.is\.null/);
+  assert.equal(calls.length, 1);
+});
+
+test("empty owned primary project is safe to permanently delete", async () => {
+  const calls = [];
+  const result = await getProjectDeletePreflight(async (path) => {
+    calls.push(path);
+    if (path.startsWith("/rest/v1/storyflow_projects")) {
+      return [{
+        id: "empty-1",
+        title: "测试空项目",
+        owner_id: "owner-1",
+        user_id: "owner-1",
+        data: {},
+      }];
+    }
+    return [];
+  }, "owner-1", { source: "project", sourceId: "empty-1" });
+
+  assert.equal(result.decision, "safe_to_delete");
+  assert.equal(result.title, "测试空项目");
+  assert.deepEqual(result.relatedCounts, {
+    works: 0,
+    screenplayUnits: 0,
+    generationTasks: 0,
+    assets: 0,
+    universeLinks: 0,
+  });
+  assert.ok(calls.some((path) => path.startsWith("/rest/v1/storyflow_works")));
+});
+
+test("blank primary Work identity does not block deletion of an otherwise empty project", async () => {
+  const result = await getProjectDeletePreflight(async (path) => {
+    if (path.startsWith("/rest/v1/storyflow_projects")) {
+      return [{ id: "empty-work-1", title: "空白测试项目", owner_id: "owner-1", data: {} }];
+    }
+    if (path.startsWith("/rest/v1/storyflow_works")) return [{ id: "work-1" }];
+    return [];
+  }, "owner-1", { source: "project", sourceId: "empty-work-1" });
+
+  assert.equal(result.decision, "safe_to_delete");
+  assert.equal(result.relatedCounts.works, 1);
+  assert.equal(result.relatedCounts.screenplayUnits, 0);
+});
+
+test("creative or linked primary project is archive-only", async () => {
+  const result = await getProjectDeletePreflight(async (path) => {
+    if (path.startsWith("/rest/v1/storyflow_projects")) {
+      return [{
+        id: "script-1",
+        title: "真实剧本",
+        owner_id: "owner-1",
+        data: { outline: "有内容的大纲" },
+      }];
+    }
+    if (path.startsWith("/rest/v1/storyflow_works")) return [{ id: "work-1" }];
+    return [];
+  }, "owner-1", { source: "project", sourceId: "script-1" });
+
+  assert.equal(result.decision, "archive_only");
+  assert.match(result.reason, /内容或关联/);
+  assert.equal(result.relatedCounts.works, 1);
+});
+
+test("preflight hides foreign or absent project identity", async () => {
+  const result = await getProjectDeletePreflight(async () => [], "owner-1", {
+    source: "project",
+    sourceId: "not-owned",
+  });
+  assert.equal(result.decision, "not_found");
+});
+
+test("project library lifecycle routes verify ownership and affected rows", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync("app/api/v2/project-library/route.ts", "utf8");
+  const preflightSource = readFileSync("app/api/v2/project-library/preflight-delete/route.ts", "utf8");
+  const lifecycleSource = readFileSync("lib/server/v2/project-library/lifecycle.ts", "utf8");
   assert.match(source, /export async function DELETE/);
-  assert.match(source, /storyflow_projects/);
-  assert.match(source, /storyflow_production_projects/);
-  assert.match(source, /storyflow_art_projects/);
-  assert.match(source, /storyflow_viral_projects/);
+  assert.match(source, /export async function PATCH/);
+  assert.match(source, /deletePreflightedProject/);
+  assert.match(lifecycleSource, /storyflow_projects/);
+  assert.match(lifecycleSource, /storyflow_production_projects/);
+  assert.match(lifecycleSource, /storyflow_art_projects/);
+  assert.match(lifecycleSource, /storyflow_viral_projects/);
+  assert.match(lifecycleSource, /return=representation/);
+  assert.match(lifecycleSource, /rows\.length !== 1/);
+  assert.match(preflightSource, /getProjectDeletePreflight/);
 });

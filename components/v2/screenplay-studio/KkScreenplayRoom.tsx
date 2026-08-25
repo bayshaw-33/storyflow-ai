@@ -53,6 +53,9 @@ export interface KkScreenplayRoomProps {
   workId: string;
   conversationId: string;
   messages: KkMessage[];
+  hasMoreMessages: boolean;
+  loadingOlderMessages: boolean;
+  onLoadOlder: () => void;
   pendingCandidate: KkCandidate | null;
   contextSummary: KkContextSummary | null;
   presetInput?: KkPresetInput | null;
@@ -71,6 +74,9 @@ export function KkScreenplayRoom({
   workId,
   conversationId,
   messages,
+  hasMoreMessages,
+  loadingOlderMessages,
+  onLoadOlder,
   pendingCandidate,
   contextSummary,
   presetInput,
@@ -140,7 +146,7 @@ export function KkScreenplayRoom({
           // propose 的用户/助手消息在服务端追加；拉取最新会话保持一致。
           try {
             const history = await screenplayStudioApi.listMessages(workId, conversationId);
-            onMessagesChange(history);
+            onMessagesChange(history.messages);
           } catch {
             /* 历史拉取失败不阻断候选展示 */
           }
@@ -221,8 +227,8 @@ export function KkScreenplayRoom({
         idempotencyKey: key,
         projectId,
       });
-      const history = await screenplayStudioApi.listMessages(workId, conversationId).catch(() => messages);
-      onMessagesChange(history);
+      const history = await screenplayStudioApi.listMessages(workId, conversationId).catch(() => ({ messages, hasMore: false, nextBefore: null }));
+      onMessagesChange(history.messages);
       await onOpenTrilogyUnit(body.unit.id);
     } catch (e) {
       const described = describeError(e);
@@ -245,6 +251,11 @@ export function KkScreenplayRoom({
         </div>
       ) : null}
       <div className={styles.kkTranscript} ref={transcriptRef}>
+        {hasMoreMessages ? (
+          <button type="button" className={styles.staleActionBtn} onClick={onLoadOlder} disabled={loadingOlderMessages}>
+            {loadingOlderMessages ? "加载中…" : "加载更早对话"}
+          </button>
+        ) : null}
         {messages.length === 0 ? (
           <div className={`${styles.kkMessage} ${styles.kkMessageAssistant} ${styles.kkStarter}`}>
             <div className={styles.kkMessageRole}>KK</div>

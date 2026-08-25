@@ -2,6 +2,23 @@ import type { DramaProject } from "../../../projects.ts";
 
 export type ProjectLibrarySource = "project" | "production" | "art" | "viral";
 
+export type ProjectDeleteDecision = "safe_to_delete" | "archive_only" | "not_found";
+
+export type ProjectDeletePreflight = {
+  source: ProjectLibrarySource;
+  sourceId: string;
+  title: string;
+  decision: ProjectDeleteDecision;
+  reason: string;
+  relatedCounts: Partial<{
+    works: number;
+    screenplayUnits: number;
+    generationTasks: number;
+    assets: number;
+    universeLinks: number;
+  }>;
+};
+
 /**
  * The dashboard's normalized project card shape.
  *

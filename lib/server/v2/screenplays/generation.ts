@@ -82,6 +82,7 @@ interface MessageRow {
   role: string;
   content: string;
   idempotency_key: string;
+  created_at?: string;
 }
 interface SnapshotRow {
   id: string;
@@ -309,13 +310,23 @@ export class ScreenplayGenerationService {
     workId: string;
     conversationId: string;
     limit?: number;
-  }): Promise<{ messages: MessageDto[] }> {
+    before?: string | null;
+  }): Promise<{ messages: MessageDto[]; hasMore: boolean; nextBefore: string | null }> {
     await this.assertWorkOwner(params.ownerId, params.workId);
-    const thread = await this.ensureThread(params.ownerId, params.workId, params.conversationId);
+    const thread = await this.findThread(params.workId, params.conversationId);
+    if (!thread) return { messages: [], hasMore: false, nextBefore: null };
+    const limit = Math.min(Math.max(params.limit ?? 30, 1), 50);
+    const beforeFilter = params.before ? `&created_at=lt.${encodeURIComponent(params.before)}` : "";
     const rows = await this.get<MessageRow[]>(
-      `/rest/v1/storyflow_conversation_messages?thread_id=eq.${encodeURIComponent(thread.id)}&select=${MSG_COLUMNS}&order=created_at.asc&limit=${params.limit ?? 200}`,
+      `/rest/v1/storyflow_conversation_messages?thread_id=eq.${encodeURIComponent(thread.id)}${beforeFilter}&select=${MSG_COLUMNS}&order=created_at.desc&limit=${limit + 1}`,
     );
-    return { messages: (rows ?? []).map(toMessageDto) };
+    const page = (rows ?? []).slice(0, limit);
+    const oldest = page[page.length - 1];
+    return {
+      messages: page.reverse().map(toMessageDto),
+      hasMore: (rows ?? []).length > limit,
+      nextBefore: oldest?.created_at ?? null,
+    };
   }
 
   /** Persist a non-model assistant notice in the same screenplay conversation. */
@@ -369,10 +380,8 @@ export class ScreenplayGenerationService {
   }
 
   private async ensureThread(ownerId: string, workId: string, conversationId: string): Promise<ThreadRow> {
-    const rows = await this.get<ThreadRow[]>(
-      `/rest/v1/storyflow_conversation_threads?id=eq.${encodeURIComponent(conversationId)}&work_id=eq.${encodeURIComponent(workId)}&select=id,work_id&limit=1`,
-    );
-    if (rows?.[0]) return rows[0];
+    const existing = await this.findThread(workId, conversationId);
+    if (existing) return existing;
     const created = await this.post<ThreadRow[]>("/rest/v1/storyflow_conversation_threads", {
       id: conversationId,
       work_id: workId,
@@ -382,6 +391,13 @@ export class ScreenplayGenerationService {
     const thread = created?.[0];
     if (!thread) throw new ScreenplayGenerationError("service_unavailable", "Unable to create thread.");
     return thread;
+  }
+
+  private async findThread(workId: string, conversationId: string): Promise<ThreadRow | null> {
+    const rows = await this.get<ThreadRow[]>(
+      `/rest/v1/storyflow_conversation_threads?id=eq.${encodeURIComponent(conversationId)}&work_id=eq.${encodeURIComponent(workId)}&select=id,work_id&limit=1`,
+    );
+    return rows?.[0] ?? null;
   }
 
   private async appendMessage(threadId: string, workId: string, role: "user" | "assistant", content: string, idempotencyKey: string): Promise<MessageDto> {
@@ -429,11 +445,11 @@ export class ScreenplayGenerationService {
   }
 }
 
-export interface MessageDto { id: string; role: string; content: string }
+export interface MessageDto { id: string; role: string; content: string; createdAt: string | null }
 export interface CandidateDto { id: string; status: string; patches: CandidatePatch[] }
 
 function toMessageDto(row: MessageRow): MessageDto {
-  return { id: row.id, role: row.role, content: row.content };
+  return { id: row.id, role: row.role, content: row.content, createdAt: row.created_at ?? null };
 }
 
 function toCandidateDto(row: CandidateRow): CandidateDto {
