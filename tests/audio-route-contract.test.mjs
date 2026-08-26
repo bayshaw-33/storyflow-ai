@@ -53,7 +53,7 @@ test("audio batch route creates two independently recoverable music jobs", () =>
   const batchRoute = read("app/api/audio/jobs/batch/route.ts");
   assert.match(batchRoute, /export async function POST/);
   assert.match(batchRoute, /candidates/);
-  assert.match(batchRoute, /reconciling/);
+  assert.match(batchRoute, /createAudioJob/);
   assert.match(batchRoute, /requestKey/);
   assert.match(batchRoute, /202/);
 });
