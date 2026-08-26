@@ -2683,6 +2683,28 @@ input:focus, textarea:focus, select:focus {
    COSMIC PAGE  (templates / generic content page)
    ============================================================================ */
 .cosmic-page { padding-bottom: var(--space-16); }
+
+.dubbing-workbench-page { min-height: 100vh; }
+.dubbing-workbench-page .cosmic-title-band { margin-bottom: 18px; }
+.dubbing-workbench-page .cosmic-title-band h1 { margin-bottom: 8px; }
+.dubbing-workbench-grid { display: grid; grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr); gap: 16px; max-width: 1440px; margin: 0 auto; }
+.dubbing-workbench-grid label { display: grid; gap: 6px; margin: 14px 0; color: rgba(255,255,255,0.64); font-size: 12px; }
+.dubbing-workbench-grid input, .dubbing-workbench-grid textarea { width: 100%; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; background: rgba(0,0,0,0.22); color: inherit; padding: 10px; font: inherit; }
+.dubbing-workbench-grid textarea { min-height: 180px; resize: vertical; line-height: 1.6; }
+.dubbing-section-kicker { color: #b8a7ff; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+.dubbing-workbench-grid h2 { margin: 8px 0; font-size: 20px; }
+.dubbing-review-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.dubbing-review-head p { margin: 6px 0 0; color: rgba(255,255,255,0.58); font-size: 12px; }
+.dubbing-empty { border: 1px dashed rgba(255,255,255,0.14); padding: 28px 16px; color: rgba(255,255,255,0.48); text-align: center; }
+.dubbing-line-list { display: grid; gap: 10px; margin-top: 18px; }
+.dubbing-line-card { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; }
+.dubbing-line-card p { display: inline; margin: 0; line-height: 1.5; }
+.dubbing-line-index { display: inline-block; width: 28px; color: #8f7cff; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.dubbing-line-actions { display: grid; justify-items: end; gap: 6px; min-width: 170px; }
+.dubbing-line-actions audio { width: 240px; max-width: 100%; }
+.dubbing-line-actions small[data-status] { color: #f4c76b; }
+.dubbing-error { color: #fca5a5; max-width: 240px; text-align: right; }
+@media (max-width: 900px) { .dubbing-workbench-grid { grid-template-columns: 1fr; } .dubbing-line-card { grid-template-columns: 1fr; } .dubbing-line-actions { justify-items: start; } }
 .cosmic-title-band {
   max-width: 1200px;
   margin: 0 auto;

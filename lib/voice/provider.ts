@@ -9,6 +9,7 @@
  * - 临时 Provider URL 不进数据库长期字段
  */
 import type { VoiceProviderName } from "./types";
+import type { AudioProvider } from "../audio/types";
 
 // ============================================================
 // 类型
@@ -85,6 +86,13 @@ export async function resolveTTSProvider(): Promise<TTSProvider> {
     }) as unknown as TTSProvider;
   }
 
+  if (name === "minimax" || name === "gmi") {
+    const audioProvider = name === "minimax"
+      ? (await import("../audio/providers/minimax")).createMiniMaxAudioProvider()
+      : (await import("../audio/providers/gmi")).createGmiAudioProvider();
+    return createTTSProviderAdapter(audioProvider, name);
+  }
+
   // 默认 placeholder
   const mod = await import("./providers/placeholder");
   return mod.createPlaceholderProvider();
@@ -103,6 +111,12 @@ export function isTTSProviderAvailable(): boolean {
   if (name === "cosyvoice") {
     return Boolean(process.env.COSYVOICE_BASE_URL);
   }
+  if (name === "minimax") {
+    return Boolean(process.env.MINIMAX_API_KEY || process.env.MINIMAX_API_KEY_PRIMARY || process.env.MINIMAX_API_KEY_SECONDARY);
+  }
+  if (name === "gmi") {
+    return Boolean(process.env.GMI_API_KEY);
+  }
   return false;
 }
 
@@ -112,4 +126,40 @@ export function isTTSProviderAvailable(): boolean {
 export function getCurrentTTSProviderName(): VoiceProviderName {
   const name = (process.env.TTS_PROVIDER || "placeholder").toLowerCase() as VoiceProviderName;
   return name;
+}
+
+function createTTSProviderAdapter(audioProvider: AudioProvider, name: "minimax" | "gmi"): TTSProvider {
+  return {
+    name,
+    isAvailable: () => audioProvider.isAvailable("tts"),
+    submit: (input) => audioProvider.submitTTS(input),
+    poll: async (providerTaskId) => {
+      const result = await audioProvider.poll(providerTaskId, "tts");
+      if (result.status !== "done") {
+        return {
+          status: result.status,
+          providerMetadata: result.providerMetadata,
+          error: result.error,
+        };
+      }
+      if (result.audioBytes) {
+        return {
+          status: "done",
+          audioBytes: result.audioBytes,
+          contentType: result.contentType || "audio/mpeg",
+          providerMetadata: result.providerMetadata,
+        };
+      }
+      if (result.audioUrl) {
+        const downloaded = await audioProvider.download(result.audioUrl);
+        return {
+          status: "done",
+          audioBytes: downloaded.bytes,
+          contentType: downloaded.contentType,
+          providerMetadata: result.providerMetadata,
+        };
+      }
+      return { status: "error", error: "AUDIO_RESULT_MISSING" };
+    },
+  };
 }

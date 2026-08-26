@@ -379,9 +379,22 @@ export const VoiceSection = memo(function VoiceSection({
         );
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.success) throw new Error(data?.error || "generate failed");
-        setVoiceLines((prev) =>
-          prev.map((l) => (l.id === lineId ? (data.voiceLine as VoiceLineDTO) : l)),
-        );
+        if (data.voiceLine) {
+          setVoiceLines((prev) => prev.map((l) => (l.id === lineId ? (data.voiceLine as VoiceLineDTO) : l)));
+        } else if (data.async && data.jobId) {
+          setVoiceLines((prev) => prev.map((l) => (l.id === lineId ? { ...l, status: "generating" } : l)));
+          for (let attempt = 0; attempt < 20; attempt += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 4000));
+            const poll = await fetch(`/api/audio/jobs/${encodeURIComponent(data.jobId)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+            if (!poll.ok) break;
+            const pollData = await poll.json().catch(() => null);
+            const nextLine = pollData?.job?.target_type === "voice_line" ? pollData.job : null;
+            if (nextLine?.status === "completed" || pollData?.job?.status === "failed" || pollData?.job?.status === "provider_timeout") {
+              await reloadLines();
+              break;
+            }
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "generate failed");
       } finally {

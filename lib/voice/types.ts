@@ -8,6 +8,8 @@ export type VoiceProviderName =
   | "cosyvoice"
   | "placeholder"
   | "openai"
+  | "minimax"
+  | "gmi"
   | "elevenlabs"
   | "volc"
   | "azure";
@@ -44,6 +46,10 @@ export type VoiceProfileDTO = {
   stability: number;
   stylePrompt: string;
   sampleAssetUrl: string | null;
+  consentStatus: "not_required" | "pending" | "confirmed" | "revoked";
+  consentSourceAssetId: string | null;
+  consentConfirmedAt: string | null;
+  consentMetadata: Record<string, unknown>;
   status: VoiceProfileStatus;
   metadata: Record<string, unknown>;
   updatedAt: string;

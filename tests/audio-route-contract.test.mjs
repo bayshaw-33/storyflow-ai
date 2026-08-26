@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { existsSync, readFileSync } from "node:fs";
+
+const read = (path) => existsSync(path) ? readFileSync(path, "utf8") : "";
+const submitRoute = read("app/api/audio/jobs/route.ts");
+const pollRoute = read("app/api/audio/jobs/[jobId]/route.ts");
+const capabilitiesRoute = read("app/api/audio/capabilities/route.ts");
+
+test("audio submit route creates an audio job and returns async acceptance", () => {
+  assert.match(submitRoute, /storyflow_generation_jobs/);
+  assert.match(submitRoute, /provider_task_id/);
+  assert.match(submitRoute, /202/);
+  assert.match(submitRoute, /computeAudioIdempotencyHash/);
+});
+
+test("audio poll route persists bytes before marking completed", () => {
+  assert.match(pollRoute, /persistAudioArtifact/);
+  assert.match(pollRoute, /result_ingesting/);
+  assert.match(pollRoute, /status: "completed"/);
+  assert.match(pollRoute, /sanitizeAudioMetadata/);
+});
+
+test("audio asset Universe bindings are patched only after a real asset id exists", () => {
+  assert.doesNotMatch(submitRoute, /assetId: "pending"/);
+  assert.doesNotMatch(pollRoute, /assetId: "pending"/);
+  assert.match(submitRoute, /storyflow_assets\?id=eq/);
+  assert.match(pollRoute, /storyflow_assets\?id=eq/);
+});
+
+test("audio capability route exposes provider availability without secrets", () => {
+  assert.match(capabilitiesRoute, /getAudioCapabilities/);
+  assert.match(capabilitiesRoute, /MUSIC_PROVIDER/);
+  assert.match(capabilitiesRoute, /TTS_PROVIDER/);
+  assert.doesNotMatch(capabilitiesRoute, /API_KEY/);
+});

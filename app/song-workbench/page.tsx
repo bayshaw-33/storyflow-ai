@@ -24,6 +24,7 @@ import {
   type SongUniverseRole,
 } from "@/lib/song/universe-links";
 import JSZip from "jszip";
+import { AudioCandidates, type SongAudioCandidate } from "@/components/song-workbench/AudioCandidates";
 
 type SongProjectType =
   | "original_song"
@@ -597,6 +598,8 @@ export default function SongWorkbenchPage() {
   const [generationError, setGenerationError] = useState("");
   // 生成进度状态文案（明确进度，禁用重复提交）
   const [generationProgress, setGenerationProgress] = useState("");
+  const [audioCandidates, setAudioCandidates] = useState<SongAudioCandidate[]>([]);
+  const [audioGenerating, setAudioGenerating] = useState(false);
   // 自动保存状态："idle" | "saving" | "saved" | "failed"
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [autoSaveTime, setAutoSaveTime] = useState<string>("");
@@ -639,6 +642,70 @@ export default function SongWorkbenchPage() {
       styleGuide: true,
     },
   });
+
+  async function pollSongAudioJob(candidateId: string, jobId: string) {
+    const accessToken = session?.access_token;
+    if (!accessToken) return;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 4000));
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(jobId)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) return;
+      const payload = await response.json() as { job?: { status?: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null } };
+      const job = payload.job;
+      if (!job) return;
+      setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? {
+        ...candidate,
+        status: job.status || candidate.status,
+        resultUrl: job.result_url || candidate.resultUrl,
+        provider: job.provider || candidate.provider,
+        model: job.model || candidate.model,
+        error: job.error || candidate.error,
+      } : candidate));
+      if (["completed", "failed", "provider_timeout"].includes(job.status || "")) return;
+    }
+  }
+
+  async function generateSongAudio() {
+    if (!session?.access_token) {
+      setGenerationError(isZh ? "登录后才能生成音频。" : "Sign in before generating audio.");
+      return;
+    }
+    if (!lyrics.trim() && !stylePrompt.trim()) {
+      setGenerationError(isZh ? "请先生成歌词或曲风提示词。" : "Generate lyrics or a style prompt first.");
+      return;
+    }
+    setAudioGenerating(true);
+    setGenerationError("");
+    const candidateId = crypto.randomUUID();
+    setAudioCandidates((current) => [{ id: candidateId, jobId: null, status: "queued", resultUrl: null, provider: null, model: null, error: null, createdAt: new Date().toISOString() }, ...current]);
+    try {
+      const response = await fetch("/api/audio/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          kind: "music",
+          prompt: stylePrompt || form.concept,
+          lyrics,
+          targetType: "song_version",
+          targetId: songProjectId || form.title || "standalone-song",
+          projectId: songProjectId,
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage },
+        }),
+      });
+      const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
+      if (!response.ok || !payload.job) throw new Error(payload.error || "AUDIO_JOB_CREATE_FAILED");
+      const job = payload.job;
+      setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? { ...candidate, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : candidate));
+      if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidateId, job.id);
+    } catch (audioError) {
+      const message = audioError instanceof Error ? audioError.message : "AUDIO_JOB_CREATE_FAILED";
+      setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? { ...candidate, status: "failed", error: message } : candidate));
+    } finally {
+      setAudioGenerating(false);
+    }
+  }
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -2120,6 +2187,7 @@ export default function SongWorkbenchPage() {
                 placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
               />
             </div>
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} />
           </div>
         </section>
       </section>

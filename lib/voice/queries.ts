@@ -49,6 +49,10 @@ type VoiceProfileRow = {
   stability: number;
   style_prompt: string;
   sample_asset_id: string | null;
+  consent_status?: string | null;
+  consent_source_asset_id?: string | null;
+  consent_confirmed_at?: string | null;
+  consent_metadata?: Record<string, unknown> | null;
   status: string;
   metadata: Record<string, unknown> | null;
   created_at: string;
@@ -648,6 +652,10 @@ function mapProfileRow(row: VoiceProfileRow): VoiceProfileDTO {
     stability: Number(row.stability),
     stylePrompt: row.style_prompt,
     sampleAssetUrl: null, // sample_asset_id 暂不解析为 URL，V1 不展示样本
+    consentStatus: (row.consent_status as VoiceProfileDTO["consentStatus"]) || "not_required",
+    consentSourceAssetId: row.consent_source_asset_id ?? null,
+    consentConfirmedAt: row.consent_confirmed_at ?? null,
+    consentMetadata: row.consent_metadata ?? {},
     status: row.status as VoiceProfileStatus,
     metadata: row.metadata ?? {},
     updatedAt: row.updated_at,

@@ -82,6 +82,12 @@ export async function POST(
         { status: 422 },
       );
     }
+    if (profile.metadata?.voiceKind === "cloned" && profile.consentStatus !== "confirmed") {
+      return Response.json(
+        { success: false, error: "克隆声音尚未完成授权确认。", code: "VOICE_CLONE_CONSENT_REQUIRED", requestId },
+        { status: 422 },
+      );
+    }
 
     // 3. 检查 Provider 可用性
     if (!isTTSProviderAvailable()) {
@@ -107,6 +113,7 @@ export async function POST(
       prompt: voiceLine.text,
       input_params: {
         voice_line_id: voiceLine.id,
+        voiceLineId: voiceLine.id,
         voice_profile_id: profile.id,
         voice_provider_voice_id: profile.voiceProviderVoiceId,
         language: voiceLine.language,
@@ -136,10 +143,10 @@ export async function POST(
     // 5. 关联 job + 推进状态
     await attachJobToVoiceLine(serverClient, voiceLine.id, user.id, jobId, "generating");
 
-    // 更新 job 状态为 running
+    // 新版统一音频状态：任务提交前保持 queued，Provider 接受后使用 generating。
     await serverClient
       .from("storyflow_generation_jobs")
-      .update({ status: "running" })
+      .update({ status: "generating" })
       .eq("id", jobId);
 
     // 6. 调用 Provider
@@ -183,20 +190,16 @@ export async function POST(
       );
     }
 
-    // 7. submit 成功 → 必须是同步结果（V1 只支持同步 Provider）
+    // 7. 异步 Provider：保存 task id，交由 /api/audio/jobs/:jobId 查询并转存
     if (submitResult.kind !== "sync_done") {
-      // 异步 Provider 需要 poll，V1 不支持
-      const msg = "ASYNC_PROVIDER_NOT_SUPPORTED_IN_V1";
-      await markVoiceLineStatus(serverClient, voiceLine.id, user.id, "failed", {
-        error: msg,
-      });
+      await markVoiceLineStatus(serverClient, voiceLine.id, user.id, "generating");
       await serverClient
         .from("storyflow_generation_jobs")
-        .update({ status: "failed", error: msg })
+        .update({ status: "generating", provider_task_id: submitResult.providerTaskId, error: null })
         .eq("id", jobId);
       return Response.json(
-        { success: false, error: "V1 暂不支持异步 Provider。", requestId },
-        { status: 422 },
+        { success: true, async: true, voiceLineId: voiceLine.id, jobId, requestId },
+        { status: 202 },
       );
     }
 
