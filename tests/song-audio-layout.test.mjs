@@ -13,7 +13,7 @@ test("audio candidates share the lower workspace without overlaying the style pr
   assert.ok(lowerStart >= 0 && styleCard > lowerStart && audioComponent > styleCard);
   assert.doesNotMatch(page, /song-audio-dock/);
   assert.doesNotMatch(css, /\.song-audio-dock\s*\{[\s\S]*position:\s*absolute/);
-  assert.match(css, /\.song-right-lower\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:/s);
+  assert.match(css, /\.song-right-lower\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s);
 });
 
 test("desktop song workbench uses the available viewport width", () => {
@@ -22,8 +22,15 @@ test("desktop song workbench uses the available viewport width", () => {
   assert.match(css, /\.song-shell-v2\s*\{[^}]*width:\s*100%/s);
 });
 
-test("audio candidates can collapse while keeping generation available", () => {
+test("audio candidates stay expanded while keeping generation available", () => {
   assert.match(component, /song-audio-card/);
-  assert.match(component, /aria-expanded/);
-  assert.match(component, /setOpen|setExpanded/);
+  assert.doesNotMatch(component, /aria-expanded/);
+  assert.doesNotMatch(component, /setOpen|setExpanded/);
+});
+
+test("song results keep the style prompt full width and stack audio tracks", () => {
+  assert.match(css, /\.song-right-lower\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s);
+  assert.match(css, /\.song-style-card[^}]*width:\s*100%/s);
+  assert.match(css, /\.song-audio-card[^}]*width:\s*100%/s);
+  assert.doesNotMatch(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(320px,\s*0\.46fr\)/);
 });

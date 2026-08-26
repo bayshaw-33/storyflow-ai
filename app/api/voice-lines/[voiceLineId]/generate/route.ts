@@ -18,6 +18,7 @@ import {
   getCurrentTTSProviderName,
 } from "@/lib/voice/provider";
 import { persistVoiceLineArtifact } from "@/lib/voice/storage";
+import { isUuid } from "@/lib/validation/ids";
 
 /**
  * POST /api/voice-lines/:voiceLineId/generate
@@ -50,6 +51,10 @@ export async function POST(
   try {
     const { voiceLineId } = await context.params;
     const user = await authenticateRequest(request);
+
+    if (!isUuid(voiceLineId)) {
+      return Response.json({ success: false, error: "voiceLineId 必须是有效 UUID。", code: "INVALID_VOICE_LINE_ID", requestId }, { status: 422 });
+    }
 
     if (!hasServiceRoleConfig()) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
     const serverClient = getSupabaseServerClient();

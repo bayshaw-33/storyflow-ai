@@ -5,12 +5,33 @@
  * 真实 503，绝不假成功。
  */
 import { NextRequest, NextResponse } from "next/server";
+import { authenticateRequest, getSupabaseServerClient, hasServiceRoleConfig } from "@/lib/supabase/server";
+import { fetchVoiceLineById } from "@/lib/voice/queries";
 import { getCurrentTTSProviderName, resolveTTSProvider } from "@/lib/voice/provider";
+import { isUuid } from "@/lib/validation/ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  let user;
+  try {
+    user = await authenticateRequest(request);
+  } catch {
+    return NextResponse.json({ success: false, error: "请先登录。", code: "unauthenticated" }, { status: 401 });
+  }
+  const body = await request.json().catch(() => ({}));
+  const targetId = String(body.targetId ?? "").trim();
+  if (!isUuid(targetId)) {
+    return NextResponse.json({ success: false, error: "targetId 必须是有效 Voice Line UUID。", code: "INVALID_VOICE_LINE_ID" }, { status: 422 });
+  }
+  if (!hasServiceRoleConfig()) {
+    return NextResponse.json({ success: false, error: "服务端配音存储未配置。", code: "service_unavailable" }, { status: 503 });
+  }
+  const serverClient = getSupabaseServerClient();
+  if (!serverClient) return NextResponse.json({ success: false, error: "服务端配音存储未配置。", code: "service_unavailable" }, { status: 503 });
+  const voiceLine = await fetchVoiceLineById(serverClient, targetId, user.id);
+  if (!voiceLine) return NextResponse.json({ success: false, error: "Voice Line 不存在或无权访问。", code: "VOICE_LINE_NOT_FOUND" }, { status: 404 });
   const name = getCurrentTTSProviderName();
   if (name === "placeholder") {
     return NextResponse.json(
@@ -18,8 +39,7 @@ export async function POST(request: NextRequest) {
       { status: 503 },
     );
   }
-  const body = await request.json().catch(() => ({}));
-  const text = String(body.text ?? "").trim();
+  const text = voiceLine.text.trim();
   if (!text) {
     return NextResponse.json({ success: false, error: "text 必填。", code: "validation_failed" }, { status: 422 });
   }

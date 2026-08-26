@@ -20,7 +20,8 @@ test("song audio candidates support playback and job stages", () => {
 
 test("one generation action submits two independently tracked song candidates", () => {
   assert.match(page, /\["A", "B"\]/);
-  assert.match(page, /Promise\.allSettled/);
+  assert.match(page, /api\/audio\/jobs\/batch/);
+  assert.match(page, /candidates:\s*\[/);
   assert.match(page, /requestKey/);
   assert.match(component, /生成 2 首|Generate 2 tracks/);
 });

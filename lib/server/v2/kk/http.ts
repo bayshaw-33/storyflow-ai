@@ -9,12 +9,17 @@ import { KkProfileServiceError } from "./profile.ts";
 import { classifyKkHttpError } from "./error-classify.ts";
 
 export function kkProfileErrorResponse(error: unknown, defaultMessage: string) {
+  const requestId = crypto.randomUUID();
   if (error instanceof KkProfileServiceError) {
+    const retryable = error.status >= 500;
     return NextResponse.json(
       {
         success: false,
         error: error.message,
         code: error.code,
+        requestId,
+        retryable,
+        retryAfter: retryable ? 5 : null,
       },
       { status: error.status },
     );
@@ -26,6 +31,8 @@ export function kkProfileErrorResponse(error: unknown, defaultMessage: string) {
       error: classified.message === "Service is temporarily unavailable." ? defaultMessage : classified.message,
       code: classified.code,
       requestId: classified.requestId,
+      retryable: classified.status >= 500,
+      retryAfter: classified.status >= 500 ? 5 : null,
     },
     { status: classified.status },
   );

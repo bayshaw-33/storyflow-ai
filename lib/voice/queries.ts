@@ -30,6 +30,7 @@ import type {
   VoiceLineDTO,
   VoiceProfileStatus,
 } from "./types";
+import { isUuid, normalizeOptionalUuid } from "@/lib/validation/ids";
 
 // ============================================================
 // 行类型（数据库 schema 对应）
@@ -238,8 +239,8 @@ export async function createVoiceProfile(
   ownerId: string,
   input: CreateVoiceProfileInput,
 ): Promise<VoiceProfileDTO> {
-  const actorProfileId = input.actorProfileId ?? null;
-  const universeEntityId = input.universeEntityId ?? null;
+  const actorProfileId = input.actorProfileId ? normalizeOptionalUuid(input.actorProfileId, "actor_profile_id") : null;
+  const universeEntityId = input.universeEntityId ? normalizeOptionalUuid(input.universeEntityId, "universe_entity_id") : null;
 
   if (!actorProfileId && !universeEntityId) {
     throw new Error("VOICE_PROFILE_TARGET_REQUIRED");
@@ -354,20 +355,24 @@ export async function createVoiceLine(
   ownerId: string,
   input: CreateVoiceLineInput,
 ): Promise<VoiceLineDTO> {
+  if (!isUuid(input.voiceProfileId)) throw new Error("INVALID_VOICE_PROFILE_ID");
+  const projectId = normalizeOptionalUuid(input.projectId, "project_id");
+  const sceneId = normalizeOptionalUuid(input.sceneId, "scene_id");
+  const shotId = normalizeOptionalUuid(input.shotId, "shot_id");
   // 校验 profile 归属
   const profile = await fetchVoiceProfileById(serverClient, input.voiceProfileId, ownerId);
   if (!profile) throw new Error("VOICE_PROFILE_NOT_FOUND");
   if (profile.status === "archived") throw new Error("VOICE_PROFILE_ARCHIVED");
 
   // 幂等：同一 profile + 同一 shot + 同一 text 不重复创建
-  if (input.shotId && input.projectId) {
+  if (shotId && projectId) {
     const { data: existing } = await serverClient
       .from("storyflow_voice_lines")
       .select("*")
       .eq("owner_id", ownerId)
       .eq("voice_profile_id", input.voiceProfileId)
-      .eq("project_id", input.projectId)
-      .eq("shot_id", input.shotId)
+      .eq("project_id", projectId)
+      .eq("shot_id", shotId)
       .eq("text", input.text)
       .maybeSingle();
 
@@ -380,9 +385,9 @@ export async function createVoiceLine(
     text: input.text,
     language: input.language ?? profile.language ?? "zh",
     ssml: input.ssml ?? null,
-    project_id: input.projectId ?? null,
-    scene_id: input.sceneId ?? null,
-    shot_id: input.shotId ?? null,
+    project_id: projectId,
+    scene_id: sceneId,
+    shot_id: shotId,
     status: "draft",
     revision: 0,
     is_approved: false,
@@ -416,9 +421,9 @@ export async function updateVoiceLine(
   if (input.text !== undefined) patch.text = input.text;
   if (input.language !== undefined) patch.language = input.language;
   if (input.ssml !== undefined) patch.ssml = input.ssml;
-  if (input.projectId !== undefined) patch.project_id = input.projectId;
-  if (input.sceneId !== undefined) patch.scene_id = input.sceneId;
-  if (input.shotId !== undefined) patch.shot_id = input.shotId;
+  if (input.projectId !== undefined) patch.project_id = normalizeOptionalUuid(input.projectId, "project_id");
+  if (input.sceneId !== undefined) patch.scene_id = normalizeOptionalUuid(input.sceneId, "scene_id");
+  if (input.shotId !== undefined) patch.shot_id = normalizeOptionalUuid(input.shotId, "shot_id");
 
   if (Object.keys(patch).length === 0) return current;
 

@@ -11,6 +11,7 @@ import {
   fetchVoiceLinesForProfile,
   createVoiceLine,
 } from "@/lib/voice/queries";
+import { isUuid, normalizeOptionalUuid } from "@/lib/validation/ids";
 
 /**
  * Voice Lines for a Character (TRAE-V2-03)
@@ -36,6 +37,9 @@ export async function GET(
   try {
     const { universeId, entityId } = await context.params;
     const user = await authenticateRequest(request);
+
+    if (!isUuid(universeId)) return Response.json({ success: false, error: "universeId 必须是有效 UUID。", code: "INVALID_UNIVERSE_ID", requestId }, { status: 422 });
+    if (!isUuid(entityId)) return Response.json({ success: false, error: "entityId 必须是有效 UUID。", code: "INVALID_ENTITY_ID", requestId }, { status: 422 });
 
     if (!hasServiceRoleConfig()) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
     const serverClient = getSupabaseServerClient();
@@ -77,6 +81,9 @@ export async function POST(
     const { universeId, entityId } = await context.params;
     const user = await authenticateRequest(request);
 
+    if (!isUuid(universeId)) return Response.json({ success: false, error: "universeId 必须是有效 UUID。", code: "INVALID_UNIVERSE_ID", requestId }, { status: 422 });
+    if (!isUuid(entityId)) return Response.json({ success: false, error: "entityId 必须是有效 UUID。", code: "INVALID_ENTITY_ID", requestId }, { status: 422 });
+
     if (!hasServiceRoleConfig()) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
     const serverClient = getSupabaseServerClient();
     if (!serverClient) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
@@ -114,14 +121,25 @@ export async function POST(
       });
     }
 
+    let projectId: string | null;
+    let sceneId: string | null;
+    let shotId: string | null;
+    try {
+      projectId = normalizeOptionalUuid(body.projectId, "project_id");
+      sceneId = normalizeOptionalUuid(body.sceneId, "scene_id");
+      shotId = normalizeOptionalUuid(body.shotId, "shot_id");
+    } catch {
+      return Response.json({ success: false, error: "projectId、sceneId、shotId 必须是有效 UUID。", code: "INVALID_VOICE_LINE_SCOPE", requestId }, { status: 422 });
+    }
+
     const voiceLine = await createVoiceLine(serverClient, user.id, {
       voiceProfileId: profile.id,
       text: body.text,
       language: body.language,
       ssml: body.ssml,
-      projectId: body.projectId,
-      sceneId: body.sceneId,
-      shotId: body.shotId,
+      projectId: projectId ?? undefined,
+      sceneId: sceneId ?? undefined,
+      shotId: shotId ?? undefined,
     });
 
     return ok({ voiceProfile: profile, voiceLine, requestId });

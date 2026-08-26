@@ -91,7 +91,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
     }
     if (job.input_params.voiceLineId || job.target_type === "voice_line") {
       const voiceLineId = typeof job.input_params.voiceLineId === "string" ? job.input_params.voiceLineId : job.target_id;
-      if (voiceLineId) {
+      if (voiceLineId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(voiceLineId)) {
         await serviceFetch(`/rest/v1/storyflow_voice_lines?id=eq.${encodeURIComponent(voiceLineId)}&owner_id=eq.${encodeURIComponent(user.id)}`, {
           method: "PATCH",
           body: JSON.stringify({ status: "generated", asset_id: assetId, storage_path: artifact.storagePath, signed_url: artifact.signedUrl, signed_url_expires_at: artifact.expiresAt, error: null, completed_at: new Date().toISOString() }),

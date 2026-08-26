@@ -646,6 +646,7 @@ export default function SongWorkbenchPage() {
   async function pollSongAudioJob(candidateId: string, jobId: string) {
     const accessToken = session?.access_token;
     if (!accessToken) return;
+    const nonTerminalStatuses: SongAudioCandidate["status"][] = ["queued", "reconciling", "generating", "result_ingesting"];
     for (let attempt = 0; attempt < 20; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 4000));
       const response = await fetch(`/api/audio/jobs/${encodeURIComponent(jobId)}`, {
@@ -664,6 +665,7 @@ export default function SongWorkbenchPage() {
         error: job.error || candidate.error,
       } : candidate));
       if (["completed", "failed", "provider_timeout"].includes(job.status || "")) return;
+      if (!nonTerminalStatuses.includes(job.status || "queued")) return;
     }
   }
 
@@ -678,39 +680,74 @@ export default function SongWorkbenchPage() {
     }
     setAudioGenerating(true);
     setGenerationError("");
-    const batchId = crypto.randomUUID();
     const placeholders = (["A", "B"] as const).map((label) => ({ id: crypto.randomUUID(), label, jobId: null, status: "queued" as const, resultUrl: null, provider: null, model: null, error: null, createdAt: new Date().toISOString() }));
     setAudioCandidates((current) => [...placeholders, ...current]);
     try {
-      await Promise.allSettled(placeholders.map(async (candidate) => {
-        try {
-          const response = await fetch("/api/audio/jobs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-            body: JSON.stringify({
-              kind: "music",
-              prompt: stylePrompt || form.concept,
-              lyrics,
-              targetType: "song_version",
-              targetId: songProjectId || form.title || "standalone-song",
-              requestKey: `${batchId}:${candidate.label}`,
-              projectId: songProjectId,
-              inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label },
-            }),
-          });
-          const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
-          if (!response.ok || !payload.job) throw new Error(payload.error || "AUDIO_JOB_CREATE_FAILED");
-          const job = payload.job;
-          setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
-          if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidate.id, job.id);
-        } catch (audioError) {
-          const message = audioError instanceof Error ? audioError.message : "AUDIO_JOB_CREATE_FAILED";
-          setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, status: "failed", error: message } : item));
-          throw audioError;
+      const response = await fetch("/api/audio/jobs/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          kind: "music",
+          candidates: [
+            { label: "A", prompt: stylePrompt || form.concept, lyrics },
+            { label: "B", prompt: stylePrompt || form.concept, lyrics },
+          ],
+          targetType: "song_version",
+          targetId: songProjectId || form.title || "standalone-song",
+          projectId: songProjectId,
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage },
+        }),
+      });
+      const payload = await response.json() as {
+        jobs?: Array<{ label: "A" | "B"; job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string }>;
+        error?: string;
+      };
+      if (!response.ok && !payload.jobs?.length) throw new Error(payload.error || "AUDIO_BATCH_CREATE_FAILED");
+      for (const candidate of placeholders) {
+        const result = payload.jobs?.find((item) => item.label === candidate.label);
+        if (!result?.job) {
+          setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, status: "failed", error: result?.error || "AUDIO_JOB_CREATE_FAILED" } : item));
+          continue;
         }
-      }));
+        const job = result.job;
+        setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
+        if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidate.id, job.id);
+      }
+    } catch (audioError) {
+      const message = audioError instanceof Error ? audioError.message : "AUDIO_BATCH_CREATE_FAILED";
+      setAudioCandidates((current) => current.map((item) => placeholders.some((placeholder) => placeholder.id === item.id) ? { ...item, status: "failed", error: message } : item));
     } finally {
       setAudioGenerating(false);
+    }
+  }
+
+  async function retrySongAudioCandidate(candidateId: string) {
+    const candidate = audioCandidates.find((item) => item.id === candidateId);
+    if (!candidate || !session?.access_token) return;
+    setAudioCandidates((current) => current.map((item) => item.id === candidateId ? { ...item, status: "queued", error: null } : item));
+    try {
+      const response = await fetch("/api/audio/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          kind: "music",
+          prompt: stylePrompt || form.concept,
+          lyrics,
+          targetType: "song_version",
+          targetId: songProjectId || form.title || "standalone-song",
+          requestKey: `retry:${candidate.id}:${Date.now()}`,
+          projectId: songProjectId,
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label, retryOf: candidate.jobId },
+        }),
+      });
+      const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
+      if (!response.ok || !payload.job) throw new Error(payload.error || "AUDIO_JOB_RETRY_FAILED");
+      const job = payload.job;
+      setAudioCandidates((current) => current.map((item) => item.id === candidateId ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
+      if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidateId, job.id);
+    } catch (audioError) {
+      const message = audioError instanceof Error ? audioError.message : "AUDIO_JOB_RETRY_FAILED";
+      setAudioCandidates((current) => current.map((item) => item.id === candidateId ? { ...item, status: "failed", error: message } : item));
     }
   }
 
@@ -2194,7 +2231,7 @@ export default function SongWorkbenchPage() {
                 placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
               />
             </div>
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} />
           </div>
         </section>
       </section>

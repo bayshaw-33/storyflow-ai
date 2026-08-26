@@ -27,6 +27,7 @@ export const dynamic = "force-dynamic";
  * 不静默切 fixture。
  */
 export async function GET(request: NextRequest) {
+  const requestId = crypto.randomUUID();
   try {
     const user = await authenticateRequest(request);
     if (!hasServiceRoleConfig()) {
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
             success: false,
             error: "KK service not configured in production-like environment (K21-KK-002).",
             code: "service_unavailable",
+            requestId,
+            retryable: true,
+            retryAfter: 5,
           },
           { status: 503 },
         );

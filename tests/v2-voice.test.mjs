@@ -226,7 +226,7 @@ test("createVoiceProfile 幂等：同 entity 已存在则返回现有", () => {
 
 test("createVoiceLine 幂等：同 profile+shot+text 不重复创建", () => {
   assert.ok(
-    queriesSource.includes("if (input.shotId && input.projectId)"),
+    queriesSource.includes("if (shotId && projectId)"),
     "幂等校验需 shotId + projectId",
   );
   assert.ok(

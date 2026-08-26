@@ -3,11 +3,12 @@
 // 交付物 3：资产页
 // 角色 / 地点 / 组织 / 道具 / 概念列表，每个对象显示状态、来源、主版本、被使用情况。
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Boxes, Search } from "lucide-react";
 import type { UniverseBundleV2, UniverseObjectStatus } from "@/lib/client/v2/universe/types";
 import styles from "./universe.module.css";
 import { StatusBadge, GuideHint } from "./shared";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 // 资产统一视图模型。
 type AssetRow = {
@@ -21,6 +22,17 @@ type AssetRow = {
   kind: string;
 };
 
+type UniverseAudioAsset = {
+  id: string;
+  name: string;
+  role: string;
+  provider: string | null;
+  model: string | null;
+  playableUrl: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
 const STATUS_FILTERS: Array<{ value: "all" | UniverseObjectStatus; label: string }> = [
   { value: "all", label: "全部" },
   { value: "canon", label: "Canon" },
@@ -32,6 +44,21 @@ const STATUS_FILTERS: Array<{ value: "all" | UniverseObjectStatus; label: string
 export function AssetsPanel({ bundle }: { bundle: UniverseBundleV2 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | UniverseObjectStatus>("all");
+  const [audioAssets, setAudioAssets] = useState<UniverseAudioAsset[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const client = getSupabaseBrowserClient();
+    void client?.auth.getSession().then(async ({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) return;
+      const response = await fetch(`/api/v2/universes/${encodeURIComponent(bundle.universe.id)}/audio-assets`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+      if (!response?.ok) return;
+      const payload = await response.json().catch(() => null) as { audioAssets?: UniverseAudioAsset[] } | null;
+      if (active) setAudioAssets(payload?.audioAssets || []);
+    });
+    return () => { active = false; };
+  }, [bundle.universe.id]);
 
   // 把所有资产聚合为统一列表，标注 kind。
   const allAssets = useMemo<AssetRow[]>(() => {
@@ -146,6 +173,27 @@ export function AssetsPanel({ bundle }: { bundle: UniverseBundleV2 }) {
             </div>
           ))
         )}
+
+        {audioAssets.length > 0 ? (
+          <section className={styles.audioSection} aria-label="Universe 音频资产">
+            <h3 className={styles.assetGroupTitle}>声音资产 <span className={styles.cardCount}>{audioAssets.length}</span></h3>
+            <div className={styles.audioList}>
+              {audioAssets.map((audio) => (
+                <article className={styles.audioRow} key={audio.id}>
+                  <div className={styles.rowHeader}>
+                    <p className={styles.rowTitle}>{audio.name}</p>
+                    <span className={styles.cardCount}>{audio.role}</span>
+                  </div>
+                  <audio controls preload="metadata" src={audio.playableUrl} />
+                  <div className={styles.rowMeta}>
+                    {audio.provider ? <span>{audio.provider}{audio.model ? ` · ${audio.model}` : ""}</span> : null}
+                    <span>签名链接有效至 {new Date(audio.expiresAt).toLocaleTimeString()}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <GuideHint>
           每个资产的状态决定其在作品继承中的优先级：Canon 优先继承；Draft 需确认后升级；Alternative 仅在显式选择时继承；Deprecated 不再继承。

@@ -251,6 +251,30 @@
   gap: 4px;
 }
 
+.audioSection {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.audioList {
+  display: grid;
+  gap: 8px;
+}
+
+.audioRow {
+  padding: 12px 14px;
+  border: 1px solid rgba(109, 231, 223, 0.22);
+  border-radius: 10px;
+  background: rgba(109, 231, 223, 0.04);
+}
+
+.audioRow audio {
+  width: 100%;
+  height: 34px;
+  margin-top: 10px;
+}
+
 /* 状态徽章 */
 .statusBadge {
   display: inline-flex;

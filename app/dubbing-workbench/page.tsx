@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Loader2, Play, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -12,13 +13,6 @@ type DubbingLine = {
   audioUrl: string | null;
   latestJobId: string | null;
   error: string | null;
-};
-
-const panelStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 10,
-  background: "linear-gradient(145deg, rgba(22,20,38,0.96), rgba(8,10,18,0.96))",
-  padding: 20,
 };
 
 export default function DubbingWorkbenchPage() {
@@ -51,7 +45,7 @@ export default function DubbingWorkbenchPage() {
       const response = await fetch("/api/voice-lines/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ universeId, entityId, projectId, lines: parsedLines.map((text) => ({ text })) }),
+        body: JSON.stringify({ universeId, entityId, projectId: projectId || undefined, lines: parsedLines.map((text) => ({ text })) }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || "Import failed");
@@ -107,12 +101,13 @@ export default function DubbingWorkbenchPage() {
           <h1>{isZh ? "配音工作台" : "Dubbing Workbench"}</h1>
           <p>{isZh ? "把角色台词变成可以试听、审核和留存的声音版本。" : "Turn character dialogue into reviewable, durable voice versions."}</p>
         </div>
+        <Link className="dubbing-settings-link" href="/settings">{isZh ? "设置" : "Settings"}</Link>
       </header>
 
       {message ? <div className="notice success">{message}</div> : null}
       {error ? <div className="notice error">{error}</div> : null}
       <section className="dubbing-workbench-grid">
-        <div style={panelStyle}>
+        <div className="dubbing-panel">
           <div className="dubbing-section-kicker">01 / {isZh ? "建立配音上下文" : "Set the dubbing context"}</div>
           <h2>{isZh ? "先指定角色，再导入台词" : "Choose the character, then import lines"}</h2>
           <label>{isZh ? "Universe ID" : "Universe ID"}<input value={universeId} onChange={(event) => setUniverseId(event.target.value)} placeholder="universe-id" /></label>
@@ -125,7 +120,7 @@ export default function DubbingWorkbenchPage() {
           </button>
         </div>
 
-        <div style={panelStyle}>
+        <div className="dubbing-panel dubbing-review-panel">
           <div className="dubbing-section-kicker">02 / {isZh ? "逐句生产与审核" : "Generate and review"}</div>
           <div className="dubbing-review-head"><div><h2>{isZh ? "声音版本" : "Voice versions"}</h2><p>{isZh ? "每条台词独立生成，完成后立即转存到 Kiikis。" : "Each line generates independently and is stored in Kiikis."}</p></div><button className="secondary-button" type="button" onClick={() => void generateAll()} disabled={busy || !lines.length}>{isZh ? "批量生成" : "Batch generate"}</button></div>
           {!lines.length ? <p className="dubbing-empty">{isZh ? "导入台词后，这里会出现逐句任务卡。" : "Import lines to create one task card per line."}</p> : <div className="dubbing-line-list">{lines.map((line, index) => <article className="dubbing-line-card" key={line.id}><div><span className="dubbing-line-index">{String(index + 1).padStart(2, "0")}</span><p>{line.text}</p></div><div className="dubbing-line-actions"><small data-status={line.status}>{line.status}</small>{line.audioUrl ? <audio controls preload="metadata" src={line.audioUrl} /> : <button className="secondary-button" type="button" onClick={() => void generateLine(line)} disabled={busy}><Play size={14} />{isZh ? "生成试听" : "Generate"}</button>}{line.error ? <small className="dubbing-error">{line.error}</small> : null}</div></article>)}</div>}
