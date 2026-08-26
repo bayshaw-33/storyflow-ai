@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, getSupabaseServerClient, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { resolveAudioProvider } from "@/lib/audio/provider";
-import { computeAudioIdempotencyHash, sanitizeAudioMetadata } from "@/lib/audio/jobs";
+import { classifyAudioProviderError, computeAudioIdempotencyHash, sanitizeAudioMetadata } from "@/lib/audio/jobs";
 import { persistAudioArtifact } from "@/lib/audio/storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
 import { buildAudioUniverseBinding } from "@/lib/audio/universe-links";
@@ -43,13 +43,15 @@ export async function POST(request: NextRequest) {
   const kind = body.kind === "tts" || body.kind === "music" ? body.kind : null;
   const text = typeof body.text === "string" ? body.text : typeof body.prompt === "string" ? body.prompt : "";
   const targetId = typeof body.targetId === "string" ? body.targetId : "standalone";
+  const requestKey = typeof body.requestKey === "string" ? body.requestKey.slice(0, 120) : "";
+  const idempotencyTargetId = requestKey ? `${targetId}:${requestKey}` : targetId;
   const providerName = typeof body.provider === "string" ? body.provider as AudioProviderName : undefined;
   const model = typeof body.model === "string" && body.model ? body.model : null;
   if (!kind || !text.trim()) return response(400, { success: false, error: "缺少 kind 和 text/prompt。" });
 
   const provider = await resolveAudioProvider(kind, providerName);
   if (!provider.isAvailable(kind)) return response(422, { success: false, error: "当前音频 Provider 不可用。", code: "PROVIDER_UNAVAILABLE", provider: provider.name });
-  const idempotencyHash = computeAudioIdempotencyHash({ ownerId: user.id, kind, targetId, text, provider: provider.name, model: model || provider.capabilities().models[0] || "default" });
+  const idempotencyHash = computeAudioIdempotencyHash({ ownerId: user.id, kind, targetId: idempotencyTargetId, text, provider: provider.name, model: model || provider.capabilities().models[0] || "default" });
 
   const existing = await serviceFetch<JobRow[]>(`${TABLE}?owner_id=eq.${encodeURIComponent(user.id)}&job_type=eq.audio&idempotency_hash=eq.${encodeURIComponent(idempotencyHash)}&status=not.in.(failed,provider_timeout)&limit=1`);
   if (existing?.[0]) return response(200, { success: true, created: false, job: existing[0] });
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
       model,
       provider_task_id: null,
       prompt: text,
-      input_params: { ...inputParams, kind, targetId, idempotencyHash },
+      input_params: { ...inputParams, kind, targetId, requestKey, idempotencyHash },
       idempotency_hash: idempotencyHash,
       status: "queued",
       error: null,
@@ -119,9 +121,9 @@ export async function POST(request: NextRequest) {
     await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: "completed", provider: provider.name, model, kind }).catch(() => undefined);
     return response(201, { success: true, created: true, job: completed?.[0] || job, assetId });
   } catch (error) {
-    const message = error instanceof Error ? error.message.slice(0, 300) : "AUDIO_PROVIDER_FAILED";
-    await serviceFetch(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", body: JSON.stringify({ status: message.includes("TIMEOUT") ? "provider_timeout" : "failed", error: message }) }).catch(() => undefined);
-    await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: message.includes("TIMEOUT") ? "provider_timeout" : "failed", provider: provider.name, model, kind }).catch(() => undefined);
-    return response(502, { success: false, error: "音频 Provider 调用失败。", code: "PROVIDER_CALL_FAILED", jobId: job.id });
+    const providerFailure = classifyAudioProviderError(error);
+    await serviceFetch(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", body: JSON.stringify({ status: providerFailure.status, error: providerFailure.internalMessage }) }).catch(() => undefined);
+    await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: providerFailure.status, provider: provider.name, model, kind }).catch(() => undefined);
+    return response(502, { success: false, error: providerFailure.safeMessage, code: providerFailure.code, jobId: job.id });
   }
 }

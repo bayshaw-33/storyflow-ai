@@ -4763,10 +4763,16 @@ input:focus, textarea:focus, select:focus {
 /* ===== Song Workbench v2 两栏布局 ===== */
 .song-workbench-page.song-workbench-v2 {
   background: #080B0C;
+  width: 100%;
   height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+@media (min-width: 721px) {
+  .song-workbench-page.song-workbench-v2 {
+    padding-left: 96px;
+  }
 }
 .song-copyright-stack {
   margin-top: 16px;
@@ -4780,6 +4786,9 @@ input:focus, textarea:focus, select:focus {
 }
 .song-workbench-v2 .song-title-bar {
   display: flex;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -5019,6 +5028,7 @@ input:focus, textarea:focus, select:focus {
 /* 两栏 shell：38% / 62%，满屏不限制窄宽 */
 .song-shell-v2 {
   display: grid;
+  width: 100%;
   grid-template-columns: 38fr 62fr;
   gap: 16px;
   max-width: none;
@@ -5105,8 +5115,9 @@ input:focus, textarea:focus, select:focus {
 .song-right-lower {
   flex: calc(100 - var(--upper-pct, 70)) 1 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.46fr);
+  gap: var(--space-3);
 }
 
 /* 上方左右均分：歌词 + 翻译 */
@@ -5139,30 +5150,25 @@ input:focus, textarea:focus, select:focus {
   font-family: var(--font-body);
 }
 
-/* Audio generation is an optional overlay and must not resize the original song editor. */
-.song-audio-dock {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  width: min(100%, 480px);
-  pointer-events: none;
+/* Audio generation shares the lower work area and never covers the prompt. */
+.song-style-card,
+.song-audio-card {
+  min-width: 0;
+  min-height: 0;
 }
-.song-audio-dock .song-audio-card {
-  max-height: min(44dvh, 360px);
+.song-audio-card {
+  height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
   border-color: rgba(45, 212, 191, 0.34);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
-  pointer-events: auto;
 }
 .song-audio-card .song-output-card-head {
   min-height: 46px;
   padding: 8px 10px;
 }
 .song-audio-panel-body {
-  max-height: min(36dvh, 300px);
+  max-height: calc(100% - 46px);
   overflow-y: auto;
   padding: 0 10px 10px;
 }
@@ -5176,7 +5182,8 @@ input:focus, textarea:focus, select:focus {
 }
 .song-audio-candidate {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--glass-border);
 }
@@ -5193,6 +5200,44 @@ input:focus, textarea:focus, select:focus {
 .song-audio-candidate audio {
   width: 100%;
   min-width: 0;
+  height: 32px;
+}
+.song-audio-cover {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  color: rgba(242, 242, 243, 0.92);
+  background: linear-gradient(145deg, #243332, #111718 70%);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  border-radius: 8px;
+}
+.song-audio-cover strong {
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+  color: #5eead4;
+}
+.song-audio-player-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.song-audio-loading-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.song-audio-loading-track[data-status="queued"]::after,
+.song-audio-loading-track[data-status="generating"]::after,
+.song-audio-loading-track[data-status="result_ingesting"]::after {
+  content: "";
+  display: block;
+  width: 42%;
+  height: 100%;
+  background: #2dd4bf;
 }
 
 
@@ -5417,6 +5462,14 @@ input:focus, textarea:focus, select:focus {
     height: 100%;
     min-height: 0;
   }
+  .song-right-lower {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(120px, 1fr) auto;
+  }
+  .song-audio-card {
+    height: auto;
+    max-height: 190px;
+  }
 }
 
 /* 小屏幕（<768px）：手机 / 平板竖屏，单列 + 双页面流程 */
@@ -5443,16 +5496,14 @@ input:focus, textarea:focus, select:focus {
     position: relative;
     min-height: calc(100dvh - 160px);
   }
-  .song-audio-dock {
-    right: 0;
-    width: 100%;
-  }
   .song-right-upper {
     flex: 1 1 auto;
   }
   .song-right-lower {
     flex: 0 0 auto;
     min-height: 180px;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, auto) auto;
   }
   .song-splitter {
     display: none;

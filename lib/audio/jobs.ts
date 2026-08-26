@@ -9,6 +9,39 @@ export type AudioJobStatus =
   | "failed"
   | "provider_timeout";
 
+export type AudioProviderFailure = {
+  status: Extract<AudioJobStatus, "failed" | "provider_timeout">;
+  code: "PROVIDER_TIMEOUT" | "PROVIDER_TEMPORARY_ERROR" | "PROVIDER_CALL_FAILED";
+  safeMessage: string;
+  internalMessage: string;
+};
+
+export function classifyAudioProviderError(error: unknown): AudioProviderFailure {
+  const internalMessage = (error instanceof Error ? error.message : "AUDIO_PROVIDER_FAILED").slice(0, 300);
+  if (/timeout|timed out|aborted/i.test(internalMessage)) {
+    return {
+      status: "provider_timeout",
+      code: "PROVIDER_TIMEOUT",
+      safeMessage: "音频服务响应超时，本次任务未确认提交。请稍后手动重试。",
+      internalMessage,
+    };
+  }
+  if (/internal error|temporar(?:y|ily)|overload|unavailable/i.test(internalMessage)) {
+    return {
+      status: "failed",
+      code: "PROVIDER_TEMPORARY_ERROR",
+      safeMessage: "音频模型服务暂时异常，请稍后重试。",
+      internalMessage,
+    };
+  }
+  return {
+    status: "failed",
+    code: "PROVIDER_CALL_FAILED",
+    safeMessage: "音频生成提交失败，请稍后重试。",
+    internalMessage,
+  };
+}
+
 export function mapAudioPollToJobStatus(result: AudioPollResult): AudioJobStatus {
   if (result.status === "queued") return "queued";
   if (result.status === "running") return "generating";

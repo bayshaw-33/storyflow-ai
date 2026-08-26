@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Music2 } from "lucide-react";
 
 export type SongAudioCandidate = {
   id: string;
+  label: "A" | "B";
   jobId: string | null;
   status: "queued" | "generating" | "result_ingesting" | "completed" | "failed" | "provider_timeout";
   resultUrl: string | null;
@@ -54,7 +56,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate }: AudioCan
             {open ? (isZh ? "收起" : "Collapse") : (candidates.length ? (isZh ? "查看候选" : "View") : (isZh ? "展开" : "Open"))}
           </button>
           <button className="primary-button" type="button" onClick={onGenerate} disabled={busy}>
-            {busy ? (isZh ? "已提交" : "Submitted") : (isZh ? "生成音频" : "Generate audio")}
+            {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成 2 首" : "Generate 2 tracks")}
           </button>
         </div>
       </div>
@@ -63,15 +65,21 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate }: AudioCan
           <p className="subtle">{isZh ? "歌词和曲风确认后，可在这里生成第一版音乐。" : "Generate the first music version after confirming lyrics and style."}</p>
         ) : (
           <div className="song-audio-candidates" aria-live="polite">
-            {candidates.map((candidate, index) => (
-              <article className="song-audio-candidate" key={candidate.id}>
-                <div className="song-audio-candidate-head">
-                  <span>{isZh ? `候选 ${index + 1}` : `Candidate ${index + 1}`}</span>
-                  <small data-status={candidate.status}>{statusLabel(candidate.status, isZh)}</small>
+            {candidates.map((candidate) => (
+              <article className="song-audio-candidate song-audio-player" key={candidate.id}>
+                <div className="song-audio-cover" aria-hidden="true">
+                  <Music2 size={20} strokeWidth={1.6} />
+                  <strong>{candidate.label}</strong>
                 </div>
-                {candidate.resultUrl ? <audio controls preload="metadata" src={candidate.resultUrl} /> : null}
-                {candidate.provider || candidate.model ? <small className="field-note">{[candidate.provider, candidate.model].filter(Boolean).join(" · ")}</small> : null}
-                {candidate.error ? <small className="field-note song-save-warning">{candidate.error}</small> : null}
+                <div className="song-audio-player-main">
+                  <div className="song-audio-candidate-head">
+                    <span>{isZh ? `候选 ${candidate.label}` : `Candidate ${candidate.label}`}</span>
+                    <small data-status={candidate.status}>{statusLabel(candidate.status, isZh)}</small>
+                  </div>
+                  {candidate.resultUrl ? <audio controls preload="metadata" src={candidate.resultUrl} /> : <div className="song-audio-loading-track" data-status={candidate.status} />}
+                  {candidate.provider || candidate.model ? <small className="field-note">{[candidate.provider, candidate.model].filter(Boolean).join(" · ")}</small> : null}
+                  {candidate.error ? <small className="field-note song-save-warning">{candidate.error}</small> : null}
+                </div>
               </article>
             ))}
           </div>

@@ -15,3 +15,10 @@ test("audio jobs expose idempotency and provider URL sanitization helpers", () =
   assert.match(source, /sanitizeAudioMetadata/);
   assert.match(source, /providerTempUrl/);
 });
+
+test("audio provider submit errors distinguish timeout from temporary failure", () => {
+  assert.match(source, /classifyAudioProviderError/);
+  assert.match(source, /timeout\|timed out\|aborted/i);
+  assert.match(source, /PROVIDER_TIMEOUT/);
+  assert.match(source, /PROVIDER_TEMPORARY_ERROR/);
+});

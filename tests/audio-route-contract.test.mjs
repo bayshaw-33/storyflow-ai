@@ -34,3 +34,17 @@ test("audio capability route exposes provider availability without secrets", () 
   assert.match(capabilitiesRoute, /TTS_PROVIDER/);
   assert.doesNotMatch(capabilitiesRoute, /API_KEY/);
 });
+
+test("audio submit route returns safe actionable provider errors", () => {
+  assert.match(submitRoute, /classifyAudioProviderError/);
+  assert.match(submitRoute, /providerFailure\.status/);
+  assert.match(submitRoute, /providerFailure\.safeMessage/);
+  assert.match(submitRoute, /providerFailure\.code/);
+  assert.doesNotMatch(submitRoute, /message\.includes\("TIMEOUT"\)/);
+});
+
+test("audio submit idempotency distinguishes two candidates in one batch", () => {
+  assert.match(submitRoute, /requestKey/);
+  assert.match(submitRoute, /idempotencyTargetId/);
+  assert.match(submitRoute, /computeAudioIdempotencyHash\(\{[^}]*targetId: idempotencyTargetId/s);
+});

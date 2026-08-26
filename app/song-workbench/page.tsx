@@ -678,30 +678,37 @@ export default function SongWorkbenchPage() {
     }
     setAudioGenerating(true);
     setGenerationError("");
-    const candidateId = crypto.randomUUID();
-    setAudioCandidates((current) => [{ id: candidateId, jobId: null, status: "queued", resultUrl: null, provider: null, model: null, error: null, createdAt: new Date().toISOString() }, ...current]);
+    const batchId = crypto.randomUUID();
+    const placeholders = (["A", "B"] as const).map((label) => ({ id: crypto.randomUUID(), label, jobId: null, status: "queued" as const, resultUrl: null, provider: null, model: null, error: null, createdAt: new Date().toISOString() }));
+    setAudioCandidates((current) => [...placeholders, ...current]);
     try {
-      const response = await fetch("/api/audio/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          kind: "music",
-          prompt: stylePrompt || form.concept,
-          lyrics,
-          targetType: "song_version",
-          targetId: songProjectId || form.title || "standalone-song",
-          projectId: songProjectId,
-          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage },
-        }),
-      });
-      const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
-      if (!response.ok || !payload.job) throw new Error(payload.error || "AUDIO_JOB_CREATE_FAILED");
-      const job = payload.job;
-      setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? { ...candidate, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : candidate));
-      if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidateId, job.id);
-    } catch (audioError) {
-      const message = audioError instanceof Error ? audioError.message : "AUDIO_JOB_CREATE_FAILED";
-      setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? { ...candidate, status: "failed", error: message } : candidate));
+      await Promise.allSettled(placeholders.map(async (candidate) => {
+        try {
+          const response = await fetch("/api/audio/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              kind: "music",
+              prompt: stylePrompt || form.concept,
+              lyrics,
+              targetType: "song_version",
+              targetId: songProjectId || form.title || "standalone-song",
+              requestKey: `${batchId}:${candidate.label}`,
+              projectId: songProjectId,
+              inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label },
+            }),
+          });
+          const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
+          if (!response.ok || !payload.job) throw new Error(payload.error || "AUDIO_JOB_CREATE_FAILED");
+          const job = payload.job;
+          setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
+          if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidate.id, job.id);
+        } catch (audioError) {
+          const message = audioError instanceof Error ? audioError.message : "AUDIO_JOB_CREATE_FAILED";
+          setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, status: "failed", error: message } : item));
+          throw audioError;
+        }
+      }));
     } finally {
       setAudioGenerating(false);
     }
@@ -2187,8 +2194,6 @@ export default function SongWorkbenchPage() {
                 placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
               />
             </div>
-          </div>
-          <div className="song-audio-dock">
             <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} />
           </div>
         </section>
