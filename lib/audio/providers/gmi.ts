@@ -19,6 +19,14 @@ function baseUrl() {
   return (process.env.GMI_AUDIO_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
 }
 
+export function getGmiRequestQueueBaseUrl() {
+  return baseUrl();
+}
+
+export function getGmiOrganizationId() {
+  return process.env.GMI_ORGANIZATION_ID || "";
+}
+
 function requestId(data: Record<string, unknown>) {
   return readNestedString(data, [["request_id"], ["task_id"], ["id"]]);
 }
@@ -27,19 +35,27 @@ function mediaUrl(data: Record<string, unknown>) {
   return readNestedString(data, [["outcome", "audio_url"], ["outcome", "url"], ["outcome", "media_urls", "0", "url"], ["audio_url"], ["url"]]);
 }
 
-async function submit(apiKeyValue: string, model: string, payload: Record<string, unknown>): Promise<AudioSubmitResult> {
-  const data = await requestJson(`${baseUrl()}/requests`, apiKeyValue, {
-    method: "POST",
-    body: JSON.stringify({ model, payload }),
-    signal: AbortSignal.timeout(120_000),
-  });
+async function submit(apiKeyValue: string, model: string, payload: Record<string, unknown>, kind: AudioKind): Promise<AudioSubmitResult> {
+  let data: Record<string, unknown>;
+  try {
+    data = await requestJson(`${baseUrl()}/requests`, apiKeyValue, {
+      method: "POST",
+      body: JSON.stringify({ model, payload }),
+      signal: AbortSignal.timeout(kind === "music" ? 12_000 : 120_000),
+    }, { organizationId: getGmiOrganizationId() || undefined });
+  } catch (error) {
+    if (kind === "music" && /abort|timeout|timed out/i.test(error instanceof Error ? error.message : String(error))) {
+      throw new Error(`GMI_SUBMIT_UNCONFIRMED:${Date.now()}`);
+    }
+    throw error;
+  }
   const id = requestId(data);
   if (!id) throw new Error("GMI_REQUEST_ID_MISSING");
   return { kind: "async_submitted", providerTaskId: id };
 }
 
 async function poll(apiKeyValue: string, providerTaskId: string): Promise<AudioPollResult> {
-  const data = await requestJson(`${baseUrl()}/requests/${encodeURIComponent(providerTaskId)}`, apiKeyValue, { method: "GET" });
+  const data = await requestJson(`${baseUrl()}/requests/${encodeURIComponent(providerTaskId)}`, apiKeyValue, { method: "GET" }, { organizationId: getGmiOrganizationId() || undefined });
   const status = parseProviderStatus(data.status);
   if (status === "error") return { status, rawStatus: readString(data.status), error: readNestedString(data, [["error", "message"], ["message"], ["outcome", "error"]]) || "GMI_AUDIO_FAILED" };
   if (status !== "done") return { status, rawStatus: readString(data.status) };
@@ -64,8 +80,11 @@ export function createGmiAudioProvider(): AudioProvider {
     submitMusic: (input: MusicSubmitInput) => key ? submit(key, input.model || process.env.GMI_MUSIC_MODEL || "minimax-music-3.0", {
       prompt: input.prompt,
       lyrics: input.lyrics || "",
-      audio_setting: { sample_rate: 44100, bitrate: 256000, format: "mp3" },
-    }) : Promise.reject(new Error("PROVIDER_UNAVAILABLE:GMI_API_KEY")),
+      sample_rate: 44100,
+      bitrate: 256000,
+      format: "mp3",
+      lyrics_optimizer: false,
+    }, "music") : Promise.reject(new Error("PROVIDER_UNAVAILABLE:GMI_API_KEY")),
     submitTTS: (input: TTSSubmitInput) => key ? submit(key, process.env.GMI_TTS_MODEL || "minimax-tts-speech-2.8-hd", {
       text: input.text,
       voice_id: input.voiceProviderVoiceId || "English_expressive_narrator",
@@ -78,7 +97,7 @@ export function createGmiAudioProvider(): AudioProvider {
       audio_sample_rate: "32000",
       bitrate: "128000",
       channel: "1",
-    }) : Promise.reject(new Error("PROVIDER_UNAVAILABLE:GMI_API_KEY")),
+    }, "tts") : Promise.reject(new Error("PROVIDER_UNAVAILABLE:GMI_API_KEY")),
     poll: (providerTaskId, _kind) => key ? poll(key, providerTaskId) : Promise.reject(new Error("PROVIDER_UNAVAILABLE:GMI_API_KEY")),
     download: (audioUrl) => downloadAudio(audioUrl),
   };

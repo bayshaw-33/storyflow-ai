@@ -25,6 +25,19 @@ test("GMI adapter uses the request queue and MiniMax audio model ids", () => {
   assert.match(source("lib/audio/providers/helpers.ts"), /Array\.isArray\(value\)/);
 });
 
+test("GMI music payload keeps model fields at the request payload top level", () => {
+  assert.match(gmi, /sample_rate:\s*44100/);
+  assert.match(gmi, /bitrate:\s*256000/);
+  assert.match(gmi, /format:\s*["']mp3["']/);
+  assert.match(gmi, /lyrics_optimizer:\s*false/);
+  assert.doesNotMatch(gmi, /audio_setting:\s*\{[^}]*sample_rate/s);
+});
+
+test("GMI requests support organization-scoped routing", () => {
+  assert.match(gmi, /GMI_ORGANIZATION_ID/);
+  assert.match(source("lib/audio/providers/helpers.ts"), /X-Organization-ID/);
+});
+
 test("audio OpenAI adapter remains TTS-only and voice resolver recognizes new providers", () => {
   assert.match(openai, /audio\/speech/);
   assert.doesNotMatch(openai, /music_generation/);

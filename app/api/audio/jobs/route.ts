@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
   if (existing?.[0]) return response(200, { success: true, created: false, job: existing[0] });
 
   const inputParams = body.inputParams && typeof body.inputParams === "object" ? body.inputParams as Record<string, unknown> : {};
+  const lyrics = typeof body.lyrics === "string" ? body.lyrics : "";
+  const submittedAt = Date.now();
   const insertRows = await serviceFetch<JobRow[]>(TABLE, {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
       model,
       provider_task_id: null,
       prompt: text,
-      input_params: { ...inputParams, kind, targetId, requestKey, idempotencyHash },
+      input_params: { ...inputParams, kind, targetId, requestKey, idempotencyHash, lyrics, submittedAt },
       idempotency_hash: idempotencyHash,
       status: "queued",
       error: null,
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const submitResult = kind === "music"
-      ? await provider.submitMusic({ prompt: text, lyrics: typeof body.lyrics === "string" ? body.lyrics : null, model })
+      ? await provider.submitMusic({ prompt: text, lyrics: lyrics || null, model })
       : await provider.submitTTS({ text, voiceProviderVoiceId: typeof body.voiceProviderVoiceId === "string" ? body.voiceProviderVoiceId : null, language: typeof body.language === "string" ? body.language : "zh", speed: typeof body.speed === "number" ? body.speed : 1, pitch: typeof body.pitch === "number" ? body.pitch : 0, stability: typeof body.stability === "number" ? body.stability : 0.5, stylePrompt: typeof body.stylePrompt === "string" ? body.stylePrompt : "" });
 
     if (submitResult.kind === "async_submitted") {
@@ -124,6 +126,6 @@ export async function POST(request: NextRequest) {
     const providerFailure = classifyAudioProviderError(error);
     await serviceFetch(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", body: JSON.stringify({ status: providerFailure.status, error: providerFailure.internalMessage }) }).catch(() => undefined);
     await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: providerFailure.status, provider: provider.name, model, kind }).catch(() => undefined);
-    return response(502, { success: false, error: providerFailure.safeMessage, code: providerFailure.code, jobId: job.id });
+    return response(providerFailure.status === "reconciling" ? 202 : 502, { success: providerFailure.status === "reconciling", error: providerFailure.safeMessage, code: providerFailure.code, jobId: job.id, status: providerFailure.status, job: { ...job, status: providerFailure.status, error: providerFailure.internalMessage } });
   }
 }

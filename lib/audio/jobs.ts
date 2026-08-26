@@ -4,20 +4,29 @@ import type { AudioPollResult } from "./types";
 export type AudioJobStatus =
   | "queued"
   | "generating"
+  | "reconciling"
   | "result_ingesting"
   | "completed"
   | "failed"
   | "provider_timeout";
 
 export type AudioProviderFailure = {
-  status: Extract<AudioJobStatus, "failed" | "provider_timeout">;
-  code: "PROVIDER_TIMEOUT" | "PROVIDER_TEMPORARY_ERROR" | "PROVIDER_CALL_FAILED";
+  status: Extract<AudioJobStatus, "failed" | "provider_timeout" | "reconciling">;
+  code: "PROVIDER_TIMEOUT" | "PROVIDER_TEMPORARY_ERROR" | "PROVIDER_CALL_FAILED" | "GMI_SUBMIT_UNCONFIRMED";
   safeMessage: string;
   internalMessage: string;
 };
 
 export function classifyAudioProviderError(error: unknown): AudioProviderFailure {
   const internalMessage = (error instanceof Error ? error.message : "AUDIO_PROVIDER_FAILED").slice(0, 300);
+  if (/GMI_SUBMIT_UNCONFIRMED/i.test(internalMessage)) {
+    return {
+      status: "reconciling",
+      code: "GMI_SUBMIT_UNCONFIRMED",
+      safeMessage: "任务已送达，正在确认生成编号。完成后会自动更新。",
+      internalMessage,
+    };
+  }
   if (/timeout|timed out|aborted/i.test(internalMessage)) {
     return {
       status: "provider_timeout",

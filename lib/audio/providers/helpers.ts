@@ -4,12 +4,14 @@ export async function requestJson(
   url: string,
   apiKey: string,
   init: RequestInit = {},
+  options: { organizationId?: string } = {},
 ): Promise<Record<string, unknown>> {
   const response = await fetch(url, {
     ...init,
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      ...(options.organizationId ? { "X-Organization-ID": options.organizationId } : {}),
       ...(init.headers || {}),
     },
   });

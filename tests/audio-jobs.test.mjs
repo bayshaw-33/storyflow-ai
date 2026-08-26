@@ -22,3 +22,9 @@ test("audio provider submit errors distinguish timeout from temporary failure", 
   assert.match(source, /PROVIDER_TIMEOUT/);
   assert.match(source, /PROVIDER_TEMPORARY_ERROR/);
 });
+
+test("accepted-but-unconfirmed music submissions are recoverable", () => {
+  assert.match(source, /reconciling/);
+  assert.match(source, /GMI_SUBMIT_UNCONFIRMED/);
+  assert.match(source, /任务已送达|being confirmed/);
+});

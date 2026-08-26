@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authenticateRequest, getSupabaseServerClient, serviceFetch } from "@/lib/supabase/server";
 import { resolveAudioProvider } from "@/lib/audio/provider";
 import { mapAudioPollToJobStatus, sanitizeAudioMetadata } from "@/lib/audio/jobs";
+import { findAcceptedGmiRequest } from "@/lib/audio/providers/gmi-reconciliation";
 import { persistAudioArtifact } from "@/lib/audio/storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
 import { buildAudioUniverseBinding } from "@/lib/audio/universe-links";
@@ -36,9 +37,27 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
   const rows = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(jobId)}&owner_id=eq.${encodeURIComponent(user.id)}&job_type=eq.audio&limit=1`);
   let job = rows?.[0];
   if (!job) return NextResponse.json({ success: false, error: "音频任务不存在。" }, { status: 404 });
+  const kind = job.input_params?.kind === "tts" ? "tts" : "music" as AudioKind;
+  if (!job.provider_task_id && job.status === "reconciling" && job.provider === "gmi" && process.env.GMI_API_KEY) {
+    try {
+      const match = await findAcceptedGmiRequest({
+        apiKey: process.env.GMI_API_KEY,
+        model: job.model || process.env.GMI_MUSIC_MODEL || "minimax-music-3.0",
+        prompt: job.prompt,
+        lyrics: typeof job.input_params.lyrics === "string" ? job.input_params.lyrics : "",
+        submittedAt: typeof job.input_params.submittedAt === "number" ? job.input_params.submittedAt : Date.now() - 30_000,
+      });
+      if (match) {
+        const recovered = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ provider_task_id: match.providerTaskId, status: "generating", error: null }) });
+        job = recovered?.[0] || { ...job, provider_task_id: match.providerTaskId, status: "generating", error: null };
+      }
+    } catch {
+      // A transient reconciliation failure leaves the job recoverable for the next poll.
+    }
+  }
   if (!job.provider_task_id || !["queued", "generating", "result_ingesting"].includes(job.status)) return NextResponse.json({ success: true, job });
 
-  const kind = job.input_params?.kind === "tts" ? "tts" : "music" as AudioKind;
+  let ingestionStarted = false;
   try {
     const provider = await resolveAudioProvider(kind, job.provider);
     const poll = await provider.poll(job.provider_task_id, kind);
@@ -58,6 +77,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
     if (!serverClient) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
     const downloaded = poll.audioBytes ? { bytes: poll.audioBytes, contentType: poll.contentType || "audio/mpeg" } : poll.audioUrl ? await provider.download(poll.audioUrl) : null;
     if (!downloaded) throw new Error("AUDIO_RESULT_MISSING");
+    ingestionStarted = true;
     const ingesting = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "result_ingesting", result_url: null, result_metadata: sanitizeAudioMetadata(poll.providerMetadata || {}) }) });
     job = ingesting?.[0] || { ...job, status: "result_ingesting" };
     const artifact = await persistAudioArtifact({ serverClient, ownerId: user.id, jobId: job.id, bytes: downloaded.bytes, contentType: downloaded.contentType });
@@ -82,6 +102,12 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
     await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: "completed", provider: job.provider, model: job.model, kind }).catch(() => undefined);
     return NextResponse.json({ success: true, job: updated?.[0] || { ...job, status: "completed", result_url: artifact.signedUrl, storage_path: artifact.storagePath } });
   } catch (error) {
+    if (ingestionStarted) {
+      const failure = "AUDIO_RESULT_INGEST_FAILED";
+      const updated = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "failed", error: failure }) }).catch(() => null);
+      await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: "failed", provider: job.provider, model: job.model, kind }).catch(() => undefined);
+      return NextResponse.json({ success: true, job: updated?.[0] || { ...job, status: "failed", error: failure } });
+    }
     return NextResponse.json({ success: true, job, warning: error instanceof Error ? error.message.slice(0, 240) : "AUDIO_POLL_FAILED" });
   }
 }

@@ -48,3 +48,18 @@ test("audio submit idempotency distinguishes two candidates in one batch", () =>
   assert.match(submitRoute, /idempotencyTargetId/);
   assert.match(submitRoute, /computeAudioIdempotencyHash\(\{[^}]*targetId: idempotencyTargetId/s);
 });
+
+test("audio batch route creates two independently recoverable music jobs", () => {
+  const batchRoute = read("app/api/audio/jobs/batch/route.ts");
+  assert.match(batchRoute, /export async function POST/);
+  assert.match(batchRoute, /candidates/);
+  assert.match(batchRoute, /reconciling/);
+  assert.match(batchRoute, /requestKey/);
+  assert.match(batchRoute, /202/);
+});
+
+test("audio poll route reconciles missing provider ids before polling", () => {
+  assert.match(pollRoute, /reconcil/);
+  assert.match(pollRoute, /findAcceptedGmiRequest/);
+  assert.match(pollRoute, /AUDIO_RESULT_INGEST_FAILED/);
+});
