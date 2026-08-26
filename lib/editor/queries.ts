@@ -3,7 +3,7 @@
  * Queries：读取 Assembly Sequence + Selected Takes + Voice Lines
  *
  * 复用现有 storyflow_assembly_sequences/items + selected_takes + voice_lines 表
- * Owner 校验：通过 project_id 关联到 storyflow_production_projects.owner_id
+ * Owner 校验：以 storyflow_projects 为唯一项目身份来源
  */
 
 import { serviceFetch } from "@/lib/supabase/server";
@@ -19,30 +19,32 @@ import { EditorError } from "./types";
 // Owner 校验
 // ============================================================
 
-type ProductionProjectRow = {
+type ProjectRow = {
   id: string;
-  project_id: string;
-  owner_id: string;
+  owner_id: string | null;
+  user_id: string | null;
+  deleted_at: string | null;
 };
 
 /**
  * 校验 projectId 归属 ownerId
- * 通过 storyflow_production_projects 表
+ * 通过顶层 storyflow_projects 表；production scope 是可选的阶段数据，不能代替项目身份。
  */
 export async function validateProjectOwnership(
   ownerId: string,
   projectId: string,
 ): Promise<string> {
-  const rows = await serviceFetch<ProductionProjectRow[]>(
-    `/rest/v1/storyflow_production_projects?project_id=eq.${encodeURIComponent(projectId)}&owner_id=eq.${encodeURIComponent(ownerId)}&select=id,project_id,owner_id&limit=1`,
+  const rows = await serviceFetch<ProjectRow[]>(
+    `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(projectId)}&select=id,owner_id,user_id,deleted_at&limit=1`,
   );
-  if (!rows[0]) {
+  const project = rows[0];
+  if (!project || project.deleted_at !== null || (project.owner_id ?? project.user_id) !== ownerId) {
     throw new EditorError(
       "SCOPE_NOT_FOUND",
       `Project ${projectId} 不存在或无权访问。`,
     );
   }
-  return rows[0].id;
+  return project.id;
 }
 
 // ============================================================
@@ -130,6 +132,20 @@ export type EditorTimelineData = {
   voiceLines: VoiceLineSummary[];
 };
 
+function createEmptyAssemblySequence(projectId: string): AssemblySequenceRow {
+  return {
+    id: `empty:${projectId}`,
+    project_id: projectId,
+    name: "Main Sequence",
+    transition_type: "cut",
+    total_duration_seconds: 0,
+    status: "draft",
+    metadata: {},
+    created_at: "1970-01-01T00:00:00.000Z",
+    updated_at: "1970-01-01T00:00:00.000Z",
+  };
+}
+
 export async function loadEditorTimelineData(
   ownerId: string,
   projectId: string,
@@ -140,10 +156,12 @@ export async function loadEditorTimelineData(
   // 2. 读取 assembly sequence
   const sequence = await getAssemblySequence(projectId);
   if (!sequence) {
-    throw new EditorError(
-      "SEQUENCE_NOT_FOUND",
-      `Project ${projectId} 没有关联的 Assembly Sequence，请先在 Production 中创建。`,
-    );
+    return {
+      sequence: createEmptyAssemblySequence(projectId),
+      items: [],
+      selectedTakes: [],
+      voiceLines: [],
+    };
   }
 
   // 3. 并行读取 items / takes / voice_lines

@@ -66,3 +66,15 @@ test("ensureStageWork refuses to provision a Work for the editing stage (editor 
   );
   assert.equal(calls.length, 0, "must not call the ensure_project_stage_work RPC for editing");
 });
+
+test("editor validates ownership against the canonical project, not an optional production scope", () => {
+  const queries = read("../../lib/editor/queries.ts");
+  assert.match(queries, /storyflow_projects\?id=eq\./);
+  assert.doesNotMatch(queries, /storyflow_production_projects\?project_id=eq\./);
+});
+
+test("a valid project without an assembly sequence opens as an empty timeline", () => {
+  const queries = read("../../lib/editor/queries.ts");
+  assert.doesNotMatch(queries, /SEQUENCE_NOT_FOUND/);
+  assert.match(queries, /createEmptyAssemblySequence\(projectId\)/);
+});
