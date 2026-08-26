@@ -1,4 +1,9 @@
-import type { ProjectDeletePreflight, ProjectLibraryProject } from "./types.ts";
+import type {
+  ProjectDeletePreflight,
+  ProjectLibraryProject,
+  TestCleanupResult,
+  TestCleanupSelection,
+} from "./types.ts";
 
 export class ProjectLibraryClientError extends Error {
   readonly status: number;
@@ -72,4 +77,23 @@ export async function deleteProjectFromLibrary(
   if (!response.ok || !body?.success) {
     throw new ProjectLibraryClientError(body?.error || "项目删除失败。", response.status);
   }
+}
+
+export async function deleteTestProjectsFromLibrary(
+  accessToken: string,
+  projects: TestCleanupSelection[],
+): Promise<TestCleanupResult> {
+  const response = await fetch("/api/v2/project-library/test-cleanup", {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ projects }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(body?.deleted) || !Array.isArray(body?.failed)) {
+    throw new ProjectLibraryClientError(body?.error || "测试项目清理失败。", response.status);
+  }
+  return body as TestCleanupResult;
 }

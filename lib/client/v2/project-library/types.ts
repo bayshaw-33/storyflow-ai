@@ -19,6 +19,18 @@ export type ProjectDeletePreflight = {
   }>;
 };
 
+export type TestCleanupSelection = {
+  source: ProjectLibrarySource;
+  sourceId: string;
+};
+
+export type TestCleanupResult = {
+  deleted: TestCleanupSelection[];
+  failed: Array<TestCleanupSelection & { error: string }>;
+  deletedUniverseIds: string[];
+  storageWarnings: string[];
+};
+
 /**
  * The dashboard's normalized project card shape.
  *

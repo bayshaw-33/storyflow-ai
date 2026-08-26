@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -119,3 +120,14 @@ for (const scenario of ["surviving-link", "entity", "shared", "foreign-owner"]) 
     assert.equal(calls.some(({ path, init }) => (init.method || "GET") === "DELETE" && path.includes("storyflow_universes")), false);
   });
 }
+
+test("test cleanup route is hidden behind authenticated email authorization", () => {
+  const routePath = "app/api/v2/project-library/test-cleanup/route.ts";
+  assert.equal(existsSync(routePath), true, "test cleanup route must exist");
+  const route = readFileSync(routePath, "utf8");
+  assert.match(route, /authenticateRequest/);
+  assert.match(route, /isTestCleanupEmail\(user\.email\)/);
+  assert.match(route, /status:\s*404/);
+  assert.match(route, /deleteTestAccountProjects/);
+  assert.doesNotMatch(route, /getProjectDeletePreflight/);
+});
