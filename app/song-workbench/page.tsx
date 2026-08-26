@@ -2187,6 +2187,8 @@ export default function SongWorkbenchPage() {
                 placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
               />
             </div>
+          </div>
+          <div className="song-audio-dock">
             <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} />
           </div>
         </section>
