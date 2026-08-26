@@ -124,8 +124,14 @@ export async function POST(request: NextRequest) {
     return response(201, { success: true, created: true, job: completed?.[0] || job, assetId });
   } catch (error) {
     const providerFailure = classifyAudioProviderError(error);
-    await serviceFetch(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", body: JSON.stringify({ status: providerFailure.status, error: providerFailure.internalMessage }) }).catch(() => undefined);
+    const updated = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ status: providerFailure.status, error: providerFailure.internalMessage }),
+    }).catch(() => null);
+    const persistedJob = updated?.[0] || { ...job, status: providerFailure.status, error: providerFailure.internalMessage };
+    const publicJob = providerFailure.status === "reconciling" ? { ...persistedJob, error: null } : persistedJob;
     await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: providerFailure.status, provider: provider.name, model, kind }).catch(() => undefined);
-    return response(providerFailure.status === "reconciling" ? 202 : 502, { success: providerFailure.status === "reconciling", error: providerFailure.safeMessage, code: providerFailure.code, jobId: job.id, status: providerFailure.status, job: { ...job, status: providerFailure.status, error: providerFailure.internalMessage } });
+    return response(providerFailure.status === "reconciling" ? 202 : 502, { success: providerFailure.status === "reconciling", error: providerFailure.safeMessage, code: providerFailure.code, jobId: job.id, status: providerFailure.status, job: publicJob });
   }
 }

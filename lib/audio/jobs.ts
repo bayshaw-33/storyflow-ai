@@ -17,6 +17,16 @@ export type AudioProviderFailure = {
   internalMessage: string;
 };
 
+export const AUDIO_RECONCILIATION_TIMEOUT_MS = 3 * 60_000;
+
+export function shouldExpireAudioReconciliation(
+  submittedAt: number,
+  now = Date.now(),
+  timeoutMs = AUDIO_RECONCILIATION_TIMEOUT_MS,
+): boolean {
+  return Number.isFinite(submittedAt) && now - submittedAt >= timeoutMs;
+}
+
 export function classifyAudioProviderError(error: unknown): AudioProviderFailure {
   const internalMessage = (error instanceof Error ? error.message : "AUDIO_PROVIDER_FAILED").slice(0, 300);
   if (/GMI_SUBMIT_UNCONFIRMED/i.test(internalMessage)) {

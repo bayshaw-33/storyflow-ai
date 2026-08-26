@@ -28,3 +28,10 @@ test("accepted-but-unconfirmed music submissions are recoverable", () => {
   assert.match(source, /GMI_SUBMIT_UNCONFIRMED/);
   assert.match(source, /任务已送达|being confirmed/);
 });
+
+test("reconciliation expires instead of leaving an audio job pending forever", async () => {
+  const { shouldExpireAudioReconciliation } = await import("../lib/audio/jobs.ts");
+  const now = Date.now();
+  assert.equal(shouldExpireAudioReconciliation(now - 60_000, now), false);
+  assert.equal(shouldExpireAudioReconciliation(now - 181_000, now), true);
+});

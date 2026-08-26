@@ -23,6 +23,9 @@ export async function requestJson(
     throw new Error(`${code}:${response.status}:${detail}`);
   }
 
+  if (Array.isArray(body)) {
+    return { data: body };
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("PROVIDER_INVALID_RESPONSE");
   }

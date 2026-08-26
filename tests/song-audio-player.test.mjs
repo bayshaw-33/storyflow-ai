@@ -22,3 +22,9 @@ test("reconciling is a visible non-terminal candidate state", () => {
   assert.match(component, /reconciling/);
   assert.match(page, /reconciling/);
 });
+
+test("song candidates keep polling through reconciliation and hide internal non-terminal errors", () => {
+  assert.match(page, /attempt\s*<\s*90/);
+  assert.match(page, /job\.status\s*===\s*["']reconciling["']\s*\?\s*null/);
+  assert.match(component, /canRetry\s*&&\s*candidate\.error/);
+});

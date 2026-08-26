@@ -647,7 +647,7 @@ export default function SongWorkbenchPage() {
     const accessToken = session?.access_token;
     if (!accessToken) return;
     const nonTerminalStatuses: SongAudioCandidate["status"][] = ["queued", "reconciling", "generating", "result_ingesting"];
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 4000));
       const response = await fetch(`/api/audio/jobs/${encodeURIComponent(jobId)}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -662,11 +662,16 @@ export default function SongWorkbenchPage() {
         resultUrl: job.result_url || candidate.resultUrl,
         provider: job.provider || candidate.provider,
         model: job.model || candidate.model,
-        error: job.error || candidate.error,
+        error: job.status === "reconciling" ? null : nonTerminalStatuses.includes(job.status || "queued") ? null : job.error || candidate.error,
       } : candidate));
       if (["completed", "failed", "provider_timeout"].includes(job.status || "")) return;
       if (!nonTerminalStatuses.includes(job.status || "queued")) return;
     }
+    setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId && nonTerminalStatuses.includes(candidate.status) ? {
+      ...candidate,
+      status: "provider_timeout",
+      error: isZh ? "任务确认超时，请手动重试。" : "Task confirmation timed out. Please retry.",
+    } : candidate));
   }
 
   async function generateSongAudio() {

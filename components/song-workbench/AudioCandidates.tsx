@@ -141,7 +141,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry }:
                     {canRetry && onRetry ? <button className="icon-button song-audio-retry" type="button" onClick={() => onRetry(candidate.id)} title={isZh ? "重试" : "Retry"} aria-label={isZh ? `重试候选 ${candidate.label}` : `Retry candidate ${candidate.label}`}><RotateCcw size={16} /></button> : null}
                     {candidate.resultUrl ? <a className="icon-button song-audio-download" href={candidate.resultUrl} download title={isZh ? "下载" : "Download"} aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label}`}><Download size={16} /></a> : null}
                   </span>
-                  {candidate.error ? <small className="field-note song-save-warning">{candidate.error}</small> : null}
+                  {canRetry && candidate.error ? <small className="field-note song-save-warning">{candidate.error}</small> : null}
                 </article>
               );
             })}

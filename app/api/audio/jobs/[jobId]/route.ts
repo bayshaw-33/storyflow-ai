@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest, getSupabaseServerClient, serviceFetch } from "@/lib/supabase/server";
 import { resolveAudioProvider } from "@/lib/audio/provider";
-import { mapAudioPollToJobStatus, sanitizeAudioMetadata } from "@/lib/audio/jobs";
+import { mapAudioPollToJobStatus, sanitizeAudioMetadata, shouldExpireAudioReconciliation } from "@/lib/audio/jobs";
 import { findAcceptedGmiRequest } from "@/lib/audio/providers/gmi-reconciliation";
 import { persistAudioArtifact } from "@/lib/audio/storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
@@ -26,6 +26,7 @@ type JobRow = {
   result_metadata: Record<string, unknown>;
   target_type: string;
   target_id: string | null;
+  created_at?: string;
 };
 
 const TABLE = "/rest/v1/storyflow_generation_jobs";
@@ -38,21 +39,43 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
   let job = rows?.[0];
   if (!job) return NextResponse.json({ success: false, error: "音频任务不存在。" }, { status: 404 });
   const kind = job.input_params?.kind === "tts" ? "tts" : "music" as AudioKind;
-  if (!job.provider_task_id && job.status === "reconciling" && job.provider === "gmi" && process.env.GMI_API_KEY) {
+  const submittedAt = typeof job.input_params.submittedAt === "number"
+    ? job.input_params.submittedAt
+    : Date.parse(job.created_at || "");
+  const needsGmiReconciliation = !job.provider_task_id
+    && job.provider === "gmi"
+    && kind === "music"
+    && (job.status === "reconciling" || (job.status === "queued" && /GMI_SUBMIT_UNCONFIRMED/i.test(job.error || "")));
+  if (needsGmiReconciliation && process.env.GMI_API_KEY) {
+    let matched = false;
     try {
       const match = await findAcceptedGmiRequest({
         apiKey: process.env.GMI_API_KEY,
         model: job.model || process.env.GMI_MUSIC_MODEL || "minimax-music-3.0",
         prompt: job.prompt,
         lyrics: typeof job.input_params.lyrics === "string" ? job.input_params.lyrics : "",
-        submittedAt: typeof job.input_params.submittedAt === "number" ? job.input_params.submittedAt : Date.now() - 30_000,
+        submittedAt: Number.isFinite(submittedAt) ? submittedAt : Date.now() - 30_000,
       });
       if (match) {
         const recovered = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ provider_task_id: match.providerTaskId, status: "generating", error: null }) });
         job = recovered?.[0] || { ...job, provider_task_id: match.providerTaskId, status: "generating", error: null };
+        matched = true;
       }
     } catch {
       // A transient reconciliation failure leaves the job recoverable for the next poll.
+    }
+    if (!matched && shouldExpireAudioReconciliation(submittedAt)) {
+      const failure = "GMI_RECONCILIATION_TIMEOUT";
+      const expired = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "provider_timeout", error: failure }) }).catch(() => null);
+      await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: "provider_timeout", provider: job.provider, model: job.model, kind }).catch(() => undefined);
+      return NextResponse.json({ success: true, job: expired?.[0] || { ...job, status: "provider_timeout", error: failure } });
+    }
+    if (!matched) {
+      const reconciling = job.status === "reconciling" && !job.error
+        ? job
+        : (await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "reconciling", error: null }) }).catch(() => null))?.[0]
+          || { ...job, status: "reconciling", error: null };
+      return NextResponse.json({ success: true, job: reconciling });
     }
   }
   if (!job.provider_task_id || !["queued", "generating", "result_ingesting"].includes(job.status)) return NextResponse.json({ success: true, job });

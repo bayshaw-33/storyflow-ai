@@ -63,3 +63,10 @@ test("audio poll route reconciles missing provider ids before polling", () => {
   assert.match(pollRoute, /findAcceptedGmiRequest/);
   assert.match(pollRoute, /AUDIO_RESULT_INGEST_FAILED/);
 });
+
+test("audio reconciliation has a terminal deadline and never resubmits", () => {
+  assert.match(pollRoute, /shouldExpireAudioReconciliation/);
+  assert.match(pollRoute, /GMI_RECONCILIATION_TIMEOUT/);
+  assert.match(pollRoute, /provider_timeout/);
+  assert.doesNotMatch(pollRoute, /provider\.submitMusic/);
+});
