@@ -642,6 +642,136 @@
   padding: 7px 10px;
 }
 
+.archiveToggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.testCleanupModeButton {
+  border-color: rgba(109, 231, 223, 0.8);
+  background: rgba(109, 231, 223, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(109, 231, 223, 0.12);
+}
+
+.testCleanupCard {
+  cursor: pointer;
+}
+
+.testCleanupCard .projectCardTop {
+  padding-right: 36px;
+}
+
+.testCleanupSelected {
+  border-color: #6de7df;
+  background: rgba(109, 231, 223, 0.09);
+  box-shadow: inset 4px 0 0 #6de7df, inset 0 0 0 1px rgba(109, 231, 223, 0.16);
+}
+
+.testCleanupSelected:hover {
+  border-color: #8aefe8;
+  background: rgba(109, 231, 223, 0.12);
+}
+
+.testCleanupCheckbox {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-radius: 5px;
+  accent-color: #6de7df;
+  cursor: pointer;
+}
+
+.shellCleanupMode {
+  padding-bottom: 126px;
+}
+
+.testCleanupBar {
+  position: fixed;
+  z-index: 30;
+  right: 40px;
+  bottom: 18px;
+  left: calc(var(--workspace-nav-offset, 128px) + 40px);
+  max-width: 1680px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(109, 231, 223, 0.48);
+  border-radius: 14px;
+  background: rgba(8, 16, 15, 0.96);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.testCleanupSummary {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.testCleanupSummary strong {
+  color: #f4f7f8;
+  font-size: 14px;
+}
+
+.testCleanupSummary span {
+  color: rgba(214, 229, 228, 0.58);
+  font-size: 11px;
+}
+
+.testCleanupActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.testCleanupActions button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(244, 247, 248, 0.82);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.testCleanupActions button:hover:not(:disabled) {
+  border-color: rgba(109, 231, 223, 0.48);
+  color: #a9f4ef;
+}
+
+.testCleanupActions .testCleanupDelete {
+  border-color: #ff8b8b;
+  background: #ff8b8b;
+  color: #160707;
+}
+
+.testCleanupActions .testCleanupDelete:hover:not(:disabled) {
+  border-color: #ffaaaa;
+  background: #ffaaaa;
+  color: #160707;
+}
+
+.testCleanupActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.testCleanupNotice {
+  margin: 14px 0 0;
+  color: #a9f4ef;
+  font-size: 12px;
+}
+
 .projectCardMenu {
   display: grid;
   gap: 6px;
@@ -916,6 +1046,28 @@
   .projectToolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .shellCleanupMode {
+    padding-bottom: 206px;
+  }
+
+  .testCleanupBar {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .testCleanupActions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .testCleanupActions .testCleanupDelete {
+    grid-column: 1 / -1;
   }
 
   .projectSearch,

@@ -234,6 +234,18 @@ test("dashboard project management uses real project data and card-plus-table la
   assert.match(managementSrc, /getProjectWorkbenchHref/);
 });
 
+test("test account project cleanup uses one batch selection flow", () => {
+  const clientSrc = fs.readFileSync(path.resolve("components/v2/dashboard/DashboardClient.tsx"), "utf8");
+  const managementSrc = fs.readFileSync(path.resolve("components/v2/dashboard/ProjectManagement.tsx"), "utf8");
+  assert.match(clientSrc, /userEmail=\{session\?\.user\?\.email\s*\|\|\s*["']["']\}/);
+  assert.match(managementSrc, /bayshaw33@gmail\.com/);
+  assert.match(managementSrc, /清理测试项目/);
+  assert.match(managementSrc, /全选当前结果/);
+  assert.match(managementSrc, /删除所选项目/);
+  assert.match(managementSrc, /deleteTestProjectsFromLibrary/);
+  assert.match(managementSrc, /window\.confirm/);
+});
+
 test("production job list is fail-closed by default instead of fixture-on", () => {
   const src = fs.readFileSync(path.resolve("lib/client/v2/jobs/api.ts"), "utf8");
   assert.match(src, /NEXT_PUBLIC_USE_JOB_FIXTURE\s*===\s*["']true["']/);

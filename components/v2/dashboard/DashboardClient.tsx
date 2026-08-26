@@ -166,7 +166,7 @@ export function DashboardClient() {
 
   // 正常工作区使用真实项目库；fixture 只服务显式预览模式。
   if (!previewMode) {
-    return <ProjectManagement accessToken={session?.access_token || ""} />;
+    return <ProjectManagement accessToken={session?.access_token || ""} userEmail={session?.user?.email || ""} />;
   }
 
   // 空数据：首次使用引导。

@@ -20,9 +20,20 @@ import type { UnifiedJob } from "@/lib/client/v2/jobs/types";
 import { fetchKkRuntime } from "@/lib/client/v2/kk/api";
 import type { KkPendingConfirmation } from "@/lib/client/v2/kk/types";
 import { deleteProject, readProjectsFromStorage } from "@/lib/projects";
-import { archiveProjectFromLibrary, deleteProjectFromLibrary, fetchProjectDeletePreflight, fetchProjectLibrary } from "@/lib/client/v2/project-library/api";
+import {
+  archiveProjectFromLibrary,
+  deleteProjectFromLibrary,
+  deleteTestProjectsFromLibrary,
+  fetchProjectDeletePreflight,
+  fetchProjectLibrary,
+} from "@/lib/client/v2/project-library/api";
 import { getCleanupCandidateLabel, getCleanupCandidateSummary } from "@/lib/client/v2/project-library/lifecycle";
-import { asProjectLibraryRecord, type ProjectDeletePreflight, type ProjectLibraryProject } from "@/lib/client/v2/project-library/types";
+import {
+  asProjectLibraryRecord,
+  type ProjectDeletePreflight,
+  type ProjectLibraryProject,
+  type TestCleanupSelection,
+} from "@/lib/client/v2/project-library/types";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
   filterAndSortProjects,
@@ -35,6 +46,7 @@ import styles from "./dashboard.module.css";
 
 type ProjectManagementProps = {
   accessToken: string;
+  userEmail: string;
 };
 
 type LoadStatus = "loading" | "ready" | "error";
@@ -118,7 +130,7 @@ function activeJobs(jobs: UnifiedJob[]) {
   return jobs.filter((job) => !["completed", "failed", "cancelled"].includes(job.stage));
 }
 
-export function ProjectManagement({ accessToken }: ProjectManagementProps) {
+export function ProjectManagement({ accessToken, userEmail }: ProjectManagementProps) {
   const router = useRouter();
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -135,6 +147,11 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [projectError, setProjectError] = useState("");
   const [secondaryNotice, setSecondaryNotice] = useState("");
+  const testCleanupEnabled = userEmail.trim().toLowerCase() === "bayshaw33@gmail.com";
+  const [testCleanupMode, setTestCleanupMode] = useState(false);
+  const [selectedProjectKeys, setSelectedProjectKeys] = useState<Set<string>>(new Set());
+  const [testCleanupBusy, setTestCleanupBusy] = useState(false);
+  const [testCleanupNotice, setTestCleanupNotice] = useState("");
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -189,6 +206,72 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
 
   function setFilter<K extends keyof ProjectLibraryFilters>(key: K, value: ProjectLibraryFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleTestCleanupSelection(project: ProjectLibraryProject) {
+    const key = project.libraryKey || `${project.source || "project"}:${project.id}`;
+    setSelectedProjectKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function selectAllVisibleTestProjects() {
+    setSelectedProjectKeys(new Set(visibleProjects.map((project) => (
+      project.libraryKey || `${project.source || "project"}:${project.id}`
+    ))));
+  }
+
+  function exitTestCleanupMode() {
+    setTestCleanupMode(false);
+    setSelectedProjectKeys(new Set());
+    setTestCleanupNotice("");
+    setActionProjectKey(null);
+  }
+
+  async function handleTestCleanupDelete() {
+    if (!testCleanupEnabled || selectedProjectKeys.size === 0 || testCleanupBusy) return;
+    const selectedProjects = projects.filter((project) => selectedProjectKeys.has(
+      project.libraryKey || `${project.source || "project"}:${project.id}`,
+    ));
+    if (selectedProjects.length === 0) {
+      setSelectedProjectKeys(new Set());
+      return;
+    }
+    if (!window.confirm(`确认永久删除所选 ${selectedProjects.length} 个测试项目？空白且仅由这些项目使用的 Universe 也会一并删除。此操作无法恢复。`)) return;
+
+    setTestCleanupBusy(true);
+    setProjectError("");
+    setTestCleanupNotice("");
+    try {
+      const selections: TestCleanupSelection[] = selectedProjects.map((project) => ({
+        source: project.source || "project",
+        sourceId: project.sourceId || project.id,
+      }));
+      const result = await deleteTestProjectsFromLibrary(accessToken, selections);
+      const deletedKeys = new Set(result.deleted.map(({ source, sourceId }) => `${source}:${sourceId}`));
+      for (const project of selectedProjects) {
+        const source = project.source || "project";
+        const sourceId = project.sourceId || project.id;
+        if (source === "project" && deletedKeys.has(`${source}:${sourceId}`)) deleteProject(project.id);
+      }
+      setProjects((current) => current.filter((project) => !deletedKeys.has(
+        `${project.source || "project"}:${project.sourceId || project.id}`,
+      )));
+      setSelectedProjectKeys(new Set(result.failed.map(({ source, sourceId }) => `${source}:${sourceId}`)));
+
+      const messages = [`已删除 ${result.deleted.length} 个测试项目`];
+      if (result.deletedUniverseIds.length > 0) messages.push(`同时清理 ${result.deletedUniverseIds.length} 个空 Universe`);
+      if (result.failed.length > 0) messages.push(`${result.failed.length} 个项目未删除，仍保持选中`);
+      if (result.storageWarnings.length > 0) messages.push(`${result.storageWarnings.length} 个存储文件等待后台回收`);
+      setTestCleanupNotice(`${messages.join("；")}。`);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "测试项目清理失败，请稍后重试。");
+    } finally {
+      setTestCleanupBusy(false);
+    }
   }
 
   async function handleArchiveProject(project: ProjectLibraryProject, action: "archive" | "restore") {
@@ -264,7 +347,7 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
   }
 
   return (
-    <main className={styles.shell}>
+    <main className={`${styles.shell} ${testCleanupMode ? styles.shellCleanupMode : ""}`}>
       <div className={styles.container}>
         <header className={styles.projectManagementHeader}>
           <div>
@@ -306,18 +389,35 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
             type="button"
             className={styles.archiveToggle}
             onClick={() => {
+              if (testCleanupMode) exitTestCleanupMode();
               setCleanupReview(null);
               setLibraryView((current) => current === "active" ? "archived" : "active");
             }}
           >
             {libraryView === "active" ? "已归档" : "返回项目"}
           </button>
+          {testCleanupEnabled ? (
+            <button
+              type="button"
+              className={`${styles.archiveToggle} ${testCleanupMode ? styles.testCleanupModeButton : ""}`}
+              onClick={() => {
+                if (testCleanupMode) exitTestCleanupMode();
+                else {
+                  setCleanupReview(null);
+                  setActionProjectKey(null);
+                  setTestCleanupMode(true);
+                }
+              }}
+            >
+              {testCleanupMode ? "退出清理" : "清理测试项目"}
+            </button>
+          ) : null}
           {libraryView === "active" ? (
             <button
               type="button"
               className={styles.archiveToggle}
               onClick={() => void handleCleanupReview()}
-              disabled={checkingCleanupCandidates || likelyEmptyProjects.length === 0}
+              disabled={testCleanupMode || checkingCleanupCandidates || likelyEmptyProjects.length === 0}
             >
               {checkingCleanupCandidates ? "检查中…" : "检查空白项目"}
             </button>
@@ -375,9 +475,30 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
                 const progress = getProjectProgress(project);
                 const projectKey = project.libraryKey || `${project.source || "project"}:${project.id}`;
                 const supportsArchive = (project.source || "project") === "project";
+                const selectedForCleanup = selectedProjectKeys.has(projectKey);
                 return (
-                  <article key={projectKey} className={styles.projectCard}>
-                    <Link href={getProjectWorkbenchHref(project)} className={styles.projectCardLink}>
+                  <article
+                    key={projectKey}
+                    className={`${styles.projectCard} ${testCleanupMode ? styles.testCleanupCard : ""} ${selectedForCleanup ? styles.testCleanupSelected : ""}`}
+                  >
+                    {testCleanupMode ? (
+                      <input
+                        type="checkbox"
+                        className={styles.testCleanupCheckbox}
+                        checked={selectedForCleanup}
+                        onChange={() => toggleTestCleanupSelection(project)}
+                        aria-label={`选择测试项目 ${project.title || "未命名项目"}`}
+                      />
+                    ) : null}
+                    <Link
+                      href={getProjectWorkbenchHref(project)}
+                      className={styles.projectCardLink}
+                      onClick={(event) => {
+                        if (!testCleanupMode) return;
+                        event.preventDefault();
+                        toggleTestCleanupSelection(project);
+                      }}
+                    >
                       <div className={styles.projectCardTop}>
                         <span className={styles.projectType}>{WORKFLOW_LABELS[project.workflowType] || project.workflowType}</span>
                         <span className={`${styles.statusBadge} ${styles[`status_${project.status}`] || ""}`}>
@@ -403,19 +524,23 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
                           疑似空项目
                         </span>
                       ) : null}
-                      <span className={styles.projectCardAction}>打开项目 <ArrowRight size={14} /></span>
+                      <span className={styles.projectCardAction}>
+                        {testCleanupMode ? (selectedForCleanup ? "已选择" : "点击选择") : <>打开项目 <ArrowRight size={14} /></>}
+                      </span>
                     </Link>
-                    <button
-                      type="button"
-                      className={styles.projectCardDelete}
-                      onClick={() => setActionProjectKey((current) => current === projectKey ? null : projectKey)}
-                      disabled={workingProjectKey === projectKey}
-                      aria-label={`项目操作 ${project.title || "未命名项目"}`}
-                    >
-                      <MoreHorizontal size={15} />
-                      更多
-                    </button>
-                    {actionProjectKey === projectKey ? (
+                    {!testCleanupMode ? (
+                      <button
+                        type="button"
+                        className={styles.projectCardDelete}
+                        onClick={() => setActionProjectKey((current) => current === projectKey ? null : projectKey)}
+                        disabled={workingProjectKey === projectKey}
+                        aria-label={`项目操作 ${project.title || "未命名项目"}`}
+                      >
+                        <MoreHorizontal size={15} />
+                        更多
+                      </button>
+                    ) : null}
+                    {!testCleanupMode && actionProjectKey === projectKey ? (
                       <div className={styles.projectCardMenu}>
                         {libraryView === "archived" ? (
                           <button type="button" onClick={() => void handleArchiveProject(project, "restore")} disabled={workingProjectKey === projectKey}>恢复项目</button>
@@ -443,6 +568,27 @@ export function ProjectManagement({ accessToken }: ProjectManagementProps) {
               })}
             </div>
           )}
+          {testCleanupMode ? (
+            <div className={styles.testCleanupBar} role="region" aria-label="测试项目批量清理">
+              <div className={styles.testCleanupSummary}>
+                <strong>已选择 {selectedProjectKeys.size} 个项目</strong>
+                <span>只删除你选中的测试项目；有内容或共用的 Universe 会保留。</span>
+              </div>
+              <div className={styles.testCleanupActions}>
+                <button type="button" onClick={selectAllVisibleTestProjects}>全选当前结果</button>
+                <button type="button" onClick={() => setSelectedProjectKeys(new Set())}>取消全选</button>
+                <button
+                  type="button"
+                  className={styles.testCleanupDelete}
+                  onClick={() => void handleTestCleanupDelete()}
+                  disabled={selectedProjectKeys.size === 0 || testCleanupBusy}
+                >
+                  {testCleanupBusy ? "正在删除…" : "删除所选项目"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {testCleanupNotice ? <p className={styles.testCleanupNotice}>{testCleanupNotice}</p> : null}
           {cleanupReview && libraryView === "active" ? (
             <div className={styles.cleanupCandidateList}>
               <div>
