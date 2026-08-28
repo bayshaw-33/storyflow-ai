@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, CalendarDays, Layers3 } from "lucide-react";
 import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { getCommunityPublicationDetail } from "@/lib/server/v2/community/discovery";
+import { computeAllowedActions } from "@/lib/contracts/v2/community";
 import { getCommunityContentLabel, getPublicationObjectHref } from "@/lib/client/v2/community/view-model";
+import { CommunityInteractionPanel } from "@/components/v2/community/CommunityInteractionPanel";
 import styles from "../community.module.css";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,7 @@ export default async function CommunityPublicationPage({
 
   const kind = detail.context.subjectType;
   const objectHref = getPublicationObjectHref({ ...publication, ...detail.context });
+  const allowedActions = computeAllowedActions(publication, viewer?.id ?? null);
 
   return (
     <main className={`cosmic-page ${styles.detailShell}`}>
@@ -70,6 +73,11 @@ export default async function CommunityPublicationPage({
           </div>
         </div>
       </article>
+      <CommunityInteractionPanel
+        publicationId={publication.id}
+        viewerId={viewer?.id ?? null}
+        canComment={allowedActions.includes("comment")}
+      />
     </main>
   );
 }
