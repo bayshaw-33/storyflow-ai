@@ -65,10 +65,14 @@ export async function POST(
       );
     }
 
-    // CM-004: authorId 由服务端注入；idempotencyKey 缺失时由服务端生成确定性 key
-    const idempotencyKey =
-      body.idempotencyKey ||
-      `comment:${user.id}:${id}:${body.parentCommentId ?? "root"}:${Date.now()}`;
+    // CM-004: authorId 由服务端注入；重试必须复用客户端生成的幂等键。
+    if (typeof body.idempotencyKey !== "string" || !body.idempotencyKey.trim()) {
+      return NextResponse.json(
+        { success: false, error: "idempotencyKey is required.", code: "validation_failed" },
+        { status: 400 },
+      );
+    }
+    const idempotencyKey = body.idempotencyKey.trim();
 
     const comment = await createComment(serviceFetch, {
       publicationId: id,

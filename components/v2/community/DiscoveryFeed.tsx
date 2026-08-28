@@ -15,6 +15,7 @@ import { PublicationCard } from "./PublicationCard";
 import { CommunityEmptyState } from "./CommunityEmptyState";
 import { CommunityFilters } from "./CommunityFilters";
 import { CommunityNavigation } from "./CommunityNavigation";
+import { CommunityNotifications } from "./CommunityNotifications";
 import styles from "@/app/community/community.module.css";
 
 interface DiscoveryFeedProps {
@@ -227,6 +228,7 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
           <span>{isZh ? "公开创作流" : "Public creation stream"}</span>
           <strong>{items.length.toString().padStart(2, "0")}</strong>
         </div>
+        <CommunityNotifications viewerId={viewerId} />
       </header>
 
       <div className={styles.communityLayout}>
