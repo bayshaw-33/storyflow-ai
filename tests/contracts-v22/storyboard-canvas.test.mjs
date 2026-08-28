@@ -48,6 +48,16 @@ test("canvas provides infinite viewport controls without a fixed board boundary"
   assert.match(canvas, /4/);
 });
 
+test("canvas provides director-board selection, grouping, and connector actions", () => {
+  const canvas = read("../../components/production/StoryboardCanvas.tsx");
+  assert.match(canvas, /selectedIds/, "selection state");
+  assert.match(canvas, /event\.shiftKey|Shift/, "multi-select gesture");
+  assert.match(canvas, /框选/, "marquee selection");
+  assert.match(canvas, /分组/, "group action");
+  assert.match(canvas, /连线/, "connector action");
+  assert.match(canvas, /移出画布/, "canvas-only removal wording");
+});
+
 test("production workbench wires the canvas subview end-to-end", () => {
   const pw = read("../../components/production/ProductionWorkbench.tsx");
   assert.match(pw, /import \{ StoryboardCanvas \}/, "component imported");

@@ -47,6 +47,7 @@ function normalizeGroup(item: StoryboardCanvasGroup): StoryboardCanvasGroup | nu
     width: Math.max(80, finiteNumber(item.width, 240)),
     height: Math.max(60, finiteNumber(item.height, 180)),
     ...(typeof item.color === "string" ? { color: item.color } : {}),
+    ...(Array.isArray(item.members) ? { members: item.members.filter((member): member is string => typeof member === "string") } : {}),
   };
 }
 
