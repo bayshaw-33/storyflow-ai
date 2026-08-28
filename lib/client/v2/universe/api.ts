@@ -310,13 +310,14 @@ export async function fetchUniverseBundleFromApi(
   const fetchImpl = options.fetchImpl || fetch;
   const id = encodeURIComponent(universeId);
   const headers = authHeaders(accessToken);
+  const fetcher = authedFetchImpl(fetchImpl);
 
   // 并行请求 4 个端点：详情、资产、作品、健康度。
   const [detailRes, entitiesRes, worksRes, healthRes] = await Promise.all([
-    fetchImpl(`${API_PATH}/${id}`, { headers, credentials: "same-origin" }),
-    fetchImpl(`${API_PATH}/${id}/entities`, { headers, credentials: "same-origin" }),
-    fetchImpl(`${API_PATH}/${id}/works`, { headers, credentials: "same-origin" }),
-    fetchImpl(`${API_PATH}/${id}/health`, { headers, credentials: "same-origin" }),
+    fetcher(`${API_PATH}/${id}`, { headers, credentials: "same-origin" }),
+    fetcher(`${API_PATH}/${id}/entities`, { headers, credentials: "same-origin" }),
+    fetcher(`${API_PATH}/${id}/works`, { headers, credentials: "same-origin" }),
+    fetcher(`${API_PATH}/${id}/health`, { headers, credentials: "same-origin" }),
   ]);
 
   const detail = await parseCodexResponse<CodexUniverseDetailResponse>(
@@ -732,9 +733,23 @@ async function parseV22Envelope<T>(
   if (res.status === 404) {
     throw new UniverseApiError(UNIVERSE_API_ERROR_CODES.NOT_FOUND, "资源不存在或无访问权限。");
   }
-  let body: { success?: boolean; data?: T; error?: string; code?: string } | null = null;
+  let body: {
+    success?: boolean;
+    data?: T;
+    contractVersion?: string;
+    error?: string;
+    code?: string;
+    [key: string]: unknown;
+  } | null = null;
   try {
-    body = (await res.json()) as { success?: boolean; data?: T; error?: string; code?: string };
+    body = (await res.json()) as {
+      success?: boolean;
+      data?: T;
+      contractVersion?: string;
+      error?: string;
+      code?: string;
+      [key: string]: unknown;
+    };
   } catch {
     body = null;
   }
@@ -743,7 +758,17 @@ async function parseV22Envelope<T>(
     const msg = body?.error || fallbackMsg;
     throw new UniverseApiError(code, `${msg}（${res.status}）`);
   }
-  return body.data as T;
+  // V2.2 当前路由为根级业务字段（manifest/diffs/packet），同时兼容
+  // 统一 envelope 的 data 字段，避免“接口已存在但客户端读不到结果”。
+  if (body.data !== undefined) return body.data as T;
+  const {
+    success: _success,
+    contractVersion: _contractVersion,
+    error: _error,
+    code: _code,
+    ...rootData
+  } = body;
+  return rootData as T;
 }
 
 // 把服务端 snake_case manifest 行映射为 camelCase DTO。
@@ -869,17 +894,18 @@ export async function fetchContextPacket(
   workId: string,
   options: { fetchImpl?: typeof fetch; workVersionId?: string } = {},
 ): Promise<ContextPacketV22> {
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
   const qs = options.workVersionId
     ? `?workVersionId=${encodeURIComponent(options.workVersionId)}`
     : "";
-  const res = await fetchImpl(
+  const res = await fetcher(
     `${WORKS_API_PATH}/${encodeURIComponent(workId)}/context-packet${qs}`,
     { headers: { Accept: "application/json" }, credentials: "same-origin" },
   );
-  return parseV22Envelope<ContextPacketV22>(
+  const data = await parseV22Envelope<{ packet?: ContextPacketV22 } & Partial<ContextPacketV22>>(
     res,
     UNIVERSE_API_ERROR_CODES.SERVICE_UNAVAILABLE,
     "Context Packet 加载失败。",
   );
+  return data.packet ?? (data as ContextPacketV22);
 }

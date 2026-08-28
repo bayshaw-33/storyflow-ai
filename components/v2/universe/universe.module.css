@@ -251,6 +251,98 @@
   gap: 4px;
 }
 
+/* 作品与 Universe 的真实继承状态：默认收敛，发现更新时再展开差异。 */
+.inheritanceStatus {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(109, 231, 223, 0.04);
+  border: 1px solid rgba(109, 231, 223, 0.14);
+}
+
+.inheritanceHeader,
+.inheritanceActionRow,
+.inheritanceDiffSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inheritanceLabel,
+.inheritanceMuted,
+.inheritanceHint,
+.inheritanceError {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.inheritanceLabel {
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 700;
+}
+
+.inheritanceMuted,
+.inheritanceHint {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.inheritanceHint {
+  margin: 7px 0 0;
+  line-height: 1.5;
+}
+
+.inheritanceError,
+.inheritanceConflict {
+  color: #ff8a8a;
+}
+
+.inheritanceDiff {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.inheritanceDiffSummary {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+}
+
+.inheritanceDiffList {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+}
+
+.inheritanceDiffList li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.diffImpact {
+  min-width: 52px;
+  color: #6de7df;
+  font-weight: 700;
+}
+
+.diffImpactConflict {
+  color: #ff8a8a;
+}
+
+.inheritanceConflict {
+  margin: 7px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .audioSection {
   margin-top: 20px;
   padding-top: 16px;
