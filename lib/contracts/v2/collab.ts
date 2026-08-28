@@ -312,6 +312,8 @@ export interface Notification {
   readonly body: string;
   readonly resourceType: ResourceType | null;
   readonly resourceId: string | null;
+  readonly linkUrl: string | null;
+  readonly sourceUrl: string | null;
   readonly read: boolean;
   readonly readAt: string | null;
   readonly createdAt: string;
