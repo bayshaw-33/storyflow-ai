@@ -21,7 +21,7 @@ type EntityRow = { id: string; universe_id: string; type: string; name: string; 
 export async function bindUniverse(params: { fetcher: InheritanceFetcher; userId: string; projectId: string; universeId: string }) {
   const [project, universe] = await Promise.all([readProject(params), readUniverse(params)]);
   assertOwner(project, params.userId);
-  assertUniverseAccess(universe, params.userId, params.fetcher);
+  await assertUniverseAccess(universe, params.userId, params.fetcher);
   const links = await query<LinkRow[]>(params.fetcher, `/rest/v1/storyflow_universe_project_links?project_id=eq.${encodeURIComponent(params.projectId)}&unbound_at=is.null&select=id,universe_id,project_id,user_id,project_role,inheritance_settings,unbound_at,created_at,updated_at&limit=10`);
   const existing = (links || []).find((link) => link.universe_id === params.universeId);
   if (existing) return { link: toLinkDto(existing), created: false };
@@ -33,6 +33,13 @@ export async function bindUniverse(params: { fetcher: InheritanceFetcher; userId
   });
   const link = rows?.[0];
   if (!link) throw new InheritanceError("service_unavailable", "Unable to bind Universe.");
+  await writeBindingHistory(params.fetcher, {
+    projectId: params.projectId,
+    universeId: params.universeId,
+    userId: params.userId,
+    action: "bound",
+    sourceLinkId: link.id,
+  });
   return { link: toLinkDto(link), created: true };
 }
 
@@ -45,6 +52,13 @@ export async function unbindUniverse(params: { fetcher: InheritanceFetcher; user
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({ unbound_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+  });
+  await writeBindingHistory(params.fetcher, {
+    projectId: params.projectId,
+    universeId: links[0].universe_id,
+    userId: params.userId,
+    action: "unbound",
+    sourceLinkId: links[0].id,
   });
   return { unbound: true, historyId: links[0].id };
 }
@@ -117,9 +131,31 @@ function assertOwner(project: ProjectRow, userId: string) {
   if (project.owner_id !== userId && project.user_id !== userId) throw new InheritanceError("forbidden", "Project access denied.");
 }
 
-function assertUniverseAccess(universe: UniverseRow, userId: string, fetcher: InheritanceFetcher) {
-  if (universe.user_id !== userId && !universe.team_id) throw new InheritanceError("forbidden", "Universe access denied.");
-  void fetcher;
+async function assertUniverseAccess(universe: UniverseRow, userId: string, fetcher: InheritanceFetcher) {
+  if (universe.user_id === userId) return;
+  if (!universe.team_id) throw new InheritanceError("forbidden", "Universe access denied.");
+  const memberships = await query<Array<{ team_id: string }>>(
+    fetcher,
+    `/rest/v1/storyflow_team_members?team_id=eq.${encodeURIComponent(universe.team_id)}&user_id=eq.${encodeURIComponent(userId)}&status=eq.active&select=team_id&limit=1`,
+  );
+  if (!memberships?.length) throw new InheritanceError("forbidden", "Universe access denied.");
+}
+
+async function writeBindingHistory(
+  fetcher: InheritanceFetcher,
+  input: { projectId: string; universeId: string; userId: string; action: "bound" | "unbound"; sourceLinkId: string },
+) {
+  await query(fetcher, "/rest/v1/storyflow_universe_binding_history", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      project_id: input.projectId,
+      universe_id: input.universeId,
+      user_id: input.userId,
+      action: input.action,
+      source_link_id: input.sourceLinkId,
+    }),
+  });
 }
 
 function toLinkDto(row: LinkRow) {
