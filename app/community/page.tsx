@@ -1,5 +1,5 @@
-import { hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
-import { listDiscoveryFeed } from "@/lib/server/v2/community/discovery";
+import { getViewerFromCookies, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { searchCommunityFeed } from "@/lib/server/v2/community/search";
 import { CommunityServiceError } from "@/lib/server/v2/community/publications";
 import { DiscoveryFeed } from "@/components/v2/community/DiscoveryFeed";
 import { CommunityPlaceholderClient } from "./CommunityPlaceholderClient";
@@ -21,15 +21,25 @@ export default async function CommunityPage() {
     return <CommunityPlaceholderClient />;
   }
 
-  // CM-002: 服务端预取发现页投影 (前 20 条 public)
-  let initialItems: Awaited<ReturnType<typeof listDiscoveryFeed>> = [];
+  // C0：服务端预取带公开 source context 的社区卡片投影。
+  const viewer = await getViewerFromCookies();
+  let initialItems: Awaited<ReturnType<typeof searchCommunityFeed>>["items"] = [];
+  let initialNextCursor: string | null = null;
+  let initialHasMore = false;
   let loadError: string | null = null;
   try {
-    initialItems = await listDiscoveryFeed(serviceFetch, { limit: 20 });
+    const initialResult = await searchCommunityFeed(serviceFetch, {
+      section: "recommended",
+      limit: 20,
+      viewerId: viewer?.id ?? null,
+    });
+    initialItems = initialResult.items;
+    initialNextCursor = initialResult.nextCursor;
+    initialHasMore = initialResult.hasMore;
   } catch (e) {
     loadError =
-      e instanceof CommunityServiceError ? e.message : "Unable to load discovery feed.";
+      e instanceof CommunityServiceError ? e.message : "社区内容暂时无法加载，请稍后重试。";
   }
 
-  return <DiscoveryFeed initialItems={initialItems} loadError={loadError} />;
+  return <DiscoveryFeed initialItems={initialItems} initialNextCursor={initialNextCursor} initialHasMore={initialHasMore} initialViewerId={viewer?.id ?? null} loadError={loadError} />;
 }

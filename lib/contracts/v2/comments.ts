@@ -104,6 +104,8 @@ export interface CommunityNotification {
   readonly body: string;
   readonly resourceType: string | null;
   readonly resourceId: string | null;
+  readonly linkUrl: string | null;
+  readonly sourceUrl: string | null;
   readonly read: boolean;
   readonly readAt: string | null;
   readonly createdAt: string;
@@ -120,6 +122,10 @@ export interface CommunityNotificationRow {
     readonly body?: string;
     readonly resource_type?: string | null;
     readonly resource_id?: string | null;
+    readonly link_url?: string | null;
+    readonly source_url?: string | null;
+    readonly linkUrl?: string | null;
+    readonly sourceUrl?: string | null;
     readonly [k: string]: unknown;
   } | null;
   readonly created_at: string;
@@ -228,6 +234,14 @@ export function parseNotification(row: CommunityNotificationRow): CommunityNotif
     ? eventType.slice("notification_".length)
     : eventType;
   const type = isCommunityNotificationType(typeStr) ? typeStr : "comment";
+  const resourceType = row.payload?.resource_type ?? null;
+  const resourceId = row.payload?.resource_id ?? null;
+  const linkUrl =
+    row.payload?.link_url ??
+    row.payload?.linkUrl ??
+    (resourceType === "publication" && resourceId
+      ? `/community/${encodeURIComponent(resourceId)}`
+      : null);
   return Object.freeze({
     id: row.id,
     recipientId: row.owner_id,
@@ -235,8 +249,10 @@ export function parseNotification(row: CommunityNotificationRow): CommunityNotif
     actorId: row.actor_id,
     title: row.payload?.title ?? "",
     body: row.payload?.body ?? "",
-    resourceType: row.payload?.resource_type ?? null,
-    resourceId: row.payload?.resource_id ?? null,
+    resourceType,
+    resourceId,
+    linkUrl,
+    sourceUrl: row.payload?.source_url ?? row.payload?.sourceUrl ?? null,
     read: row.read_at !== null && row.read_at !== undefined,
     readAt: row.read_at ?? null,
     createdAt: row.created_at,

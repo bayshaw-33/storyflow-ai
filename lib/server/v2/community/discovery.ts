@@ -6,12 +6,20 @@
  */
 import {
   parsePublication,
+  toCommunityFeedProjection,
   toProjection,
   type Publication,
+  type CommunityFeedProjection,
+  type CommunityPublicationContext,
   type PublicationProjection,
   type PublicationRow,
 } from "../../../contracts/v2/community.ts";
 import { CommunityServiceError, type CommunityFetcher } from "./publications.ts";
+import {
+  fetchCommunityPublicationRows,
+  getCommunityRowContext,
+  hydrateCommunityWorkIds,
+} from "./context.ts";
 
 /**
  * CM-002: 发现页查询 publication 投影
@@ -52,6 +60,53 @@ export async function listDiscoveryFeed(
   });
 
   return (rows ?? []).map((r) => toProjection(parsePublication(r)));
+}
+
+export type CommunityFeedSection = "recommended" | "universes" | "works" | "actors" | "assets";
+
+/**
+ * C0：社区体验 Feed。
+ *
+ * 与旧 discover 接口并行，避免破坏 CM-002 的 legacy projection 契约；新
+ * 页面需要的 source context 只通过这个明确的公开卡片投影返回。
+ */
+export async function listCommunityFeed(
+  fetcher: CommunityFetcher,
+  options: {
+    section?: CommunityFeedSection;
+    viewerId?: string | null;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<CommunityFeedProjection[]> {
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100);
+  const offset = Math.max(options.offset ?? 0, 0);
+  const params = new URLSearchParams();
+  params.set("visibility", "eq.public");
+  params.set("status", "eq.active");
+  params.set("order", "created_at.desc");
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+
+  if (options.section === "universes") params.set("source_type", "eq.universe");
+  if (options.section === "works") params.set("source_type", "in.(project,episode,scene)");
+  if (options.section === "actors") params.set("source_type", "eq.actor");
+  if (options.section === "assets") params.set("source_type", "eq.asset");
+
+  const rows = await fetchCommunityPublicationRows(
+    fetcher,
+    (select) => {
+      params.set("select", select);
+      return `/rest/v1/storyflow_publications?${params.toString()}`;
+    },
+    { headers: { Accept: "application/json" } },
+    "failed to fetch community feed",
+  );
+  const hydratedRows = await hydrateCommunityWorkIds(fetcher, rows);
+
+  return hydratedRows.map((row) =>
+    toCommunityFeedProjection(parsePublication(row), options.viewerId ?? null, getCommunityRowContext(row)),
+  );
 }
 
 /**
@@ -99,12 +154,38 @@ export async function getPublicationDetail(
   if (!publicationId) {
     throw new CommunityServiceError("validation_failed", "publicationId is required", 400);
   }
-  const row = await fetcher<PublicationRow | null>(
+  const row = await fetchPublicationRow(fetcher, publicationId);
+  return row ? parsePublication(row) : null;
+}
+
+export interface CommunityPublicationDetail {
+  readonly publication: Publication;
+  readonly context: CommunityPublicationContext;
+}
+
+/** C0 card context for the publication detail page, including semantic subject type. */
+export async function getCommunityPublicationDetail(
+  fetcher: CommunityFetcher,
+  publicationId: string,
+): Promise<CommunityPublicationDetail | null> {
+  if (!publicationId) {
+    throw new CommunityServiceError("validation_failed", "publicationId is required", 400);
+  }
+  const row = await fetchPublicationRow(fetcher, publicationId);
+  if (!row) return null;
+  const [hydratedRow] = await hydrateCommunityWorkIds(fetcher, [row]);
+  return { publication: parsePublication(hydratedRow), context: getCommunityRowContext(hydratedRow) };
+}
+
+async function fetchPublicationRow(
+  fetcher: CommunityFetcher,
+  publicationId: string,
+): Promise<PublicationRow | null> {
+  return fetcher<PublicationRow | null>(
     `/rest/v1/storyflow_publications?id=eq.${encodeURIComponent(publicationId)}&limit=1`,
     { headers: { Accept: "application/vnd.pgrst.object+json" } },
   ).catch((err: unknown) => {
     if (err && typeof err === "object" && "status" in err && err.status === 406) return null;
     throw new CommunityServiceError("service_unavailable", "failed to fetch publication", 503, err);
   });
-  return row ? parsePublication(row) : null;
 }

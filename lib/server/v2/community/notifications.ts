@@ -200,6 +200,8 @@ export async function sendNotification(
     body: string;
     resourceType?: string | null;
     resourceId?: string | null;
+    linkUrl?: string | null;
+    sourceUrl?: string | null;
     idempotencyKey: string;
   },
 ): Promise<{ sent: boolean; eventId: string | null }> {
@@ -222,6 +224,13 @@ export async function sendNotification(
 
   // 直接 INSERT 到 creative_events (event_type=notification_<type>)
   // 幂等: (owner_id, idempotency_key) ON CONFLICT DO NOTHING
+  const resourceType = params.resourceType ?? null;
+  const resourceId = params.resourceId ?? null;
+  const linkUrl =
+    params.linkUrl ??
+    (resourceType === "publication" && resourceId
+      ? `/community/${encodeURIComponent(resourceId)}`
+      : null);
   const result = await fetcher<{ id: string } | null>(
     `/rest/v1/storyflow_creative_events`,
     {
@@ -243,8 +252,10 @@ export async function sendNotification(
         payload: {
           title: params.title,
           body: params.body,
-          resource_type: params.resourceType ?? null,
-          resource_id: params.resourceId ?? null,
+          resource_type: resourceType,
+          resource_id: resourceId,
+          link_url: linkUrl,
+          source_url: params.sourceUrl ?? null,
         },
         occurred_at: new Date().toISOString(),
       }),

@@ -106,6 +106,12 @@ export async function createPublication(
         p_visibility: validated.visibility ?? "public",
         p_invite_token_hash: validated.inviteTokenHash ?? null,
         p_idempotency_key: validated.idempotencyKey,
+        p_subject_type: validated.subjectType ?? null,
+        p_source_workbench: validated.sourceWorkbench ?? null,
+        p_rights_summary: validated.rightsSummary ?? null,
+        p_contribution_summary: validated.contributionSummary ?? null,
+        p_work_id: validated.workId ?? null,
+        p_universe_id: validated.universeId ?? null,
       }),
     },
   ).catch((err: unknown) => {

@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  *
  * POST /api/v2/community/publications — 创建 publication (CM-001)
  *   CM-001: publisherId 由服务端从认证用户注入，客户端不可传入。
- *   body: { sourceType, sourceId, sourceVersion?, title, summary?, coverUrl?, visibility?, inviteTokenHash?, idempotencyKey? }
+ *   body: { sourceType, sourceId, sourceVersion?, title, summary?, coverUrl?, visibility?, inviteTokenHash?, subjectType?, sourceWorkbench?, rightsSummary?, contributionSummary?, workId?, universeId?, idempotencyKey? }
  */
 export async function GET(request: NextRequest) {
   try {
@@ -73,6 +73,12 @@ export async function POST(request: NextRequest) {
       coverUrl: body.coverUrl ?? null,
       visibility: body.visibility ?? "public",
       inviteTokenHash: body.inviteTokenHash ?? null,
+      subjectType: body.subjectType ?? null,
+      sourceWorkbench: body.sourceWorkbench ?? null,
+      rightsSummary: body.rightsSummary ?? null,
+      contributionSummary: body.contributionSummary ?? null,
+      workId: body.workId ?? null,
+      universeId: body.universeId ?? null,
       idempotencyKey,
     });
 
