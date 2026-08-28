@@ -61,6 +61,13 @@ test.describe("V2.2 unified production workbench", () => {
     await page.getByRole("button", { name: "适配视图" }).click();
     await page.getByRole("button", { name: "添加便签" }).click();
     await expect(canvas.getByPlaceholder("记录导演备注…")).toBeVisible();
+    const board = canvas.locator('[title="Shift+拖拽框选"]');
+    await board.click({ button: "right", position: { x: 40, y: 40 } });
+    const contextMenu = canvas.getByTestId("canvas-context-menu");
+    await expect(contextMenu).toBeVisible();
+    await expect(contextMenu.getByRole("menuitem", { name: "添加便签" })).toBeVisible();
+    await contextMenu.getByRole("menuitem", { name: "添加便签" }).click();
+    await expect(canvas.getByPlaceholder("记录导演备注…")).toHaveCount(2);
     await expect(canvas.getByRole("button", { name: "导出画布" })).toBeVisible();
     await expect(canvas.getByRole("button", { name: "导出布局 JSON" })).toBeVisible();
   });

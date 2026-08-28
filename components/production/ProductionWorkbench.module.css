@@ -198,6 +198,12 @@
 }
 
 .stageContent { min-width: 0; }
+.stageContent {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
 .stageEmpty {
   display: flex;
   min-height: 520px;
@@ -540,7 +546,8 @@
   max-width: 1840px;
   width: 100%;
   margin: 0 auto;
-  display: block;
+  display: flex;
+  flex-direction: column;
 }
 
 /* assets tab: art-workbench link bar */

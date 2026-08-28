@@ -3,7 +3,7 @@
 /** 分镜无限画布：镜头内容实时来自 scenes/frames，画布只保存布局元数据。 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import type { StoryboardScene } from "@/lib/storyboard/contracts";
 import { fitViewport, getCanvasBounds, layoutShotsByScene, normalizeStoryboardCanvas } from "@/lib/production/storyboard-canvas";
 import type { StoryboardCanvasEdge, StoryboardCanvasGroup, StoryboardCanvasState } from "@/lib/production/types";
@@ -20,6 +20,7 @@ type DragState =
   | { kind: "pan"; start: Point; origin: Point }
   | { kind: "items"; start: Point; origins: Record<string, Point>; ids: CanvasId[] }
   | { kind: "marquee"; start: Point; current: Point };
+type ContextMenuState = { x: number; y: number; target: CanvasId | null };
 
 function clampZoom(value: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
@@ -91,9 +92,18 @@ export function StoryboardCanvas(props: {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<CanvasId>>(new Set());
   const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   useEffect(() => { stateRef.current = state; }, [state]);
   useEffect(() => () => { if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current); }, []);
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (event: PointerEvent) => {
+      if (!boardRef.current?.contains(event.target as Node)) setContextMenu(null);
+    };
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [contextMenu]);
 
   const commit = useCallback((next: StoryboardCanvasState) => {
     stateRef.current = next;
@@ -154,6 +164,7 @@ export function StoryboardCanvas(props: {
 
   const handleBackgroundPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 && event.button !== 1) return;
+    setContextMenu(null);
     const point = localPoint(event);
     event.currentTarget.setPointerCapture(event.pointerId);
     if (event.shiftKey) {
@@ -195,12 +206,13 @@ export function StoryboardCanvas(props: {
     schedulePointerUpdate({ ...stateRef.current, shots: stateRef.current.shots.map((item) => positions.has(canvasId("shot", item.shotId)) ? { ...item, ...positions.get(canvasId("shot", item.shotId)) } : item), notes: stateRef.current.notes.map((item) => positions.has(canvasId("note", item.id)) ? { ...item, ...positions.get(canvasId("note", item.id)) } : item), groups: (stateRef.current.groups ?? []).map((item) => positions.has(canvasId("group", item.id)) ? { ...item, ...positions.get(canvasId("group", item.id)) } : item) });
   }, [localPoint, schedulePointerUpdate]);
 
-  const removeSelected = useCallback(() => {
-    if (!selectedIds.size) return;
-    const removed = new Set(selectedIds);
+  const removeIds = useCallback((ids: Iterable<CanvasId>) => {
+    const removed = new Set(ids);
+    if (!removed.size) return;
     update({ shots: stateRef.current.shots.filter((item) => !removed.has(canvasId("shot", item.shotId))), notes: stateRef.current.notes.filter((item) => !removed.has(canvasId("note", item.id))), groups: (stateRef.current.groups ?? []).filter((item) => !removed.has(canvasId("group", item.id))), edges: (stateRef.current.edges ?? []).filter((edge) => !removed.has(edge.from as CanvasId) && !removed.has(edge.to as CanvasId)) });
-    setSelectedIds(new Set());
-  }, [selectedIds, update]);
+    setSelectedIds((current) => new Set([...current].filter((id) => !removed.has(id))));
+  }, [update]);
+  const removeSelected = useCallback(() => removeIds(selectedIds), [removeIds, selectedIds]);
   const finishDrag = useCallback(() => {
     const drag = dragRef.current;
     if (drag?.kind === "marquee") {
@@ -231,9 +243,39 @@ export function StoryboardCanvas(props: {
     const edge: StoryboardCanvasEdge = { id: `edge-${Date.now()}`, from: ids[0], to: ids[1], label: "" };
     update({ edges: [...(stateRef.current.edges ?? []), edge] });
   }, [selectedIds, update]);
+  const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const targetElement = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>("[data-canvas-id]") : null;
+    const target = (targetElement?.dataset.canvasId as CanvasId | undefined) ?? null;
+    if (target && !event.shiftKey) setSelectedIds(new Set([target]));
+    const point = localPoint(event);
+    const board = boardRef.current;
+    const menuWidth = 220;
+    const menuHeight = 300;
+    setContextMenu({
+      x: Math.max(8, Math.min(point.x, (board?.clientWidth ?? 720) - menuWidth - 8)),
+      y: Math.max(8, Math.min(point.y, (board?.clientHeight ?? 420) - menuHeight - 8)),
+      target,
+    });
+  }, [localPoint]);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const removeContextTarget = useCallback(() => {
+    if (contextMenu?.target) removeIds([contextMenu.target]);
+    closeContextMenu();
+  }, [closeContextMenu, contextMenu?.target, removeIds]);
+  const openContextShot = useCallback(() => {
+    const target = contextMenu?.target;
+    if (target?.startsWith("shot:")) onOpenShot?.(target.slice("shot:".length));
+    closeContextMenu();
+  }, [closeContextMenu, contextMenu?.target, onOpenShot]);
+  const editContextNote = useCallback(() => {
+    const target = contextMenu?.target;
+    if (target?.startsWith("note:")) setEditingNoteId(target.slice("note:".length));
+    closeContextMenu();
+  }, [closeContextMenu, contextMenu?.target]);
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (isEditableTarget(event.target)) return;
-    if (event.key === "Escape") setSelectedIds(new Set());
+    if (event.key === "Escape") { setSelectedIds(new Set()); setContextMenu(null); }
     if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); removeSelected(); }
   }, [removeSelected]);
   const exportLayout = useCallback(() => {
@@ -259,6 +301,7 @@ export function StoryboardCanvas(props: {
 
   const viewport = state.viewport;
   const marqueeStyle = marquee ? { left: Math.min(marquee.start.x, marquee.current.x), top: Math.min(marquee.start.y, marquee.current.y), width: Math.abs(marquee.current.x - marquee.start.x), height: Math.abs(marquee.current.y - marquee.start.y) } : null;
+  const contextTargetKind = contextMenu?.target?.split(":")[0];
   return (
     <section style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 420 }} data-testid="storyboard-canvas">
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
@@ -277,21 +320,45 @@ export function StoryboardCanvas(props: {
           <button type="button" onClick={exportLayout} style={buttonStyle(false)}>导出布局 JSON</button>
         </div>
       </div>
-      <div ref={boardRef} tabIndex={0} title="Shift+拖拽框选" onKeyDown={handleKeyDown} onPointerDown={handleBackgroundPointerDown} onPointerMove={handlePointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag} onWheel={handleWheel} style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative", outline: "none", background: "radial-gradient(circle at 1px 1px, rgba(255,255,255,.07) 1px, transparent 0) 0 0 / 26px 26px, rgba(255,255,255,.015)", cursor: dragRef.current?.kind === "pan" ? "grabbing" : "grab", touchAction: "none" }}>
+      <div ref={boardRef} tabIndex={0} title="Shift+拖拽框选" onKeyDown={handleKeyDown} onContextMenu={handleContextMenu} onPointerDown={handleBackgroundPointerDown} onPointerMove={handlePointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag} onWheel={handleWheel} style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative", outline: "none", background: "radial-gradient(circle at 1px 1px, rgba(255,255,255,.07) 1px, transparent 0) 0 0 / 26px 26px, rgba(255,255,255,.015)", cursor: dragRef.current?.kind === "pan" ? "grabbing" : "grab", touchAction: "none" }}>
         <div data-testid="canvas-world-layer" style={{ position: "absolute", left: 0, top: 0, transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: "0 0", width: 1, height: 1 }}>
           <svg aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, width: 1, height: 1, overflow: "visible", pointerEvents: "none" }}>
             {(state.edges ?? []).map((edge) => { const from = objectRect(state, edge.from as CanvasId); const to = objectRect(state, edge.to as CanvasId); return from && to ? <line key={edge.id} x1={from.x + from.width / 2} y1={from.y + from.height / 2} x2={to.x + to.width / 2} y2={to.y + to.height / 2} stroke={edge.color || "#75dbc6"} strokeWidth="2" markerEnd="url(#canvas-arrow)" /> : null; })}
             <defs><marker id="canvas-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#75dbc6" /></marker></defs>
           </svg>
-          {(state.groups ?? []).map((group) => <div key={`group-${group.id}`} onPointerDown={(event) => beginItemDrag(event, "group", group.id, group.x, group.y)} style={{ position: "absolute", left: group.x, top: group.y, width: group.width, height: group.height, border: `1px solid ${group.color || "rgba(117,219,198,.45)"}`, background: "rgba(117,219,198,.06)", borderRadius: 14, color: "var(--ink-muted)", padding: "8px 12px", fontSize: 12, boxSizing: "border-box", zIndex: 1, ...(selectedIds.has(canvasId("group", group.id)) ? { boxShadow: "0 0 0 2px rgba(117,219,198,.5)" } : {}) }}>{group.title}</div>)}
-          {state.shots.map((item) => { const entry = shotById.get(item.shotId); const imageUrl = entry ? frames[entry.shotId]?.imageUrl : undefined; const id = canvasId("shot", item.shotId); return <div key={`shot-${item.shotId}`} onPointerDown={(event) => beginItemDrag(event, "shot", item.shotId, item.x, item.y)} style={{ position: "absolute", left: item.x, top: item.y, width: CARD_W, borderRadius: 10, border: selectedIds.has(id) ? "2px solid #75dbc6" : "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.04)", overflow: "hidden", cursor: "grab", userSelect: "none", touchAction: "none", zIndex: 2 }}><div style={{ aspectRatio: "9 / 16", background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>{imageUrl ? <img src={imageUrl} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} /> : <span style={{ fontSize: 12, color: "var(--ink-muted)", padding: 12, textAlign: "center" }}>{entry ? "未生成" : "镜头已删除"}</span>}</div><div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 9px", fontSize: 12 }}><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => entry && onOpenShot?.(item.shotId)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", color: entry ? "inherit" : "var(--ink-muted)", cursor: entry ? "pointer" : "default", padding: 0 }}>{entry ? `场 ${entry.scene.order} · 镜 ${entry.shot.order}` : "已失效"}</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setSelectedIds(new Set([id])); removeSelected(); }} aria-label="移出画布" style={{ background: "none", border: "none", color: "var(--ink-muted)", cursor: "pointer", padding: 2 }}>✕</button></div></div>; })}
-          {state.notes.map((note) => { const id = canvasId("note", note.id); return <div key={`note-${note.id}`} onPointerDown={(event) => beginItemDrag(event, "note", note.id, note.x, note.y)} style={{ position: "absolute", left: note.x, top: note.y, width: 200, minHeight: 120, borderRadius: 10, border: selectedIds.has(id) ? "2px solid #ffd166" : "1px solid rgba(255,209,102,.35)", background: "rgba(255,209,102,.08)", padding: 10, cursor: "grab", userSelect: "none", touchAction: "none", zIndex: 3, boxSizing: "border-box" }}>{editingNoteId === note.id ? <textarea autoFocus defaultValue={note.text} onPointerDown={(event) => event.stopPropagation()} onBlur={(event) => { update({ notes: stateRef.current.notes.map((item) => item.id === note.id ? { ...item, text: event.target.value } : item) }); setEditingNoteId(null); }} placeholder="记录导演备注…" style={{ width: "100%", minHeight: 80, resize: "vertical", background: "transparent", border: "none", outline: "none", color: "inherit", fontSize: 12.5, fontFamily: "inherit" }} /> : <div onPointerDown={(event) => event.stopPropagation()} onClick={() => setEditingNoteId(note.id)} style={{ minHeight: 80, fontSize: 12.5, whiteSpace: "pre-wrap", color: note.text ? "inherit" : "var(--ink-muted)" }}>{note.text || "点击输入便签内容…"}</div>}<button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setSelectedIds(new Set([id])); removeSelected(); }} aria-label="删除便签" style={{ position: "absolute", top: 4, right: 6, background: "none", border: "none", color: "var(--ink-muted)", cursor: "pointer", padding: 2 }}>✕</button></div>; })}
+          {(state.groups ?? []).map((group) => <div key={`group-${group.id}`} data-canvas-id={canvasId("group", group.id)} onPointerDown={(event) => beginItemDrag(event, "group", group.id, group.x, group.y)} style={{ position: "absolute", left: group.x, top: group.y, width: group.width, height: group.height, border: `1px solid ${group.color || "rgba(117,219,198,.45)"}`, background: "rgba(117,219,198,.06)", borderRadius: 14, color: "var(--ink-muted)", padding: "8px 12px", fontSize: 12, boxSizing: "border-box", zIndex: 1, ...(selectedIds.has(canvasId("group", group.id)) ? { boxShadow: "0 0 0 2px rgba(117,219,198,.5)" } : {}) }}>{group.title}</div>)}
+          {state.shots.map((item) => { const entry = shotById.get(item.shotId); const imageUrl = entry ? frames[entry.shotId]?.imageUrl : undefined; const id = canvasId("shot", item.shotId); return <div key={`shot-${item.shotId}`} data-canvas-id={id} onPointerDown={(event) => beginItemDrag(event, "shot", item.shotId, item.x, item.y)} style={{ position: "absolute", left: item.x, top: item.y, width: CARD_W, borderRadius: 10, border: selectedIds.has(id) ? "2px solid #75dbc6" : "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.04)", overflow: "hidden", cursor: "grab", userSelect: "none", touchAction: "none", zIndex: 2 }}><div style={{ aspectRatio: "9 / 16", background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>{imageUrl ? <img src={imageUrl} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }} /> : <span style={{ fontSize: 12, color: "var(--ink-muted)", padding: 12, textAlign: "center" }}>{entry ? "未生成" : "镜头已删除"}</span>}</div><div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 9px", fontSize: 12 }}><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => entry && onOpenShot?.(item.shotId)} style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", color: entry ? "inherit" : "var(--ink-muted)", cursor: entry ? "pointer" : "default", padding: 0 }}>{entry ? `场 ${entry.scene.order} · 镜 ${entry.shot.order}` : "已失效"}</button><button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setSelectedIds(new Set([id])); removeIds([id]); }} aria-label="移出画布" style={{ background: "none", border: "none", color: "var(--ink-muted)", cursor: "pointer", padding: 2 }}>✕</button></div></div>; })}
+          {state.notes.map((note) => { const id = canvasId("note", note.id); return <div key={`note-${note.id}`} data-canvas-id={id} onPointerDown={(event) => beginItemDrag(event, "note", note.id, note.x, note.y)} style={{ position: "absolute", left: note.x, top: note.y, width: 200, minHeight: 120, borderRadius: 10, border: selectedIds.has(id) ? "2px solid #ffd166" : "1px solid rgba(255,209,102,.35)", background: "rgba(255,209,102,.08)", padding: 10, cursor: "grab", userSelect: "none", touchAction: "none", zIndex: 3, boxSizing: "border-box" }}>{editingNoteId === note.id ? <textarea autoFocus defaultValue={note.text} onPointerDown={(event) => event.stopPropagation()} onBlur={(event) => { update({ notes: stateRef.current.notes.map((item) => item.id === note.id ? { ...item, text: event.target.value } : item) }); setEditingNoteId(null); }} placeholder="记录导演备注…" style={{ width: "100%", minHeight: 80, resize: "vertical", background: "transparent", border: "none", outline: "none", color: "inherit", fontSize: 12.5, fontFamily: "inherit" }} /> : <div onPointerDown={(event) => event.stopPropagation()} onClick={() => setEditingNoteId(note.id)} style={{ minHeight: 80, fontSize: 12.5, whiteSpace: "pre-wrap", color: note.text ? "inherit" : "var(--ink-muted)" }}>{note.text || "点击输入便签内容…"}</div>}<button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => removeIds([id])} aria-label="删除便签" style={{ position: "absolute", top: 4, right: 6, background: "none", border: "none", color: "var(--ink-muted)", cursor: "pointer", padding: 2 }}>✕</button></div>; })}
         </div>
         {marqueeStyle ? <div style={{ position: "absolute", ...marqueeStyle, border: "1px solid #75dbc6", background: "rgba(117,219,198,.12)", pointerEvents: "none" }} /> : null}
         {state.shots.length === 0 && state.notes.length === 0 && !(state.groups ?? []).length ? <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)", fontSize: 13, pointerEvents: "none" }}>用“全部镜头”或“添加便签”开始</div> : null}
+        {contextMenu ? (
+          <div data-testid="canvas-context-menu" role="menu" aria-label="画布上下文菜单" onPointerDown={(event) => event.stopPropagation()} style={{ position: "absolute", left: contextMenu.x, top: contextMenu.y, zIndex: 20, width: 220, padding: 6, border: "1px solid rgba(117,219,198,.35)", borderRadius: 10, background: "rgba(18,24,25,.98)", boxShadow: "0 14px 36px rgba(0,0,0,.35)" }}>
+            {contextTargetKind === "shot" ? <ContextMenuButton label="打开镜头" onClick={openContextShot} /> : null}
+            {contextTargetKind === "note" ? <ContextMenuButton label="编辑便签" onClick={editContextNote} /> : null}
+            {contextMenu.target ? <ContextMenuButton label={contextTargetKind === "note" ? "删除便签" : contextTargetKind === "group" ? "删除分组" : "移出镜头"} onClick={removeContextTarget} danger /> : null}
+            {!contextMenu.target ? <>
+              <ContextMenuButton label="添加便签" onClick={() => { addNote(); closeContextMenu(); }} />
+              <ContextMenuButton label="全部镜头上画布" onClick={() => { layoutAllShots(); closeContextMenu(); }} />
+              <ContextMenuButton label="按场次排版" onClick={() => { layoutByScene(); closeContextMenu(); }} />
+              <ContextMenuButton label="适配视图" onClick={() => { handleFitView(); closeContextMenu(); }} />
+            </> : null}
+            {selectedIds.size ? <>
+              <div style={{ height: 1, margin: "5px 4px", background: "rgba(255,255,255,.1)" }} />
+              <ContextMenuButton label="分组" onClick={() => { addGroup(); closeContextMenu(); }} />
+              <ContextMenuButton label="连线" onClick={() => { connectSelected(); closeContextMenu(); }} disabled={selectedIds.size < 2} />
+              <ContextMenuButton label="删除所选" onClick={() => { removeSelected(); closeContextMenu(); }} danger />
+              <ContextMenuButton label="清除选择" onClick={() => { setSelectedIds(new Set()); closeContextMenu(); }} />
+            </> : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );
+}
+
+function ContextMenuButton({ label, onClick, disabled = false, danger = false }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return <button type="button" role="menuitem" onClick={onClick} disabled={disabled} style={{ display: "block", width: "100%", padding: "8px 10px", border: 0, borderRadius: 7, background: "transparent", color: danger ? "#ff8d8d" : "var(--ink-primary)", textAlign: "left", fontSize: 12, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .45 : 1 }}>{label}</button>;
 }
 
 function buttonStyle(primary: boolean): CSSProperties {

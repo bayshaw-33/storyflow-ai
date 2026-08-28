@@ -58,6 +58,24 @@ test("canvas provides director-board selection, grouping, and connector actions"
   assert.match(canvas, /移出画布/, "canvas-only removal wording");
 });
 
+test("canvas provides contextual actions from the right-click menu", () => {
+  const canvas = read("../../components/production/StoryboardCanvas.tsx");
+  assert.match(canvas, /contextMenu/, "right-click menu state");
+  assert.match(canvas, /onContextMenu=\{handleContextMenu\}/, "canvas handles right-clicks");
+  assert.match(canvas, /preventDefault\(\)/, "native browser menu is suppressed inside the canvas");
+  assert.match(canvas, /canvas-context-menu/, "context menu has a stable test hook");
+  assert.match(canvas, /打开镜头|编辑便签|删除所选|适配视图/, "menu exposes real object and canvas actions");
+});
+
+test("canvas subview receives the available workbench height", () => {
+  const stage = read("../../components/production/UnifiedStoryboardStage.tsx");
+  const styles = read("../../components/production/ProductionWorkbench.module.css");
+  assert.match(stage, /subview === "canvas" \? \{ display: "flex"/);
+  assert.match(stage, /height: "100%"/);
+  assert.match(styles, /\.stageContent[\s\S]*?flex: 1[\s\S]*?flex-direction: column/);
+  assert.match(styles, /\.workspace[\s\S]*?display: flex[\s\S]*?flex-direction: column/);
+});
+
 test("canvas provides deterministic layout, shot navigation, and layout export", () => {
   const canvas = read("../../components/production/StoryboardCanvas.tsx");
   const workbench = read("../../components/production/ProductionWorkbench.tsx");

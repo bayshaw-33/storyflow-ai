@@ -107,7 +107,7 @@ export function UnifiedStoryboardStage({
   );
 
   return (
-    <section aria-label="统一分镜工作台" data-testid="unified-storyboard-stage" data-project-id={projectId} data-work-id={workId} data-unit-id={unitId ?? ""}>
+    <section aria-label="统一分镜工作台" data-testid="unified-storyboard-stage" data-project-id={projectId} data-work-id={workId} data-unit-id={unitId ?? ""} style={subview === "canvas" ? { display: "flex", minHeight: 0, height: "100%", flexDirection: "column" } : undefined}>
       <nav aria-label="分镜子视图" style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "16px 24px 0" }}>
         {SUBVIEWS.map((item) => (
           <button
@@ -129,7 +129,7 @@ export function UnifiedStoryboardStage({
           </button>
         ))}
       </nav>
-      <div data-testid={`storyboard-subview-${subview}`}>
+      <div data-testid={`storyboard-subview-${subview}`} style={subview === "canvas" ? { display: "flex", minHeight: 0, flex: 1, flexDirection: "column" } : undefined}>
         {content?.[subview] ?? (subview === "motion" ? fallbackMotion : (
           <div style={{ padding: 40, color: "var(--ink-muted)", textAlign: "center" }}>
             当前子视图尚未绑定内容。
