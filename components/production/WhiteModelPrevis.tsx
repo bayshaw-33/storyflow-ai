@@ -24,12 +24,21 @@ import {
   type PrevisTransform,
   type PrevisVector3,
 } from "@/lib/director/previs";
+import {
+  buildPrevisSceneForShot,
+  buildVideoHandoffPackage,
+  previsHandoffStorageKey,
+  type PrevisAsset,
+  type PrevisShotOption,
+} from "@/lib/director/previs-integration";
 import styles from "./WhiteModelPrevis.module.css";
 
 export interface WhiteModelPrevisProps {
   projectId: string;
   workId: string;
   unitId: string | null;
+  shotOptions?: PrevisShotOption[];
+  assets?: { characters: PrevisAsset[]; locations: PrevisAsset[]; props: PrevisAsset[] };
 }
 
 const EMPTY_TRANSFORM: PrevisTransform = {
@@ -83,7 +92,7 @@ function downloadDataUrl(filename: string, dataUrl: string) {
   anchor.click();
 }
 
-export function WhiteModelPrevis({ projectId, workId, unitId }: WhiteModelPrevisProps) {
+export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], assets = { characters: [], locations: [], props: [] } }: WhiteModelPrevisProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -94,10 +103,18 @@ export function WhiteModelPrevis({ projectId, workId, unitId }: WhiteModelPrevis
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState("");
+  const [selectedShotId, setSelectedShotId] = useState(shotOptions[0]?.shotId ?? "");
   const playbackRef = useRef({ playing: false, currentTime: 0, durationSeconds: 5 });
 
   const storageKey = `kiikis:previs:v1:${projectId}:${workId}:${unitId ?? "none"}`;
   const selectedObject = scene.objects.find((object) => object.id === selectedId) ?? null;
+  const selectedShot = shotOptions.find((shot) => shot.shotId === selectedShotId) ?? shotOptions[0] ?? null;
+
+  useEffect(() => {
+    if (!shotOptions.some((shot) => shot.shotId === selectedShotId)) {
+      setSelectedShotId(shotOptions[0]?.shotId ?? "");
+    }
+  }, [selectedShotId, shotOptions]);
 
   useEffect(() => {
     try {
@@ -286,6 +303,45 @@ export function WhiteModelPrevis({ projectId, workId, unitId }: WhiteModelPrevis
     setNotice("已恢复基础白模场景");
   };
 
+  const loadSelectedShot = () => {
+    if (!selectedShot) {
+      setNotice("当前项目还没有可载入的分镜镜头。");
+      return;
+    }
+    const next = buildPrevisSceneForShot(selectedShot, assets);
+    setScene(next);
+    setSelectedId(next.objects.find((object) => object.kind === "actor_proxy")?.id ?? next.objects[0]?.id ?? "camera");
+    setCurrentTime(0);
+    setPlaying(false);
+    setNotice(`${selectedShot.sceneLabel} · ${selectedShot.shotLabel} 已载入白模。`);
+  };
+
+  const exportVideoHandoff = () => {
+    if (!selectedShot) {
+      setNotice("请先选择一个分镜镜头。");
+      return;
+    }
+    const handoff = buildVideoHandoffPackage({
+      projectId,
+      workId,
+      unitId,
+      shot: selectedShot,
+      scene,
+      firstframeUrl: selectedShot.storyboardImageUrl,
+      prompt: selectedShot.videoPrompt,
+    });
+    window.localStorage.setItem(previsHandoffStorageKey(projectId, workId, unitId, selectedShot.shotId), JSON.stringify(handoff));
+    downloadText(`${projectId}-${selectedShot.shotId}-video-handoff.json`, JSON.stringify(handoff, null, 2), "application/json");
+    setNotice("视频交付包已导出；请在视频阶段人工确认后提交生成。");
+  };
+
+  const copyVideoPrompt = () => {
+    if (!selectedShot) return;
+    const value = selectedShot.videoPrompt || selectedShot.visualDescription;
+    if (value) void navigator.clipboard?.writeText(value);
+    setNotice("视频提示词已复制，可在视频阶段人工确认后使用。");
+  };
+
   const capture = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -303,7 +359,17 @@ export function WhiteModelPrevis({ projectId, workId, unitId }: WhiteModelPrevis
           <button type="button" onClick={reset} title="恢复基础场景" aria-label="恢复基础场景"><RotateCcw size={15} /></button>
           <button type="button" onClick={capture}><ScanLine size={15} />截图</button>
           <button type="button" onClick={() => downloadText(`${projectId}-previs.json`, serializePrevisScene(scene), "application/json")}><Download size={15} />导出场景 JSON</button>
+          <button type="button" onClick={exportVideoHandoff} disabled={!selectedShot}><Download size={15} />导出视频交付包</button>
         </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+        <strong style={{ fontSize: 12 }}>当前镜头</strong>
+        <select aria-label="当前镜头" value={selectedShotId} onChange={(event) => setSelectedShotId(event.target.value)} disabled={shotOptions.length === 0} style={{ minWidth: 240, padding: "7px 10px", borderRadius: 8, background: "rgba(255,255,255,.06)", color: "inherit", border: "1px solid rgba(255,255,255,.14)" }}>
+          {shotOptions.length === 0 ? <option value="">尚无分镜镜头</option> : shotOptions.map((shot) => <option key={shot.shotId} value={shot.shotId}>{shot.sceneLabel} · {shot.shotLabel}</option>)}
+        </select>
+        <button type="button" onClick={loadSelectedShot} disabled={!selectedShot}>载入当前镜头</button>
+        <button type="button" onClick={copyVideoPrompt} disabled={!selectedShot}>复制视频提示词</button>
+        {selectedShot?.storyboardImageUrl ? <span style={{ color: "#75dbc6", fontSize: 12 }}>已关联首帧</span> : <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>暂无已确认首帧</span>}
       </div>
       <div className={styles.editor}>
         <div className={styles.viewportWrap}>

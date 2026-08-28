@@ -18,6 +18,9 @@ export interface PrevisObject {
   id: string;
   kind: PrevisObjectKind;
   name: string;
+  /** Stable project asset identity when this object came from the storyboard. */
+  assetId?: string;
+  source?: "storyboard" | "manual";
   transform: PrevisTransform;
   keyframes: PrevisKeyframe[];
 }

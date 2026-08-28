@@ -92,6 +92,7 @@ import { WORK_CONTRACT_VERSION } from "@/lib/contracts/v2/work";
 import { fetchUnifiedWorkbenchContext, ensureUnifiedStage } from "@/lib/client/v2/unified-workbench/api";
 import { bindWorkToUniverse } from "@/lib/client/v2/universe/api";
 import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
+import { buildPrevisShotOptions } from "@/lib/director/previs-integration";
 import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
@@ -181,6 +182,11 @@ export function ProductionWorkbench() {
   const [candidates, setCandidates] = useState<AssetCandidateMap>({});
   const [frames, setFrames] = useState<ShotFrameMap>({});
   const [prompts, setPrompts] = useState<PromptResultMap>({});
+
+  const previsShots = useMemo(
+    () => buildPrevisShotOptions(scenes, assets, frames, prompts),
+    [assets, frames, prompts, scenes],
+  );
 
   // --- 视频区状态（任务 1）---
   const [videoJobs, setVideoJobs] = useState<VideoJobMap>({});
@@ -1643,6 +1649,8 @@ export function ProductionWorkbench() {
                   subview={storyboardSubview}
                   onSubviewChange={handleStoryboardSubviewChange}
                   handoffId={handoffId || null}
+                  previsShots={previsShots}
+                  previsAssets={assets}
                   content={{
                     shot_table: (
                       <StoryboardTablePanel
