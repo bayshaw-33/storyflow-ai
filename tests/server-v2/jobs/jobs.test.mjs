@@ -17,6 +17,14 @@ test("archived test jobs leave the default feed but remain readable in history a
   assert.equal((await readUnifiedJob({ fetcher, userId: "u-1", jobId: archived.id })).job.status, "failed");
 });
 
+test("archived legacy text tasks leave the default feed but remain readable in history", async () => {
+  const archived = { id: "archived-text", user_id: "u-1", status: "archived", step_key: "translation", phase_key: "script_production", created_at: "2026-08-01T11:17:49Z", completed_at: "2026-08-01T11:19:54Z", error_message: "EMPTY_DEEPSEEK_OUTPUT" };
+  const fetcher = async (path) => path.includes("storyflow_generation_tasks") ? [archived] : [];
+  assert.deepEqual((await listUnifiedJobs({ fetcher, userId: "u-1" })).items, []);
+  assert.equal((await listUnifiedJobs({ fetcher, userId: "u-1", includeArchived: true })).items[0].id, archived.id);
+  assert.equal((await readUnifiedJob({ fetcher, userId: "u-1", jobId: archived.id })).job.status, "cancelled");
+});
+
 test("maps legacy video sub-states to the frozen v2 lifecycle", () => {
   assert.equal(mapLegacyJob({ id: "1", owner_id: "u-1", job_type: "video", status: "queued", created_at: "2026-08-12T00:00:00Z" }).status, "queued");
   assert.equal(mapLegacyJob({ id: "2", owner_id: "u-1", job_type: "video", status: "generating", created_at: "2026-08-12T00:00:00Z" }).status, "running");

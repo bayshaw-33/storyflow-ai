@@ -23,6 +23,8 @@
 - 两份 MP3 均从生产私有存储读取并经 macOS 音频解析器验证，未重新调用生成模型、未增加生成费用。
 - 5 条已确认失败、另 10 条超过 46 小时且无结果文件的历史测试音频，以 `result_metadata.archivedAt` 可恢复归档。原状态、错误和记录均保留，不是删除或改成假成功。
 - 报告称有 6 条声音失败，生产查询实际找到 5 条终态失败音频；另 10 条同批次的旧排队/生成任务没有结果文件，按测试数据清理范围一并归档。没有删除其他类型任务或正常任务。
+- 另发现 1 条 8 月 1 日的空项目文本翻译任务（`EMPTY_DEEPSEEK_OUTPUT`），已按同一规则归档；默认任务列表隐藏，历史读取保留原失败时间与错误。
+- 文本任务使用数据库正式允许的 `archived` 状态，不伪装为 cancelled；对应迁移为 `20260828093000_legacy_task_archive_status.sql`。
 
 归档不会从默认任务中心/KK 消息列表继续弹出。原详情接口仍可读，带 `includeArchived=true` 的 `/api/v2/jobs` 可查询归档历史。清除目标行的 `archivedAt`、`archiveReason` 和 `originalStatus` 三个 metadata 键即可取消归档；保留其他 metadata，不删除行。
 

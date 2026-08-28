@@ -118,7 +118,7 @@ export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: st
       query<LegacyJobRow[]>(params.fetcher, `/rest/v1/storyflow_exports?user_id=eq.${encodeURIComponent(params.userId)}${projectFilter}${statusFilter}&select=id,user_id,project_id,export_type,status,created_at&order=created_at.desc&limit=200`),
     ]);
     const rawItems = [
-      ...(textTasks || []).map((row) => mapLegacyJob({ ...row, job_type: "text" }, params.now)),
+      ...(textTasks || []).filter((row) => params.includeArchived || row.status !== "archived").map((row) => mapLegacyJob({ ...row, job_type: "text" }, params.now)),
       ...(mediaJobs || []).filter((row) => params.includeArchived || !row.result_metadata?.archivedAt).map((row) => mapLegacyJob(row, params.now)),
       ...(exports || []).map((row) => mapLegacyJob({ ...row, job_type: "export" }, params.now)),
     ];
@@ -156,6 +156,7 @@ export async function readUnifiedJob(params: { fetcher: JobsFetcher; userId: str
 }
 
 function mapStatus(status: string | null | undefined): GenerationJobStatus {
+  if (status === "archived") return "cancelled";
   if (status === "draft" || status === "pending_confirm" || status === "queued" || status === "running" || status === "result_ingesting" || status === "completed" || status === "partial_failure" || status === "failed" || status === "cancelled") return status;
   if (status === "generating" || status === "streaming" || status === "retrying") return "running";
   if (status === "cancel_requested") return "queued";
