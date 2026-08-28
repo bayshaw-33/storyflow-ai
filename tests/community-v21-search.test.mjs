@@ -28,9 +28,9 @@ const row = {
 };
 
 test("C1 search uses a stable keyset cursor and returns a next cursor", async () => {
-  let requestUrl = "";
+  const requestUrls = [];
   const fetcher = async (url) => {
-    requestUrl = url;
+    requestUrls.push(url);
     return [row, { ...row, id: "pub-1", created_at: "2026-08-27T00:00:00Z" }];
   };
 
@@ -48,11 +48,13 @@ test("C1 search uses a stable keyset cursor and returns a next cursor", async ()
     createdAt: row.created_at,
     id: row.id,
   });
-  assert.match(requestUrl, /source_type=in\.%28project%2Cepisode%2Cscene%29/);
-  assert.match(requestUrl, /order=created_at\.desc%2Cid\.desc/);
-  assert.match(requestUrl, /and=/);
-  assert.match(requestUrl, /or%3D/);
-  assert.match(requestUrl, /limit=2/);
+  const publicationRequest = requestUrls.find((url) => url.includes("storyflow_publications"));
+  assert.ok(publicationRequest);
+  assert.match(publicationRequest, /source_type=in\.%28project%2Cepisode%2Cscene%29/);
+  assert.match(publicationRequest, /order=created_at\.desc%2Cid\.desc/);
+  assert.match(publicationRequest, /and=/);
+  assert.match(publicationRequest, /or%3D/);
+  assert.match(publicationRequest, /limit=2/);
 });
 
 test("C1 search cursor excludes newer rows and invalid cursor is a validation error", async () => {

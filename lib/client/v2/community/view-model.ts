@@ -1,5 +1,7 @@
 import type { Locale } from "@/lib/i18n/dictionaries";
 import type { PublicationSourceType, PublicationSubject } from "@/lib/contracts/v2/community";
+import { isWorkType, type WorkType } from "../../../contracts/v2/work.ts";
+import { resolveWorkbenchRoute } from "../navigation/resolver.ts";
 
 export const COMMUNITY_SECTIONS = [
   { id: "recommended", labelZh: "推荐", labelEn: "Discover" },
@@ -52,12 +54,18 @@ export function getPublicationObjectHref(input: {
   sourceType: PublicationSourceType;
   sourceId: string;
   subjectType?: CommunityContentKind;
+  projectId?: string | null;
   workId?: string | null;
+  workType?: string | null;
 }): string | null {
   const kind = input.subjectType ?? getCommunityContentKind(input.sourceType);
   if (kind === "work") {
-    const workId = input.workId || (input.sourceType === "project" ? input.sourceId : null);
-    return workId ? `/projects/${encodeURIComponent(workId)}` : null;
+    const projectId = input.projectId || (input.sourceType === "project" ? input.sourceId : null);
+    if (!projectId || !isWorkType(input.workType)) return null;
+    return resolveWorkbenchRoute(input.workType as WorkType, {
+      projectId,
+      workId: input.workId,
+    });
   }
   const sourceId = encodeURIComponent(input.sourceId);
   switch (input.sourceType) {

@@ -44,8 +44,15 @@ test("C0 only emits known same-origin object routes", () => {
     "/business/marketplace/asset-1",
   );
   assert.equal(
-    getPublicationObjectHref({ sourceType: "project", sourceId: "project-1" }),
-    "/projects/project-1",
+    getPublicationObjectHref({
+      sourceType: "project",
+      sourceId: "project-1",
+      subjectType: "work",
+      projectId: "project-1",
+      workId: "work-1",
+      workType: "script",
+    }),
+    "/production?projectId=project-1&workId=work-1&tab=script",
   );
   assert.equal(
     getPublicationObjectHref({ sourceType: "scene", sourceId: "scene-1" }),
