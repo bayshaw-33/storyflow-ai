@@ -38,6 +38,16 @@ test("canvas component provides pan, zoom, item drag, and note editing", () => {
   assert.match(canvas, /MIN_ZOOM|clampZoom/, "zoom clamped");
 });
 
+test("canvas provides infinite viewport controls without a fixed board boundary", () => {
+  const canvas = read("../../components/production/StoryboardCanvas.tsx");
+  assert.match(canvas, /适配视图/, "fit view action");
+  assert.match(canvas, /zoomAtPoint/, "pointer-centered zoom");
+  assert.match(canvas, /handleFitView/, "fit view handler");
+  assert.match(canvas, /requestAnimationFrame/, "pointer updates are frame-coalesced");
+  assert.match(canvas, /0\.1/);
+  assert.match(canvas, /4/);
+});
+
 test("production workbench wires the canvas subview end-to-end", () => {
   const pw = read("../../components/production/ProductionWorkbench.tsx");
   assert.match(pw, /import \{ StoryboardCanvas \}/, "component imported");

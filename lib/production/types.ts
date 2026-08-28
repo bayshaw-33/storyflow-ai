@@ -115,12 +115,33 @@ export type ProductionChatMessage = {
  * 镜头卡只存 shotId + 画布坐标，展示数据（帧图/场次标题）实时取自 scenes/frames；
  * 便签为画布自有内容。viewport 为画布平移/缩放。
  */
+export type StoryboardCanvasViewport = { x: number; y: number; zoom: number };
 export type StoryboardCanvasShotRef = { shotId: string; x: number; y: number };
 export type StoryboardCanvasNote = { id: string; text: string; x: number; y: number };
+export type StoryboardCanvasGroup = {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+  members?: string[];
+};
+export type StoryboardCanvasEdge = {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  color?: string;
+};
 export type StoryboardCanvasState = {
-  viewport: { x: number; y: number; zoom: number };
+  viewport: StoryboardCanvasViewport;
   shots: StoryboardCanvasShotRef[];
   notes: StoryboardCanvasNote[];
+  schemaVersion?: 2;
+  groups?: StoryboardCanvasGroup[];
+  edges?: StoryboardCanvasEdge[];
 };
 
 export type ProductionProjectState = {
