@@ -58,6 +58,17 @@ test("canvas provides director-board selection, grouping, and connector actions"
   assert.match(canvas, /移出画布/, "canvas-only removal wording");
 });
 
+test("canvas provides deterministic layout, shot navigation, and layout export", () => {
+  const canvas = read("../../components/production/StoryboardCanvas.tsx");
+  const workbench = read("../../components/production/ProductionWorkbench.tsx");
+  assert.match(canvas, /按场次排版/);
+  assert.match(canvas, /导出画布/);
+  assert.match(canvas, /导出布局 JSON/);
+  assert.match(canvas, /onOpenShot/);
+  assert.match(workbench, /onOpenShot=\{/);
+  assert.match(workbench, /storyboardCanvas:\s*canvas/, "existing draft payload remains unchanged");
+});
+
 test("production workbench wires the canvas subview end-to-end", () => {
   const pw = read("../../components/production/ProductionWorkbench.tsx");
   assert.match(pw, /import \{ StoryboardCanvas \}/, "component imported");

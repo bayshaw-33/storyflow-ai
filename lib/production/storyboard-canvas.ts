@@ -99,7 +99,7 @@ export function getCanvasBounds(state: StoryboardCanvasState, sizes: CanvasObjec
   const rectangles: Array<{ x: number; y: number; width: number; height: number }> = [
     ...normalized.shots.map((item) => ({ x: item.x, y: item.y, width: shotWidth, height: shotHeight })),
     ...normalized.notes.map((item) => ({ x: item.x, y: item.y, width: noteWidth, height: noteHeight })),
-    ...normalized.groups.map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
+    ...(normalized.groups ?? []).map((item) => ({ x: item.x, y: item.y, width: item.width, height: item.height })),
   ];
   if (!rectangles.length) return null;
   return rectangles.reduce<CanvasBounds>(

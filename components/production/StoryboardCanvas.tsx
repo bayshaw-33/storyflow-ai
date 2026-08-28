@@ -278,7 +278,7 @@ export function StoryboardCanvas(props: {
         </div>
       </div>
       <div ref={boardRef} tabIndex={0} title="Shift+拖拽框选" onKeyDown={handleKeyDown} onPointerDown={handleBackgroundPointerDown} onPointerMove={handlePointerMove} onPointerUp={finishDrag} onPointerCancel={finishDrag} onWheel={handleWheel} style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative", outline: "none", background: "radial-gradient(circle at 1px 1px, rgba(255,255,255,.07) 1px, transparent 0) 0 0 / 26px 26px, rgba(255,255,255,.015)", cursor: dragRef.current?.kind === "pan" ? "grabbing" : "grab", touchAction: "none" }}>
-        <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: "0 0", width: 1, height: 1 }}>
+        <div data-testid="canvas-world-layer" style={{ position: "absolute", left: 0, top: 0, transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: "0 0", width: 1, height: 1 }}>
           <svg aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, width: 1, height: 1, overflow: "visible", pointerEvents: "none" }}>
             {(state.edges ?? []).map((edge) => { const from = objectRect(state, edge.from as CanvasId); const to = objectRect(state, edge.to as CanvasId); return from && to ? <line key={edge.id} x1={from.x + from.width / 2} y1={from.y + from.height / 2} x2={to.x + to.width / 2} y2={to.y + to.height / 2} stroke={edge.color || "#75dbc6"} strokeWidth="2" markerEnd="url(#canvas-arrow)" /> : null; })}
             <defs><marker id="canvas-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#75dbc6" /></marker></defs>

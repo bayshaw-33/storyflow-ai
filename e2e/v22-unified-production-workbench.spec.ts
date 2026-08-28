@@ -41,4 +41,27 @@ test.describe("V2.2 unified production workbench", () => {
     await page.getByRole("tab", { name: "视频" }).click();
     await expect(page).toHaveURL(/tab=video/);
   });
+
+  test("storyboard canvas supports viewport controls, notes, and exports", async ({ page }) => {
+    await installSession(page);
+    await page.goto(`/production?projectId=${encodeURIComponent(projectId)}&workId=${encodeURIComponent(scriptWorkId)}&tab=storyboard&view=canvas`);
+
+    const canvas = page.getByTestId("storyboard-canvas");
+    await expect(canvas).toBeVisible();
+    await expect(page.getByRole("button", { name: "适配视图" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "按场次排版" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "分组" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "连线" })).toBeDisabled();
+
+    const world = page.getByTestId("canvas-world-layer");
+    const before = await world.getAttribute("style");
+    await canvas.locator('[title="Shift+拖拽框选"]').evaluate((element) => element.dispatchEvent(new WheelEvent("wheel", { deltaY: -240, bubbles: true })));
+    await expect.poll(() => world.getAttribute("style")).not.toBe(before);
+
+    await page.getByRole("button", { name: "适配视图" }).click();
+    await page.getByRole("button", { name: "添加便签" }).click();
+    await expect(canvas.getByPlaceholder("记录导演备注…")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "导出画布" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "导出布局 JSON" })).toBeVisible();
+  });
 });

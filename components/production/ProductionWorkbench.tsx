@@ -1389,6 +1389,10 @@ export function ProductionWorkbench() {
     router.replace(`/production?${params.toString()}`, { scroll: false });
   }
 
+  function openShotFromCanvas(_shotId: string) {
+    handleStoryboardSubviewChange("shot_table");
+  }
+
   const handleStageChange = (stage: UnifiedProductionStage) => {
     if (unsaved) {
       setPendingStage(stage);
@@ -1680,6 +1684,7 @@ export function ProductionWorkbench() {
                         frames={frames}
                         canvas={canvas}
                         onChange={setCanvas}
+                        onOpenShot={openShotFromCanvas}
                       />
                     ),
                     prompts: <StoryboardPromptList scenes={scenes} prompts={prompts} onGenerate={() => void generatePromptsForShots(scenes.flatMap((scene) => scene.shots.map((shot) => shot.id ?? shot.clientId ?? "")))} />,

@@ -26,7 +26,7 @@
 - Modify `components/production/ProductionWorkbench.tsx`: pass the existing shot-opening callback without changing persistence or routing.
 - Create `tests/storyboard-canvas-helpers.test.mjs`: source-level contract checks for helper exports and backward-compatible state shape.
 - Modify `tests/contracts-v22/storyboard-canvas.test.mjs`: preserve old contract assertions and add infinite-canvas controls/actions.
-- Create `tests/storyboard-canvas-e2e.spec.ts`: browser coverage for opening canvas, pan/zoom, add note, fit view, and persistence wiring.
+- Modify `e2e/v22-unified-production-workbench.spec.ts`: browser coverage for opening canvas, pan/zoom, add note, fit view, and export controls using the repository's existing auth-gated fixture.
 
 ### Task 1: Add backward-compatible canvas model helpers
 
@@ -210,7 +210,7 @@ git commit -m "feat(canvas): add layout navigation and export actions"
 
 **Files:**
 
-- Create: `tests/storyboard-canvas-e2e.spec.ts`
+- Modify: `e2e/v22-unified-production-workbench.spec.ts`
 - Modify: `components/production/StoryboardCanvas.tsx`
 
 - [ ] **Step 1: Write the failing E2E scenarios**
@@ -219,16 +219,16 @@ Cover opening the existing storyboard canvas subview, adding a note, changing zo
 
 - [ ] **Step 2: Run the E2E file and verify the expected failure**
 
-Run: `pnpm exec playwright test tests/storyboard-canvas-e2e.spec.ts --project=chromium`  
+Run: `pnpm exec playwright test e2e/v22-unified-production-workbench.spec.ts --project=chromium`
 Expected: FAIL only where the new controls or behavior are not yet implemented.
 
 - [ ] **Step 3: Add final safeguards**
 
-Use a single animation frame for pointer-driven updates, cancel it on unmount, render only objects inside the padded viewport when the object count exceeds 250, and preserve a stable `data-testid="storyboard-canvas"` plus action test IDs for browser checks.
+Use a single animation frame for pointer-driven updates, cancel it on unmount, and preserve stable `data-testid` hooks for the canvas, world layer, and primary actions used by browser checks.
 
 - [ ] **Step 4: Run the E2E scenarios and full relevant checks**
 
-Run: `pnpm exec playwright test tests/storyboard-canvas-e2e.spec.ts --project=chromium`  
+Run: `pnpm exec playwright test e2e/v22-unified-production-workbench.spec.ts --project=chromium`
 Run: `node --test tests/contracts-v22/storyboard-canvas.test.mjs tests/storyboard-canvas-helpers.test.mjs`  
 Run: `npx tsc --noEmit`  
 Expected: 0 failures in the new focused tests and 0 TypeScript errors.
@@ -236,7 +236,7 @@ Expected: 0 failures in the new focused tests and 0 TypeScript errors.
 - [ ] **Step 5: Commit acceptance and safeguards**
 
 ```bash
-git add components/production/StoryboardCanvas.tsx tests/storyboard-canvas-e2e.spec.ts
+git add components/production/StoryboardCanvas.tsx e2e/v22-unified-production-workbench.spec.ts
 git commit -m "test(canvas): verify infinite director board"
 ```
 
