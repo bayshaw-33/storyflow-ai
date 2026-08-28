@@ -2512,11 +2512,32 @@ input:focus, textarea:focus, select:focus {
   font-size: 0.8rem; color: var(--ink-muted);
   text-decoration: line-through;
 }
+.kk-tier-fit {
+  width: 100%;
+  min-height: 34px;
+  margin: -6px 0 0;
+  color: var(--ink-secondary);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  text-align: center;
+}
 .kk-billing-toggle {
   display: flex;
   justify-content: center;
   gap: var(--space-4);
   margin: var(--space-6) auto var(--space-4);
+}
+.kk-pricing-clarity {
+  max-width: 760px;
+  margin: 0 auto var(--space-6);
+  padding: 10px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+  background: var(--glass-fill);
 }
 .kk-billing-option {
   padding: 6px 16px;

@@ -14,15 +14,16 @@ const tierCopy = {
   "en-US": {
     kicker: "Pricing",
     title: "Choose the room that matches your production rhythm.",
-    subtitle: "Paid tiers open Stripe Checkout when billing is configured.",
+    subtitle: "Paid tiers open Stripe Checkout when billing is available; no paid tier is granted silently.",
+    tierClarity: "ELITE and PRO may share the beta price, but they solve different problems: platform credits versus BYO API and workbench control.",
     select: "Choose tier",
     selected: "Current tier",
     signingIn: "Sign in to choose a tier.",
     saving: "Saving",
     redirecting: "Opening checkout",
     saved: "Plan updated.",
-    stagingSaved: "Your plan has been updated.",
     error: "Could not update your plan. Please try again.",
+    billingUnavailable: "Paid checkout is not available yet. No paid plan was activated.",
     checkoutError: "Could not open checkout. Please try again.",
     missingProfile: "Profile was not found for this account.",
     betaLabel: "Beta",
@@ -36,15 +37,16 @@ const tierCopy = {
   "zh-CN": {
     kicker: "定价",
     title: "选择与你创作节奏匹配的工作间。",
-    subtitle: "付费档位会在支付配置完成后打开 Stripe Checkout。",
+    subtitle: "付费档位通过 Stripe Checkout 开通；支付未开放时不会静默升级。",
+    tierClarity: "ELITE 和 PRO 可能处于相同公测价，但侧重点不同：ELITE 偏平台额度，PRO 偏自接 API 与工作台控制。",
     select: "选择档位",
     selected: "当前档位",
     signingIn: "请先登录后再选择档位。",
     saving: "保存中",
     redirecting: "正在打开支付",
     saved: "套餐已更新。",
-    stagingSaved: "套餐已更新。",
     error: "套餐更新失败，请重试。",
+    billingUnavailable: "付费支付尚未开放，本次没有开通付费套餐。",
     checkoutError: "支付页面打开失败，请重试。",
     missingProfile: "未找到当前账号的个人资料。",
     betaLabel: "公测价",
@@ -92,6 +94,13 @@ const MonetizationTier = memo(function MonetizationTier({
 
   const disabled = saving;
   const includes = isZh ? plan.includes : plan.includesEn || plan.includes;
+  const tierChoice = tier.id === "ELITE"
+    ? (isZh ? "适合：主要使用平台模型，需要更多 KK 额度。" : "Best for: platform models and higher KK credit volume.")
+    : tier.id === "PRO"
+      ? (isZh ? "适合：需要自接 API，并控制模块化工作台。" : "Best for: BYO API and modular workbench control.")
+      : tier.id === "ULTRA"
+        ? (isZh ? "适合：长期经营 IP 宇宙与完整生产链。" : "Best for: long-term IP universe and full production.")
+        : (isZh ? "适合：先体验核心创作流程。" : "Best for: trying the core creative flow.");
 
   return (
     <div
@@ -120,6 +129,7 @@ const MonetizationTier = memo(function MonetizationTier({
       <span className="kk-tier-name">{tier.id}</span>
       <h2>{plan.name}</h2>
       <p>{isZh ? plan.positioningZh : plan.positioning}</p>
+      <p className="kk-tier-fit">{tierChoice}</p>
 
       <div className="kk-tier-price">
         {!isFree && <span className="kk-tier-beta-label">{copy.betaLabel}</span>}
@@ -211,13 +221,15 @@ export function MonetizationLayer() {
           return;
         }
 
-        if (response.status !== 501 || payload?.code !== "BILLING_NOT_CONFIGURED") {
-          throw new Error(payload?.error || "checkout-error");
+        if (payload?.code === "BILLING_NOT_CONFIGURED") {
+          setMessage({ tone: "error", text: copy.billingUnavailable });
+          return;
         }
 
-        await updateProfilePlan(tier, user.id);
-        setMessage({ tone: "success", text: copy.stagingSaved });
-        return;
+        if (!response.ok) {
+          throw new Error(payload?.error || "checkout-error");
+        }
+        throw new Error(payload?.error || "checkout-error");
       }
 
       await updateProfilePlan(tier, user.id);
@@ -257,6 +269,8 @@ export function MonetizationLayer() {
           <span className="kk-billing-save">{copy.annualSave}</span>
         </button>
       </div>
+
+      <p className="kk-pricing-clarity">{copy.tierClarity}</p>
 
       {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
 
