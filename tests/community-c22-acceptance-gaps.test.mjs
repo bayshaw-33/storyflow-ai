@@ -12,6 +12,9 @@ import {
   getCommunityContentLabel,
   getPublicationObjectHref,
 } from "../lib/client/v2/community/view-model.ts";
+import { parseNotification } from "../lib/contracts/v2/comments.ts";
+import { sendNotification } from "../lib/server/v2/community/notifications.ts";
+import { listNotifications as listCollabNotifications } from "../lib/server/v2/collab/notifications.ts";
 
 const baseRow = {
   id: "pub-1",
@@ -72,8 +75,17 @@ test("COM20-CARD-004: legacy rows receive explicit non-claiming context fallback
   const projection = toCommunityFeedProjection(parsePublication(baseRow), null);
   assert.equal(projection.subjectType, "work");
   assert.equal(projection.sourceWorkbench, "作品工作台");
-  assert.equal(projection.rightsSummary, "权利状态待确认");
-  assert.equal(projection.contributionSummary, "AI / 人工贡献待标注");
+  assert.equal(projection.rightsSummary, "权利状态未声明");
+  assert.equal(projection.contributionSummary, "暂无贡献记录");
+});
+
+test("COM20-CARD-004: Work context resolves the concrete workbench label", () => {
+  const context = getPublicationContext({
+    source_type: "project",
+    source_id: "project-1",
+    work_type: "song",
+  });
+  assert.equal(context.sourceWorkbench, "歌曲工作台");
 });
 
 test("COM20-NAV-001: episode and scene publications link to the resolved Work", () => {
@@ -83,8 +95,10 @@ test("COM20-NAV-001: episode and scene publications link to the resolved Work", 
       sourceId: "episode-1",
       subjectType: "work",
       workId: "work-1",
+      projectId: "project-1",
+      workType: "script",
     }),
-    "/projects/work-1",
+    "/production?projectId=project-1&workId=work-1&tab=script",
   );
   assert.equal(
     getPublicationObjectHref({
@@ -92,8 +106,10 @@ test("COM20-NAV-001: episode and scene publications link to the resolved Work", 
       sourceId: "scene-1",
       subjectType: "work",
       workId: "work-1",
+      projectId: "project-1",
+      workType: "script",
     }),
-    "/projects/work-1",
+    "/production?projectId=project-1&workId=work-1&tab=script",
   );
 });
 
@@ -103,6 +119,9 @@ test("COM20-CARD-004: publication card renders the context summaries", async () 
   assert.match(source, /rightsSummary/);
   assert.match(source, /contributionSummary/);
   assert.match(source, /subjectType/);
+  assert.match(source, /权利状态未声明/);
+  assert.match(source, /暂无合法入口/);
+  assert.match(source, /disabled/);
 });
 
 test("COM20-NAV-001: feed resolves episode ownership to the real Work route", async () => {
@@ -110,14 +129,80 @@ test("COM20-NAV-001: feed resolves episode ownership to the real Work route", as
   const episodeRow = { ...baseRow, subject_type: "work" };
   const fetcher = async (url) => {
     calls.push(url);
-    if (url.includes("storyflow_episodes")) return [{ id: "episode-1", project_id: "work-1" }];
+    if (url.includes("storyflow_episodes")) return [{ id: "episode-1", project_id: "project-1" }];
+    if (url.includes("storyflow_works")) return [{ id: "work-1", project_id: "project-1", work_type: "script" }];
     return [episodeRow];
   };
 
   const [item] = await listCommunityFeed(fetcher, { section: "works" });
   assert.equal(item.workId, "work-1");
-  assert.equal(getPublicationObjectHref(item), "/projects/work-1");
+  assert.equal(item.projectId, "project-1");
+  assert.equal(item.workType, "script");
+  assert.equal(getPublicationObjectHref(item), "/production?projectId=project-1&workId=work-1&tab=script");
   assert.ok(calls.some((url) => url.includes("storyflow_episodes")));
+});
+
+test("COM20-API-007: notification exposes publication and source jump targets", () => {
+  const notification = parseNotification({
+    id: "event-1",
+    owner_id: "user-1",
+    event_type: "notification_comment",
+    actor_type: "user",
+    actor_id: "user-2",
+    payload: {
+      title: "新评论",
+      body: "有人评论了你的作品",
+      resource_type: "publication",
+      resource_id: "pub-1",
+      link_url: "/community/pub-1",
+      source_url: "/production?projectId=project-1&workId=work-1&tab=script",
+    },
+    created_at: "2026-08-28T00:00:00Z",
+    read_at: null,
+  });
+  assert.equal(notification.linkUrl, "/community/pub-1");
+  assert.equal(notification.sourceUrl, "/production?projectId=project-1&workId=work-1&tab=script");
+});
+
+test("COM20-API-007: sending a publication notification persists real jump targets", async () => {
+  let body = null;
+  const fetcher = async (_url, init) => {
+    body = JSON.parse(init.body);
+    return { id: "event-2" };
+  };
+  await sendNotification(fetcher, {
+    recipientId: "user-1",
+    type: "reaction",
+    actorId: "user-2",
+    title: "点赞",
+    body: "有人赞了你的作品",
+    resourceType: "publication",
+    resourceId: "pub-1",
+    sourceUrl: "/production?projectId=project-1&workId=work-1&tab=script",
+    idempotencyKey: "notify:reaction:pub-1:user-2",
+  });
+  assert.equal(body.payload.link_url, "/community/pub-1");
+  assert.equal(body.payload.source_url, "/production?projectId=project-1&workId=work-1&tab=script");
+});
+
+test("COM20-API-007: the active notification consumer forwards jump targets", async () => {
+  const items = await listCollabNotifications(async () => [{
+    id: "event-3",
+    owner_id: "user-1",
+    event_type: "notification:reaction",
+    payload: {
+      title: "点赞",
+      body: "有人赞了你的作品",
+      resource_type: "publication",
+      resource_id: "pub-1",
+      link_url: "/community/pub-1",
+      source_url: "/production?projectId=project-1&workId=work-1&tab=script",
+      read: false,
+    },
+    created_at: "2026-08-28T00:00:00Z",
+  }], "user-1");
+  assert.equal(items[0].linkUrl, "/community/pub-1");
+  assert.equal(items[0].sourceUrl, "/production?projectId=project-1&workId=work-1&tab=script");
 });
 
 test("COM20-CARD-004: migration adds publication context without changing source_type semantics", async () => {

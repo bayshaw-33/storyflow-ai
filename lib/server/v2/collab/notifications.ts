@@ -26,6 +26,8 @@ export async function sendNotification(
     body: string;
     resourceType?: string | null;
     resourceId?: string | null;
+    linkUrl?: string | null;
+    sourceUrl?: string | null;
     idempotencyKey: string;
   },
 ): Promise<{ sent: boolean; eventId: string | null }> {
@@ -48,6 +50,13 @@ export async function sendNotification(
 
   // 通过 Phase 1 RPC append_creative_event 写入事件流
   // 事件 payload 包含通知详情
+  const resourceType = params.resourceType ?? null;
+  const resourceId = params.resourceId ?? null;
+  const linkUrl =
+    params.linkUrl ??
+    (resourceType === "publication" && resourceId
+      ? `/community/${encodeURIComponent(resourceId)}`
+      : null);
   const result = await fetcher<{ p_inserted: boolean; p_event_id: string | null }>(
     `/rest/v1/rpc/append_creative_event`,
     {
@@ -59,8 +68,10 @@ export async function sendNotification(
         p_payload: {
           title: params.title,
           body: params.body,
-          resource_type: params.resourceType ?? null,
-          resource_id: params.resourceId ?? null,
+          resource_type: resourceType,
+          resource_id: resourceId,
+          link_url: linkUrl,
+          source_url: params.sourceUrl ?? null,
           read: false,
         },
         p_idempotency_key: params.idempotencyKey,
@@ -100,7 +111,7 @@ export async function listNotifications(
     id: string;
     owner_id: string;
     event_type: string;
-    payload: { title: string; body: string; resource_type: string | null; resource_id: string | null; read: boolean } | null;
+    payload: { title: string; body: string; resource_type: string | null; resource_id: string | null; link_url?: string | null; source_url?: string | null; read: boolean } | null;
     created_at: string;
   }>>(
     `/rest/v1/storyflow_creative_events?${params.toString()}`,
@@ -120,6 +131,8 @@ export async function listNotifications(
         ? r.payload.resource_type
         : null,
     resourceId: r.payload?.resource_id ?? null,
+    linkUrl: r.payload?.link_url ?? (r.payload?.resource_type === "publication" && r.payload?.resource_id ? `/community/${encodeURIComponent(r.payload.resource_id)}` : null),
+    sourceUrl: r.payload?.source_url ?? null,
     read: r.payload?.read ?? false,
     readAt: null,
     createdAt: r.created_at,
