@@ -11,8 +11,8 @@ type SearchParams = { scope?: string; project_id?: string };
 /**
  * /actors/purchased — 已购演员列表（SSR）
  *
- * 必须登录：未登录跳 /login。
- * SSR 拉首屏 12 条，客户端切 Tab / 加载更多走 /api/actors/purchased。
+ * 若服务端 cookie 可用则 SSR 拉首屏；若会话只存在浏览器 localStorage，交给客户端
+ * 再读一次 Supabase session，避免已登录用户被错误重定向到登录页。
  */
 export default async function PurchasedActorsPage({
   searchParams,
@@ -24,10 +24,6 @@ export default async function PurchasedActorsPage({
   }
 
   const viewer = await getViewerFromCookies();
-  if (!viewer) {
-    redirect("/login");
-  }
-
   const client = getSupabaseServerClient();
   if (!client) {
     redirect("/login");
@@ -41,7 +37,8 @@ export default async function PurchasedActorsPage({
   // lib 层签名：getPurchasedActors(serverClient, buyerId, cursor?, limit=12, scope?, projectId?)
   // scope 为 "all" 时不传（undefined），让 lib 返回全部
   const scopeParam = scope === "all" ? undefined : scope;
-  const result = await getPurchasedActors(client, viewer.id, null, 12, scopeParam, projectId).catch((error) => {
+  const result = viewer
+    ? await getPurchasedActors(client, viewer.id, null, 12, scopeParam, projectId).catch((error) => {
     // SSR 失败不阻塞页面：返回空列表 + 错误信息，客户端可重试
     console.error("[actors/purchased] SSR fetch failed:", error);
     return {
@@ -49,7 +46,8 @@ export default async function PurchasedActorsPage({
       nextCursor: null as string | null,
       hasMore: false,
     };
-  });
+    })
+    : { items: [] as PurchasedActorItem[], nextCursor: null as string | null, hasMore: false };
 
   const payload: InitialPurchasedPayload = {
     initialItems: result.items,
@@ -58,6 +56,7 @@ export default async function PurchasedActorsPage({
     total: result.items.length,
     initialScope: scope,
     initialProjectId: projectId,
+    initialAuthenticated: Boolean(viewer),
   };
 
   return <PurchasedActorsClient initial={payload} />;

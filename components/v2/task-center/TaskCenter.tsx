@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
   cancelJob,
@@ -172,6 +173,7 @@ export function TaskCenter() {
   const [jobs, setJobs] = useState<UnifiedJob[]>([]);
   const [stats, setStats] = useState<JobStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<string>("fixture");
   const [dimension, setDimension] = useState<GroupingDimension>("stage");
@@ -224,6 +226,7 @@ export function TaskCenter() {
       setJobs(result.jobs);
       setStats(result.stats);
       setSource(result.source);
+      setLastUpdatedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : isZh ? "加载任务列表失败。" : "Failed to load tasks.");
     } finally {
@@ -263,7 +266,7 @@ export function TaskCenter() {
           }
         } else {
           // real mode: PATCH /api/v2/jobs/:id with { action }
-          const response = await fetch(`/api/v2/jobs/${encodeURIComponent(job.id)}`, {
+          const response = await fetchWithAuthRetry(`/api/v2/jobs/${encodeURIComponent(job.id)}`, {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
@@ -376,6 +379,11 @@ export function TaskCenter() {
           </span>
           <span style={sourceBadgeStyle(source)}>
             {source === "fixture" ? (isZh ? "演示数据" : "Fixture") : (isZh ? "实时" : "Live")}
+          </span>
+          <span>
+            {lastUpdatedAt
+              ? `${isZh ? "最后更新" : "Last updated"} ${new Date(lastUpdatedAt).toLocaleTimeString(isZh ? "zh-CN" : "en-US")}`
+              : isZh ? "等待首次同步" : "Waiting for first sync"}
           </span>
           {USE_FIXTURE && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>

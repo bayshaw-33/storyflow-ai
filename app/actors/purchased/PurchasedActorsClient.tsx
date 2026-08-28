@@ -9,6 +9,8 @@ import { GrantTypeBadge } from "@/components/marketplace/GrantTypeBadge";
 import { actorLibraryCopy } from "@/components/actors/actor-copy";
 import { toActorCard } from "@/components/actors/actor-view-model";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import styles from "@/components/actors/actors.module.css";
 import purchasedStyles from "./purchased.module.css";
 import type { PurchasedActorItem } from "@/lib/supabase/marketplace-queries";
@@ -20,6 +22,7 @@ export type InitialPurchasedPayload = {
   total: number;
   initialScope: "all" | "global" | "project";
   initialProjectId: string | null;
+  initialAuthenticated: boolean;
 };
 
 type ScopeFilter = "all" | "global" | "project";
@@ -47,6 +50,9 @@ export function PurchasedActorsClient({ initial }: Props) {
   const [scope, setScope] = useState<ScopeFilter>(initial.initialScope);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "anonymous">(
+    initial.initialAuthenticated ? "authenticated" : "checking",
+  );
 
   // 切 Tab 时重置并重新拉取
   const reload = useCallback(
@@ -56,8 +62,11 @@ export function PurchasedActorsClient({ initial }: Props) {
       try {
         const params = new URLSearchParams({ limit: "12" });
         if (nextScope !== "all") params.set("scope", nextScope);
-        const response = await fetch(`/api/actors/purchased?${params.toString()}`, { credentials: "include" });
+        const response = await fetchWithAuthRetry(`/api/actors/purchased?${params.toString()}`, {
+          credentials: "include",
+        });
         const json = await response.json();
+        if (response.status === 401) setAuthState("anonymous");
         if (!response.ok || !json.success) {
           throw new Error(json.error || (isZh ? "加载失败" : "Failed to load"));
         }
@@ -84,6 +93,32 @@ export function PurchasedActorsClient({ initial }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope]);
 
+  // SSR 读不到 localStorage 会话时，由浏览器 Supabase 会话决定页面状态。
+  // 这样不会因为 cookie 缺失把已登录用户送回登录页，也不会把匿名用户误显示成空库。
+  useEffect(() => {
+    const client = getSupabaseBrowserClient();
+    if (!client) {
+      setAuthState(initial.initialAuthenticated ? "authenticated" : "anonymous");
+      return;
+    }
+    let active = true;
+    void client.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      const authenticated = Boolean(data.session?.access_token);
+      setAuthState(authenticated ? "authenticated" : "anonymous");
+      if (authenticated && !initial.initialAuthenticated) void reload(initial.initialScope);
+    }).catch(() => {
+      if (active) setAuthState("anonymous");
+    });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      if (active) setAuthState(session?.access_token ? "authenticated" : "anonymous");
+    });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [initial.initialAuthenticated, initial.initialScope, reload]);
+
   const loadMore = useCallback(async () => {
     if (!hasMore || loading || !cursor) return;
     setLoading(true);
@@ -91,8 +126,11 @@ export function PurchasedActorsClient({ initial }: Props) {
     try {
       const params = new URLSearchParams({ limit: "12", cursor });
       if (scope !== "all") params.set("scope", scope);
-      const response = await fetch(`/api/actors/purchased?${params.toString()}`, { credentials: "include" });
+      const response = await fetchWithAuthRetry(`/api/actors/purchased?${params.toString()}`, {
+        credentials: "include",
+      });
       const json = await response.json();
+      if (response.status === 401) setAuthState("anonymous");
       if (!response.ok || !json.success) {
         throw new Error(json.error || (isZh ? "加载失败" : "Failed to load"));
       }
@@ -120,7 +158,7 @@ export function PurchasedActorsClient({ initial }: Props) {
     [items],
   );
 
-  const showEmpty = !loading && items.length === 0;
+  const showEmpty = authState !== "checking" && !loading && items.length === 0;
 
   return (
     <main className={styles.page}>
@@ -164,7 +202,19 @@ export function PurchasedActorsClient({ initial }: Props) {
 
       {error ? <div className={styles.noticeBar} role="alert">{error}</div> : null}
 
-      {showEmpty ? (
+      {authState === "checking" && items.length === 0 ? (
+        <section className={styles.statePanel} aria-busy="true">
+          <LoaderCircle className={styles.spin} size={22} />
+          <h2>{isZh ? "正在确认登录状态…" : "Checking sign-in status…"}</h2>
+        </section>
+      ) : authState === "anonymous" ? (
+        <section className={styles.statePanel}>
+          <PackageOpen size={22} color="#8f999b" />
+          <h2>{isZh ? "请先登录查看已购演员" : "Sign in to view your actors"}</h2>
+          <p>{isZh ? "登录后，你购买或领取的演员会显示在这里。" : "Your purchased and claimed actors will appear here after sign-in."}</p>
+          <Link className={styles.primaryBtn} href="/login?next=/actors/purchased">{isZh ? "登录" : "Sign in"}</Link>
+        </section>
+      ) : showEmpty ? (
         <section className={styles.statePanel}>
           <PackageOpen size={22} color="#8f999b" />
           <h2>{t("purchased.empty")}</h2>

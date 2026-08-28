@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles } from "lucide-react";
 import type { PublicationProjection } from "@/lib/contracts/v2/community";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -17,6 +17,7 @@ interface FeedResponse {
   success?: boolean;
   items?: PublicationProjection[];
   error?: string;
+  correlationId?: string;
 }
 
 /**
@@ -36,6 +37,28 @@ export function DiscoveryFeed({ initialItems, loadError }: DiscoveryFeedProps) {
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(initialItems.length >= 20);
   const offsetRef = useRef(initialItems.length);
+
+  async function reloadFeed() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v2/community/discover?limit=20&offset=0", {
+        credentials: "include",
+      });
+      const json = (await res.json().catch(() => ({}))) as FeedResponse;
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || (isZh ? "加载失败" : "Failed to load"));
+      }
+      const next = json.items ?? [];
+      setItems(next);
+      offsetRef.current = next.length;
+      setHasMore(next.length >= 20);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // 加载当前 viewer (匿名则 null)
   // P0-01 修复：原实现裸 fetch /api/v2/kk（无 Bearer，Bearer-only 鉴权下恒失败），
@@ -99,6 +122,15 @@ export function DiscoveryFeed({ initialItems, loadError }: DiscoveryFeedProps) {
       {error ? (
         <div className={styles.feedError} role="alert">
           {error}
+          <button
+            type="button"
+            className={styles.loadMoreBtn}
+            onClick={() => void reloadFeed()}
+            disabled={loading}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            {loading ? isZh ? "重新加载中…" : "Reloading…" : isZh ? "重新加载" : "Reload"}
+          </button>
         </div>
       ) : null}
 

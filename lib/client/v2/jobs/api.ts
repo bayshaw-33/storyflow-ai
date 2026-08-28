@@ -14,6 +14,7 @@
  */
 import { computeStats } from "./grouping.ts";
 import { CONTRACT_VERSION, type JobAction, type JobFilters, type JobStats, type UnifiedJob } from "./types.ts";
+import { defaultAuthFetchDeps, fetchWithAuthRetry } from "../auth-fetch.ts";
 
 /** 是否使用 fixture 演示数据（生产环境 fail-closed） */
 export const USE_FIXTURE =
@@ -131,6 +132,36 @@ function buildHeaders(token: string | null): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+function jobsAuthFetch(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  accessToken: string | null,
+): Promise<Response> {
+  return fetchWithAuthRetry(input, init, {
+    ...defaultAuthFetchDeps,
+    fetcher: (request, requestInit) => defaultAuthFetchDeps.fetcher(request, {
+      ...requestInit,
+      // Keep the adapter's historical plain-object header shape for callers
+      // that inspect requests, while fetchWithAuthRetry still owns refreshes.
+      headers: toPlainHeaders(requestInit?.headers),
+    }),
+    // Prefer the browser's current session when available; the explicit token
+    // remains a fallback for callers and tests that already hold a session.
+    getAccessToken: async () => (await defaultAuthFetchDeps.getAccessToken()) ?? accessToken,
+  });
+}
+
+function toPlainHeaders(input: HeadersInit | undefined): Record<string, string> {
+  const headers = new Headers(input);
+  const result: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    if (key === "authorization") result.Authorization = value;
+    else if (key === "content-type") result["Content-Type"] = value;
+    else result[key] = value;
+  });
+  return result;
 }
 
 function applyFilters(jobs: UnifiedJob[], filters?: JobFilters): UnifiedJob[] {
@@ -352,10 +383,10 @@ export async function fetchJobs(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await jobsAuthFetch(url, {
       method: "GET",
       headers: buildHeaders(accessToken),
-    });
+    }, accessToken);
   } catch (err) {
     throw new JobsApiError(
       err instanceof Error ? `网络错误：${err.message}` : "加载任务列表失败，网络异常。",
@@ -401,11 +432,11 @@ async function transitionJobRequest(
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}/${encodeURIComponent(jobId)}`, {
+    response = await jobsAuthFetch(`${API_BASE}/${encodeURIComponent(jobId)}`, {
       method: "PATCH",
       headers: buildHeaders(accessToken),
       body: JSON.stringify({ action }),
-    });
+    }, accessToken);
   } catch (err) {
     throw new JobsApiError(
       err instanceof Error ? `网络错误：${err.message}` : failureMessage,

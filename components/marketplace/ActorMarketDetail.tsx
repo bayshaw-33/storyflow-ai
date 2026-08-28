@@ -13,6 +13,7 @@ import {
   Ban,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import type {
   ActorStats,
   BuyerStatus,
@@ -120,7 +121,7 @@ export function ActorMarketDetail({
     setDialogError(null);
     try {
       const projectId = selectedProjectId || null;
-      const response = await fetch(`/api/actors/${actor.id}/purchase`, {
+      const response = await fetchWithAuthRetry(`/api/actors/${actor.id}/purchase`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -148,7 +149,7 @@ export function ActorMarketDetail({
     setDialogError(null);
     try {
       const projectId = preview.grant_type === "project" ? preview.project_id : null;
-      const response = await fetch(`/api/actors/${actor.id}/purchase`, {
+      const response = await fetchWithAuthRetry(`/api/actors/${actor.id}/purchase`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",

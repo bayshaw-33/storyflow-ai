@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getViewerFromCookies, getSupabaseServerClient, hasServiceRoleConfig } from "@/lib/supabase/server";
+import { getViewerFromRequest, getSupabaseServerClient, hasServiceRoleConfig } from "@/lib/supabase/server";
 import { getActorMarketDetail } from "@/lib/supabase/marketplace-queries";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * 公开，返回演员市场详情（演员信息+价格+销量+创作者+买家购买状态）。
  * 未登录 viewerId=null；已登录从 cookie 解析 viewerId。
  */
-export async function GET(_request: NextRequest, context: { params: Promise<{ actorId: string }> }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ actorId: string }> }) {
   try {
     if (!hasServiceRoleConfig()) {
       return NextResponse.json({ success: false, error: "服务端缺少 SUPABASE_SERVICE_ROLE_KEY 配置。" }, { status: 503 });
@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ ac
     }
 
     const { actorId } = await context.params;
-    const viewer = await getViewerFromCookies();
+    const viewer = await getViewerFromRequest(request);
     const detail = await getActorMarketDetail(client, actorId, viewer?.id ?? null);
 
     if (!detail) {

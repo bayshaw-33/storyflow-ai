@@ -36,6 +36,7 @@ import { selectReferenceSheetImages } from "@/components/actors/reference-sheet-
 import { useActorSession } from "@/components/actors/use-actor-session";
 import styles from "@/components/actors/actors.module.css";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import type { ActorProfile } from "@/lib/actors";
 
 // 演员详情页：
@@ -180,7 +181,7 @@ export default function ActorDetailPage() {
       try {
         const headers: Record<string, string> = {};
         if (token) headers.Authorization = `Bearer ${token}`;
-        const response = await fetch(`/api/actors/${encodeURIComponent(actorId)}/market`, { headers });
+        const response = await fetchWithAuthRetry(`/api/actors/${encodeURIComponent(actorId)}/market`, { headers });
         if (!response.ok) return;
         const json = await response.json();
         if (!active) return;
