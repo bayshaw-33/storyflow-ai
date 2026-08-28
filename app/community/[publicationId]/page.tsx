@@ -64,8 +64,8 @@ export default async function CommunityPublicationPage({
             )}
             <div className={styles.detailContextSummary}>
               <span>来源工作台 · {detail.context.sourceWorkbench}</span>
-              <span>权利 · {detail.context.rightsSummary}</span>
-              <span>贡献 · {detail.context.contributionSummary}</span>
+              <span>权利 · {detail.context.rightsSummary || "权利状态未声明"}</span>
+              <span>贡献 · {detail.context.contributionSummary || "暂无贡献记录"}</span>
             </div>
           </div>
         </div>

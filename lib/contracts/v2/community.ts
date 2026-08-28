@@ -104,7 +104,9 @@ export interface PublicationRow {
   readonly source_workbench?: string | null;
   readonly rights_summary?: string | null;
   readonly contribution_summary?: string | null;
+  readonly project_id?: string | null;
   readonly work_id?: string | null;
+  readonly work_type?: string | null;
   readonly universe_id?: string | null;
 }
 
@@ -124,6 +126,8 @@ export interface CreatePublicationInput {
   readonly rightsSummary?: string | null;
   readonly contributionSummary?: string | null;
   readonly workId?: string | null;
+  readonly projectId?: string | null;
+  readonly workType?: string | null;
   readonly universeId?: string | null;
   readonly idempotencyKey: string;
 }
@@ -161,7 +165,9 @@ export interface CommunityFeedProjection extends PublicationProjection {
   readonly sourceWorkbench: string;
   readonly rightsSummary: string;
   readonly contributionSummary: string;
+  readonly projectId: string | null;
   readonly workId: string | null;
+  readonly workType: string | null;
   readonly universeId: string | null;
   readonly allowedActions: ReadonlyArray<string>;
 }
@@ -171,7 +177,9 @@ export interface CommunityPublicationContext {
   readonly sourceWorkbench: string;
   readonly rightsSummary: string;
   readonly contributionSummary: string;
+  readonly projectId: string | null;
   readonly workId: string | null;
+  readonly workType: string | null;
   readonly universeId: string | null;
 }
 
@@ -454,14 +462,14 @@ export function getPublicationSubjectType(sourceType: PublicationSourceType): Pu
 
 /**
  * 将旧发布记录和新上下文记录统一成公开卡片需要的语义上下文。
- * 缺失的权利/贡献信息使用明确的待确认文案，避免把空白误认为已授权。
+ * 缺失的权利/贡献信息使用明确的未声明/无记录文案，避免把空白误认为已授权。
  */
 export function getPublicationContext(
   row: Pick<PublicationRow, "source_type"> &
     Partial<
       Pick<
         PublicationRow,
-        "source_id" | "subject_type" | "source_workbench" | "rights_summary" | "contribution_summary" | "work_id" | "universe_id"
+        "source_id" | "subject_type" | "source_workbench" | "rights_summary" | "contribution_summary" | "project_id" | "work_id" | "work_type" | "universe_id"
       >
     >,
 ): CommunityPublicationContext {
@@ -469,14 +477,16 @@ export function getPublicationContext(
   const subjectType = isPublicationSubject(String(row.subject_type ?? ""))
     ? (row.subject_type as PublicationSubject)
     : getPublicationSubjectType(sourceType);
-  const defaultWorkId = sourceType === "project" ? nonEmpty(row.work_id) ?? nonEmpty(row.source_id) : null;
+  const projectId = nonEmpty(row.project_id) ?? (sourceType === "project" ? nonEmpty(row.source_id) : null);
 
   return Object.freeze({
     subjectType,
-    sourceWorkbench: nonEmpty(row.source_workbench) ?? defaultSourceWorkbench(sourceType),
-    rightsSummary: nonEmpty(row.rights_summary) ?? "权利状态待确认",
-    contributionSummary: nonEmpty(row.contribution_summary) ?? "AI / 人工贡献待标注",
-    workId: nonEmpty(row.work_id) ?? defaultWorkId,
+    sourceWorkbench: nonEmpty(row.source_workbench) ?? defaultSourceWorkbench(sourceType, row.work_type),
+    rightsSummary: nonEmpty(row.rights_summary) ?? "权利状态未声明",
+    contributionSummary: nonEmpty(row.contribution_summary) ?? "暂无贡献记录",
+    projectId,
+    workId: nonEmpty(row.work_id),
+    workType: nonEmpty(row.work_type),
     universeId: nonEmpty(row.universe_id),
   });
 }
@@ -486,10 +496,17 @@ function nonEmpty(value: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
-function defaultSourceWorkbench(sourceType: PublicationSourceType): string {
+function defaultSourceWorkbench(sourceType: PublicationSourceType, workType?: string | null): string {
   if (sourceType === "universe") return "Universe 工作台";
   if (sourceType === "actor") return "演员市场";
   if (sourceType === "asset") return "素材市场";
+  if (workType === "script") return "剧本工作台";
+  if (workType === "song") return "歌曲工作台";
+  if (workType === "art") return "美术工作台";
+  if (workType === "storyboard") return "分镜工作台";
+  if (workType === "video") return "视频工作台";
+  if (workType === "voice") return "配音工作台";
+  if (workType === "editing") return "剪辑工作台";
   return "作品工作台";
 }
 
@@ -510,7 +527,9 @@ export function toCommunityFeedProjection(
     sourceWorkbench: context.sourceWorkbench,
     rightsSummary: context.rightsSummary,
     contributionSummary: context.contributionSummary,
+    projectId: context.projectId,
     workId: context.workId,
+    workType: context.workType,
     universeId: context.universeId,
     allowedActions: computeAllowedActions(pub, viewerId),
   });

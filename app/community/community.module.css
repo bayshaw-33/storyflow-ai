@@ -431,6 +431,20 @@
   color: #d3fffb;
 }
 
+.sourceDisabled {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: not-allowed;
+}
+
 .sourceMarker {
   width: 6px;
   height: 6px;

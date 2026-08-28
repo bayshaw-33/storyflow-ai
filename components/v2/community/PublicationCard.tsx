@@ -33,6 +33,8 @@ export function PublicationCard({ publication, viewerId }: PublicationCardProps)
   const kind = getCommunityContentKind(publication.subjectType);
   const detailHref = getPublicationDetailHref(publication.id);
   const objectHref = getPublicationObjectHref(publication);
+  const rightsSummary = publication.rightsSummary || "权利状态未声明";
+  const contributionSummary = publication.contributionSummary || "暂无贡献记录";
   const allowedActions = publication.allowedActions;
   const canInteract = Boolean(viewerId);
 
@@ -150,11 +152,11 @@ export function PublicationCard({ publication, viewerId }: PublicationCardProps)
           </div>
           <div className={styles.cardContextItem}>
             <dt>{isZh ? "权利摘要" : "Rights"}</dt>
-            <dd>{publication.rightsSummary}</dd>
+            <dd>{rightsSummary}</dd>
           </div>
           <div className={styles.cardContextItemWide}>
             <dt>{isZh ? "贡献摘要" : "Contribution"}</dt>
-            <dd>{publication.contributionSummary}</dd>
+            <dd>{contributionSummary}</dd>
           </div>
         </dl>
 
@@ -167,10 +169,15 @@ export function PublicationCard({ publication, viewerId }: PublicationCardProps)
               <ArrowUpRight size={13} />
             </Link>
           ) : (
-            <span>
-              {isZh ? "源对象暂不可跳转" : "Source object is not directly openable"}
+            <button
+              type="button"
+              className={styles.sourceDisabled}
+              disabled
+              title={sourceDisabledReason(publication, isZh)}
+            >
+              {isZh ? "暂无合法入口" : "No valid source route"}
               {publication.sourceVersion ? ` · ${publication.sourceVersion}` : ""}
-            </span>
+            </button>
           )}
         </div>
 
@@ -221,6 +228,13 @@ function sourceLabel(sourceType: CommunityFeedProjection["sourceType"], isZh: bo
   if (sourceType === "actor") return isZh ? "演员市场" : "Actor market";
   if (sourceType === "asset") return isZh ? "资产市场" : "Asset market";
   return isZh ? "来源作品" : "Source work";
+}
+
+function sourceDisabledReason(publication: CommunityFeedProjection, isZh: boolean): string {
+  if (publication.subjectType === "milestone" || publication.subjectType === "kk_showcase") {
+    return isZh ? "该内容类型暂未建立公开源对象入口。" : "This content type has no public source route yet.";
+  }
+  return isZh ? "缺少真实 Work 上下文，暂不生成跳转。" : "The real Work context is unavailable, so navigation is disabled.";
 }
 
 function formatDate(value: string, locale: Locale): string {
