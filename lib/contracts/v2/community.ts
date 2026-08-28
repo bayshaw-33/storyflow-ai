@@ -24,6 +24,21 @@ export const PUBLICATION_SOURCE_TYPES = [
 ] as const;
 export type PublicationSourceType = (typeof PUBLICATION_SOURCE_TYPES)[number];
 
+/**
+ * 产品层的公开内容分类。它和数据库 source_type 有意分离：
+ * project/episode/scene 都是真实的作品来源，而 milestone/kk_showcase
+ * 是发布投影的语义分类，不应被伪装成数据库资源类型。
+ */
+export const PUBLICATION_SUBJECT_TYPES = [
+  "work",
+  "universe",
+  "actor",
+  "asset",
+  "milestone",
+  "kk_showcase",
+] as const;
+export type PublicationSubject = (typeof PUBLICATION_SUBJECT_TYPES)[number];
+
 export const VISIBILITY = ["public", "invite_only", "hidden"] as const;
 export type Visibility = (typeof VISIBILITY)[number];
 
@@ -84,6 +99,13 @@ export interface PublicationRow {
   readonly reaction_count: number;
   readonly bookmark_count: number;
   readonly comment_count: number;
+  /** K22 card context; optional for rows created before the context migration. */
+  readonly subject_type?: PublicationSubject | string | null;
+  readonly source_workbench?: string | null;
+  readonly rights_summary?: string | null;
+  readonly contribution_summary?: string | null;
+  readonly work_id?: string | null;
+  readonly universe_id?: string | null;
 }
 
 export interface CreatePublicationInput {
@@ -97,6 +119,12 @@ export interface CreatePublicationInput {
   readonly coverUrl?: string | null;
   readonly visibility?: Visibility;
   readonly inviteTokenHash?: string | null;
+  readonly subjectType?: PublicationSubject | null;
+  readonly sourceWorkbench?: string | null;
+  readonly rightsSummary?: string | null;
+  readonly contributionSummary?: string | null;
+  readonly workId?: string | null;
+  readonly universeId?: string | null;
   readonly idempotencyKey: string;
 }
 
@@ -115,6 +143,36 @@ export interface PublicationProjection {
   readonly reactionCount: number;
   readonly bookmarkCount: number;
   readonly commentCount: number;
+}
+
+/**
+ * C0 社区卡片投影：保留 discovery projection 的公开字段，并增加可用于
+ * 对象识别和真实跳转的源引用。这里不包含 storage path、invite token 或
+ * moderation 私有字段。
+ */
+export type CommunityContentKind = PublicationSubject;
+
+export interface CommunityFeedProjection extends PublicationProjection {
+  readonly sourceType: PublicationSourceType;
+  readonly sourceId: string;
+  readonly sourceVersion: string | null;
+  readonly contentKind: CommunityContentKind;
+  readonly subjectType: PublicationSubject;
+  readonly sourceWorkbench: string;
+  readonly rightsSummary: string;
+  readonly contributionSummary: string;
+  readonly workId: string | null;
+  readonly universeId: string | null;
+  readonly allowedActions: ReadonlyArray<string>;
+}
+
+export interface CommunityPublicationContext {
+  readonly subjectType: PublicationSubject;
+  readonly sourceWorkbench: string;
+  readonly rightsSummary: string;
+  readonly contributionSummary: string;
+  readonly workId: string | null;
+  readonly universeId: string | null;
 }
 
 // ============================================================
@@ -194,6 +252,10 @@ export function isPublicationSourceType(v: string): v is PublicationSourceType {
   return PUBLICATION_SOURCE_TYPES.includes(v as PublicationSourceType);
 }
 
+export function isPublicationSubject(v: string): v is PublicationSubject {
+  return PUBLICATION_SUBJECT_TYPES.includes(v as PublicationSubject);
+}
+
 export function isVisibility(v: string): v is Visibility {
   return VISIBILITY.includes(v as Visibility);
 }
@@ -234,6 +296,13 @@ export function validateCreatePublication(input: CreatePublicationInput): Create
   }
   if (input.summary && input.summary.length > 2000) {
     throw new CommunityValidationError("summary_too_long", "summary must be <= 2000 chars", "summary");
+  }
+  if (input.subjectType && !isPublicationSubject(input.subjectType)) {
+    throw new CommunityValidationError(
+      "invalid_subject_type",
+      `subjectType must be one of ${PUBLICATION_SUBJECT_TYPES.join(", ")}`,
+      "subjectType",
+    );
   }
   if (input.visibility && !isVisibility(input.visibility)) {
     throw new CommunityValidationError(
@@ -370,4 +439,79 @@ export function computeAllowedActions(
   }
 
   return Object.freeze(actions);
+}
+
+export function getPublicationContentKind(sourceType: PublicationSourceType): CommunityContentKind {
+  if (sourceType === "universe") return "universe";
+  if (sourceType === "actor") return "actor";
+  if (sourceType === "asset") return "asset";
+  return "work";
+}
+
+export function getPublicationSubjectType(sourceType: PublicationSourceType): PublicationSubject {
+  return getPublicationContentKind(sourceType);
+}
+
+/**
+ * 将旧发布记录和新上下文记录统一成公开卡片需要的语义上下文。
+ * 缺失的权利/贡献信息使用明确的待确认文案，避免把空白误认为已授权。
+ */
+export function getPublicationContext(
+  row: Pick<PublicationRow, "source_type"> &
+    Partial<
+      Pick<
+        PublicationRow,
+        "source_id" | "subject_type" | "source_workbench" | "rights_summary" | "contribution_summary" | "work_id" | "universe_id"
+      >
+    >,
+): CommunityPublicationContext {
+  const sourceType = row.source_type;
+  const subjectType = isPublicationSubject(String(row.subject_type ?? ""))
+    ? (row.subject_type as PublicationSubject)
+    : getPublicationSubjectType(sourceType);
+  const defaultWorkId = sourceType === "project" ? nonEmpty(row.work_id) ?? nonEmpty(row.source_id) : null;
+
+  return Object.freeze({
+    subjectType,
+    sourceWorkbench: nonEmpty(row.source_workbench) ?? defaultSourceWorkbench(sourceType),
+    rightsSummary: nonEmpty(row.rights_summary) ?? "权利状态待确认",
+    contributionSummary: nonEmpty(row.contribution_summary) ?? "AI / 人工贡献待标注",
+    workId: nonEmpty(row.work_id) ?? defaultWorkId,
+    universeId: nonEmpty(row.universe_id),
+  });
+}
+
+function nonEmpty(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function defaultSourceWorkbench(sourceType: PublicationSourceType): string {
+  if (sourceType === "universe") return "Universe 工作台";
+  if (sourceType === "actor") return "演员市场";
+  if (sourceType === "asset") return "素材市场";
+  return "作品工作台";
+}
+
+/** C0：Feed 卡片使用的公开对象上下文投影。 */
+export function toCommunityFeedProjection(
+  pub: Publication,
+  viewerId: string | null = null,
+  context: CommunityPublicationContext = getPublicationContext({ source_type: pub.sourceType, source_id: pub.sourceId }),
+): CommunityFeedProjection {
+  const projection = toProjection(pub);
+  return Object.freeze({
+    ...projection,
+    sourceType: pub.sourceType,
+    sourceId: pub.sourceId,
+    sourceVersion: pub.sourceVersion,
+    contentKind: context.subjectType,
+    subjectType: context.subjectType,
+    sourceWorkbench: context.sourceWorkbench,
+    rightsSummary: context.rightsSummary,
+    contributionSummary: context.contributionSummary,
+    workId: context.workId,
+    universeId: context.universeId,
+    allowedActions: computeAllowedActions(pub, viewerId),
+  });
 }

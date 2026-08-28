@@ -1,50 +1,64 @@
 "use client";
 
-import { Bookmark, Heart, MessageCircle, Users } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowUpRight,
+  Bookmark,
+  Heart,
+  MessageCircle,
+  Music2,
+  Users,
+} from "lucide-react";
 import { useState } from "react";
-import type { PublicationProjection } from "@/lib/contracts/v2/community";
+import type { Locale } from "@/lib/i18n/dictionaries";
+import type { CommunityFeedProjection } from "@/lib/contracts/v2/community";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
+import {
+  getCommunityContentKind,
+  getCommunityContentLabel,
+  getPublicationDetailHref,
+  getPublicationObjectHref,
+} from "@/lib/client/v2/community/view-model";
 import { useI18n } from "@/lib/i18n/useI18n";
 import styles from "@/app/community/community.module.css";
 
 interface PublicationCardProps {
-  publication: PublicationProjection;
-  /** 当前查看者 ID（匿名则 null，CM-009 权限矩阵） */
+  publication: CommunityFeedProjection;
   viewerId: string | null;
 }
 
-/**
- * Publication 卡片 (Phase 5, CM-005)
- *
- * - CM-005: 展示来源类型/ID、owner、互动计数和允许动作
- * - 不暴露私有 storage path 或敏感信息
- * - CM-003: 关注/反应/收藏幂等 toggle
- * - CM-009: 匿名只读，认证用户可互动
- */
 export function PublicationCard({ publication, viewerId }: PublicationCardProps) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
+  const kind = getCommunityContentKind(publication.subjectType);
+  const detailHref = getPublicationDetailHref(publication.id);
+  const objectHref = getPublicationObjectHref(publication);
+  const allowedActions = publication.allowedActions;
+  const canInteract = Boolean(viewerId);
 
-  const [following, setFollowing] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
+  const [following, setFollowing] = useState(allowedActions.includes("unfollow"));
+  const [bookmarked, setBookmarked] = useState(allowedActions.includes("remove_bookmark"));
   const [reacted, setReacted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const canInteract = Boolean(viewerId);
 
   async function callToggle(endpoint: string, body: Record<string, unknown>) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(endpoint, {
+      const response = await fetchWithAuthRetry(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        credentials: "include",
       });
-      const json = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; code?: string };
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || (isZh ? "操作失败" : "Action failed"));
+      const json = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        following?: boolean;
+        reacted?: boolean;
+        bookmarked?: boolean;
+      };
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || (isZh ? "操作失败，请重试。" : "Action failed. Please retry."));
       }
       return json;
     } finally {
@@ -53,136 +67,169 @@ export function PublicationCard({ publication, viewerId }: PublicationCardProps)
   }
 
   async function onToggleFollow() {
-    if (!canInteract) return;
+    if (!canInteract || !allowedActions.some((action) => action === "follow" || action === "unfollow")) return;
     try {
-      const json = (await callToggle("/api/v2/community/follows", {
+      const json = await callToggle("/api/v2/community/follows", {
         targetType: "publication",
         targetId: publication.id,
-      })) as { following?: boolean };
+      });
       setFollowing(json.following === true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : isZh ? "关注失败。" : "Follow failed.");
     }
   }
 
   async function onToggleReaction() {
-    if (!canInteract) return;
+    if (!canInteract || !allowedActions.includes("react")) return;
     try {
-      const json = (await callToggle("/api/v2/community/reactions", {
+      const json = await callToggle("/api/v2/community/reactions", {
         publicationId: publication.id,
         reactionType: "like",
-      })) as { reacted?: boolean };
+      });
       setReacted(json.reacted === true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : isZh ? "反应失败。" : "Reaction failed.");
     }
   }
 
   async function onToggleBookmark() {
-    if (!canInteract) return;
+    if (!canInteract || !allowedActions.some((action) => action === "bookmark" || action === "remove_bookmark")) return;
     try {
-      const json = (await callToggle("/api/v2/community/bookmarks", {
+      const json = await callToggle("/api/v2/community/bookmarks", {
         publicationId: publication.id,
-      })) as { bookmarked?: boolean };
+      });
       setBookmarked(json.bookmarked === true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : isZh ? "收藏失败。" : "Save failed.");
     }
   }
 
   return (
-    <article className={styles.card}>
-      <div className={styles.cardCover}>
-        {publication.coverUrl ? (
-          // CM-005: cover_url 是发布者公开的封面，非私有 storage path
-          <img
-            className={styles.cardCoverImg}
-            src={publication.coverUrl}
-            alt={publication.title}
-            loading="lazy"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ) : (
-          <span>{isZh ? "无封面" : "No cover"}</span>
-        )}
+    <article className={styles.publicationCard} data-publication-id={publication.id}>
+      <div className={styles.cardMedia}>
+        <Link
+          href={detailHref}
+          className={styles.cardMediaLink}
+          aria-label={isZh ? `查看 ${publication.title}` : `View ${publication.title}`}
+        >
+          {publication.coverUrl ? (
+            <img
+              className={styles.cardCoverImg}
+              src={publication.coverUrl}
+              alt={publication.title}
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          ) : (
+            <div className={styles.coverFallback} aria-hidden="true">
+              <Music2 size={24} strokeWidth={1.5} />
+              <span>{isZh ? "待展开" : "Open this work"}</span>
+            </div>
+          )}
+          <span className={styles.cardKindBadge}>{getCommunityContentLabel(kind, locale)}</span>
+        </Link>
       </div>
 
       <div className={styles.cardBody}>
-        <h3 className={styles.cardTitle}>{publication.title}</h3>
-        {publication.summary ? (
-          <p className={styles.cardSummary}>{publication.summary}</p>
-        ) : null}
+        <div className={styles.cardEyebrow}>
+          <span>{isZh ? "公开版本" : "Public version"}</span>
+          <time dateTime={publication.createdAt}>{formatDate(publication.createdAt, locale)}</time>
+        </div>
 
-        {/* CM-005: 互动计数 */}
-        <div className={styles.cardMeta}>
-          <span className={styles.metaItem}>
-            <Users size={11} />
-            {publication.followCount}
+        <h2 className={styles.cardTitle}>
+          <Link href={detailHref}>{publication.title}</Link>
+        </h2>
+        {publication.summary ? <p className={styles.cardSummary}>{publication.summary}</p> : null}
+
+        <dl className={styles.cardContext} aria-label={isZh ? "作品上下文" : "Publication context"}>
+          <div className={styles.cardContextItem}>
+            <dt>{isZh ? "来源工作台" : "Workbench"}</dt>
+            <dd>{publication.sourceWorkbench}</dd>
+          </div>
+          <div className={styles.cardContextItem}>
+            <dt>{isZh ? "权利摘要" : "Rights"}</dt>
+            <dd>{publication.rightsSummary}</dd>
+          </div>
+          <div className={styles.cardContextItemWide}>
+            <dt>{isZh ? "贡献摘要" : "Contribution"}</dt>
+            <dd>{publication.contributionSummary}</dd>
+          </div>
+        </dl>
+
+        <div className={styles.sourceLine}>
+          <span className={styles.sourceMarker} aria-hidden="true" />
+          {objectHref ? (
+            <Link href={objectHref} className={styles.sourceLink}>
+              {sourceLabel(publication.sourceType, isZh)}
+              {publication.sourceVersion ? ` · ${publication.sourceVersion}` : ""}
+              <ArrowUpRight size={13} />
+            </Link>
+          ) : (
+            <span>
+              {isZh ? "源对象暂不可跳转" : "Source object is not directly openable"}
+              {publication.sourceVersion ? ` · ${publication.sourceVersion}` : ""}
+            </span>
+          )}
+        </div>
+
+        <div className={styles.creatorLine}>
+          <span className={styles.creatorAvatar} aria-hidden="true">
+            {publication.publisherId.slice(0, 1).toUpperCase()}
           </span>
-          <span className={styles.metaItem}>
-            <Heart size={11} />
-            {publication.reactionCount}
-          </span>
-          <span className={styles.metaItem}>
-            <Bookmark size={11} />
-            {publication.bookmarkCount}
-          </span>
-          <span className={styles.metaItem}>
-            <MessageCircle size={11} />
-            {publication.commentCount}
-          </span>
+          <span>{isZh ? "创作者" : "Creator"}</span>
+          <strong>{publication.publisherId.slice(0, 8)}</strong>
         </div>
       </div>
 
-      {/* CM-009 权限矩阵: 匿名只读提示；认证用户可互动 */}
-      {canInteract ? (
-        <div className={styles.actions}>
-          <button
-            type="button"
-            className={`${styles.actionBtn} ${following ? styles.actionBtnActive : ""}`}
-            onClick={onToggleFollow}
-            disabled={busy}
-            aria-pressed={following}
-          >
-            <Users size={12} />
-            {following ? (isZh ? "已关注" : "Following") : isZh ? "关注" : "Follow"}
-          </button>
-          <button
-            type="button"
-            className={`${styles.actionBtn} ${reacted ? styles.actionBtnActive : ""}`}
-            onClick={onToggleReaction}
-            disabled={busy}
-            aria-pressed={reacted}
-          >
-            <Heart size={12} />
-            {reacted ? (isZh ? "已赞" : "Liked") : isZh ? "赞" : "Like"}
-          </button>
-          <button
-            type="button"
-            className={`${styles.actionBtn} ${bookmarked ? styles.actionBtnActive : ""}`}
-            onClick={onToggleBookmark}
-            disabled={busy}
-            aria-pressed={bookmarked}
-          >
-            <Bookmark size={12} />
-            {bookmarked ? (isZh ? "已收藏" : "Saved") : isZh ? "收藏" : "Save"}
-          </button>
+      <footer className={styles.cardFooter}>
+        <div className={styles.cardStats} aria-label={isZh ? "互动数据" : "Engagement metrics"}>
+          <span><Heart size={13} />{publication.reactionCount}</span>
+          <span><Bookmark size={13} />{publication.bookmarkCount}</span>
+          <span><MessageCircle size={13} />{publication.commentCount}</span>
         </div>
-      ) : (
-        <p className={styles.signedOutHint}>
-          {isZh ? "登录后可关注、点赞、收藏" : "Sign in to follow, like, and bookmark"}
-        </p>
-      )}
-
-      {error ? (
-        <p className={styles.signedOutHint} role="alert">
-          {error}
-        </p>
-      ) : null}
+        {canInteract ? (
+          <div className={styles.cardActions}>
+            {allowedActions.some((action) => action === "follow" || action === "unfollow") ? (
+              <button type="button" className={following ? styles.actionBtnActive : styles.actionBtn} onClick={() => void onToggleFollow()} disabled={busy} aria-pressed={following}>
+                <Users size={13} />{following ? (isZh ? "已关注" : "Following") : isZh ? "关注" : "Follow"}
+              </button>
+            ) : null}
+            {allowedActions.includes("react") ? (
+              <button type="button" className={reacted ? styles.actionBtnActive : styles.actionBtn} onClick={() => void onToggleReaction()} disabled={busy} aria-pressed={reacted}>
+                <Heart size={13} />{reacted ? (isZh ? "已赞" : "Liked") : isZh ? "赞" : "Like"}
+              </button>
+            ) : null}
+            {allowedActions.some((action) => action === "bookmark" || action === "remove_bookmark") ? (
+              <button type="button" className={bookmarked ? styles.actionBtnActive : styles.actionBtn} onClick={() => void onToggleBookmark()} disabled={busy} aria-pressed={bookmarked}>
+                <Bookmark size={13} />{bookmarked ? (isZh ? "已收藏" : "Saved") : isZh ? "收藏" : "Save"}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <span className={styles.signInHint}>{isZh ? "登录后可互动" : "Sign in to interact"}</span>
+        )}
+      </footer>
+      {error ? <p className={styles.cardError} role="alert">{error}</p> : null}
     </article>
   );
+}
+
+function sourceLabel(sourceType: CommunityFeedProjection["sourceType"], isZh: boolean): string {
+  if (sourceType === "universe") return "Universe";
+  if (sourceType === "actor") return isZh ? "演员市场" : "Actor market";
+  if (sourceType === "asset") return isZh ? "资产市场" : "Asset market";
+  return isZh ? "来源作品" : "Source work";
+}
+
+function formatDate(value: string, locale: Locale): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return locale === "zh-CN" ? "刚刚" : "Just now";
+  return new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 export default PublicationCard;
