@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
+    "@types/three": "^0.185.4",
     "@webav/av-cliper": "1.2.8",
     "@xzdarcy/react-timeline-editor": "1.0.0",
     "docx": "^9.7.1",
@@ -35,6 +36,7 @@
     "react-is": "^19.2.8",
     "read-excel-file": "^9.2.0",
     "recharts": "^3.10.0",
+    "three": "^0.185.1",
     "typescript": "^5.8.3"
   },
   "devDependencies": {

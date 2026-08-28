@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { DynamicGridEditor } from "./DynamicGridEditor";
+import { WhiteModelPrevis } from "./WhiteModelPrevis";
 import type { StoryboardScene } from "@/lib/storyboard/contracts";
 
 export type StoryboardSubview = "shot_table" | "grids" | "motion" | "prompts" | "canvas";
@@ -80,12 +82,23 @@ export function UnifiedStoryboardStage({
   handoffId,
   content,
 }: UnifiedStoryboardStageProps) {
+  const [previsOpen, setPrevisOpen] = useState(false);
   const fallbackMotion = handoffId ? (
-    <DynamicGridEditor handoffId={handoffId} />
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "16px 24px 0" }}>
+        <button type="button" onClick={() => setPrevisOpen((value) => !value)} style={{ padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(117,219,198,.5)", background: previsOpen ? "rgba(117,219,198,.14)" : "rgba(255,255,255,.04)", color: "#75dbc6", cursor: "pointer", fontWeight: 700 }}>
+          {previsOpen ? "返回动态分镜" : "打开白模预演"}
+        </button>
+      </div>
+      {previsOpen ? <WhiteModelPrevis projectId={projectId} workId={workId} unitId={unitId} /> : <DynamicGridEditor handoffId={handoffId} />}
+    </>
   ) : (
-    <div style={{ padding: 40, color: "var(--ink-muted)", textAlign: "center" }}>
-      请先在剧本阶段确认可用版本，再生成分镜运动预览。
-    </div>
+    previsOpen ? <WhiteModelPrevis projectId={projectId} workId={workId} unitId={unitId} /> : (
+      <div style={{ padding: 24, color: "var(--ink-muted)", textAlign: "center" }}>
+        <p>请先在剧本阶段确认可用版本，再生成分镜运动预览。</p>
+        <button type="button" onClick={() => setPrevisOpen(true)} style={{ padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(117,219,198,.5)", background: "rgba(117,219,198,.12)", color: "#75dbc6", cursor: "pointer", fontWeight: 700 }}>打开白模预演</button>
+      </div>
+    )
   );
 
   return (
