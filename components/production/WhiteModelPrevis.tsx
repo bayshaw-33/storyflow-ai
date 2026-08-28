@@ -103,12 +103,14 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState("");
+  const [rendererError, setRendererError] = useState("");
   const [selectedShotId, setSelectedShotId] = useState(shotOptions[0]?.shotId ?? "");
   const playbackRef = useRef({ playing: false, currentTime: 0, durationSeconds: 5 });
 
   const storageKey = `kiikis:previs:v1:${projectId}:${workId}:${unitId ?? "none"}`;
   const selectedObject = scene.objects.find((object) => object.id === selectedId) ?? null;
   const selectedShot = shotOptions.find((shot) => shot.shotId === selectedShotId) ?? shotOptions[0] ?? null;
+  const hasShotOptions = shotOptions.length > 0;
 
   useEffect(() => {
     if (!shotOptions.some((shot) => shot.shotId === selectedShotId)) {
@@ -138,17 +140,31 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !hasShotOptions) return;
     const threeScene = new THREE.Scene();
     threeScene.background = new THREE.Color("#091112");
     const camera = new THREE.PerspectiveCamera(35, 9 / 16, 0.1, 100);
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    } catch {
+      setRendererError("当前浏览器无法启动白模视窗，请检查 WebGL 设置。");
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     cameraRef.current = camera;
     rendererRef.current = renderer;
 
-    const controls = new OrbitControls(camera, canvas);
+    let controls: OrbitControls;
+    try {
+      controls = new OrbitControls(camera, canvas);
+    } catch {
+      renderer.dispose();
+      setRendererError("白模视窗初始化失败，请刷新后重试。");
+      return;
+    }
+    setRendererError("");
     controls.enableDamping = true;
     controls.target.set(0, 1, 0);
     camera.position.set(...scene.camera.position);
@@ -168,8 +184,8 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
       camera.aspect = 9 / 16;
       camera.updateProjectionMatrix();
     };
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(resize) : null;
+    observer?.observe(canvas);
     resize();
 
     let frame = 0;
@@ -197,14 +213,14 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
     frame = requestAnimationFrame(render);
     return () => {
       cancelAnimationFrame(frame);
-      observer.disconnect();
+      observer?.disconnect();
       controls.dispose();
       renderer.dispose();
       rendererRef.current = null;
       cameraRef.current = null;
       sceneGroupRef.current = null;
     };
-  }, []);
+  }, [hasShotOptions]);
 
   useEffect(() => {
     const group = sceneGroupRef.current;
@@ -374,7 +390,16 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
       <div className={styles.editor}>
         <div className={styles.viewportWrap}>
           <div className={styles.viewportLabel}><Camera size={14} />9:16 · {scene.durationSeconds}s</div>
-          <canvas ref={canvasRef} className={styles.viewport} aria-label="白模三维视窗" />
+          {rendererError ? (
+            <div className={styles.emptyPreview} role="status">{rendererError}</div>
+          ) : hasShotOptions ? (
+            <canvas ref={canvasRef} className={styles.viewport} aria-label="白模三维视窗" />
+          ) : (
+            <div className={styles.emptyPreview} role="status">
+              <strong>尚无分镜镜头</strong>
+              <span>先在分镜阶段创建镜头，再进入白模预演。</span>
+            </div>
+          )}
           <div className={styles.timeline}>
             <div className={styles.timelineControls}>
               <button type="button" onClick={() => setPlaying((value) => !value)} aria-label={playing ? "暂停" : "播放"}>{playing ? <Pause size={15} /> : <Play size={15} />}</button>

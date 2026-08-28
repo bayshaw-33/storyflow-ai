@@ -98,6 +98,44 @@ function cloneScene(scene: PrevisScene): PrevisScene {
   return JSON.parse(JSON.stringify(scene)) as PrevisScene;
 }
 
+function isVector3(value: unknown): value is PrevisVector3 {
+  return Array.isArray(value) && value.length === 3 && value.every((item) => typeof item === "number" && Number.isFinite(item));
+}
+
+function isTransform(value: unknown): value is PrevisTransform {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PrevisTransform>;
+  return isVector3(candidate.position) && isVector3(candidate.rotation) && isVector3(candidate.scale);
+}
+
+function isKeyframes(value: unknown): value is PrevisKeyframe[] {
+  return Array.isArray(value) && value.every((item) => {
+    if (!item || typeof item !== "object") return false;
+    const candidate = item as Partial<PrevisKeyframe>;
+    return typeof candidate.timeSeconds === "number" && Number.isFinite(candidate.timeSeconds) && isTransform(candidate.transform);
+  });
+}
+
+function isPrevisCamera(value: unknown): value is PrevisCamera {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PrevisCamera>;
+  return isVector3(candidate.position)
+    && isVector3(candidate.rotation)
+    && typeof candidate.focalLength === "number"
+    && Number.isFinite(candidate.focalLength)
+    && isKeyframes(candidate.keyframes);
+}
+
+function isPrevisObject(value: unknown): value is PrevisObject {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PrevisObject>;
+  return typeof candidate.id === "string"
+    && (candidate.kind === "room" || candidate.kind === "actor_proxy" || candidate.kind === "prop")
+    && typeof candidate.name === "string"
+    && isTransform(candidate.transform)
+    && isKeyframes(candidate.keyframes);
+}
+
 export function upsertKeyframe(
   scene: PrevisScene,
   objectId: string,
@@ -126,6 +164,8 @@ export function parsePrevisScene(serialized: string): PrevisScene {
   if (candidate.durationSeconds !== 5 && candidate.durationSeconds !== 10) {
     throw new Error("Invalid previs durationSeconds");
   }
-  if (!candidate.camera || !Array.isArray(candidate.objects)) throw new Error("Invalid previs scene data");
+  if (!isPrevisCamera(candidate.camera) || !Array.isArray(candidate.objects) || !candidate.objects.every(isPrevisObject)) {
+    throw new Error("Invalid previs scene data");
+  }
   return parsed as PrevisScene;
 }

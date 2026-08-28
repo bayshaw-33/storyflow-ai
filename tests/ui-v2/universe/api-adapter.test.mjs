@@ -211,6 +211,22 @@ test("fetchUniverseBundleFromApi 并行请求 4 个端点并带 Authorization Be
   assert.deepEqual(bundle.recentActivity, []);
 });
 
+test("fetchUniverseBundleFromApi 为浏览器 fetch 保留正确的 Window receiver", async () => {
+  let calls = 0;
+  function browserFetch(url, init) {
+    assert.equal(this, globalThis, "fetch 必须在 globalThis/Window receiver 上调用");
+    calls += 1;
+    const u = typeof url === "string" ? new URL(url, "http://localhost") : url;
+    if (u.pathname.endsWith("/entities")) return entitiesRes();
+    if (u.pathname.endsWith("/works")) return worksRes();
+    if (u.pathname.endsWith("/health")) return healthRes();
+    return detailRes();
+  }
+
+  await fetchUniverseBundleFromApi("uni-1", TOKEN, { fetchImpl: browserFetch });
+  assert.equal(calls, 4);
+});
+
 test("fetchUniverseBundleFromApi 请求路径包含 encodeURIComponent 编码的 universeId", async () => {
   const paths = [];
   const fetchImpl = async (url) => {

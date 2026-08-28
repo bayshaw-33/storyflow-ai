@@ -6,7 +6,7 @@ import {
   buildVideoHandoffPackage,
   buildPrevisShotOptions,
 } from "../lib/director/previs-integration.ts";
-import { createDefaultPrevisScene } from "../lib/director/previs.ts";
+import { createDefaultPrevisScene, parsePrevisScene } from "../lib/director/previs.ts";
 
 const scenes = [{
   id: "scene-1",
@@ -98,4 +98,17 @@ test("白模交付包包含轨迹、首帧和人工确认标记", () => {
   assert.deepEqual(packageData.previs.camera.position, scene.camera.position);
   assert.equal(packageData.previs.objects[0].assetId, undefined);
   assert.match(packageData.motionSummary, /跟随推进/);
+});
+
+test("白模草稿拒绝缺少对象关键帧的损坏空场景", () => {
+  const scene = createDefaultPrevisScene();
+  scene.objects = [{
+    ...scene.objects[0],
+    keyframes: undefined,
+  }];
+
+  assert.throws(
+    () => parsePrevisScene(JSON.stringify(scene)),
+    /Invalid previs scene data/,
+  );
 });

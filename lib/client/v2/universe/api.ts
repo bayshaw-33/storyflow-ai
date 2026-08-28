@@ -267,9 +267,17 @@ import { defaultAuthFetchDeps, fetchWithAuthRetry } from "../auth-fetch.ts";
  * 鉴权，旧的 cookie-only 调用在生产恒 401。node 测试注入 fetchImpl 时
  * 无浏览器 session → 不带 Authorization，行为与旧实现一致。
  */
-function authedFetchImpl(fetchImpl: typeof fetch) {
+function bindFetch(fetchImpl: typeof fetch = globalThis.fetch): typeof fetch {
+  return fetchImpl.bind(globalThis);
+}
+
+function authedFetchImpl(fetchImpl: typeof fetch = globalThis.fetch) {
+  // Browser native fetch is receiver-sensitive in Safari/Chromium. Binding it
+  // once here keeps both the default Window.fetch and injected fetch adapters
+  // callable through the shared auth wrapper.
+  const boundFetch = bindFetch(fetchImpl);
   return (input: RequestInfo | URL, init?: RequestInit) =>
-    fetchWithAuthRetry(input, init ?? {}, { ...defaultAuthFetchDeps, fetcher: fetchImpl });
+    fetchWithAuthRetry(input, init ?? {}, { ...defaultAuthFetchDeps, fetcher: boundFetch });
 }
 
 function authHeaders(accessToken: string | null): Record<string, string> {
@@ -307,7 +315,7 @@ export async function fetchUniverseBundleFromApi(
       "未登录，请先登录后再查看宇宙。",
     );
   }
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetchImpl = bindFetch(options.fetchImpl);
   const id = encodeURIComponent(universeId);
   const headers = authHeaders(accessToken);
   const fetcher = authedFetchImpl(fetchImpl);
@@ -509,7 +517,7 @@ export async function fetchUniverseProposals(
       "未登录，请先登录后再查看候选变更。",
     );
   }
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetchImpl = bindFetch(options.fetchImpl);
   const res = await fetchImpl(
     `${API_PATH}/${encodeURIComponent(universeId)}/proposals`,
     { headers: authHeaders(accessToken), credentials: "same-origin" },
@@ -557,7 +565,7 @@ export async function runCanonCheck(
       "未登录，请先登录后再执行 Canon Check。",
     );
   }
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetchImpl = bindFetch(options.fetchImpl);
   const res = await fetchImpl(
     `${API_PATH}/${encodeURIComponent(universeId)}/canon/check`,
     {
@@ -591,7 +599,7 @@ export async function fetchImpactAnalysis(
       "未登录，请先登录后再查看影响分析。",
     );
   }
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetchImpl = bindFetch(options.fetchImpl);
   const qs = new URLSearchParams({ entity: canonFactId });
   const res = await fetchImpl(
     `${API_PATH}/${encodeURIComponent(universeId)}/canon/impact?${qs.toString()}`,
@@ -641,7 +649,7 @@ export async function applyInboxAction(
       message: "操作已提交（fixture 预览模式，不会真正写入）。",
     };
   }
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const res = await fetcher(
     `${API_PATH}/${encodeURIComponent(universeId)}/proposals/${encodeURIComponent(proposalId)}`,
     {
@@ -682,7 +690,7 @@ export async function toggleCanonFactLock(
         : "Canon Fact 已解锁（fixture 预览模式）。",
     };
   }
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const res = await fetcher(
     `${API_PATH}/${encodeURIComponent(universeId)}/canon-facts/${encodeURIComponent(canonFactId)}/lock`,
     {
@@ -809,7 +817,7 @@ export async function fetchWorkInheritanceState(
   workId: string,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<WorkInheritanceStateV22> {
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance`, {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
@@ -830,7 +838,7 @@ export async function bindWorkToUniverse(
   input: BindWorkToUniverseInput,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<WorkInheritanceManifestV22> {
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/universe/bind`, {
     method: "POST",
     headers: { Accept: "application/json" },
@@ -851,7 +859,7 @@ export async function fetchInheritanceDiff(
   workId: string,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<InheritanceDiffResultV22> {
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/diff`, {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
@@ -870,7 +878,7 @@ export async function adoptInheritanceDiffs(
   input: AdoptDiffsInput,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<AdoptResultV22> {
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const res = await fetcher(`${WORKS_API_PATH}/${encodeURIComponent(workId)}/inheritance/adopt`, {
     method: "POST",
     headers: { Accept: "application/json" },
@@ -894,7 +902,7 @@ export async function fetchContextPacket(
   workId: string,
   options: { fetchImpl?: typeof fetch; workVersionId?: string } = {},
 ): Promise<ContextPacketV22> {
-  const fetcher = authedFetchImpl(options.fetchImpl || fetch);
+  const fetcher = authedFetchImpl(options.fetchImpl);
   const qs = options.workVersionId
     ? `?workVersionId=${encodeURIComponent(options.workVersionId)}`
     : "";
