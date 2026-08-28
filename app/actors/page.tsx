@@ -302,7 +302,7 @@ export default function ActorsPage() {
         </span>
       ) : null}
 
-      <ActorMarketSection viewerToken={session?.access_token || null} />
+      <ActorMarketSection viewerToken={session?.access_token || null} sessionLoaded={sessionLoaded} />
 
       <CreateActorModal open={createOpen} token={session?.access_token || ""} copy={ui} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
     </main>

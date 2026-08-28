@@ -25,6 +25,14 @@ import {
 
 const NOW = new Date("2026-08-14T12:00:00+08:00");
 
+test("historical jobs keep their actual timestamp when polled again", () => {
+  const job = makeJob({ status: "failed", completedAt: "2026-08-14T11:02:00+08:00" });
+  const before = projectJobToKkMessage({ job, now: NOW });
+  const after = projectJobToKkMessage({ job, now: new Date("2026-08-28T12:00:00Z") });
+  assert.equal(before.createdAt, job.completedAt);
+  assert.equal(after.createdAt, before.createdAt);
+});
+
 function makeJob(overrides = {}) {
   return {
     id: "job-test-001",

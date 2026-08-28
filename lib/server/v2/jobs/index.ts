@@ -71,6 +71,8 @@ type ProjectMarkerRow = { id: string; workflow_type?: string | null; mode?: stri
 
 export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob {
   const status = mapStatus(row.status);
+  const terminal = ["completed", "failed", "cancelled", "partial_failure"].includes(status);
+  const completedAt = row.completed_at || (terminal ? row.updated_at || row.created_at : null);
   const metadata = row.result_metadata || {};
   // P0-05: progress counts come from server-owned metadata only. A completed
   // export/text row without counts reports 0/0 (UI hides the fraction) —
@@ -83,7 +85,7 @@ export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob
   const workbenchType = stringValue(metadata.workbenchType) ?? stringValue(inputParams.workbenchType);
   const resultUrl = stringValue(row.result_url) ?? stringValue(metadata.resultUrl)
     ?? resultReferences.find((reference) => reference.startsWith("/") || /^https?:\/\//.test(reference));
-  const timing = buildTiming(row, metadata, now);
+  const timing = buildTiming({ ...row, completed_at: completedAt }, metadata, now);
   const actions: JobAction[] = status === "failed" || status === "partial_failure" ? ["retry", "view_details"] : status === "completed" ? ["view_results", "view_details"] : status === "cancelled" ? ["view_details"] : ["cancel", "view_details"];
   return {
     id: row.id,
@@ -97,14 +99,14 @@ export function mapLegacyJob(row: LegacyJobRow, now = new Date()): GenerationJob
     failedItemCount: status === "partial_failure" ? Math.max(0, total - completed) : 0,
     actions,
     createdAt: row.created_at,
-    completedAt: row.completed_at || null,
+    completedAt,
     workId,
     workbenchType,
     resultUrl,
   };
 }
 
-export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: string; projectId?: string | null; jobType?: string | null; status?: string | null; now?: Date }) {
+export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: string; projectId?: string | null; jobType?: string | null; status?: string | null; includeArchived?: boolean; now?: Date }) {
   if (!params.userId) throw new V2JobsError("unauthenticated", "Authentication is required.");
   const projectFilter = params.projectId ? `&project_id=eq.${encodeURIComponent(params.projectId)}` : "";
   const statusFilter = params.status ? `&status=eq.${encodeURIComponent(params.status)}` : "";
@@ -117,7 +119,7 @@ export async function listUnifiedJobs(params: { fetcher: JobsFetcher; userId: st
     ]);
     const rawItems = [
       ...(textTasks || []).map((row) => mapLegacyJob({ ...row, job_type: "text" }, params.now)),
-      ...(mediaJobs || []).map((row) => mapLegacyJob(row, params.now)),
+      ...(mediaJobs || []).filter((row) => params.includeArchived || !row.result_metadata?.archivedAt).map((row) => mapLegacyJob(row, params.now)),
       ...(exports || []).map((row) => mapLegacyJob({ ...row, job_type: "export" }, params.now)),
     ];
     const retiredProjectIds = await readRetiredProjectIds(params.fetcher, rawItems.map((job) => job.projectId));

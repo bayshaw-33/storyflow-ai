@@ -137,7 +137,7 @@ export function KkPanel({
       {showPollingBar && (
         <div className={`${styles.connectionBar} ${styles.connectionBarPolling}`} role="status">
           <RefreshCw size={12} />
-          <span>{isZh ? "实时断线，正在轮询补拉..." : "Realtime offline, polling..."}</span>
+          <span>{isZh ? "任务自动更新中" : "Task updates active"}</span>
         </div>
       )}
 

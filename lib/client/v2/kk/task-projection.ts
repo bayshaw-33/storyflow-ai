@@ -131,7 +131,7 @@ function shortId(id: string): string {
 export function projectJobToKkMessage(input: ProjectJobMessageInput): KkMessage {
   const { job } = input;
   const isZh = (input.locale ?? "zh-CN") === "zh-CN";
-  const now = (input.now ?? new Date()).toISOString();
+  const occurredAt = job.completedAt || job.createdAt;
 
   const mapping = MAPPING[job.status];
   if (!mapping) {
@@ -143,7 +143,7 @@ export function projectJobToKkMessage(input: ProjectJobMessageInput): KkMessage 
       title: isZh ? fallback.titleZh : fallback.titleEn,
       body: isZh ? fallback.bodyZh(job) : fallback.bodyEn(job),
       severity: fallback.severity,
-      createdAt: now,
+      createdAt: occurredAt,
       actionLabel: isZh ? "查看详情" : "View details",
       actionUrl: resolveJobDetailUrl(job.id),
       relatedJobId: job.id,
@@ -168,7 +168,7 @@ export function projectJobToKkMessage(input: ProjectJobMessageInput): KkMessage 
     title: isZh ? mapping.titleZh : mapping.titleEn,
     body: isZh ? mapping.bodyZh(job) : mapping.bodyEn(job),
     severity: mapping.severity,
-    createdAt: now,
+    createdAt: occurredAt,
     actionLabel: useResultAction
       ? isZh ? "查看结果" : "View results"
       : isZh ? "查看详情" : "View details",

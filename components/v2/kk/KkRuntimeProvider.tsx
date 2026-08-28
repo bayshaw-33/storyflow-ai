@@ -197,6 +197,7 @@ export function KkRuntimeProvider({
     setEvents([]);
     setLastSequence(0);
     setError(null);
+    setLastSuccessAt(null);
     setLegacyMessages([]);
     setJobMessages([]);
     setLegacySource("api");
@@ -283,7 +284,8 @@ export function KkRuntimeProvider({
       if (generation !== sessionGeneration.current) return;
       setRuntime(data);
       setLastSequence(data.serverCursor);
-      setConnectionState("live");
+      // HTTP 成功只代表补拉可用；不冒充 WebSocket 实时订阅。
+      setConnectionState("polling");
       setError(null);
       setLastSuccessAt(Date.now());
     } catch (err) {
@@ -311,7 +313,7 @@ export function KkRuntimeProvider({
   const pullEvents = useCallback(async () => {
     if (!sessionResolved) return;
     if (inflightPull.current) return;
-    if (connectionState === "offline" && !allowFixtureFallback) return;
+    if (!runtimeAccessToken) return;
     const generation = sessionGeneration.current;
     inflightPull.current = true;
     try {
@@ -338,6 +340,7 @@ export function KkRuntimeProvider({
       }
       // 拉取成功 → live
       setConnectionState((prev) => (prev === "live" ? "live" : "polling"));
+      setError(null);
       setLastSuccessAt(Date.now());
     } catch (err) {
       if (generation !== sessionGeneration.current) return;
@@ -369,13 +372,14 @@ export function KkRuntimeProvider({
   useEffect(() => {
     if (!sessionResolved) return;
     if (!pollingEnabled) return;
-    if (connectionState === "offline" && !allowFixtureFallback) return;
+    if (!runtimeAccessToken) return;
     const id = setInterval(() => {
-      void pullEvents();
+      if (!runtime || connectionState === "offline" || connectionState === "reconnecting") void refresh();
+      else void pullEvents();
       void refreshJobMessages();
     }, pollingIntervalMs);
     return () => clearInterval(id);
-  }, [sessionResolved, pollingEnabled, pollingIntervalMs, connectionState, allowFixtureFallback, pullEvents, refreshJobMessages]);
+  }, [sessionResolved, runtimeAccessToken, runtime, pollingEnabled, pollingIntervalMs, connectionState, refresh, pullEvents, refreshJobMessages]);
 
   // -----------------------------------------------------------------------
   // fixture 兜底：连接失败时拉旧 KkMessage（K21-KK-002 dev 允许）
@@ -430,7 +434,7 @@ export function KkRuntimeProvider({
     const kkRealtimeEnabled = ff.kkRealtime === true;
     const enabled =
       forceEnabled ||
-      (connectionState === "live" && kkRealtimeEnabled) ||
+      ((connectionState === "live" || connectionState === "polling") && kkRealtimeEnabled) ||
       (connectionState === "live" && legacySource === "fixture");
     return {
       connectionState,

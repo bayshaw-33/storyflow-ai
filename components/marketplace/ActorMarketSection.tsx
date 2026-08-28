@@ -1,20 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, Store, TriangleAlert } from "lucide-react";
 import { ActorMarketCard } from "@/components/marketplace/ActorMarketCard";
 import { useI18n } from "@/lib/i18n/useI18n";
 import styles from "@/components/actors/actors.module.css";
 import marketStyles from "./marketplace.module.css";
 import type { MarketActorCard } from "./types";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 
 type SortKey = "latest" | "popular";
 type PriceFilter = "all" | "free" | "paid";
 
 type Props = {
-  /** 当前访客的 access_token；未登录传 null，市场区块仍可浏览（公开端点）。 */
+  /** platform 端点需要登录；会话恢复完成前不发起请求。 */
   viewerToken?: string | null;
+  sessionLoaded?: boolean;
 };
 
 /**
@@ -29,7 +31,7 @@ type Props = {
  * 旧 /api/actors/market 端点不存在，会被 [actorId] 动态路由误命中（actorId=market）。
  * platform 端点返回 {actors, total}（page/pageSize 分页），此处做响应映射。
  */
-export function ActorMarketSection({ viewerToken }: Props) {
+export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props) {
   const { locale, t } = useI18n();
   const isZh = locale === "zh-CN";
 
@@ -40,11 +42,13 @@ export function ActorMarketSection({ viewerToken }: Props) {
   const [error, setError] = useState("");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("latest");
+  const requestVersion = useRef(0);
 
   const PAGE_SIZE = 12;
 
   const fetchPage = useCallback(
-    async (nextCursor: string | null) => {
+    async (nextCursor: string | null, signal?: AbortSignal) => {
+      const version = ++requestVersion.current;
       setLoading(true);
       setError("");
       try {
@@ -56,10 +60,9 @@ export function ActorMarketSection({ viewerToken }: Props) {
           pageSize: String(PAGE_SIZE),
         });
         if (sortKey === "popular") params.set("sort", "popular");
-        const headers: Record<string, string> = {};
-        if (viewerToken) headers.Authorization = `Bearer ${viewerToken}`;
-        const response = await fetch(`/api/actors/platform?${params.toString()}`, { headers });
+        const response = await fetchWithAuthRetry(`/api/actors/platform?${params.toString()}`, { signal });
         const json = await response.json();
+        if (version !== requestVersion.current || signal?.aborted) return null;
         if (!response.ok || !json.success) {
           throw new Error(json.error || (isZh ? "市场加载失败" : "Failed to load marketplace"));
         }
@@ -87,20 +90,29 @@ export function ActorMarketSection({ viewerToken }: Props) {
         const nextPage = page * PAGE_SIZE < total ? String(page + 1) : null;
         return { items: mapped, nextCursor: nextPage, hasMore: nextPage !== null };
       } catch (issue) {
-        setError(issue instanceof Error ? issue.message : isZh ? "市场加载失败" : "Failed to load marketplace");
+        if (version === requestVersion.current && !signal?.aborted) {
+          setError(issue instanceof Error ? issue.message : isZh ? "市场加载失败" : "Failed to load marketplace");
+        }
         return null;
       } finally {
-        setLoading(false);
+        if (version === requestVersion.current && !signal?.aborted) setLoading(false);
       }
     },
-    [sortKey, viewerToken, isZh],
+    [sortKey, isZh],
   );
 
   // 首屏 + 切筛选时重新拉取
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    setItems([]);
+    setCursor(null);
+    setHasMore(false);
+    setError("");
+    setLoading(false);
+    if (!sessionLoaded || !viewerToken) return;
     void (async () => {
-      const json = await fetchPage(null);
+      const json = await fetchPage(null, controller.signal);
       if (!active || !json) return;
       setItems(json.items || []);
       setCursor(json.nextCursor || null);
@@ -108,8 +120,10 @@ export function ActorMarketSection({ viewerToken }: Props) {
     })();
     return () => {
       active = false;
+      requestVersion.current += 1;
+      controller.abort();
     };
-  }, [fetchPage]);
+  }, [fetchPage, viewerToken, sessionLoaded]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loading || !cursor) return;
@@ -121,7 +135,7 @@ export function ActorMarketSection({ viewerToken }: Props) {
   }, [hasMore, loading, cursor, fetchPage]);
 
   const showEmpty = !loading && !error && items.length === 0;
-  const showInitial = loading && items.length === 0;
+  const showInitial = !sessionLoaded || (loading && items.length === 0);
 
   return (
     <section className={marketStyles.section} aria-label={t("marketplace.title")}>
@@ -175,7 +189,11 @@ export function ActorMarketSection({ viewerToken }: Props) {
         </div>
       ) : null}
 
-      {showInitial ? (
+      {sessionLoaded && !viewerToken ? (
+        <div className={marketStyles.emptyPanel}>
+          <Link href="/login?next=/actors">{isZh ? "登录后浏览演员市场" : "Sign in to browse the actor marketplace"}</Link>
+        </div>
+      ) : showInitial ? (
         <ul className={styles.grid} aria-busy="true">
           {Array.from({ length: 8 }, (_, index) => (
             <li key={index}>

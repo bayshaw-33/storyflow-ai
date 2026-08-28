@@ -1,8 +1,82 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import React, { act } from "react";
+import TestRenderer from "react-test-renderer";
+import ts from "typescript";
 
 const read = (path) => readFileSync(path, "utf8");
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const mocks = {
+  "@/lib/i18n/useI18n": "export const useI18n = () => ({locale:'en', t: key=>key});",
+  "next/link": "export default function Link({children}) { return children; }",
+  "@/components/marketplace/ActorMarketCard": "import React from 'react'; export const ActorMarketCard = ({actor}) => React.createElement('li', null, actor.name);",
+  "supabase": "export const getSupabaseBrowserClient = () => globalThis.__marketTestClient;",
+  "css": "export default {};",
+};
+registerHooks({
+  resolve(specifier, context, next) {
+    if (mocks[specifier]) return { url: `coze-test:${specifier}`, shortCircuit: true };
+    if (specifier.endsWith('.css')) return { url: 'coze-test:css', shortCircuit: true };
+    if (specifier.startsWith('@/') || (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))) {
+      const base = specifier.startsWith('@/') ? resolve(root, specifier.slice(2)) : resolve(dirname(fileURLToPath(context.parentURL)), specifier);
+      if (base === resolve(root, 'lib/supabase/client.ts') || base === resolve(root, 'lib/supabase/client')) return { url: 'coze-test:supabase', shortCircuit: true };
+      for (const name of [base, `${base}.ts`, `${base}.tsx`]) if (existsSync(name)) return { url: pathToFileURL(name).href, shortCircuit: true };
+    }
+    return next(specifier, context.parentURL?.startsWith('coze-test:') ? { ...context, parentURL: import.meta.url } : context);
+  },
+  load(url, context, next) {
+    if (url.startsWith('coze-test:')) return { format: 'module', shortCircuit: true, source: mocks[url.slice('coze-test:'.length)] };
+    if (url.endsWith('.tsx')) return { format: 'module', shortCircuit: true, source: ts.transpileModule(readFileSync(new URL(url), 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext } }).outputText };
+    return next(url, context);
+  },
+});
+const { ActorMarketSection } = await import('../components/marketplace/ActorMarketSection.tsx');
+
+test("market waits for session hydration and uses the latest browser token", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.__marketTestClient = { auth: { getSession: async () => ({ data: { session: { access_token: 'fresh-token' } } }) } };
+  globalThis.fetch = async (url, init) => {
+    requests.push(new Headers(init.headers).get('authorization'));
+    return Response.json({ success: true, actors: [{ actor: { id:'a', name:'Market Actor' } }], total:1 });
+  };
+  let renderer;
+  try {
+    await act(async () => { renderer = TestRenderer.create(React.createElement(ActorMarketSection, { viewerToken: null, sessionLoaded:false })); });
+    assert.equal(requests.length, 0);
+    await act(async () => renderer.update(React.createElement(ActorMarketSection, { viewerToken:'stale-token', sessionLoaded:true })));
+    assert.deepEqual(requests, ['Bearer fresh-token']);
+    assert.match(JSON.stringify(renderer.toJSON()), /Market Actor/);
+  } finally { await act(async () => renderer?.unmount()); globalThis.fetch = originalFetch; delete globalThis.__marketTestClient; }
+});
+
+test("late marketplace 401 cannot overwrite a newer authenticated success", async () => {
+  const originalFetch = globalThis.fetch;
+  let release;
+  let calls = 0;
+  globalThis.__marketTestClient = { auth: {
+    getSession: async () => ({ data: { session: { access_token:'token' } } }),
+    refreshSession: async () => ({ data: { session:null } }),
+  } };
+  globalThis.fetch = async () => {
+    if (++calls === 1) return new Promise(resolveResponse => { release = () => resolveResponse(Response.json({ success:false, error:'请先登录。' }, {status:401})); });
+    return Response.json({ success:true, actors:[{ actor:{ id:'b', name:'Current Actor' } }], total:1 });
+  };
+  let renderer;
+  try {
+    await act(async () => { renderer = TestRenderer.create(React.createElement(ActorMarketSection, { viewerToken:'old', sessionLoaded:true })); });
+    await act(async () => renderer.update(React.createElement(ActorMarketSection, { viewerToken:'new', sessionLoaded:true })));
+    await act(async () => release());
+    assert.match(JSON.stringify(renderer.toJSON()), /Current Actor/);
+    assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /请先登录/);
+  } finally { await act(async () => renderer?.unmount()); globalThis.fetch = originalFetch; delete globalThis.__marketTestClient; }
+});
 
 test("已购演员页不因 SSR 缺少 cookie 直接重定向，并使用 auth retry 拉取", () => {
   const page = read("app/actors/purchased/page.tsx");

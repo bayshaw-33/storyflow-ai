@@ -3,6 +3,20 @@ import test from "node:test";
 
 const { mapLegacyJob, listUnifiedJobs, readUnifiedJob, transitionJob, V2JobsError } = await import("../../../lib/server/v2/jobs/index.ts");
 
+test("a historical failed audio job stops elapsed time at its last update", () => {
+  const job = mapLegacyJob({ id: "old-audio", job_type: "audio", status: "provider_timeout", created_at: "2026-08-26T09:00:00Z", updated_at: "2026-08-26T09:02:00Z" }, new Date("2026-08-28T12:00:00Z"));
+  assert.equal(job.timing.elapsedSeconds, 120);
+  assert.equal(job.completedAt, "2026-08-26T09:02:00Z");
+});
+
+test("archived test jobs leave the default feed but remain readable in history and detail", async () => {
+  const archived = { id: "archived-audio", owner_id: "u-1", job_type: "audio", status: "failed", created_at: "2026-08-26T09:00:00Z", result_metadata: { archivedAt: "2026-08-28T12:00:00Z" } };
+  const fetcher = async (path) => path.includes("storyflow_generation_jobs") ? [archived] : [];
+  assert.deepEqual((await listUnifiedJobs({ fetcher, userId: "u-1" })).items, []);
+  assert.equal((await listUnifiedJobs({ fetcher, userId: "u-1", includeArchived: true })).items[0].id, archived.id);
+  assert.equal((await readUnifiedJob({ fetcher, userId: "u-1", jobId: archived.id })).job.status, "failed");
+});
+
 test("maps legacy video sub-states to the frozen v2 lifecycle", () => {
   assert.equal(mapLegacyJob({ id: "1", owner_id: "u-1", job_type: "video", status: "queued", created_at: "2026-08-12T00:00:00Z" }).status, "queued");
   assert.equal(mapLegacyJob({ id: "2", owner_id: "u-1", job_type: "video", status: "generating", created_at: "2026-08-12T00:00:00Z" }).status, "running");

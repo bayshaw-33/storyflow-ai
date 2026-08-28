@@ -70,6 +70,7 @@ export function PurchasedActorsClient({ initial }: Props) {
         if (!response.ok || !json.success) {
           throw new Error(json.error || (isZh ? "加载失败" : "Failed to load"));
         }
+        setAuthState("authenticated");
         setItems(json.items || []);
         setCursor(json.nextCursor || null);
         setHasMore(Boolean(json.hasMore));
@@ -158,7 +159,7 @@ export function PurchasedActorsClient({ initial }: Props) {
     [items],
   );
 
-  const showEmpty = authState !== "checking" && !loading && items.length === 0;
+  const showEmpty = authState === "authenticated" && !loading && !error && items.length === 0;
 
   return (
     <main className={styles.page}>
@@ -200,7 +201,14 @@ export function PurchasedActorsClient({ initial }: Props) {
         </div>
       </section>
 
-      {error ? <div className={styles.noticeBar} role="alert">{error}</div> : null}
+      {error ? (
+        <div className={styles.noticeBar} role="alert">
+          {error}
+          <button type="button" className={styles.ghostBtn} disabled={loading} onClick={() => void reload(scope)}>
+            {isZh ? "重新加载" : "Reload"}
+          </button>
+        </div>
+      ) : null}
 
       {authState === "checking" && items.length === 0 ? (
         <section className={styles.statePanel} aria-busy="true">

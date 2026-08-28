@@ -33,7 +33,7 @@ function resolveRelativeModule(specifier, parentURL) {
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/supabase/client") {
+    if (specifier === "@/lib/supabase/client" || (specifier.startsWith(".") && context.parentURL?.startsWith("file:") && resolve(dirname(fileURLToPath(context.parentURL)), specifier) === resolve(projectRoot, "lib/supabase/client.ts"))) {
       return { url: supabaseClientModule, shortCircuit: true };
     }
     if (specifier.startsWith("@/")) {
@@ -74,6 +74,56 @@ registerHooks({
 
 const { KkRuntimeProvider } = await import("../../../components/v2/kk/KkRuntimeProvider.tsx");
 const { useKkRuntime } = await import("../../../components/v2/kk/useKkRuntime.ts");
+
+test("KK retries a transient runtime outage without stopping job polling", async () => {
+  globalThis.__kkTestSupabaseClient = {
+    auth: {
+      getSession: async () => ({ data: { session: { access_token: "token", user: { id: "u" } } } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  const originalInterval = globalThis.setInterval;
+  const originalClear = globalThis.clearInterval;
+  const ticks = new Map();
+  let counter = 0;
+  globalThis.setInterval = (fn) => { const id = ++counter; ticks.set(id, fn); return id; };
+  globalThis.clearInterval = (id) => ticks.delete(id);
+  let runtimeCalls = 0;
+  let jobsCalls = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input) === "/api/v2/kk") {
+      runtimeCalls++;
+      return runtimeCalls === 1 ? Response.json({ success: false }, { status: 503 }) : Response.json(runtimeResponse());
+    }
+    if (String(input) === "/api/v2/jobs") {
+      jobsCalls++;
+      return Response.json({ success: true, items: [], hasMore: false });
+    }
+    return Response.json({ success: true, events: [], nextCursor: 0 });
+  };
+  let latest;
+  function Probe() { latest = useKkRuntime(); return null; }
+  let renderer;
+  try {
+    await act(async () => { renderer = TestRenderer.create(React.createElement(KkRuntimeProvider, { allowFixtureFallback: false }, React.createElement(Probe))); });
+    await settle();
+    assert.equal(latest.error?.code, "service_unavailable");
+    assert.ok(ticks.size > 0, "an outage must not disable recovery polling");
+    await act(async () => { for (const tick of [...ticks.values()]) tick(); });
+    await settle();
+    assert.ok(runtimeCalls >= 2);
+    assert.ok(jobsCalls >= 2);
+    assert.equal(latest.error, null);
+    assert.notEqual(latest.connectionState, "offline");
+  } finally {
+    await act(async () => renderer?.unmount());
+    globalThis.fetch = originalFetch;
+    globalThis.setInterval = originalInterval;
+    globalThis.clearInterval = originalClear;
+    delete globalThis.__kkTestSupabaseClient;
+  }
+});
 
 function runtimeResponse() {
   return {
