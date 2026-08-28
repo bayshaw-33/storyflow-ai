@@ -109,7 +109,7 @@ test("assertWorkType throws WorkContractError with field=workType on invalid inp
 test("resolveWorkbenchRoute returns the canonical production route for audiovisual WorkTypes", () => {
   for (const t of WORK_TYPES) {
     const route = resolveWorkbenchRoute(t, { projectId: "p1", workId: "w1" });
-    if (["script", "art", "storyboard", "video"].includes(t)) {
+    if (["script", "art", "storyboard", "video", "editing"].includes(t)) {
       assert.equal(route, `/production?projectId=p1&workId=w1&tab=${t}`, `bad route for ${t}`);
     } else {
       assert.match(route, /^\/[a-z-]+\?projectId=p1&workId=w1$/, `bad route for ${t}`);

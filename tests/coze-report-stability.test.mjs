@@ -104,8 +104,25 @@ test("任务中心展示最后成功更新时间，并把任务操作纳入认�
   assert.doesNotMatch(taskCenter, /\?\s*\{\s*Authorization:\s*`Bearer \$\{session\.access_token\}`\s*\}:\s*\{\}\s*,\s*\n\s*\.\.\.\(session\?\.access_token/);
 });
 
-test("社区发现失败时提供可见的重新加载入口", () => {
+test("社区发现失败时通过统一空状态提供当前分区重试入口", async () => {
   const feed = read("components/v2/community/DiscoveryFeed.tsx");
-  assert.match(feed, /重新加载|Reload/);
-  assert.match(feed, /onClick=.*loadMore|onClick=.*reload/s);
+  assert.match(feed, /\{error \? \([\s\S]*?<CommunityEmptyState[\s\S]*?actionLabel=\{isZh \? "重试" : "Retry"\}[\s\S]*?onAction=\{retryCurrentSection\}/);
+  assert.match(feed, /function retryCurrentSection\(\)[\s\S]*?loadPersonalSection\(activeSection\)[\s\S]*?loadRemoteSection\(activeSection, false, query\)/);
+  const { CommunityEmptyState } = await import('../components/v2/community/CommunityEmptyState.tsx');
+  let retries = 0;
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(CommunityEmptyState, {
+        title: 'Community unavailable', body: 'Try again', error: true,
+        actionLabel: 'Retry', onAction: () => { retries += 1; },
+      }));
+    });
+    const button = renderer.root.findByType('button');
+    assert.match(JSON.stringify(button.children.filter(child => typeof child === 'string')), /Retry/);
+    await act(async () => button.props.onClick());
+    assert.equal(retries, 1);
+  } finally {
+    await act(async () => renderer?.unmount());
+  }
 });
