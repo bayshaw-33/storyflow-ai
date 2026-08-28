@@ -52,10 +52,11 @@ import { test } from "node:test";
 import { parseNotification, toCommentProjection } from "../lib/contracts/v2/comments.ts";
 
 test("C2 notification route exposes authenticated list and idempotent read actions", async () => {
-  await assert.rejects(
-    () => readFile(new URL("../app/api/v2/community/notifications/route.ts", import.meta.url)),
-    /ENOENT/,
-  );
+  const source = await readFile(new URL("../app/api/v2/community/notifications/route.ts", import.meta.url), "utf8");
+  assert.match(source, /authenticateRequest/);
+  assert.match(source, /listNotifications/);
+  assert.match(source, /markNotificationRead/);
+  assert.match(source, /markAllNotificationsRead/);
 });
 
 test("C2 deleted comment projection keeps the row but hides its body", () => {
