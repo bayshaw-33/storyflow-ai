@@ -217,6 +217,7 @@ export function PublicationCard({ publication, viewerId }: PublicationCardProps)
         ) : (
           <span className={styles.signInHint}>{isZh ? "登录后可互动" : "Sign in to interact"}</span>
         )}
+        {objectHref ? <Link href={detailHref} className={styles.cardReturnLink}>{isZh ? "继续创作" : "Keep creating"}<ArrowUpRight size={12} /></Link> : null}
       </footer>
       {error ? <p className={styles.cardError} role="alert">{error}</p> : null}
     </article>

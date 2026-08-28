@@ -5,6 +5,7 @@ import { getCommunityPublicationDetail } from "@/lib/server/v2/community/discove
 import { computeAllowedActions } from "@/lib/contracts/v2/community";
 import { getCommunityContentLabel, getPublicationObjectHref } from "@/lib/client/v2/community/view-model";
 import { CommunityInteractionPanel } from "@/components/v2/community/CommunityInteractionPanel";
+import { CommunityReturnActions } from "@/components/v2/community/CommunityReturnActions";
 import styles from "../community.module.css";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +74,11 @@ export default async function CommunityPublicationPage({
           </div>
         </div>
       </article>
+      <CommunityReturnActions
+        allowedActions={allowedActions}
+        sourceType={publication.sourceType}
+        sourceHref={objectHref}
+      />
       <CommunityInteractionPanel
         publicationId={publication.id}
         viewerId={viewer?.id ?? null}

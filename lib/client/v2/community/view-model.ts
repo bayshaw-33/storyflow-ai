@@ -16,6 +16,15 @@ export const COMMUNITY_SECTIONS = [
 export type CommunitySectionId = (typeof COMMUNITY_SECTIONS)[number]["id"];
 export type CommunityContentKind = PublicationSubject;
 
+export type CommunityReturnActionId = "apply_use" | "remix" | "license";
+
+export interface CommunityReturnAction {
+  id: CommunityReturnActionId;
+  enabled: boolean;
+  href?: string;
+  reason?: string;
+}
+
 export function getCommunityContentKind(
   sourceType: PublicationSourceType | CommunityContentKind,
 ): CommunityContentKind {
@@ -82,6 +91,36 @@ export function getPublicationObjectHref(input: {
 
 export function getPublicationDetailHref(publicationId: string): string {
   return `/community/${encodeURIComponent(publicationId)}`;
+}
+
+export function getPublicationReturnActions(input: {
+  allowedActions: readonly string[];
+  sourceType: PublicationSourceType;
+  sourceHref: string | null;
+}): ReadonlyArray<CommunityReturnAction> {
+  const canEnterSource = Boolean(input.sourceHref);
+  return [
+    {
+      id: "apply_use",
+      enabled: canEnterSource && input.allowedActions.includes("apply_use"),
+      href: canEnterSource ? input.sourceHref ?? undefined : undefined,
+      reason: canEnterSource ? undefined : "缺少真实来源入口，暂不能申请使用。",
+    },
+    {
+      id: "remix",
+      enabled: false,
+      reason: input.allowedActions.includes("remix")
+        ? "改编入口正在等待源对象确认。"
+        : "当前权利摘要没有返回可用的改编授权。",
+    },
+    {
+      id: "license",
+      enabled: false,
+      reason: input.sourceType === "asset"
+        ? "当前 publication 没有返回可用的授权 offer。"
+        : "只有带真实授权 offer 的素材可以进入授权流程。",
+    },
+  ];
 }
 
 export function getCommunitySectionLabel(
