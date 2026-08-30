@@ -26,6 +26,8 @@ import {
   Video as VideoIcon,
 } from "lucide-react";
 import type { StoryboardScene, StoryboardShot } from "@/lib/storyboard/contracts";
+import type { PrevisVersionSummary } from "@/lib/director/previs-version";
+import { VideoGenerationConfirmDialog } from "./VideoGenerationConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,8 +66,10 @@ type ShotVideoPanelProps = {
   hasFirstframe: boolean;
   /** True while the generate request is in-flight (button disabled). */
   submitting: boolean;
+  /** Immutable white-model version adopted for this shot, if any. */
+  previsVersion?: PrevisVersionSummary;
   /** Callback: generate video for this shot. */
-  onGenerate: () => void;
+  onGenerate: (previsVersionId?: string) => void;
   /** Callback: re-poll job status (called every 5s while running). */
   onPoll: () => void;
 };
@@ -93,11 +97,13 @@ export function ShotVideoPanel({
   videoState,
   hasFirstframe,
   submitting,
+  previsVersion,
   onGenerate,
   onPoll,
 }: ShotVideoPanelProps) {
   const status = videoState?.status ?? "idle";
   const [elapsed, setElapsed] = useState<number>(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Elapsed timer while queued/running
   useEffect(() => {
@@ -151,7 +157,7 @@ export function ShotVideoPanel({
       <div style={{ display: "flex", gap: 6, marginBottom: status === "completed" ? 10 : 0, flexWrap: "wrap" }}>
         <button
           type="button"
-          onClick={canGenerate ? onGenerate : undefined}
+          onClick={canGenerate ? () => setConfirmOpen(true) : undefined}
           disabled={!canGenerate}
           style={{
             padding: "4px 10px",
@@ -188,7 +194,7 @@ export function ShotVideoPanel({
           <div style={{ color: mutedColor, fontSize: 11 }}>{videoState?.error || "未知错误"}</div>
           <button
             type="button"
-            onClick={canGenerate ? onGenerate : undefined}
+            onClick={canGenerate ? () => setConfirmOpen(true) : undefined}
             disabled={!canGenerate}
             style={{
               marginTop: 6, padding: "3px 8px", fontSize: 11, borderRadius: 4,
@@ -269,6 +275,17 @@ export function ShotVideoPanel({
       ) : null}
 
       <span style={{ display: "none" }}>{scene.id ?? scene.clientId}{shotId}</span>
+      <VideoGenerationConfirmDialog
+        open={confirmOpen}
+        shotLabel={`场 ${scene.order} · 镜头 ${shot.order}`}
+        previsVersion={previsVersion ?? null}
+        busy={submitting}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          onGenerate(previsVersion?.id);
+        }}
+      />
     </div>
   );
 }

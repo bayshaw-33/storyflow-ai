@@ -40,6 +40,7 @@ import type {
   StoryboardShot,
 } from "@/lib/storyboard/contracts";
 import type { ProductionSourceFile } from "@/lib/production/types";
+import type { PrevisVersionSummary } from "@/lib/director/previs-version";
 import { ShotVideoPanel, BatchVideoProgressBar, type VideoJobMap, type VideoJobState, type BatchVideoProgress } from "./ShotVideoPanel";
 
 // ---------------------------------------------------------------------------
@@ -689,8 +690,9 @@ type ShotFramesPanelProps = {
   onUpdateShot: (sceneId: string, shotId: string, patch: Partial<StoryboardShot>) => void;
   // 视频区（任务 1）
   videoJobs: VideoJobMap;
+  adoptedPrevisByShot: Record<string, PrevisVersionSummary>;
   submittingVideoShotId: string | null;
-  onGenerateVideo: (shotId: string) => void;
+  onGenerateVideo: (shotId: string, previsVersionId?: string) => void;
   onPollVideo: (shotId: string) => void;
   // 批量（任务 2）
   batchProgress: BatchVideoProgress | null;
@@ -705,7 +707,7 @@ export function ShotFramesPanel(props: ShotFramesPanelProps) {
   const {
     scenes, frames, prompts, generatingShotId, generatingPromptsForShots,
     onGenerateFrame, onGeneratePrompts, onToggleConfirm, onUpdateShot,
-    videoJobs, submittingVideoShotId, onGenerateVideo, onPollVideo,
+    videoJobs, adoptedPrevisByShot, submittingVideoShotId, onGenerateVideo, onPollVideo,
     batchProgress, onBatchAll, onBatchScene, onBatchUnfinished, onBatchRetryFailed, batchRunning,
   } = props;
   const allShots = useMemo(() => scenes.flatMap((s) => s.shots.map((shot) => ({ scene: s, shot }))), [scenes]);
@@ -771,8 +773,9 @@ export function ShotFramesPanel(props: ShotFramesPanelProps) {
                 onToggleConfirm={() => onToggleConfirm(shotId)}
                 onUpdateShot={(patch) => onUpdateShot(scene.id ?? scene.clientId ?? "", shotId, patch)}
                 videoState={videoJobs[shotId]}
+                previsVersion={adoptedPrevisByShot[shotId]}
                 submittingVideo={submittingVideoShotId === shotId}
-                onGenerateVideo={() => onGenerateVideo(shotId)}
+                onGenerateVideo={(previsVersionId) => onGenerateVideo(shotId, previsVersionId)}
                 onPollVideo={() => onPollVideo(shotId)}
               />
             );
@@ -794,12 +797,13 @@ type ShotFrameCardProps = {
   onUpdateShot: (patch: Partial<StoryboardShot>) => void;
   // 视频区
   videoState?: VideoJobState;
+  previsVersion?: PrevisVersionSummary;
   submittingVideo: boolean;
-  onGenerateVideo: () => void;
+  onGenerateVideo: (previsVersionId?: string) => void;
   onPollVideo: () => void;
 };
 
-function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerateFrame, onToggleConfirm, onUpdateShot, videoState, submittingVideo, onGenerateVideo, onPollVideo }: ShotFrameCardProps) {
+function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerateFrame, onToggleConfirm, onUpdateShot, videoState, previsVersion, submittingVideo, onGenerateVideo, onPollVideo }: ShotFrameCardProps) {
   const shotId = shot.id ?? shot.clientId ?? "";
   return (
     <div style={cardStyle}>
@@ -859,6 +863,7 @@ function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerate
         scene={scene}
         shot={shot}
         videoState={videoState}
+        previsVersion={previsVersion}
         hasFirstframe={Boolean(frame?.imageUrl)}
         submitting={submittingVideo}
         onGenerate={onGenerateVideo}

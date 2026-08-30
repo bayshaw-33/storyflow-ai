@@ -93,7 +93,7 @@ import { fetchUnifiedWorkbenchContext, ensureUnifiedStage } from "@/lib/client/v
 import { bindWorkToUniverse } from "@/lib/client/v2/universe/api";
 import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
 import { buildPrevisShotOptions } from "@/lib/director/previs-integration";
-import type { PrevisVersionRecord } from "@/lib/director/previs-version";
+import { summarizePrevisVersion, type PrevisVersionRecord, type PrevisVersionSummary } from "@/lib/director/previs-version";
 import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
@@ -183,7 +183,7 @@ export function ProductionWorkbench() {
   const [candidates, setCandidates] = useState<AssetCandidateMap>({});
   const [frames, setFrames] = useState<ShotFrameMap>({});
   const [prompts, setPrompts] = useState<PromptResultMap>({});
-  const [adoptedPrevisByShot, setAdoptedPrevisByShot] = useState<Record<string, PrevisVersionRecord>>({});
+  const [adoptedPrevisByShot, setAdoptedPrevisByShot] = useState<Record<string, PrevisVersionSummary>>({});
 
   const previsShots = useMemo(
     () => buildPrevisShotOptions(scenes, assets, frames, prompts),
@@ -1002,7 +1002,7 @@ export function ProductionWorkbench() {
    * 任务 1：提交单个 Shot 的视频生成。
    * 重新生成时保留旧视频直到新视频成功（不先删旧的）。
    */
-  async function submitVideo(shotId: string) {
+  async function submitVideo(shotId: string, previsVersionId?: string) {
     // PRD §8.1：视频生成需正式 scope（draft 不可，需先归档）—— fail-closed
     if (!isCloudActionable(projectId, sourceUnitId) || !session) {
       setNotice("视频生成需要先归档为正式项目。");
@@ -1021,6 +1021,7 @@ export function ProductionWorkbench() {
         sourceUnitId,
         idempotencyKey,
         expectedRevision: revision ?? undefined,
+        previsVersionId,
       });
       setVideoJobs((current) => ({
         ...current,
@@ -1381,7 +1382,7 @@ export function ProductionWorkbench() {
   }
 
   function handlePrevisAdopted(version: PrevisVersionRecord) {
-    setAdoptedPrevisByShot((current) => ({ ...current, [version.snapshot.shotId]: version }));
+    setAdoptedPrevisByShot((current) => ({ ...current, [version.snapshot.shotId]: summarizePrevisVersion(version) }));
     navigateToStage("video");
   }
 
@@ -1729,6 +1730,7 @@ export function ProductionWorkbench() {
                 }}
                 onUpdateShot={updateShot}
                 videoJobs={videoJobs}
+                adoptedPrevisByShot={adoptedPrevisByShot}
                 submittingVideoShotId={submittingVideoShotId}
                 onGenerateVideo={submitVideo}
                 onPollVideo={pollVideoJob}

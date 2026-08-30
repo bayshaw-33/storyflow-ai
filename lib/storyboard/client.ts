@@ -269,6 +269,8 @@ export class StoryboardClient {
     duration?: number;
     /** 画幅，如 "16:9" / "9:16" */
     aspectRatio?: string;
+    /** Immutable adopted white-model version for exact input provenance. */
+    previsVersionId?: string;
   }): Promise<{ jobId: string; providerTaskId?: string; reused: boolean; status: string }> {
     const encoded = encodeURIComponent(shotId);
     return this.fetchJson({
