@@ -24,6 +24,7 @@ const rows = {
   projectPublications: [{ id: "pub-project-1", source_type: "project", source_id: "project-1", source_version: "work-v1" }],
   links: [{ id: "link-1", universe_id: "u-1", project_id: "project-1", project_role: "main_season", updated_at: universe.updated_at }],
   projects: [{ id: "project-1", title: "Glass City Season One", workflow_type: "script", status: "draft", owner_id: "owner-1", updated_at: universe.updated_at }],
+  works: [{ id: "work-1", project_id: "project-1", work_type: "script", status: "draft", updated_at: universe.updated_at }],
   entities: [
     { id: "entity-1", universe_id: "u-1", type: "character", name: "Mara", summary: "A keeper of forgotten dreams.", status: "canon", updated_at: universe.updated_at },
     { id: "entity-2", universe_id: "u-1", type: "location", name: "The Archive", summary: "A draft location.", status: "draft", updated_at: universe.updated_at },
@@ -41,7 +42,7 @@ const rows = {
     { id: "event-1", title: "The first memory", description: "Canon event.", date_label: "Day 1", status: "canon", is_canon: true, updated_at: universe.updated_at },
     { id: "event-2", title: "Possible ending", description: "Draft event.", date_label: "Later", status: "draft", is_canon: false, updated_at: universe.updated_at },
   ],
-  overlays: [{ id: "overlay-1", work_id: "project-1", entity_type: "entity", entity_id: "entity-1", revision: 2, status: "active", updated_at: universe.updated_at }],
+  overlays: [{ id: "overlay-1", work_id: "work-1", entity_type: "entity", entity_id: "entity-1", revision: 2, status: "active", updated_at: universe.updated_at }],
   candidates: [{ id: "candidate-1", item_type: "character", title: "New candidate", confidence: 0.76, status: "pending", updated_at: universe.updated_at }],
 };
 
@@ -55,6 +56,7 @@ function createFetcher({ fail = [] } = {}) {
     if (path.includes("storyflow_publications?") && path.includes("source_type=eq.universe")) return rows.publication;
     if (path.includes("storyflow_universe_project_links")) return rows.links;
     if (path.includes("storyflow_projects?")) return rows.projects;
+    if (path.includes("storyflow_works?")) return rows.works;
     if (path.includes("storyflow_universe_entities")) return rows.entities;
     if (path.includes("storyflow_universe_versions")) return rows.versions;
     if (path.includes("storyflow_character_voice_profiles")) return rows.voices;
@@ -100,6 +102,9 @@ test("C1 owner projection exposes draft candidates and local overlays without pa
   assert.equal(result.candidates.length, 1);
   assert.equal(result.localOverlays.length, 1);
   assert.equal(result.localOverlays[0].revision, 2);
+  assert.equal(result.localOverlays[0].workId, "work-1");
+  assert.equal(result.localOverlays[0].projectId, "project-1");
+  assert.equal(result.works[0].primaryWorkId, "work-1");
   assert.equal("patch" in result.localOverlays[0], false);
   assert.equal(result.versions.length, 2);
 });

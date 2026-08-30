@@ -52,6 +52,14 @@ type ProjectRow = {
   updated_at: string;
 };
 
+type PrimaryWorkRow = {
+  id: string;
+  project_id: string;
+  work_type: string;
+  status: string;
+  updated_at: string;
+};
+
 type EntityRow = {
   id: string;
   type: string;
@@ -190,7 +198,7 @@ export async function readCommunityUniverse(
   ]);
 
   const projectIds = links.map((link) => link.project_id).filter(Boolean);
-  const [projects, projectPublications] = await Promise.all([
+  const [projects, primaryWorks, projectPublications] = await Promise.all([
     projectIds.length
       ? optionalQuery<ProjectRow[]>(
           fetcher,
@@ -199,24 +207,35 @@ export async function readCommunityUniverse(
           state,
         )
       : Promise.resolve([] as ProjectRow[]),
+    projectIds.length
+      ? optionalQuery<PrimaryWorkRow[]>(
+          fetcher,
+          `/rest/v1/storyflow_works?project_id=in.${inFilter(projectIds)}&is_primary=eq.true&select=id,project_id,work_type,status,updated_at&order=updated_at.desc&limit=500`,
+          "primary_works",
+          state,
+        )
+      : Promise.resolve([] as PrimaryWorkRow[]),
     publicRefs(fetcher, "project", projectIds, state),
   ]);
   const projectById = new Map(projects.map((project) => [project.id, project]));
+  const primaryWorkByProject = new Map(primaryWorks.map((work) => [work.project_id, work]));
   const projectPublicationBySource = new Map(projectPublications.map((publication) => [publication.source_id, publication]));
   const works: UniverseCommunityWork[] = links
     .map((link) => {
       const project = projectById.get(link.project_id);
+      const primaryWork = primaryWorkByProject.get(link.project_id);
       const publication = projectPublicationBySource.get(link.project_id);
       if (!isOwner && !publication) return null;
       return {
         id: publication?.id ?? link.project_id,
         projectId: link.project_id,
+        primaryWorkId: primaryWork?.id ?? null,
         publicationId: publication?.id ?? null,
         title: publication?.source_id ? project?.title || publication.source_id : project?.title || link.project_id,
-        workType: project?.workflow_type || "other",
+        workType: primaryWork?.work_type || project?.workflow_type || "other",
         projectRole: link.project_role || "main_season",
-        status: project?.status || "draft",
-        updatedAt: project?.updated_at || link.updated_at,
+        status: primaryWork?.status || project?.status || "draft",
+        updatedAt: primaryWork?.updated_at || project?.updated_at || link.updated_at,
         visibility: publication ? "public" : "owner",
       } satisfies UniverseCommunityWork;
     })
@@ -316,10 +335,12 @@ export async function readCommunityUniverse(
       };
     });
 
-  const overlays = isOwner && projectIds.length
+  const primaryWorkIds = primaryWorks.map((work) => work.id);
+  const projectIdByWork = new Map(primaryWorks.map((work) => [work.id, work.project_id]));
+  const overlays = isOwner && primaryWorkIds.length
     ? await optionalQuery<OverlayRow[]>(
         fetcher,
-        `/rest/v1/storyflow_work_local_states?work_id=in.${inFilter(projectIds)}&status=eq.active&select=id,work_id,entity_type,entity_id,revision,status,updated_at&order=updated_at.desc&limit=500`,
+        `/rest/v1/storyflow_work_local_states?work_id=in.${inFilter(primaryWorkIds)}&status=eq.active&select=id,work_id,entity_type,entity_id,revision,status,updated_at&order=updated_at.desc&limit=500`,
         "local_overlays",
         state,
       )
@@ -363,6 +384,7 @@ export async function readCommunityUniverse(
     localOverlays: overlays.map((row) => ({
       id: row.id,
       workId: row.work_id,
+      projectId: projectIdByWork.get(row.work_id) ?? null,
       entityType: row.entity_type,
       entityId: row.entity_id,
       revision: Number(row.revision) || 0,

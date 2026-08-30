@@ -5,10 +5,11 @@ import { ArrowLeft, ArrowUpRight, Bell, Check, ExternalLink, RefreshCw, Sparkles
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { WorkType } from "@/lib/contracts/v2/work";
-import type { UniverseCommunityData } from "@/lib/contracts/v2/community-universe";
+import type { UniverseCommunityData, UniverseCommunityEntity, UniverseCommunityLocalOverlay } from "@/lib/contracts/v2/community-universe";
 import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { startProject } from "@/lib/client/v2/project-start/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/useI18n";
 import { UniverseEntitiesSection } from "./UniverseEntitiesSection";
 import { UniverseTimeline } from "./UniverseTimeline";
 import { UniverseWorksSection } from "./UniverseWorksSection";
@@ -26,6 +27,8 @@ const WORK_OPTIONS: Array<{ value: WorkType; label: string }> = [
 
 export function UniverseCommunityPage(props: { data: UniverseCommunityData | null; viewerId: string | null; error?: string | null }) {
   const router = useRouter();
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
   const [activeTab, setActiveTab] = useState<"overview" | "works" | "objects" | "timeline">("overview");
   const [followed, setFollowed] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
@@ -34,6 +37,11 @@ export function UniverseCommunityPage(props: { data: UniverseCommunityData | nul
   const [creating, setCreating] = useState(false);
   const [workType, setWorkType] = useState<WorkType>("script");
   const [title, setTitle] = useState("");
+  const [editingEntity, setEditingEntity] = useState<UniverseCommunityEntity | null>(null);
+  const [selectedWorkId, setSelectedWorkId] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
+  const [existingOverlay, setExistingOverlay] = useState<{ id: string; revision: number; patch?: { note?: string } } | null>(null);
+  const [overrideBusy, setOverrideBusy] = useState(false);
   const universeId = props.data?.universe.id ?? "";
 
   useEffect(() => {
@@ -119,6 +127,88 @@ export function UniverseCommunityPage(props: { data: UniverseCommunityData | nul
     }
   }
 
+  async function openLocalOverride(entity: UniverseCommunityEntity) {
+    const firstWork = data.works.find((work) => work.primaryWorkId)?.primaryWorkId ?? "";
+    if (!firstWork) {
+      setActionError(isZh ? "请先为这个 Universe 创建一个可编辑的 Work。" : "Create an editable Work for this Universe first.");
+      return;
+    }
+    setEditingEntity(entity);
+    setSelectedWorkId(firstWork);
+    setOverrideNote("");
+    setExistingOverlay(null);
+    setOverrideBusy(true);
+    setActionError(null);
+    try {
+      const response = await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(firstWork)}/local-states`);
+      const json = (await response.json().catch(() => ({}))) as { success?: boolean; items?: Array<{ id: string; entityId: string; revision: number; patch?: { note?: string } }>; error?: string };
+      if (!response.ok || !json.success) throw new Error(json.error || (isZh ? "读取本地覆盖失败。" : "Unable to load the Work override."));
+      const found = json.items?.find((item) => item.entityId === entity.id) ?? null;
+      setExistingOverlay(found);
+      setOverrideNote(found?.patch?.note ?? "");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : isZh ? "读取本地覆盖失败。" : "Unable to load the Work override.");
+    } finally {
+      setOverrideBusy(false);
+    }
+  }
+
+  async function changeOverrideWork(workId: string) {
+    if (!editingEntity) return;
+    setSelectedWorkId(workId);
+    setOverrideBusy(true);
+    setExistingOverlay(null);
+    setOverrideNote("");
+    try {
+      const response = await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(workId)}/local-states`);
+      const json = (await response.json().catch(() => ({}))) as { success?: boolean; items?: Array<{ id: string; entityId: string; revision: number; patch?: { note?: string } }>; error?: string };
+      if (!response.ok || !json.success) throw new Error(json.error || (isZh ? "读取本地覆盖失败。" : "Unable to load the Work override."));
+      const found = json.items?.find((item) => item.entityId === editingEntity.id) ?? null;
+      setExistingOverlay(found);
+      setOverrideNote(found?.patch?.note ?? "");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : isZh ? "读取本地覆盖失败。" : "Unable to load the Work override.");
+    } finally {
+      setOverrideBusy(false);
+    }
+  }
+
+  async function saveLocalOverride() {
+    if (!editingEntity || !selectedWorkId || !overrideNote.trim()) return;
+    setOverrideBusy(true);
+    setActionError(null);
+    try {
+      const response = await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(selectedWorkId)}/local-states`, {
+        method: existingOverlay ? "PATCH" : "POST",
+        body: JSON.stringify({ entityType: "entity", entityId: editingEntity.id, note: overrideNote.trim(), expectedRevision: existingOverlay?.revision }),
+      });
+      const json = (await response.json().catch(() => ({}))) as { success?: boolean; error?: string };
+      if (!response.ok || !json.success) throw new Error(json.error || (isZh ? "保存本地覆盖失败。" : "Unable to save the Work override."));
+      setEditingEntity(null);
+      setActionError(isZh ? "本 Work 的局部改写已保存，Universe Canon 未改变。" : "The Work override is saved. Universe Canon is unchanged.");
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : isZh ? "保存本地覆盖失败。" : "Unable to save the Work override.");
+    } finally {
+      setOverrideBusy(false);
+    }
+  }
+
+  async function proposeLocalOverride(overlay: UniverseCommunityLocalOverlay) {
+    const confirmed = window.confirm(isZh ? "提交后会进入 Universe Inbox 等待审核，不会直接修改 Canon。继续吗？" : "This enters the Universe Inbox for review and will not modify Canon directly. Continue?");
+    if (!confirmed) return;
+    setActionError(null);
+    try {
+      const response = await fetchWithAuthRetry(`/api/v2/works/${encodeURIComponent(overlay.workId)}/local-states/${encodeURIComponent(overlay.id)}/propose`, { method: "POST" });
+      const json = (await response.json().catch(() => ({}))) as { success?: boolean; proposal?: { id?: string; status?: string }; error?: string };
+      if (!response.ok || !json.success) throw new Error(json.error || (isZh ? "提交 Canon 候选失败。" : "Unable to submit the Canon proposal."));
+      setActionError(isZh ? `已提交，等待 Universe Inbox 审核。Proposal ${json.proposal?.id ?? ""}` : `Submitted for Universe Inbox review. Proposal ${json.proposal?.id ?? ""}`);
+      router.refresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : isZh ? "提交 Canon 候选失败。" : "Unable to submit the Canon proposal.");
+    }
+  }
+
   const tabItems = [
     ["overview", "概览"],
     ["works", `作品 ${data.works.length}`],
@@ -158,7 +248,7 @@ export function UniverseCommunityPage(props: { data: UniverseCommunityData | nul
           </nav>
           {activeTab === "overview" ? <><Overview data={data} onCreate={() => setCreateOpen(true)} /></> : null}
           {activeTab === "works" ? <UniverseWorksSection works={data.works} isOwner={data.isOwner} onCreate={() => setCreateOpen(true)} /> : null}
-          {activeTab === "objects" ? <UniverseEntitiesSection entities={data.entities} actors={data.actors} voices={data.voices} assets={data.assets} localOverlays={data.localOverlays} candidates={data.candidates} isOwner={data.isOwner} /> : null}
+          {activeTab === "objects" ? <UniverseEntitiesSection entities={data.entities} actors={data.actors} voices={data.voices} assets={data.assets} localOverlays={data.localOverlays} candidates={data.candidates} isOwner={data.isOwner} isZh={isZh} canEditLocalOverride={data.works.some((work) => Boolean(work.primaryWorkId))} onEditLocalOverride={(entity) => void openLocalOverride(entity)} onProposeLocalOverride={(overlay) => void proposeLocalOverride(overlay)} /> : null}
           {activeTab === "timeline" ? <UniverseTimeline events={data.timeline} versions={data.versions} /> : null}
         </div>
         <aside className={styles.universeSideRail}>
@@ -169,6 +259,7 @@ export function UniverseCommunityPage(props: { data: UniverseCommunityData | nul
       </div>
 
       {createOpen ? <div className={styles.createDialogBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreateOpen(false); }}><section className={styles.createDialogCard} role="dialog" aria-modal="true" aria-labelledby="create-universe-work-title"><div className={styles.createDialogHeader}><div><span className={styles.universePanelKicker}>RETURN TO CREATION</span><h2 id="create-universe-work-title">从这个 Universe 开始一个 Work</h2></div><button type="button" className={styles.universeIconButton} onClick={() => setCreateOpen(false)} aria-label="关闭">×</button></div><label className={styles.createField}><span>Work 类型</span><select value={workType} onChange={(event) => setWorkType(event.target.value as WorkType)}>{WORK_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className={styles.createField}><span>项目标题（可选）</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={`未命名${WORK_OPTIONS.find((option) => option.value === workType)?.label || "创作"}`} maxLength={120} /></label><p className={styles.createHint}>会先创建 Project + Primary Work，再建立 Universe 绑定；任何一步失败都会明确提示，不会静默跳转。</p><div className={styles.createDialogActions}><button type="button" className={styles.universeAction} onClick={() => setCreateOpen(false)} disabled={creating}>取消</button><button type="button" className={styles.universeActionPrimary} onClick={() => void createWork()} disabled={creating}>{creating ? "创建中…" : "创建并打开工作台"}</button></div></section></div> : null}
+      {editingEntity ? <div className={styles.createDialogBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingEntity(null); }}><section className={styles.createDialogCard} role="dialog" aria-modal="true" aria-labelledby="work-local-override-title"><div className={styles.createDialogHeader}><div><span className={styles.universePanelKicker}>WORK LOCAL OVERRIDE</span><h2 id="work-local-override-title">{isZh ? `改写 ${editingEntity.name}` : `Override ${editingEntity.name}`}</h2></div><button type="button" className={styles.universeIconButton} onClick={() => setEditingEntity(null)} aria-label={isZh ? "关闭" : "Close"}>×</button></div><label className={styles.createField}><span>{isZh ? "应用到 Work" : "Apply to Work"}</span><select value={selectedWorkId} onChange={(event) => void changeOverrideWork(event.target.value)}>{data.works.filter((work) => work.primaryWorkId).map((work) => <option key={work.primaryWorkId!} value={work.primaryWorkId!}>{work.title}</option>)}</select></label><label className={styles.createField}><span>{isZh ? "本 Work 的改写说明" : "Override for this Work"}</span><textarea value={overrideNote} onChange={(event) => setOverrideNote(event.target.value)} maxLength={2000} rows={6} placeholder={isZh ? "描述这个对象在当前 Work 中与 Canon 不同的地方。" : "Describe how this object differs from Canon in this Work."} /></label><p className={styles.createHint}>{isZh ? "只影响所选 Work。保存不会直接修改 Universe Canon。" : "Only the selected Work changes. Saving does not modify Universe Canon."}</p><div className={styles.createDialogActions}><button type="button" className={styles.universeAction} onClick={() => setEditingEntity(null)} disabled={overrideBusy}>{isZh ? "取消" : "Cancel"}</button><button type="button" className={styles.universeActionPrimary} onClick={() => void saveLocalOverride()} disabled={overrideBusy || !overrideNote.trim()}>{overrideBusy ? (isZh ? "处理中…" : "Working…") : existingOverlay ? (isZh ? "保存新 revision" : "Save new revision") : (isZh ? "保存本地覆盖" : "Save override")}</button></div></section></div> : null}
     </main>
   );
 }

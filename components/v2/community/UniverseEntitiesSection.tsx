@@ -1,4 +1,6 @@
-import { Mic2, Palette, UserRound } from "lucide-react";
+"use client";
+
+import { ArrowUpRight, Mic2, Palette, Pencil, UserRound } from "lucide-react";
 import type {
   UniverseCommunityActor,
   UniverseCommunityAsset,
@@ -17,6 +19,10 @@ export function UniverseEntitiesSection(props: {
   localOverlays: readonly UniverseCommunityLocalOverlay[];
   candidates: readonly UniverseCommunityCandidate[];
   isOwner: boolean;
+  isZh: boolean;
+  canEditLocalOverride: boolean;
+  onEditLocalOverride: (entity: UniverseCommunityEntity) => void;
+  onProposeLocalOverride: (overlay: UniverseCommunityLocalOverlay) => void;
 }) {
   const canon = props.entities.filter((entity) => entity.status === "canon");
   const alternative = props.entities.filter((entity) => entity.status === "alternative");
@@ -32,8 +38,8 @@ export function UniverseEntitiesSection(props: {
       </div>
 
       <div className={styles.universeObjectGroups}>
-        <ObjectGroup title="Canon" description="公开世界的稳定事实" entities={canon} />
-        {alternative.length ? <ObjectGroup title="Alternative" description="仍可继续讨论的分支版本" entities={alternative} /> : null}
+        <ObjectGroup title="Canon" description={props.isZh ? "公开世界的稳定事实" : "Stable facts in the public world"} entities={canon} isZh={props.isZh} canEdit={props.isOwner && props.canEditLocalOverride} onEditLocalOverride={props.onEditLocalOverride} />
+        {alternative.length ? <ObjectGroup title="Alternative" description={props.isZh ? "仍可继续讨论的分支版本" : "A branch that can still be explored"} entities={alternative} isZh={props.isZh} canEdit={props.isOwner && props.canEditLocalOverride} onEditLocalOverride={props.onEditLocalOverride} /> : null}
         {props.isOwner ? (
           <>
             <section className={styles.universeObjectGroup}>
@@ -43,7 +49,7 @@ export function UniverseEntitiesSection(props: {
               </div>
               {props.localOverlays.length ? (
                 <div className={styles.universeMiniList}>
-                  {props.localOverlays.map((overlay) => <div key={overlay.id} className={styles.universeMiniItem}><strong>{overlay.entityType}</strong><span>{overlay.entityId.slice(0, 12)} · rev {overlay.revision}</span></div>)}
+                  {props.localOverlays.map((overlay) => <div key={overlay.id} className={styles.universeMiniItem}><strong>{overlay.entityType}</strong><span>{overlay.entityId.slice(0, 12)} · rev {overlay.revision}</span><button type="button" className={styles.universeAction} onClick={() => props.onProposeLocalOverride(overlay)}><ArrowUpRight size={13} />{props.isZh ? "提交为 Canon 候选" : "Propose to Canon"}</button></div>)}
                 </div>
               ) : <p className={styles.universeGroupEmpty}>还没有本地覆盖层。</p>}
             </section>
@@ -71,7 +77,7 @@ export function UniverseEntitiesSection(props: {
   );
 }
 
-function ObjectGroup(props: { title: string; description: string; entities: readonly UniverseCommunityEntity[] }) {
+function ObjectGroup(props: { title: string; description: string; entities: readonly UniverseCommunityEntity[]; isZh: boolean; canEdit: boolean; onEditLocalOverride: (entity: UniverseCommunityEntity) => void }) {
   return (
     <section className={styles.universeObjectGroup}>
       <div className={styles.universeGroupHeading}>
@@ -85,6 +91,7 @@ function ObjectGroup(props: { title: string; description: string; entities: read
               <div className={styles.universeObjectTopline}><strong>{entity.name}</strong><span className={`${styles.statusPill} ${statusClass(entity.status)}`}>{entity.status}</span></div>
               <span className={styles.universeObjectKind}>{entity.kind}</span>
               {entity.summary ? <p className={styles.universeObjectSummary}>{entity.summary}</p> : null}
+              {props.canEdit ? <button type="button" className={styles.universeAction} onClick={() => props.onEditLocalOverride(entity)}><Pencil size={13} />{props.isZh ? "本 Work 改写" : "Work override"}</button> : null}
             </article>
           ))}
         </div>

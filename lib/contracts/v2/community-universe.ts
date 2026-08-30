@@ -20,6 +20,7 @@ export interface UniverseCommunityUniverse {
 export interface UniverseCommunityWork {
   readonly id: string;
   readonly projectId: string;
+  readonly primaryWorkId: string | null;
   readonly publicationId: string | null;
   readonly title: string;
   readonly workType: string;
@@ -93,6 +94,7 @@ export interface UniverseCommunityVersion {
 export interface UniverseCommunityLocalOverlay {
   readonly id: string;
   readonly workId: string;
+  readonly projectId: string | null;
   readonly entityType: string;
   readonly entityId: string;
   readonly revision: number;
