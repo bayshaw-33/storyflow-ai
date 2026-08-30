@@ -29,10 +29,16 @@ export type PrevisShotOption = {
   propAssetIds: string[];
   storyboardImageUrl: string | null;
   videoPrompt: string;
+  promptInputHash: string;
+  referenceVersionIds: string[];
 };
 
 export type PrevisFrameMap = Record<string, { imageUrl: string }>;
-export type PrevisPromptMap = Record<string, { jimengVideoPrompt: string }>;
+export type PrevisPromptMap = Record<string, {
+  jimengVideoPrompt: string;
+  inputHash?: string;
+  referenceVersionIds?: string[];
+}>;
 
 export type VideoHandoffPackage = {
   schemaVersion: 1;
@@ -91,6 +97,8 @@ export function buildPrevisShotOptions(
       propAssetIds: [...shot.propAssetIds],
       storyboardImageUrl: frames[shotId]?.imageUrl ?? null,
       videoPrompt: prompts[shotId]?.jimengVideoPrompt ?? "",
+      promptInputHash: prompts[shotId]?.inputHash ?? "",
+      referenceVersionIds: [...(prompts[shotId]?.referenceVersionIds ?? [])],
     };
   }));
 }
