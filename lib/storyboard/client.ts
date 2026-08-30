@@ -324,7 +324,7 @@ export class StoryboardClient {
   async listVideoJobs(input: {
     projectId: string;
     sourceUnitId: string;
-  }): Promise<{ jobs: Array<{ id: string; status: string; target_id: string | null; result_url: string | null; error: string | null; created_at: string }> }> {
+  }): Promise<{ jobs: Array<{ id: string; status: string; target_id: string | null; result_url: string | null; error: string | null; provider_task_id: string | null; input_params: Record<string, unknown>; result_metadata: Record<string, unknown>; created_at: string; updated_at: string }> }> {
     const query: Record<string, string> = {
       projectId: input.projectId,
       sourceUnitId: input.sourceUnitId,

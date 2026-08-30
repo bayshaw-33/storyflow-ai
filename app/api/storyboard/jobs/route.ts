@@ -29,6 +29,9 @@ type JobRow = {
   result_url: string | null;
   storage_path: string | null;
   error: string | null;
+  provider_task_id: string | null;
+  input_params: Record<string, unknown>;
+  result_metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -61,7 +64,7 @@ export async function GET(request: Request) {
   const targetType = jobType === "video" ? "storyboard_shot_video" : "storyboard_shot";
   try {
     const rows = await serviceFetch<JobRow[]>(
-      `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(userId)}&job_type=eq.${encodeURIComponent(jobType)}&target_type=eq.${encodeURIComponent(targetType)}&project_id=eq.${encodeURIComponent(projectId)}&input_params-%3E%3EsourceUnitId=eq.${encodeURIComponent(sourceUnitId)}&order=created_at.desc&limit=200&select=id,status,target_id,result_url,storage_path,error,created_at,updated_at`,
+      `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(userId)}&job_type=eq.${encodeURIComponent(jobType)}&target_type=eq.${encodeURIComponent(targetType)}&project_id=eq.${encodeURIComponent(projectId)}&input_params-%3E%3EsourceUnitId=eq.${encodeURIComponent(sourceUnitId)}&order=created_at.desc&limit=200&select=id,status,target_id,result_url,storage_path,error,provider_task_id,input_params,result_metadata,created_at,updated_at`,
     );
 
     // PRD §9.2：对 completed 且有 storage_path 的 video job 重签 result_url

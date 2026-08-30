@@ -228,6 +228,37 @@ export function ProductionWorkbench() {
     [supabaseClient],
   );
 
+  useEffect(() => {
+    if (activeStage !== "storyboard" && activeStage !== "video") return;
+    if (!projectId || !sourceUnitId || projectId.startsWith("draft-")) return;
+    const shotIds = scenes.flatMap((scene) => scene.shots.flatMap((shot) => (
+      shot.idSource === "server" && shot.id ? [shot.id] : []
+    )));
+    if (shotIds.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (let index = 0; index < shotIds.length; index += 8) {
+        const batch = shotIds.slice(index, index + 8);
+        const records = await Promise.allSettled(batch.map((shotId) => storyboardClient.getPrevisVersion(shotId, {
+          projectId,
+          sourceUnitId,
+        })));
+        if (cancelled) return;
+        const recovered: Record<string, PrevisVersionSummary> = {};
+        for (const result of records) {
+          if (result.status === "fulfilled" && result.value) {
+            const summary = summarizePrevisVersion(result.value);
+            recovered[summary.shotId] = summary;
+          }
+        }
+        if (Object.keys(recovered).length > 0) {
+          setAdoptedPrevisByShot((current) => ({ ...current, ...recovered }));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeStage, projectId, scenes, sourceUnitId, storyboardClient]);
+
   // 任务 3：关联跳转 — 制作工作台 → 创作工作台（无关联时隐藏或禁用并说明）
   const backToCreation = useMemo(() => {
     if (!projectId) return { visible: false, ok: false, reason: undefined as string | undefined };
@@ -508,17 +539,23 @@ export function ProductionWorkbench() {
       const map: VideoJobMap = {};
       for (const job of resp.jobs) {
         if (!job.target_id) continue;
+        const metadata = job.result_metadata ?? {};
+        const input = job.input_params ?? {};
+        const restoredStatus: VideoJobState["status"] = job.status === "completed" || job.status === "failed" || job.status === "queued"
+          ? job.status
+          : "running";
         map[job.target_id] = {
           jobId: job.id,
-          status: job.status as VideoJobState["status"],
+          status: restoredStatus,
+          subStatus: metadata.sub_status as VideoJobState["subStatus"],
           startedAt: new Date(job.created_at).getTime(),
           finishedAt: job.status === "completed" || job.status === "failed" ? Date.now() : null,
           videoUrl: job.result_url,
           error: job.error,
           costEstimate: null,
-          durationSeconds: null,
-          providerTaskId: null,
-          aspectRatio: "16:9",
+          durationSeconds: typeof metadata.durationSeconds === "number" ? metadata.durationSeconds : null,
+          providerTaskId: job.provider_task_id,
+          aspectRatio: typeof input.aspectRatio === "string" ? input.aspectRatio : "16:9",
         };
       }
       setVideoJobs(map);
