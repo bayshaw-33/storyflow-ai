@@ -107,7 +107,8 @@ test("任务中心展示最后成功更新时间，并把任务操作纳入认�
 test("社区发现失败时通过统一空状态提供当前分区重试入口", async () => {
   const feed = read("components/v2/community/DiscoveryFeed.tsx");
   assert.match(feed, /\{error \? \([\s\S]*?<CommunityEmptyState[\s\S]*?actionLabel=\{isZh \? "重试" : "Retry"\}[\s\S]*?onAction=\{retryCurrentSection\}/);
-  assert.match(feed, /function retryCurrentSection\(\)[\s\S]*?loadPersonalSection\(activeSection\)[\s\S]*?loadRemoteSection\(activeSection, false, query\)/);
+  assert.match(feed, /function retryCurrentSection\(\)[\s\S]*?loadRemoteSection\(activeSection, false, query\)/);
+  assert.doesNotMatch(feed, /loadPersonalSection/);
   const { CommunityEmptyState } = await import('../components/v2/community/CommunityEmptyState.tsx');
   let retries = 0;
   let renderer;
