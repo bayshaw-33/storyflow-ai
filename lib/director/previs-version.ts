@@ -116,7 +116,7 @@ export function parsePrevisVersionSnapshot(value: unknown): PrevisVersionSnapsho
     projectId: input.projectId,
     workId: input.workId,
     sourceUnitId: input.sourceUnitId,
-    storyboardRevision: input.storyboardRevision,
+    storyboardRevision: Number(input.storyboardRevision),
     sceneId: input.sceneId,
     shotId: input.shotId,
     shotLabel: input.shotLabel,
@@ -128,7 +128,7 @@ export function parsePrevisVersionSnapshot(value: unknown): PrevisVersionSnapsho
       promptInputHash: adopted.promptInputHash,
       referenceVersionIds: [...adopted.referenceVersionIds],
       durationSeconds: adopted.durationSeconds,
-      aspectRatio: "9:16",
+      aspectRatio: "9:16" as const,
     },
     capabilityTranslation: {
       mode: capability.mode,
