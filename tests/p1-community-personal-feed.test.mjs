@@ -81,3 +81,10 @@ test("personal feed migration performs Follow/Bookmark filtering in PostgreSQL",
   assert.match(sql, /publication\.created_at DESC, publication\.id DESC/);
   assert.match(sql, /REVOKE ALL.*authenticated/i);
 });
+
+test("personal feed compares UUID follow targets without invalid text casts", () => {
+  const sql = readFileSync(new URL("../supabase/migrations/20260831010000_community_personal_feed_cursor.sql", import.meta.url), "utf8");
+  assert.doesNotMatch(sql, /follow\.target_id\s*=\s*publication\.(?:id|publisher_id|universe_id|source_id)::text/);
+  assert.match(sql, /follow\.target_id = publication\.id/);
+  assert.match(sql, /follow\.target_id = publication\.publisher_id/);
+});

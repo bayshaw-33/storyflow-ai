@@ -49,13 +49,13 @@ BEGIN
         FROM public.storyflow_follows AS follow
         WHERE follow.follower_id = p_user_id
           AND (
-            (follow.target_type = 'publication' AND follow.target_id = publication.id::text)
-            OR (follow.target_type = 'user' AND follow.target_id = publication.publisher_id::text)
+            (follow.target_type = 'publication' AND follow.target_id = publication.id)
+            OR (follow.target_type = 'user' AND follow.target_id = publication.publisher_id)
             OR (
               follow.target_type = 'universe'
               AND (
-                follow.target_id = publication.universe_id::text
-                OR (publication.source_type = 'universe' AND follow.target_id = publication.source_id::text)
+                follow.target_id = publication.universe_id
+                OR (publication.source_type = 'universe' AND follow.target_id = publication.source_id)
               )
             )
           )
