@@ -41,8 +41,8 @@
 
 ## Task 6：总验证与交付
 
-- [ ] P0 + P1 focused regression。
-- [ ] `pnpm exec tsc --noEmit`。
-- [ ] `pnpm build`。
-- [ ] 比对四个冻结布局文件与 `origin/main`。
+- [x] P0 + P1 focused regression。
+- [x] `pnpm exec tsc --noEmit`。
+- [x] `pnpm build`。
+- [x] 比对四个冻结布局文件与 `origin/main`。
 - [ ] 合并 `main`、应用 Supabase migration、推送 GitHub、验证 Vercel production。
