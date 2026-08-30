@@ -188,6 +188,11 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
         : await pollByProviderName(job.provider, job.provider_task_id);
 
       if (result.status === "done" && result.videoUrl) {
+        await patchJob(jobId, {
+          status: "result_ingesting",
+          result_metadata: { ...job.result_metadata, sub_status: "result_ingesting" },
+        });
+        job = { ...job, status: "result_ingesting", result_metadata: { ...job.result_metadata, sub_status: "result_ingesting" } };
         const transfer = await downloadAndTransfer(provider, result.videoUrl, { userId, jobId: job.id, shotId });
 
         if (transfer.kind === "success") {
@@ -204,6 +209,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storagePath: transfer.storagePath,
               durationSeconds,
               completedAt: new Date().toISOString(),
+              sub_status: "completed",
             },
           });
           job = {
@@ -219,6 +225,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storagePath: transfer.storagePath,
               durationSeconds,
               completedAt: new Date().toISOString(),
+              sub_status: "completed",
             },
           };
           // Evidence event
@@ -248,6 +255,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storagePath: null,
               storageTransferError: transfer.error,
               durationSeconds,
+              sub_status: "result_ingesting",
             },
           });
           job = {
@@ -263,6 +271,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storagePath: null,
               storageTransferError: transfer.error,
               durationSeconds,
+              sub_status: "result_ingesting",
             },
           };
           return NextResponse.json({
@@ -285,6 +294,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storagePath: transfer.storagePath,
               storageTransferError: transfer.error,
               durationSeconds,
+              sub_status: "result_ingesting",
             },
           });
           job = {
@@ -300,6 +310,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storagePath: transfer.storagePath,
               storageTransferError: transfer.error,
               durationSeconds,
+              sub_status: "result_ingesting",
             },
           };
           return NextResponse.json({
@@ -312,17 +323,31 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
         await patchJob(jobId, {
           status: "failed",
           error: `${job.provider} 视频生成失败 (raw: ${result.rawStatus})`,
+          result_metadata: { ...job.result_metadata, sub_status: "failed" },
         });
         job = {
           ...job,
           status: "failed",
           error: `${job.provider} 视频生成失败 (raw: ${result.rawStatus})`,
+          result_metadata: { ...job.result_metadata, sub_status: "failed" },
         };
+      } else {
+        await patchJob(jobId, {
+          status: "running",
+          result_metadata: { ...job.result_metadata, sub_status: "generating" },
+        });
+        job = { ...job, result_metadata: { ...job.result_metadata, sub_status: "generating" } };
       }
-      // else: still running, no update
     } catch (error) {
       // provider poll failure is non-fatal; return current DB state + warning
       const message = error instanceof Error ? error.message : String(error);
+      if (/timeout|abort/i.test(message)) {
+        await patchJob(jobId, {
+          status: "running",
+          result_metadata: { ...job.result_metadata, sub_status: "provider_timeout" },
+        }).catch(() => {});
+        job = { ...job, result_metadata: { ...job.result_metadata, sub_status: "provider_timeout" } };
+      }
       return NextResponse.json({
         success: true,
         job,
@@ -362,6 +387,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storageTransferError: null,
               durationSeconds,
               completedAt: new Date().toISOString(),
+              sub_status: "completed",
             },
           });
           job = {
@@ -378,6 +404,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
               storageTransferError: null,
               durationSeconds,
               completedAt: new Date().toISOString(),
+              sub_status: "completed",
             },
           };
           if (isEvidenceLedgerEnabled() && hasEvidenceScope) {
@@ -399,8 +426,9 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
             result_url: null,
             storage_path: null,
             error: transfer.error,
+            result_metadata: { ...job.result_metadata, sub_status: "result_ingesting" },
           });
-          job = { ...job, status: "result_ingesting", result_url: null, storage_path: null, error: transfer.error };
+          job = { ...job, status: "result_ingesting", result_url: null, storage_path: null, error: transfer.error, result_metadata: { ...job.result_metadata, sub_status: "result_ingesting" } };
           return NextResponse.json({ success: true, job, warning: transfer.error });
         } else {
           // partial_error：upload 成功但 sign 失败 → 升级为 partial_failure
@@ -409,8 +437,9 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
             result_url: null,
             storage_path: transfer.storagePath,
             error: transfer.error,
+            result_metadata: { ...job.result_metadata, sub_status: "result_ingesting" },
           });
-          job = { ...job, status: "partial_failure", result_url: null, storage_path: transfer.storagePath, error: transfer.error };
+          job = { ...job, status: "partial_failure", result_url: null, storage_path: transfer.storagePath, error: transfer.error, result_metadata: { ...job.result_metadata, sub_status: "result_ingesting" } };
           return NextResponse.json({ success: true, job, warning: transfer.error });
         }
       }
@@ -441,6 +470,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
           storageTransferError: null,
           durationSeconds,
           completedAt: new Date().toISOString(),
+          sub_status: "completed",
         },
       });
       job = {
@@ -456,6 +486,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
           storageTransferError: null,
           durationSeconds,
           completedAt: new Date().toISOString(),
+          sub_status: "completed",
         },
       };
       if (isEvidenceLedgerEnabled() && hasEvidenceScope) {

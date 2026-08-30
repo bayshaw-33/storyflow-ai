@@ -48,6 +48,9 @@ function required(value: unknown, code: string): string {
 function parseVersionRow(row: VersionRow | undefined, scope: Omit<Scope, "fetcher">): PrevisVersionRecord | null {
   if (!row) return null;
   const snapshot = parsePrevisVersionSnapshot(row.snapshot_json);
+  const { snapshotHash, ...snapshotWithoutHash } = snapshot;
+  const actualHash = createHash("sha256").update(JSON.stringify(snapshotWithoutHash)).digest("hex");
+  if (actualHash !== snapshotHash) throw new Error("PREVIS_SNAPSHOT_HASH_MISMATCH");
   if (
     snapshot.projectId !== scope.projectId
     || snapshot.sourceUnitId !== scope.sourceUnitId

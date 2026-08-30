@@ -271,7 +271,7 @@ export class StoryboardClient {
     aspectRatio?: string;
     /** Immutable adopted white-model version for exact input provenance. */
     previsVersionId?: string;
-  }): Promise<{ jobId: string; providerTaskId?: string; reused: boolean; status: string }> {
+  }): Promise<{ jobId: string; providerTaskId?: string; reused: boolean; status: string; subStatus?: string }> {
     const encoded = encodeURIComponent(shotId);
     return this.fetchJson({
       method: "POST",

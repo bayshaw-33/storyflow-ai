@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { StoryboardScene, StoryboardShot } from "@/lib/storyboard/contracts";
 import type { PrevisVersionSummary } from "@/lib/director/previs-version";
+import type { VideoJobSubStatus } from "@/lib/storyboard/video-submission";
 import { VideoGenerationConfirmDialog } from "./VideoGenerationConfirmDialog";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ export type VideoJobStatus = "idle" | "queued" | "running" | "completed" | "fail
 export type VideoJobState = {
   jobId: string | null;
   status: VideoJobStatus;
+  subStatus?: VideoJobSubStatus;
   /** ISO when the job was submitted (for elapsed time display). */
   startedAt: number | null;
   /** ISO when the job reached terminal state. */
@@ -144,7 +146,7 @@ export function ShotVideoPanel({
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <VideoIcon size={12} color={accentColor} />
           <span style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: 0.5 }}>视频</span>
-          <StatusBadge status={status} />
+          <StatusBadge status={status} subStatus={videoState?.subStatus} />
         </div>
         {status === "queued" || status === "running" ? (
           <span style={{ fontSize: 11, color: mutedColor, display: "flex", alignItems: "center", gap: 4 }}>
@@ -182,6 +184,11 @@ export function ShotVideoPanel({
           )}
           {submitting ? "提交中…" : status === "queued" ? "排队中" : status === "running" ? "生成中" : status === "completed" ? "重新生成" : "生成视频"}
         </button>
+        {videoState?.subStatus === "submission_unknown" ? (
+          <button type="button" onClick={onPoll} style={{ padding: "4px 10px", fontSize: 12, borderRadius: 6, border: `1px solid ${borderColor}`, background: "transparent", color: labelColor, cursor: "pointer" }}>
+            <RefreshCw size={11} style={{ marginRight: 4 }} />刷新状态
+          </button>
+        ) : null}
       </div>
 
       {/* 失败状态 */}
@@ -294,7 +301,7 @@ export function ShotVideoPanel({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function StatusBadge({ status }: { status: VideoJobStatus }) {
+function StatusBadge({ status, subStatus }: { status: VideoJobStatus; subStatus?: VideoJobSubStatus }) {
   const map: Record<VideoJobStatus, { label: string; color: string; bg: string }> = {
     idle: { label: "未生成", color: mutedColor, bg: "rgba(139, 151, 163, 0.12)" },
     queued: { label: "排队中", color: warningColor, bg: "rgba(251, 191, 36, 0.12)" },
@@ -302,10 +309,17 @@ function StatusBadge({ status }: { status: VideoJobStatus }) {
     completed: { label: "已完成", color: accentColor, bg: "rgba(117, 219, 198, 0.12)" },
     failed: { label: "失败", color: dangerColor, bg: "rgba(255, 107, 107, 0.12)" },
   };
+  const subStatusLabels: Partial<Record<VideoJobSubStatus, string>> = {
+    accepted: "已受理",
+    generating: "生成中",
+    result_ingesting: "转存中",
+    submission_unknown: "提交待确认",
+    provider_timeout: "查询超时",
+  };
   const s = map[status];
   return (
     <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, color: s.color, background: s.bg }}>
-      {s.label}
+      {subStatusLabels[subStatus ?? "queued"] ?? s.label}
     </span>
   );
 }

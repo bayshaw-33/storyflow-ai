@@ -24,6 +24,12 @@ import { NextResponse } from "next/server";
 import { authenticateRequest, serviceFetch } from "@/lib/supabase/server";
 import { loadStoryboardState } from "@/lib/storyboard/state-api";
 import { resolveVideoProvider, computeVideoIdempotencyHash } from "@/lib/ai/video/provider";
+import { readPrevisVersion, resolveExactFirstframeJob } from "@/lib/server/previs-versions";
+import {
+  buildVideoJobMetadata,
+  isAmbiguousVideoSubmissionError,
+  type VideoPrevisProvenance,
+} from "@/lib/storyboard/video-submission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +45,8 @@ type GenerateVideoBody = {
   duration?: number;
   /** 画幅，如 "16:9"；前端可选传 */
   aspectRatio?: string;
+  /** 已采用的不可变白模版本；存在时服务端忽略 promptOverride/duration/aspectRatio。 */
+  previsVersionId?: string;
 };
 
 function errorResponse(status: number, code: string, error: string, details?: Record<string, unknown>) {
@@ -76,8 +84,8 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
     });
   }
 
-  const duration = body.duration === 10 ? 10 : 5;
-  const aspectRatio = body.aspectRatio || "16:9";
+  let duration = body.duration === 10 ? 10 : 5;
+  let aspectRatio = body.aspectRatio || "16:9";
 
   // 1. load persisted state to find shot + 服务端解析 firstframe
   let shotPrompt = body.promptOverride?.trim() || "";
@@ -97,12 +105,14 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
             shotConfirmed = Boolean(shot.confirmed);
             if (!shotPrompt && shot.jimengPromptZh) shotPrompt = shot.jimengPromptZh;
             // firstframe = 最近 completed image job 的 result_url（服务端解析，禁止浏览器传）
-            const imageJobs = await serviceFetch<Array<{ result_url: string | null; status: string }>>(
-              `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(userId)}&job_type=eq.image&target_type=eq.storyboard_shot&target_id=eq.${encodeURIComponent(shotId)}&status=eq.completed&order=created_at.desc&limit=1&select=result_url,status`,
-            );
-            if (imageJobs?.[0]?.result_url) {
-              firstframeUrl = imageJobs[0].result_url as string;
-              shotHasImage = true;
+            if (!body.previsVersionId) {
+              const imageJobs = await serviceFetch<Array<{ result_url: string | null; status: string }>>(
+                `/rest/v1/storyflow_generation_jobs?owner_id=eq.${encodeURIComponent(userId)}&project_id=eq.${encodeURIComponent(body.projectId)}&job_type=eq.image&target_type=eq.storyboard_shot&target_id=eq.${encodeURIComponent(shotId)}&status=eq.completed&input_params-%3E%3EsourceUnitId=eq.${encodeURIComponent(body.sourceUnitId)}&order=created_at.desc&limit=1&select=result_url,status`,
+              );
+              if (imageJobs?.[0]?.result_url) {
+                firstframeUrl = imageJobs[0].result_url as string;
+                shotHasImage = true;
+              }
             }
             break;
           }
@@ -120,6 +130,45 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
   if (!shotConfirmed) {
     return errorResponse(409, "SHOT_NOT_CONFIRMED", "该 Shot 未确认分镜示意图，无法生成视频。请先在「分镜图」tab 确认。");
   }
+
+  let provenance: Partial<VideoPrevisProvenance> = {};
+  if (body.previsVersionId) {
+    try {
+      const adopted = await readPrevisVersion({
+        userId,
+        projectId: body.projectId,
+        sourceUnitId: body.sourceUnitId,
+        shotId,
+        versionId: body.previsVersionId,
+      });
+      if (!adopted) return errorResponse(404, "PREVIS_VERSION_NOT_FOUND", "采用的白模版本不存在或无权访问。");
+      const exactFrame = await resolveExactFirstframeJob({
+        userId,
+        projectId: body.projectId,
+        sourceUnitId: body.sourceUnitId,
+        shotId,
+        jobId: adopted.snapshot.adoptedInput.firstframeJobId,
+      });
+      if (exactFrame.result_url !== adopted.snapshot.adoptedInput.firstframeUrlAtSave) {
+        return errorResponse(409, "PREVIS_FIRSTFRAME_CHANGED", "白模版本对应的首帧结果已变化，请重新保存白模版本。");
+      }
+      shotPrompt = adopted.snapshot.adoptedInput.prompt;
+      firstframeUrl = exactFrame.result_url;
+      shotHasImage = true;
+      duration = adopted.snapshot.adoptedInput.durationSeconds;
+      aspectRatio = adopted.snapshot.adoptedInput.aspectRatio;
+      provenance = {
+        previsVersionId: adopted.id,
+        previsSnapshotHash: adopted.snapshot.snapshotHash,
+        firstframeJobId: adopted.snapshot.adoptedInput.firstframeJobId,
+        capabilityTranslation: adopted.snapshot.capabilityTranslation,
+        adoptedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(409, "PREVIS_VERSION_INVALID", message);
+    }
+  }
   if (!shotHasImage || !firstframeUrl) {
     return errorResponse(409, "NO_FIRSTFRAME", "该 Shot 没有已生成的分镜示意图，无法作为首帧。请先生成分镜图。");
   }
@@ -133,6 +182,7 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
     prompt: shotPrompt,
     firstframeUrl,
     duration,
+    provenanceHash: provenance.previsSnapshotHash,
   });
 
   // 3. read-before-insert 幂等检查（用 hash）
@@ -177,7 +227,13 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       duration,
       aspectRatio,
       expectedRevision: body.expectedRevision ?? null,
+      previsVersionId: provenance.previsVersionId ?? null,
+      previsSnapshotHash: provenance.previsSnapshotHash ?? null,
+      firstframeJobId: provenance.firstframeJobId ?? null,
+      capabilityTranslation: provenance.capabilityTranslation ?? null,
+      adoptedAt: provenance.adoptedAt ?? null,
     },
+    result_metadata: buildVideoJobMetadata("queued", provenance),
     status: "queued",
     target_type: "storyboard_shot_video",
     target_id: shotId,
@@ -241,6 +297,7 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       body: JSON.stringify({
         provider_task_id: result.providerTaskId,
         status: "running",
+        result_metadata: buildVideoJobMetadata("accepted", provenance),
         updated_at: new Date().toISOString(),
       }),
     });
@@ -251,15 +308,35 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       providerTaskId: result.providerTaskId,
       reused: false,
       status: "running",
+      subStatus: "accepted",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (isAmbiguousVideoSubmissionError(error)) {
+      await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "queued",
+          error: "SUBMISSION_STATUS_UNKNOWN",
+          result_metadata: buildVideoJobMetadata("submission_unknown", provenance),
+          updated_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+      return NextResponse.json({
+        success: true,
+        jobId,
+        reused: false,
+        status: "queued",
+        subStatus: "submission_unknown",
+      }, { status: 202 });
+    }
     // mark job as failed but do NOT throw — caller can retry
     await serviceFetch(`/rest/v1/storyflow_generation_jobs?id=eq.${encodeURIComponent(jobId)}`, {
       method: "PATCH",
       body: JSON.stringify({
         status: "failed",
         error: message,
+        result_metadata: buildVideoJobMetadata("failed", provenance),
         updated_at: new Date().toISOString(),
       }),
     }).catch(() => {});

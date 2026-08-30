@@ -76,7 +76,8 @@ export function computeVideoIdempotencyHash(input: {
   prompt: string;
   firstframeUrl: string;
   duration: number;
+  provenanceHash?: string;
 }): string {
-  const parts = [input.shotId, input.prompt, input.firstframeUrl, String(input.duration)];
+  const parts = [input.shotId, input.prompt, input.firstframeUrl, String(input.duration), input.provenanceHash ?? ""];
   return createHash("sha256").update(parts.join("\u0001")).digest("hex");
 }

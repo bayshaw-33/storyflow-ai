@@ -1028,6 +1028,7 @@ export function ProductionWorkbench() {
         [shotId]: {
           jobId: response.jobId,
           status: response.reused ? (response.status as VideoJobState["status"]) : "queued",
+          subStatus: response.subStatus as VideoJobState["subStatus"],
           startedAt: Date.now(),
           finishedAt: null,
           videoUrl: existing?.videoUrl ?? null,
@@ -1045,6 +1046,7 @@ export function ProductionWorkbench() {
         [shotId]: {
           jobId: null,
           status: "failed",
+          subStatus: "failed",
           startedAt: null,
           finishedAt: Date.now(),
           videoUrl: existing?.videoUrl ?? null,
@@ -1070,12 +1072,13 @@ export function ProductionWorkbench() {
       const result = await storyboardClient.queryVideoJob(state.jobId);
       const job = result.job;
       if (job.status === "completed" && job.result_url) {
-        const metadata = job.result_metadata as { durationSeconds?: number; costEstimate?: number };
+        const metadata = job.result_metadata as { durationSeconds?: number; costEstimate?: number; sub_status?: VideoJobState["subStatus"] };
         setVideoJobs((current) => ({
           ...current,
           [shotId]: {
             ...current[shotId],
             status: "completed",
+            subStatus: metadata.sub_status ?? "completed",
             finishedAt: Date.now(),
             videoUrl: job.result_url,
             durationSeconds: metadata.durationSeconds ?? null,
@@ -1084,13 +1087,26 @@ export function ProductionWorkbench() {
           },
         }));
       } else if (job.status === "failed") {
+        const metadata = job.result_metadata as { sub_status?: VideoJobState["subStatus"] };
         setVideoJobs((current) => ({
           ...current,
           [shotId]: {
             ...current[shotId],
             status: "failed",
+            subStatus: metadata.sub_status ?? "failed",
             finishedAt: Date.now(),
             error: job.error ?? "视频生成失败。",
+          },
+        }));
+      } else {
+        const metadata = job.result_metadata as { sub_status?: VideoJobState["subStatus"] };
+        setVideoJobs((current) => ({
+          ...current,
+          [shotId]: {
+            ...current[shotId],
+            status: job.status === "queued" ? "queued" : "running",
+            subStatus: metadata.sub_status,
+            providerTaskId: job.provider_task_id,
           },
         }));
       }

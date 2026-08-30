@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import { createDefaultPrevisScene } from "../lib/director/previs.ts";
@@ -169,9 +170,11 @@ test("read operations enforce owner, project, source unit, entity type, and shot
       preserved: ["first_frame"],
       lossy: ["camera_path"],
     },
-    snapshotHash: "a".repeat(64),
+    snapshotHash: "pending",
     createdAt: "2026-08-30T10:00:00.000Z",
   };
+  const { snapshotHash: _ignored, ...snapshotWithoutHash } = snapshot;
+  snapshot.snapshotHash = createHash("sha256").update(JSON.stringify(snapshotWithoutHash)).digest("hex");
   const paths = [];
   const fetcher = async (path) => {
     paths.push(path);
@@ -190,4 +193,38 @@ test("read operations enforce owner, project, source unit, entity type, and shot
   }
   assert.match(paths[0], /order=version_no\.desc/);
   assert.match(paths[1], /id=eq\.previs-version-3/);
+});
+
+test("read rejects a stored snapshot whose immutable hash no longer matches", async () => {
+  const { readPrevisVersion } = await loadStore();
+  const input = validInput();
+  const state = persistedState();
+  const calls = [];
+  const version = await (await loadStore()).savePrevisVersion({
+    userId: USER_ID,
+    input,
+    fetcher: async (path, init = {}) => {
+      if (path === "/rest/v1/rpc/get_storyboard_state") return state;
+      if (path.includes("storyflow_generation_jobs")) return [{ id: "image-job-1", result_url: "https://storage.test/frame.png", status: "completed" }];
+      if (path.includes("storyflow_versions") && init.method !== "POST") return [];
+      if (path === "/rest/v1/storyflow_versions") {
+        const body = JSON.parse(init.body);
+        calls.push(body.snapshot_json);
+        return [{ id: body.id, version_no: body.version_no, snapshot_json: body.snapshot_json }];
+      }
+      throw new Error(`UNEXPECTED_FETCH:${path}`);
+    },
+  });
+  const tampered = { ...calls[0], shotLabel: "tampered" };
+  await assert.rejects(
+    () => readPrevisVersion({
+      userId: USER_ID,
+      projectId: "project-1",
+      sourceUnitId: "episode-1",
+      shotId: "shot-1",
+      versionId: version.id,
+      fetcher: async () => [{ id: version.id, version_no: version.versionNo, snapshot_json: tampered }],
+    }),
+    /PREVIS_SNAPSHOT_HASH_MISMATCH/,
+  );
 });
