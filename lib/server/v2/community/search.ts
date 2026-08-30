@@ -1,4 +1,4 @@
-import type { CommunityFeedProjection } from "../../../contracts/v2/community.ts";
+import type { CommunityFeedProjection, PublicationRow } from "../../../contracts/v2/community.ts";
 import { parsePublication, toCommunityFeedProjection } from "../../../contracts/v2/community.ts";
 import { CommunityServiceError, type CommunityFetcher } from "./publications.ts";
 import type { CommunityFeedSection } from "./discovery.ts";
@@ -7,6 +7,7 @@ import {
   getCommunityRowContext,
   hydrateCommunityWorkIds,
 } from "./context.ts";
+import { resolvePublicationReuseCapabilities } from "./reuse.ts";
 
 export interface CommunityCursor {
   readonly createdAt: string;
@@ -18,6 +19,62 @@ export interface CommunitySearchResult {
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
   readonly degraded: boolean;
+}
+
+export type PersonalCommunityFeedSection = "following" | "saved";
+
+export async function searchPersonalCommunityFeed(
+  fetcher: CommunityFetcher,
+  options: {
+    section: PersonalCommunityFeedSection;
+    viewerId: string;
+    query?: string;
+    limit?: number;
+    cursor?: string | null;
+  },
+): Promise<CommunitySearchResult> {
+  if (!options.viewerId) throw new CommunityServiceError("unauthenticated", "Authentication is required for a personal feed.", 401);
+  if (options.section !== "following" && options.section !== "saved") {
+    throw new CommunityServiceError("validation_failed", "Invalid personal feed section.", 400);
+  }
+  const query = options.query?.trim() || "";
+  if (query.length > 120) throw new CommunityServiceError("validation_failed", "query must be <= 120 characters", 400);
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+  const cursor = options.cursor ? decodeCommunityCursor(options.cursor) : null;
+  let rows: PublicationRow[];
+  try {
+    rows = await fetcher<PublicationRow[]>("/rest/v1/rpc/list_community_personal_feed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_user_id: options.viewerId,
+        p_section: options.section,
+        p_cursor_created_at: cursor?.createdAt ?? null,
+        p_cursor_id: cursor?.id ?? null,
+        p_limit: limit + 1,
+        p_query: query || null,
+      }),
+    });
+  } catch (cause) {
+    throw new CommunityServiceError("service_unavailable", "failed to load personal community feed", 503, cause);
+  }
+  const hasMore = (rows ?? []).length > limit;
+  const pageRows = (rows ?? []).slice(0, limit);
+  const hydratedRows = await hydrateCommunityWorkIds(fetcher, pageRows);
+  const reuseCapabilities = await resolvePublicationReuseCapabilities(fetcher, hydratedRows, options.viewerId);
+  const items = hydratedRows.map((row) => toCommunityFeedProjection(
+    parsePublication(row),
+    options.viewerId,
+    getCommunityRowContext(row),
+    reuseCapabilities.get(row.id),
+  ));
+  const last = pageRows[pageRows.length - 1];
+  return {
+    items,
+    nextCursor: hasMore && last ? encodeCommunityCursor({ createdAt: last.created_at, id: last.id }) : null,
+    hasMore,
+    degraded: false,
+  };
 }
 
 export async function searchCommunityFeed(
@@ -76,12 +133,14 @@ export async function searchCommunityFeed(
   const pageRows = rows.slice(0, limit);
   const hydratedRows = await hydrateCommunityWorkIds(fetcher, pageRows);
   const hydratedById = new Map(hydratedRows.map((row) => [row.id, row]));
+  const reuseCapabilities = await resolvePublicationReuseCapabilities(fetcher, hydratedRows, options.viewerId ?? null);
   const items = pageRows.map((row) => {
     const hydratedRow = hydratedById.get(row.id) ?? row;
     return toCommunityFeedProjection(
       parsePublication(hydratedRow),
       options.viewerId ?? null,
       getCommunityRowContext(hydratedRow),
+      reuseCapabilities.get(hydratedRow.id),
     );
   });
   const last = pageRows[pageRows.length - 1];

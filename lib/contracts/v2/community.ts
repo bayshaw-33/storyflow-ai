@@ -169,8 +169,29 @@ export interface CommunityFeedProjection extends PublicationProjection {
   readonly workId: string | null;
   readonly workType: string | null;
   readonly universeId: string | null;
+  readonly reuseCapability: CommunityReuseCapability;
   readonly allowedActions: ReadonlyArray<string>;
 }
+
+export type CommunityReuseMode = "none" | "owned" | "granted" | "offer";
+
+export interface CommunityReuseCapability {
+  readonly mode: CommunityReuseMode;
+  readonly sourceWorkId: string | null;
+  readonly sourceWorkVersionId: string | null;
+  readonly grantId: string | null;
+  readonly offerId: string | null;
+  readonly reason: string;
+}
+
+export const NO_COMMUNITY_REUSE: CommunityReuseCapability = Object.freeze({
+  mode: "none",
+  sourceWorkId: null,
+  sourceWorkVersionId: null,
+  grantId: null,
+  offerId: null,
+  reason: "No verified reuse right is available.",
+});
 
 export interface CommunityPublicationContext {
   readonly subjectType: PublicationSubject;
@@ -414,7 +435,7 @@ export function toProjection(pub: Publication): PublicationProjection {
 export function computeAllowedActions(
   pub: Publication,
   viewerId: string | null,
-  options: { hasFollow?: boolean; hasBookmarked?: boolean; hasReacted?: boolean } = {},
+  options: { hasFollow?: boolean; hasBookmarked?: boolean; hasReacted?: boolean; reuseCapability?: CommunityReuseCapability } = {},
 ): ReadonlyArray<string> {
   const actions: string[] = [];
   const isOwner = viewerId === pub.publisherId;
@@ -429,7 +450,10 @@ export function computeAllowedActions(
       actions.push("react");
       actions.push(options.hasBookmarked ? "remove_bookmark" : "bookmark");
       actions.push("comment");
-      actions.push("apply_use"); // 申请使用
+      if (options.reuseCapability?.mode === "owned" || options.reuseCapability?.mode === "granted") {
+        actions.push("apply_use");
+      }
+      if (options.reuseCapability?.mode === "offer") actions.push("license");
     }
   }
 
@@ -515,6 +539,7 @@ export function toCommunityFeedProjection(
   pub: Publication,
   viewerId: string | null = null,
   context: CommunityPublicationContext = getPublicationContext({ source_type: pub.sourceType, source_id: pub.sourceId }),
+  reuseCapability: CommunityReuseCapability = NO_COMMUNITY_REUSE,
 ): CommunityFeedProjection {
   const projection = toProjection(pub);
   return Object.freeze({
@@ -531,6 +556,7 @@ export function toCommunityFeedProjection(
     workId: context.workId,
     workType: context.workType,
     universeId: context.universeId,
-    allowedActions: computeAllowedActions(pub, viewerId),
+    reuseCapability,
+    allowedActions: computeAllowedActions(pub, viewerId, { reuseCapability }),
   });
 }

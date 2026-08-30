@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateRequest, hasServiceRoleConfig, serviceFetch, getViewerFromCookies, getViewerFromRequest} from "@/lib/supabase/server";
+import { authenticateRequest, hasServiceRoleConfig, serviceFetch, getViewerFromRequest } from "@/lib/supabase/server";
 import {
   getPublication,
   hidePublication,
   restorePublication,
   CommunityServiceError,
 } from "@/lib/server/v2/community/publications";
-import { getPublicationDetail } from "@/lib/server/v2/community/discovery";
 import { computeAllowedActions, isVisibility, type Publication } from "@/lib/contracts/v2/community";
+import { resolvePublicationReuseCapabilities } from "@/lib/server/v2/community/reuse";
+import { getCommunityPublicationDetail } from "@/lib/server/v2/community/discovery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const viewer = await getViewerFromRequest(request);
 
-    const publication = await getPublicationDetail(serviceFetch, id);
+    const detail = await getCommunityPublicationDetail(serviceFetch, id);
+    const publication = detail?.publication ?? null;
     if (!publication) {
       return NextResponse.json(
         { success: false, error: "Publication not found.", code: "not_found" },
@@ -64,13 +66,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // CM-005: 计算允许动作 (不暴露私有 path)
-    const allowedActions = computeAllowedActions(publication, viewer?.id ?? null);
+    const capability = (await resolvePublicationReuseCapabilities(serviceFetch, [{
+      id: publication.id,
+      source_type: publication.sourceType,
+      source_id: publication.sourceId,
+      publisher_id: publication.publisherId,
+      work_id: detail?.context.workId ?? null,
+    }], viewer?.id ?? null)).get(publication.id)!;
+    const allowedActions = computeAllowedActions(publication, viewer?.id ?? null, { reuseCapability: capability });
 
     return NextResponse.json({
       success: true,
       contractVersion: "kiikis.community.publication/1",
       publication,
       allowedActions,
+      reuseCapability: capability,
       viewerId: viewer?.id ?? null,
       isOwner: viewer?.id === publication.publisherId,
     });

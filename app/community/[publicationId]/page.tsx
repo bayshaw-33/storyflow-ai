@@ -6,6 +6,7 @@ import { computeAllowedActions } from "@/lib/contracts/v2/community";
 import { getCommunityContentLabel, getPublicationObjectHref } from "@/lib/client/v2/community/view-model";
 import { CommunityInteractionPanel } from "@/components/v2/community/CommunityInteractionPanel";
 import { CommunityReturnActions } from "@/components/v2/community/CommunityReturnActions";
+import { resolvePublicationReuseCapabilities } from "@/lib/server/v2/community/reuse";
 import styles from "../community.module.css";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,14 @@ export default async function CommunityPublicationPage({
 
   const kind = detail.context.subjectType;
   const objectHref = getPublicationObjectHref({ ...publication, ...detail.context });
-  const allowedActions = computeAllowedActions(publication, viewer?.id ?? null);
+  const capability = (await resolvePublicationReuseCapabilities(serviceFetch, [{
+    id: publication.id,
+    source_type: publication.sourceType,
+    source_id: publication.sourceId,
+    publisher_id: publication.publisherId,
+    work_id: detail.context.workId,
+  }], viewer?.id ?? null)).get(publication.id)!;
+  const allowedActions = computeAllowedActions(publication, viewer?.id ?? null, { reuseCapability: capability });
 
   return (
     <main className={`cosmic-page ${styles.detailShell}`}>
@@ -78,6 +86,8 @@ export default async function CommunityPublicationPage({
         allowedActions={allowedActions}
         sourceType={publication.sourceType}
         sourceHref={objectHref}
+        publicationId={publication.id}
+        reuseCapability={capability}
       />
       <CommunityInteractionPanel
         publicationId={publication.id}

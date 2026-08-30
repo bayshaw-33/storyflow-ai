@@ -396,6 +396,21 @@ test("CM-005: 认证用户浏览 public 可互动", () => {
   assert.ok(actions.includes("react"));
   assert.ok(actions.includes("bookmark"));
   assert.ok(actions.includes("comment"));
+  assert.ok(!actions.includes("apply_use"));
+});
+
+test("CM-005: 只有真实 owned/granted reuse capability 才可申请使用", () => {
+  const pub = parsePublication(samplePublicationRow);
+  const actions = computeAllowedActions(pub, "user-B", {
+    reuseCapability: {
+      mode: "granted",
+      sourceWorkId: "work-1",
+      sourceWorkVersionId: "version-1",
+      grantId: "grant-1",
+      offerId: null,
+      reason: "verified",
+    },
+  });
   assert.ok(actions.includes("apply_use"));
 });
 

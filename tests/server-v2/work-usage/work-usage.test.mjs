@@ -28,9 +28,9 @@ const OWNER_B = "owner-b";
 function makeStore(seed = {}) {
   const tables = {
     storyflow_works: [
-      { id: "work-src", owner_id: OWNER_A, work_type: "screenplay" },
-      { id: "work-art", owner_id: OWNER_A, work_type: "art" },
-      { id: "work-b", owner_id: OWNER_B, work_type: "storyboard" },
+      { id: "work-src", owner_id: OWNER_A, project_id: "proj-src", work_type: "screenplay" },
+      { id: "work-art", owner_id: OWNER_A, project_id: "proj-1", work_type: "art" },
+      { id: "work-b", owner_id: OWNER_B, project_id: "proj-b", work_type: "storyboard" },
     ],
     storyflow_work_versions: [
       { id: "wv-src-1", work_id: "work-src" },
@@ -142,7 +142,7 @@ test("active grant from source owner allows the link", async () => {
     status: "active",
     idempotency_key: "g1",
   });
-  const link = await service.createLink({ ...baseInput, ownerId: OWNER_B, grantId: "grant-1" });
+  const link = await service.createLink({ ...baseInput, ownerId: OWNER_B, grantId: "grant-1", targetWorkId: "work-b", targetProjectId: "proj-b" });
   assert.equal(link.sourceWorkId, "work-src");
   assert.equal(link.rightsSnapshotId, "grant-1");
   assert.equal(link.createdAt, "2026-08-16T00:00:00Z");
@@ -176,7 +176,7 @@ test("revoked grant blocks a new link but keeps historical links", async () => {
     created_at: "2026-08-01T00:00:00Z",
   });
   await assert.rejects(
-    () => service.createLink({ ...baseInput, ownerId: OWNER_B, grantId: "grant-1" }),
+    () => service.createLink({ ...baseInput, ownerId: OWNER_B, grantId: "grant-1", targetWorkId: "work-b", targetProjectId: "proj-b" }),
     (e) => e instanceof WorkUsageError && e.code === "forbidden",
   );
   // historical link survives
@@ -197,6 +197,14 @@ test("sourceVersion not belonging to sourceWork is rejected", async () => {
   );
 });
 
+test("forged target Work owned by another creator is rejected", async () => {
+  const { service } = makeService();
+  await assert.rejects(
+    () => service.createLink({ ...baseInput, ownerId: OWNER_B, sourceWorkId: "work-b", sourceWorkVersionId: "wv-b-1", targetWorkId: "work-art", targetProjectId: "proj-1" }),
+    (e) => e instanceof WorkUsageError && e.code === "forbidden",
+  );
+});
+
 // ============================================================
 // 3. Cycle protection
 // ============================================================
@@ -204,7 +212,7 @@ test("sourceVersion not belonging to sourceWork is rejected", async () => {
 test("self-cycle (A→A) is rejected", async () => {
   const { service } = makeService();
   await assert.rejects(
-    () => service.createLink({ ...baseInput, targetWorkId: "work-src" }),
+    () => service.createLink({ ...baseInput, targetWorkId: "work-src", targetProjectId: "proj-src" }),
     (e) => e instanceof WorkUsageError && e.code === "conflict",
   );
 });
@@ -225,7 +233,7 @@ test("A→B then B→A is rejected as a cycle", async () => {
     created_at: "2026-08-01T00:00:00Z",
   });
   await assert.rejects(
-    () => service.createLink({ ...baseInput, sourceWorkId: "work-art", sourceWorkVersionId: "wv-art-1", targetWorkId: "work-src" }),
+    () => service.createLink({ ...baseInput, sourceWorkId: "work-art", sourceWorkVersionId: "wv-art-1", targetWorkId: "work-src", targetProjectId: "proj-src" }),
     (e) => e instanceof WorkUsageError && e.code === "conflict",
   );
 });

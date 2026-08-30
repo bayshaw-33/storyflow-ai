@@ -34,6 +34,7 @@ export class WorkUsageError extends Error {
 interface WorkRow {
   id: string;
   owner_id: string;
+  project_id?: string | null;
 }
 interface VersionRow {
   id: string;
@@ -100,7 +101,7 @@ export class WorkUsageService {
     const works = await this.query<WorkRow>(
       "storyflow_works",
       { id: input.sourceWorkId },
-      "id,owner_id",
+      "id,owner_id,project_id",
       1,
     );
     const sourceWork = works[0];
@@ -118,7 +119,22 @@ export class WorkUsageService {
       grantId = grant.id;
     }
 
-    // 3. source version must belong to source work
+    // 3. target Work and Project must belong to the caller. The client may
+    // choose a target but cannot forge another creator's Work or Project.
+    const targetWorks = await this.query<WorkRow>(
+      "storyflow_works",
+      { id: input.targetWorkId },
+      "id,owner_id,project_id",
+      1,
+    );
+    const targetWork = targetWorks[0];
+    if (!targetWork) throw new WorkUsageError("not_found", "Target work not found.");
+    if (targetWork.owner_id !== input.ownerId) throw new WorkUsageError("forbidden", "Target work access denied.");
+    if (targetWork.project_id && targetWork.project_id !== input.targetProjectId) {
+      throw new WorkUsageError("validation_failed", "Target project does not match the target work.");
+    }
+
+    // 4. source version must belong to source work
     const versions = await this.query<VersionRow>(
       "storyflow_work_versions",
       { id: input.sourceWorkVersionId },
@@ -130,7 +146,7 @@ export class WorkUsageService {
       throw new WorkUsageError("validation_failed", "Source version does not belong to the source work.");
     }
 
-    // 4. cycle protection
+    // 5. cycle protection
     const links = await this.query<UsageRow>("storyflow_work_usage_links", {}, "source_work_id,target_work_id");
     const cycle = wouldCreateCycle(
       links.map((l) => ({ sourceWorkId: l.source_work_id, targetWorkId: l.target_work_id })),
@@ -141,7 +157,7 @@ export class WorkUsageService {
       throw new WorkUsageError("conflict", `Linking ${input.sourceWorkId} → ${input.targetWorkId} would create a usage cycle.`);
     }
 
-    // 5. idempotency
+    // 6. idempotency
     const fingerprint = usageLinkFingerprint({
       sourceWorkId: input.sourceWorkId,
       sourceWorkVersionId: input.sourceWorkVersionId,
@@ -169,7 +185,7 @@ export class WorkUsageService {
     );
     if (hit) return { ...this.toDto(hit), idempotent: true };
 
-    // 6. insert (append-only)
+    // 7. insert (append-only)
     const body: Record<string, unknown> = {
       source_work_id: input.sourceWorkId,
       source_work_version_id: input.sourceWorkVersionId,

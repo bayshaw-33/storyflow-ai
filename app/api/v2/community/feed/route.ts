@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { listCommunityFeed } from "@/lib/server/v2/community/discovery";
-import { searchCommunityFeed } from "@/lib/server/v2/community/search";
+import { searchCommunityFeed, searchPersonalCommunityFeed } from "@/lib/server/v2/community/search";
 import { CommunityServiceError, isSchemaError } from "@/lib/server/v2/community/publications";
 
 export const runtime = "nodejs";
@@ -13,6 +13,8 @@ const COMMUNITY_FEED_SECTIONS = [
   "works",
   "actors",
   "assets",
+  "following",
+  "saved",
 ] as const;
 
 type FeedSection = (typeof COMMUNITY_FEED_SECTIONS)[number];
@@ -42,18 +44,30 @@ export async function GET(request: NextRequest) {
     const cursor = url.searchParams.get("cursor");
     const query = url.searchParams.get("q") || "";
     const viewer = await getViewerFromRequest(request);
+    const personalSection = section === "following" || section === "saved";
+    if (personalSection && !viewer) {
+      throw new CommunityServiceError("unauthenticated", "Authentication is required for following and saved feeds.", 401);
+    }
     const useCursor = Boolean(cursor || query || !url.searchParams.has("offset"));
-    const searchResult = useCursor
-      ? await searchCommunityFeed(serviceFetch, {
+    const searchResult = personalSection
+      ? await searchPersonalCommunityFeed(serviceFetch, {
+          section,
+          query,
+          cursor,
+          viewerId: viewer!.id,
+          limit: Math.min(limit, 50),
+        })
+      : useCursor
+        ? await searchCommunityFeed(serviceFetch, {
           section,
           query,
           cursor,
           viewerId: viewer?.id ?? null,
           limit: Math.min(limit, 50),
         })
-      : null;
+        : null;
     const items = searchResult?.items ?? await listCommunityFeed(serviceFetch, {
-      section,
+      section: personalSection ? "recommended" : section,
       viewerId: viewer?.id ?? null,
       limit,
       offset,

@@ -19,16 +19,20 @@ export async function GET(request: NextRequest) {
     const user = await authenticateRequest(request);
     ensureConfigured();
     const url = new URL(request.url);
-    const limit = parseInteger(url.searchParams.get("limit"), 50, 1, 200);
+    const limit = parseInteger(url.searchParams.get("limit"), 20, 1, 100);
     const offset = parseInteger(url.searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
     const unreadOnly = url.searchParams.get("unreadOnly") === "true" || url.searchParams.get("unreadOnly") === "1";
-    const items = await listNotifications(serviceFetch, user.id, { limit, offset, unreadOnly });
+    const page = await listNotifications(serviceFetch, user.id, { limit: limit + 1, offset, unreadOnly });
+    const hasMore = page.length > limit;
+    const items = page.slice(0, limit);
 
     return NextResponse.json({
       success: true,
       contractVersion: "kiikis.community.notification/1",
       items,
       unreadCount: items.filter((item) => !item.read).length,
+      hasMore,
+      nextOffset: hasMore ? offset + items.length : null,
     });
   } catch (error) {
     return notificationErrorResponse(error, "Unable to list notifications.");

@@ -1,5 +1,5 @@
 import type { Locale } from "@/lib/i18n/dictionaries";
-import type { PublicationSourceType, PublicationSubject } from "@/lib/contracts/v2/community";
+import type { CommunityReuseCapability, PublicationSourceType, PublicationSubject } from "@/lib/contracts/v2/community";
 import { isWorkType, type WorkType } from "../../../contracts/v2/work.ts";
 import { resolveWorkbenchRoute } from "../navigation/resolver.ts";
 
@@ -97,14 +97,13 @@ export function getPublicationReturnActions(input: {
   allowedActions: readonly string[];
   sourceType: PublicationSourceType;
   sourceHref: string | null;
+  reuseCapability: CommunityReuseCapability;
 }): ReadonlyArray<CommunityReturnAction> {
-  const canEnterSource = Boolean(input.sourceHref);
   return [
     {
       id: "apply_use",
-      enabled: canEnterSource && input.allowedActions.includes("apply_use"),
-      href: canEnterSource ? input.sourceHref ?? undefined : undefined,
-      reason: canEnterSource ? undefined : "缺少真实来源入口，暂不能申请使用。",
+      enabled: input.allowedActions.includes("apply_use") && (input.reuseCapability.mode === "owned" || input.reuseCapability.mode === "granted"),
+      reason: input.reuseCapability.mode === "owned" || input.reuseCapability.mode === "granted" ? undefined : "没有经过服务端验证的自有权或有效 Grant。",
     },
     {
       id: "remix",
@@ -115,10 +114,9 @@ export function getPublicationReturnActions(input: {
     },
     {
       id: "license",
-      enabled: false,
-      reason: input.sourceType === "asset"
-        ? "当前 publication 没有返回可用的授权 offer。"
-        : "只有带真实授权 offer 的素材可以进入授权流程。",
+      enabled: input.reuseCapability.mode === "offer" && input.allowedActions.includes("license") && Boolean(input.sourceHref),
+      href: input.reuseCapability.mode === "offer" && input.sourceHref ? input.sourceHref : undefined,
+      reason: input.sourceType === "asset" ? "当前 publication 没有返回 active License Offer。" : "只有带真实 License Offer 的素材可以进入授权流程。",
     },
   ];
 }

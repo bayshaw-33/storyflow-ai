@@ -35,19 +35,8 @@ interface FeedResponse {
   error?: string;
 }
 
-interface FollowItem {
-  targetType?: string;
-  targetId?: string;
-}
-
-interface BookmarkItem {
-  publicationId?: string;
-}
-
 const REMOTE_SECTIONS = new Set<CommunitySectionId>(
-  COMMUNITY_SECTIONS
-    .filter(({ id }) => id !== "following" && id !== "saved")
-    .map(({ id }) => id),
+  COMMUNITY_SECTIONS.map(({ id }) => id),
 );
 
 export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null, initialNextCursor = null, initialHasMore = false }: DiscoveryFeedProps) {
@@ -61,8 +50,8 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
   const [viewerReady, setViewerReady] = useState(false);
   const [query, setQuery] = useState("");
   const [hasMore, setHasMore] = useState(initialHasMore);
-  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const requestIdRef = useRef(0);
+  const nextCursorRef = useRef<string | null>(initialNextCursor);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +84,7 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
     if (!REMOTE_SECTIONS.has(section)) return;
     const currentRequestId = ++requestIdRef.current;
     const params = new URLSearchParams({ section, limit: "20" });
-    if (append && nextCursor) params.set("cursor", nextCursor);
+    if (append && nextCursorRef.current) params.set("cursor", nextCursorRef.current);
     if (searchQuery.trim()) params.set("q", searchQuery.trim());
     setLoading(true);
     setError(null);
@@ -109,8 +98,8 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
       }
       if (currentRequestId !== requestIdRef.current) return;
       const nextItems = json.items ?? [];
-      setItems((current) => append ? [...current, ...nextItems] : nextItems);
-      setNextCursor(json.nextCursor ?? null);
+      setItems((current) => append ? mergeFeedItems(current, nextItems) : nextItems);
+      nextCursorRef.current = json.nextCursor ?? null;
       setHasMore(json.hasMore === true);
     } catch (cause) {
       if (currentRequestId !== requestIdRef.current) return;
@@ -120,62 +109,22 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
     } finally {
       if (currentRequestId === requestIdRef.current) setLoading(false);
     }
-  }, [isZh, nextCursor]);
+  }, [isZh]);
 
-  const loadPersonalSection = useCallback(async (section: "following" | "saved") => {
+  useEffect(() => {
+    if (!viewerReady || (activeSection !== "following" && activeSection !== "saved")) return;
     if (!viewerId) {
       setItems([]);
       setHasMore(false);
       return;
     }
-
-    const currentRequestId = ++requestIdRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const [feedResponse, relationResponse] = await Promise.all([
-        fetchWithAuthRetry("/api/v2/community/feed?section=recommended&limit=100&offset=0"),
-        fetchWithAuthRetry(section === "following"
-          ? "/api/v2/community/follows?limit=200"
-          : "/api/v2/community/bookmarks?limit=200"),
-      ]);
-      const feedJson = (await feedResponse.json().catch(() => ({}))) as FeedResponse;
-      const relationJson = (await relationResponse.json().catch(() => ({}))) as {
-        success?: boolean;
-        items?: FollowItem[] | BookmarkItem[];
-        error?: string;
-      };
-      if (!feedResponse.ok || !feedJson.success || !relationResponse.ok || !relationJson.success) {
-        throw new Error(relationJson.error || (isZh ? "个人内容加载失败。" : "Personal feed failed to load."));
-      }
-      if (currentRequestId !== requestIdRef.current) return;
-
-      const publicItems = feedJson.items ?? [];
-      const personalItems = section === "following"
-        ? filterFollowedItems(publicItems, relationJson.items as FollowItem[] | undefined)
-        : filterSavedItems(publicItems, relationJson.items as BookmarkItem[] | undefined);
-      setItems(personalItems);
-      setNextCursor(null);
-      setHasMore(false);
-    } catch (cause) {
-      if (currentRequestId !== requestIdRef.current) return;
-      setError(cause instanceof Error ? cause.message : isZh ? "个人内容加载失败。" : "Personal feed failed to load.");
-      setItems([]);
-      setHasMore(false);
-    } finally {
-      if (currentRequestId === requestIdRef.current) setLoading(false);
-    }
-  }, [isZh, viewerId]);
-
-  useEffect(() => {
-    if (!viewerReady || (activeSection !== "following" && activeSection !== "saved")) return;
-    void loadPersonalSection(activeSection);
-  }, [activeSection, loadPersonalSection, viewerReady]);
+    void loadRemoteSection(activeSection, false, "");
+  }, [activeSection, loadRemoteSection, viewerId, viewerReady]);
 
   function changeSection(section: CommunitySectionId) {
     setActiveSection(section);
     setQuery("");
-    setNextCursor(null);
+    nextCursorRef.current = null;
     if (section === "following" || section === "saved") {
       setItems([]);
       setHasMore(false);
@@ -185,11 +134,7 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
   }
 
   function retryCurrentSection() {
-    if (activeSection === "following" || activeSection === "saved") {
-      void loadPersonalSection(activeSection);
-    } else {
-      void loadRemoteSection(activeSection, false, query);
-    }
+    void loadRemoteSection(activeSection, false, query);
   }
 
   const visibleItems = useMemo(() => {
@@ -324,18 +269,9 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
   );
 }
 
-function filterFollowedItems(items: CommunityFeedProjection[], follows: FollowItem[] | undefined) {
-  const relations = follows ?? [];
-  return items.filter((item) => relations.some((relation) =>
-    (relation.targetType === "publication" && relation.targetId === item.id) ||
-    (relation.targetType === "universe" && relation.targetId === item.sourceId && item.sourceType === "universe") ||
-    (relation.targetType === "user" && relation.targetId === item.publisherId),
-  ));
-}
-
-function filterSavedItems(items: CommunityFeedProjection[], bookmarks: BookmarkItem[] | undefined) {
-  const ids = new Set((bookmarks ?? []).map((item) => item.publicationId).filter(Boolean));
-  return items.filter((item) => ids.has(item.id));
+function mergeFeedItems(current: CommunityFeedProjection[], next: CommunityFeedProjection[]) {
+  const seen = new Set(current.map((item) => item.id));
+  return [...current, ...next.filter((item) => !seen.has(item.id))];
 }
 
 export default DiscoveryFeed;

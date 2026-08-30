@@ -20,6 +20,7 @@ import {
   getCommunityRowContext,
   hydrateCommunityWorkIds,
 } from "./context.ts";
+import { resolvePublicationReuseCapabilities } from "./reuse.ts";
 
 /**
  * CM-002: 发现页查询 publication 投影
@@ -103,9 +104,10 @@ export async function listCommunityFeed(
     "failed to fetch community feed",
   );
   const hydratedRows = await hydrateCommunityWorkIds(fetcher, rows);
+  const reuseCapabilities = await resolvePublicationReuseCapabilities(fetcher, hydratedRows, options.viewerId ?? null);
 
   return hydratedRows.map((row) =>
-    toCommunityFeedProjection(parsePublication(row), options.viewerId ?? null, getCommunityRowContext(row)),
+    toCommunityFeedProjection(parsePublication(row), options.viewerId ?? null, getCommunityRowContext(row), reuseCapabilities.get(row.id)),
   );
 }
 
