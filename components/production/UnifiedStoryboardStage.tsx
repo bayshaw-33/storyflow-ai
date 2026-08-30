@@ -6,6 +6,8 @@ import { DynamicGridEditor } from "./DynamicGridEditor";
 import { WhiteModelPrevis } from "./WhiteModelPrevis";
 import type { StoryboardScene } from "@/lib/storyboard/contracts";
 import type { PrevisAsset, PrevisShotOption } from "@/lib/director/previs-integration";
+import type { PrevisVersionRecord } from "@/lib/director/previs-version";
+import type { StoryboardClient } from "@/lib/storyboard/client";
 
 export type StoryboardSubview = "shot_table" | "grids" | "motion" | "prompts" | "canvas";
 
@@ -18,6 +20,9 @@ export interface UnifiedStoryboardStageProps {
   handoffId?: string | null;
   previsShots?: PrevisShotOption[];
   previsAssets?: { characters: PrevisAsset[]; locations: PrevisAsset[]; props: PrevisAsset[] };
+  storyboardClient: StoryboardClient;
+  storyboardRevision: number;
+  onPrevisAdopted: (version: PrevisVersionRecord) => void;
   content?: Partial<Record<StoryboardSubview, ReactNode>>;
 }
 
@@ -85,6 +90,9 @@ export function UnifiedStoryboardStage({
   handoffId,
   previsShots = [],
   previsAssets = { characters: [], locations: [], props: [] },
+  storyboardClient,
+  storyboardRevision,
+  onPrevisAdopted,
   content,
 }: UnifiedStoryboardStageProps) {
   const [previsOpen, setPrevisOpen] = useState(false);
@@ -95,10 +103,10 @@ export function UnifiedStoryboardStage({
           {previsOpen ? "返回动态分镜" : "打开白模预演"}
         </button>
       </div>
-      {previsOpen ? <WhiteModelPrevis projectId={projectId} workId={workId} unitId={unitId} shotOptions={previsShots} assets={previsAssets} /> : <DynamicGridEditor handoffId={handoffId} />}
+      {previsOpen ? <WhiteModelPrevis projectId={projectId} workId={workId} unitId={unitId} shotOptions={previsShots} assets={previsAssets} storyboardClient={storyboardClient} storyboardRevision={storyboardRevision} onPrevisAdopted={onPrevisAdopted} /> : <DynamicGridEditor handoffId={handoffId} />}
     </>
   ) : (
-    previsOpen ? <WhiteModelPrevis projectId={projectId} workId={workId} unitId={unitId} shotOptions={previsShots} assets={previsAssets} /> : (
+    previsOpen ? <WhiteModelPrevis projectId={projectId} workId={workId} unitId={unitId} shotOptions={previsShots} assets={previsAssets} storyboardClient={storyboardClient} storyboardRevision={storyboardRevision} onPrevisAdopted={onPrevisAdopted} /> : (
       <div style={{ padding: 24, color: "var(--ink-muted)", textAlign: "center" }}>
         <p>请先在剧本阶段确认可用版本，再生成分镜运动预览。</p>
         <button type="button" onClick={() => setPrevisOpen(true)} style={{ padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(117,219,198,.5)", background: "rgba(117,219,198,.12)", color: "#75dbc6", cursor: "pointer", fontWeight: 700 }}>打开白模预演</button>

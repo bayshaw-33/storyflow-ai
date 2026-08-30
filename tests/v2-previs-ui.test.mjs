@@ -21,7 +21,7 @@ test("白模预演提供可见的播放、时间轴、截图与 JSON 导出操�
   assert.match(source, /localStorage/);
   assert.match(source, /记录摄影机关键帧/);
   assert.match(source, /载入当前镜头/);
-  assert.match(source, /导出视频交付包/);
+  assert.match(source, /保存并送视频/);
   assert.match(source, /复制视频提示词/);
   assert.match(integration, /manualConfirmationRequired/);
 });

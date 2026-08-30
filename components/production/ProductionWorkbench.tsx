@@ -93,6 +93,7 @@ import { fetchUnifiedWorkbenchContext, ensureUnifiedStage } from "@/lib/client/v
 import { bindWorkToUniverse } from "@/lib/client/v2/universe/api";
 import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
 import { buildPrevisShotOptions } from "@/lib/director/previs-integration";
+import type { PrevisVersionRecord } from "@/lib/director/previs-version";
 import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
@@ -182,6 +183,7 @@ export function ProductionWorkbench() {
   const [candidates, setCandidates] = useState<AssetCandidateMap>({});
   const [frames, setFrames] = useState<ShotFrameMap>({});
   const [prompts, setPrompts] = useState<PromptResultMap>({});
+  const [adoptedPrevisByShot, setAdoptedPrevisByShot] = useState<Record<string, PrevisVersionRecord>>({});
 
   const previsShots = useMemo(
     () => buildPrevisShotOptions(scenes, assets, frames, prompts),
@@ -1378,6 +1380,11 @@ export function ProductionWorkbench() {
     if (stage === "storyboard") setStoryboardSubview("shot_table");
   }
 
+  function handlePrevisAdopted(version: PrevisVersionRecord) {
+    setAdoptedPrevisByShot((current) => ({ ...current, [version.snapshot.shotId]: version }));
+    navigateToStage("video");
+  }
+
   function handleStoryboardSubviewChange(subview: StoryboardSubview) {
     setStoryboardSubview(subview);
     if (!projectId) return;
@@ -1655,6 +1662,9 @@ export function ProductionWorkbench() {
                   handoffId={handoffId || null}
                   previsShots={previsShots}
                   previsAssets={assets}
+                  storyboardClient={storyboardClient}
+                  storyboardRevision={revision}
+                  onPrevisAdopted={handlePrevisAdopted}
                   content={{
                     shot_table: (
                       <StoryboardTablePanel

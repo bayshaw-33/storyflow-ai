@@ -14,6 +14,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PrevisScene } from "@/lib/director/previs";
+import type { PrevisVersionRecord } from "@/lib/director/previs-version";
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
@@ -208,6 +210,43 @@ export class StoryboardClient {
       body: input,
       expectConflict: true,
     });
+  }
+
+  async savePrevisVersion(shotId: string, input: {
+    projectId: string;
+    workId: string;
+    sourceUnitId: string;
+    storyboardRevision: number;
+    scene: PrevisScene;
+    promptInputHash?: string;
+    referenceVersionIds?: string[];
+  }): Promise<PrevisVersionRecord> {
+    const encoded = encodeURIComponent(shotId);
+    const payload = await this.fetchJson<{ version: PrevisVersionRecord }>({
+      method: "POST",
+      path: `/api/storyboard/shots/${encoded}/previs-versions`,
+      body: input,
+    });
+    return payload.version;
+  }
+
+  async getPrevisVersion(shotId: string, input: {
+    projectId: string;
+    sourceUnitId: string;
+    versionId?: string;
+  }): Promise<PrevisVersionRecord | null> {
+    const encoded = encodeURIComponent(shotId);
+    const query: Record<string, string> = {
+      projectId: input.projectId,
+      sourceUnitId: input.sourceUnitId,
+    };
+    if (input.versionId) query.versionId = input.versionId;
+    const payload = await this.fetchJson<{ version: PrevisVersionRecord | null }>({
+      method: "GET",
+      path: `/api/storyboard/shots/${encoded}/previs-versions`,
+      query,
+    });
+    return payload.version;
   }
 
   /**

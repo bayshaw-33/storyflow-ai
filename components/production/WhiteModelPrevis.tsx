@@ -26,11 +26,12 @@ import {
 } from "@/lib/director/previs";
 import {
   buildPrevisSceneForShot,
-  buildVideoHandoffPackage,
   previsHandoffStorageKey,
   type PrevisAsset,
   type PrevisShotOption,
 } from "@/lib/director/previs-integration";
+import type { PrevisVersionRecord } from "@/lib/director/previs-version";
+import type { StoryboardClient } from "@/lib/storyboard/client";
 import styles from "./WhiteModelPrevis.module.css";
 
 export interface WhiteModelPrevisProps {
@@ -39,6 +40,9 @@ export interface WhiteModelPrevisProps {
   unitId: string | null;
   shotOptions?: PrevisShotOption[];
   assets?: { characters: PrevisAsset[]; locations: PrevisAsset[]; props: PrevisAsset[] };
+  storyboardClient: StoryboardClient;
+  storyboardRevision: number;
+  onPrevisAdopted: (version: PrevisVersionRecord) => void;
 }
 
 const EMPTY_TRANSFORM: PrevisTransform = {
@@ -92,7 +96,7 @@ function downloadDataUrl(filename: string, dataUrl: string) {
   anchor.click();
 }
 
-export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], assets = { characters: [], locations: [], props: [] } }: WhiteModelPrevisProps) {
+export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], assets = { characters: [], locations: [], props: [] }, storyboardClient, storyboardRevision, onPrevisAdopted }: WhiteModelPrevisProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -104,6 +108,7 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
   const [playing, setPlaying] = useState(false);
   const [notice, setNotice] = useState("");
   const [rendererError, setRendererError] = useState("");
+  const [savingHandoff, setSavingHandoff] = useState(false);
   const [selectedShotId, setSelectedShotId] = useState(shotOptions[0]?.shotId ?? "");
   const playbackRef = useRef({ playing: false, currentTime: 0, durationSeconds: 5 });
 
@@ -332,23 +337,35 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
     setNotice(`${selectedShot.sceneLabel} · ${selectedShot.shotLabel} 已载入白模。`);
   };
 
-  const exportVideoHandoff = () => {
+  const exportVideoHandoff = async () => {
     if (!selectedShot) {
       setNotice("请先选择一个分镜镜头。");
       return;
     }
-    const handoff = buildVideoHandoffPackage({
-      projectId,
-      workId,
-      unitId,
-      shot: selectedShot,
-      scene,
-      firstframeUrl: selectedShot.storyboardImageUrl,
-      prompt: selectedShot.videoPrompt,
-    });
-    window.localStorage.setItem(previsHandoffStorageKey(projectId, workId, unitId, selectedShot.shotId), JSON.stringify(handoff));
-    downloadText(`${projectId}-${selectedShot.shotId}-video-handoff.json`, JSON.stringify(handoff, null, 2), "application/json");
-    setNotice("视频交付包已导出；请在视频阶段人工确认后提交生成。");
+    if (!unitId) {
+      setNotice("当前工作单元尚未归档，无法保存白模版本。");
+      return;
+    }
+    setSavingHandoff(true);
+    try {
+      const saved = await storyboardClient.savePrevisVersion(selectedShot.shotId, {
+        projectId,
+        workId,
+        sourceUnitId: unitId,
+        storyboardRevision,
+        scene,
+        promptInputHash: selectedShot.promptInputHash,
+        referenceVersionIds: selectedShot.referenceVersionIds,
+      });
+      window.localStorage.setItem(previsHandoffStorageKey(projectId, workId, unitId, selectedShot.shotId), JSON.stringify(saved.snapshot));
+      downloadText(`${projectId}-${selectedShot.shotId}-video-handoff.json`, JSON.stringify(saved.snapshot, null, 2), "application/json");
+      setNotice("白模版本已保存，正在送往视频阶段确认。");
+      onPrevisAdopted(saved);
+    } catch (error) {
+      setNotice(`白模版本保存失败：${error instanceof Error ? error.message : "未知错误"}`);
+    } finally {
+      setSavingHandoff(false);
+    }
   };
 
   const copyVideoPrompt = () => {
@@ -375,7 +392,7 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
           <button type="button" onClick={reset} title="恢复基础场景" aria-label="恢复基础场景"><RotateCcw size={15} /></button>
           <button type="button" onClick={capture}><ScanLine size={15} />截图</button>
           <button type="button" onClick={() => downloadText(`${projectId}-previs.json`, serializePrevisScene(scene), "application/json")}><Download size={15} />导出场景 JSON</button>
-          <button type="button" onClick={exportVideoHandoff} disabled={!selectedShot}><Download size={15} />导出视频交付包</button>
+          <button type="button" onClick={() => void exportVideoHandoff()} disabled={!selectedShot || savingHandoff}><Download size={15} />{savingHandoff ? "保存中…" : "保存并送视频"}</button>
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
