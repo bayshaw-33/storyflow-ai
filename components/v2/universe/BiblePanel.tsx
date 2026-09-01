@@ -10,6 +10,7 @@ import { CollapsibleSection, StatusBadge, GuideHint } from "./shared";
 
 export function BiblePanel({ bundle }: { bundle: UniverseBundleV2 }) {
   const { universe, rules } = bundle;
+  const bibleContent = universe.bibleContent?.trim();
   return (
     <div>
       <div className={styles.card}>
@@ -32,6 +33,13 @@ export function BiblePanel({ bundle }: { bundle: UniverseBundleV2 }) {
           {universe.summary}
         </p>
       </div>
+
+      {bibleContent ? (
+        <details className={styles.bibleReader}>
+          <summary>完整世界设定</summary>
+          <div>{bibleContent}</div>
+        </details>
+      ) : null}
 
       <div className={styles.card}>
         <div className={styles.cardHeader}>

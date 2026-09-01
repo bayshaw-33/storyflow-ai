@@ -62,6 +62,7 @@ interface CodexUniverseDetailResponse {
   };
   bible?: {
     summary?: string;
+    content?: string;
     genre?: string;
     tags?: string[];
   };
@@ -400,6 +401,7 @@ function mapUniverseInfo(detail: CodexUniverseDetailResponse): UniverseInfo {
     summary: u.summary,
     // bible.summary 语义上对应核心前提（corePremise）；缺失时回退空串。
     corePremise: detail.bible?.summary ?? "",
+    bibleContent: detail.bible?.content ?? "",
     // Codex 详情未返回 createdAt/owner，用 updatedAt 兜底 createdAt，owner 留空。
     createdAt: u.updatedAt,
     updatedAt: u.updatedAt,

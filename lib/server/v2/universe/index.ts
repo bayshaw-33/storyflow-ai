@@ -62,7 +62,7 @@ export interface UniverseListResult {
 
 export interface UniverseReadResult {
   universe: UniverseDto;
-  bible: { summary: string; genre: string; tags: string[] };
+  bible: { summary: string; content: string; genre: string; tags: string[] };
 }
 
 export interface UniverseEntityResult {
@@ -87,7 +87,7 @@ export function toUniverseDto(row: UniverseRow): UniverseDto {
   return {
     id: row.id,
     name: row.name,
-    summary: cleanSummary(row.card_summary || row.description || ""),
+    summary: buildUniverseDisplaySummary(row.card_summary, row.description),
     status: row.status === "archived" ? "deprecated" : "draft",
     visibility: row.team_id ? "team" : "private",
     currentVersion: "legacy",
@@ -118,7 +118,15 @@ export async function listUniverses(params: {
 export async function readUniverse(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseReadResult> {
   const row = await readAuthorizedUniverse(params);
   const dto = toUniverseDto(row);
-  return { universe: dto, bible: { summary: dto.summary, genre: row.genre || "", tags: readTags(row.metadata) } };
+  return {
+    universe: dto,
+    bible: {
+      summary: dto.summary,
+      content: normalizeBibleContent(row.description || ""),
+      genre: row.genre || "",
+      tags: readTags(row.metadata),
+    },
+  };
 }
 
 export async function readUniverseEntities(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseEntityResult> {
@@ -223,8 +231,42 @@ function readTags(metadata: Record<string, unknown> | null | undefined): string[
   return Array.isArray(metadata?.tags) ? metadata.tags.map(String).filter(Boolean).slice(0, 10) : [];
 }
 
-function cleanSummary(value: string): string {
-  return value.replace(/^#{1,6}\s+/gm, "").replace(/\*\*(.+?)\*\*/g, "$1").trim();
+function buildUniverseDisplaySummary(cardSummary?: string | null, description?: string | null): string {
+  const explicitSummary = normalizeSummaryText(cardSummary || "");
+  if (explicitSummary) return shortenSummary(explicitSummary);
+
+  const source = normalizeSummaryText(description || "");
+  const synopsisMatch = /(?:[一二三四五六七八九十]+、\s*)?(?:长简介|故事简介|项目简介|核心设定|世界观简介)\s*[:：]?\s*/u.exec(source);
+  const candidate = synopsisMatch ? source.slice((synopsisMatch.index || 0) + synopsisMatch[0].length) : source;
+  return shortenSummary(candidate);
+}
+
+function normalizeSummaryText(value: string): string {
+  return value
+    .replace(/\r\n?/g, "\n")
+    .replace(/[|｜]{2,}/g, " ")
+    .replace(/[-—]{3,}/g, " ")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function shortenSummary(value: string): string {
+  const compact = value.trim();
+  if (compact.length <= 180) return compact;
+  return `${compact.slice(0, 179).trimEnd()}…`;
+}
+
+function normalizeBibleContent(value: string): string {
+  return value
+    .replace(/\r\n?/g, "\n")
+    .replace(/[|｜]{2,}/g, "\n")
+    .replace(/[-—]{3,}/g, "\n")
+    .replace(/\s*([一二三四五六七八九十]+、)/g, "\n$1")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function readTeamIds(fetcher: UniverseReadFetcher, userId: string): Promise<string[]> {

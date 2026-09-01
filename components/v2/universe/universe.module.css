@@ -170,6 +170,29 @@
   text-decoration: underline;
 }
 
+.bibleReader {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.bibleReader summary {
+  cursor: pointer;
+  color: #6de7df;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bibleReader > div {
+  margin-top: 14px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
 /* 网格布局 */
 .grid {
   display: grid;

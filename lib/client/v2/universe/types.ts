@@ -37,6 +37,7 @@ export interface UniverseInfo {
   name: string;
   summary: string;
   corePremise: string;
+  bibleContent?: string;
   createdAt: string;
   updatedAt: string;
   owner: string;

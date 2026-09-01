@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  readUniverse,
   readUniverseWorks,
   toUniverseDto,
   V2UniverseError,
@@ -82,6 +83,39 @@ test("toUniverseDto: archived status maps to deprecated", () => {
 test("toUniverseDto: team_id maps to team visibility", () => {
   const dto = toUniverseDto({ ...UNIVERSE_ROW, team_id: "team-001" });
   assert.equal(dto.visibility, "team");
+});
+
+test("toUniverseDto: legacy full Bible falls back to a readable synopsis, not raw import text", () => {
+  const description = [
+    "背景及世界观|||项目名称：不可思议电台|||创作语言：中文|||",
+    "一、项目定位|||题材类型：奇幻废土+跨时空联结|||",
+    "二、长简介 Tiger 曾经是一名电台 DJ。听众流失、电台关闭之后，他的生活变成了无休止的商务应酬。",
+    "某天深夜，他醉酒后跌跌撞撞回到废弃的电台演播室。",
+  ].join(" ");
+
+  const dto = toUniverseDto({ ...UNIVERSE_ROW, card_summary: "", description });
+
+  assert.match(dto.summary, /^Tiger 曾经是一名电台 DJ/);
+  assert.ok(dto.summary.length <= 180);
+  assert.doesNotMatch(dto.summary, /\|{3}|项目名称/);
+});
+
+test("readUniverse: preserves legacy full Bible separately from the header synopsis", async () => {
+  const description = "一、项目定位|||二、长简介 Tiger 曾经是一名电台 DJ。听众流失后，他回到废弃的演播室。";
+  const fetcher = async (path) => {
+    if (path.includes("storyflow_universes")) {
+      return [{ ...UNIVERSE_ROW, card_summary: "", description }];
+    }
+    if (path.includes("storyflow_team_members")) return [];
+    throw new Error(`unexpected query: ${path}`);
+  };
+
+  const result = await readUniverse({ fetcher, userId: "user-001", universeId: "uni-001" });
+
+  assert.match(result.universe.summary, /^Tiger 曾经是一名电台 DJ/);
+  assert.match(result.bible.content, /一、项目定位/);
+  assert.match(result.bible.content, /二、长简介 Tiger 曾经是一名电台 DJ/);
+  assert.doesNotMatch(result.bible.content, /\|{3}/);
 });
 
 test("V2UniverseError: has correct code and message", () => {
