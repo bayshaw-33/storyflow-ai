@@ -54,14 +54,15 @@ test("embedded Art scope refuses to fall back to an unscoped key", () => {
   assert.equal(resolveArtDraftKey({ projectId: "p1", workId: "art-1" }), null);
 });
 
-test("embedded ArtWorkbench declares Work scope and hides standalone project navigation", async () => {
+test("embedded ArtWorkbench declares Work scope, hides standalone project navigation, and keeps asset editing reachable", async () => {
   const { readFile } = await import("node:fs/promises");
   const component = await readFile(new URL("../components/art/ArtWorkbench.tsx", import.meta.url), "utf8");
 
   assert.match(component, /contextWorkId\?: string/);
   assert.match(component, /resolveArtDraftKey\(/);
   assert.match(component, /isEmbedded \? null/);
-  assert.match(component, /embedded \? <div className=\{styles\.assetCard\}/);
+  assert.match(component, /<Link className=\{styles\.assetCard\} href=\{assetDetailHref\}>\{cardContent\}<\/Link>/);
+  assert.doesNotMatch(component, /embedded \? <div className=\{styles\.assetCard\}/);
 });
 
 // ============================================================

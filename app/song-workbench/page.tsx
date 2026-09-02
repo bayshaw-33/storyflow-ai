@@ -1206,7 +1206,10 @@ export default function SongWorkbenchPage() {
       void appendSongLedgerMessage("assistant", reply.content, `song-reply:${reply.id}`);
       setSongDevelopmentNotes((current) => appendSongNotes(current, "AI", reply.content));
     } catch (chatError) {
-      setError(chatError instanceof Error ? chatError.message : isZh ? "AI 对话失败。" : "AI chat failed.");
+      // 请求在浏览器层被中断时，服务端可能已经完成生成；不自动重发，避免重复扣费/重复任务。
+      // 恢复输入，让创作者可以决定重试或去任务中心确认。
+      setChatInput(trimmed);
+      setError(toSongChatError(chatError, isZh));
     } finally {
       setChatGenerating(false);
     }
@@ -3263,6 +3266,16 @@ async function readJsonResponse<T extends { error?: string }>(response: Response
   } catch {
     return { error: text.slice(0, 240) } as T;
   }
+}
+
+function toSongChatError(error: unknown, isZh: boolean) {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (/load failed|failed to fetch|networkerror|network request failed/i.test(message)) {
+    return isZh
+      ? "连接暂时中断，歌曲对话可能已经提交。你的输入已保留；请稍后重试，或到任务中心确认结果。"
+      : "The connection was interrupted and the song chat may already be processing. Your input was kept; retry later or check Task Center.";
+  }
+  return message || (isZh ? "AI 对话失败。" : "AI chat failed.");
 }
 
 function escapeRegExp(value: string) {

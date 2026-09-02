@@ -490,7 +490,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.repoActions}><button type="button" className={styles.extractButton} onClick={extractAssets} disabled={busy === "extract" || !state.sourceText.trim()} title={!state.sourceText.trim() ? "请先关联项目或上传资料" : "AI 自动拆解角色、场景、道具"}>{busy === "extract" ? <LoaderCircle className={styles.spin} size={16} /> : <Sparkles size={16} />}{busy === "extract" ? "拆解中..." : "自动拆解"}</button><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} embedded={isEmbedded} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -506,7 +506,7 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
   return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function AssetCard({ asset, onDelete, isZh, embedded, scopeProjectId, scopeSourceUnitId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; embedded?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string }) {
+function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string }) {
   const image = useMemo(() => {
     // 优先使用已设为终稿的版本图；否则取最新生成的版本图
     const masterVariant = asset.variants?.find((item) => item.type === "master");
@@ -536,7 +536,7 @@ function AssetCard({ asset, onDelete, isZh, embedded, scopeProjectId, scopeSourc
   );
   return (
     <div className={styles.assetCardWrapper}>
-      {embedded ? <div className={styles.assetCard}>{cardContent}</div> : <Link className={styles.assetCard} href={assetDetailHref}>{cardContent}</Link>}
+      <Link className={styles.assetCard} href={assetDetailHref}>{cardContent}</Link>
       {onDelete ? <button type="button" className={styles.assetDeleteBtn} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(asset.id); }} title={isZh ? "删除" : "Delete"}>×</button> : null}
     </div>
   );
