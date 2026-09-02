@@ -68,25 +68,24 @@ test("同名角色不串资产：scope 不同则 key 不同", () => {
 });
 
 // 7. ArtAssetDetail 使用与嵌入工作台相同的 scoped key
-test("ArtAssetDetail 从 URL projectId+sourceUnitId 派生 scoped key", async () => {
+test("ArtAssetDetail 从 URL projectId+workId 派生与工作台一致的 scoped key", async () => {
   const detail = await read("../components/art/ArtAssetDetail.tsx");
-  // 必须导入 getArtWorkbenchStorageKey
-  assert.match(detail, /import\s*\{[^}]*getArtWorkbenchStorageKey[^}]*\}\s*from\s*"@\/lib\/art-workbench"/);
-  // 必须从 URL 读 projectId 和 sourceUnitId
+  assert.match(detail, /resolveArtDraftKey/);
   assert.match(detail, /searchParams\.get\("projectId"\)/);
   assert.match(detail, /searchParams\.get\("sourceUnitId"\)/);
-  // 必须用两个上下文参数派生 storageKey
-  assert.match(detail, /getArtWorkbenchStorageKey\(ctxProjectId \|\| undefined, ctxSourceUnitId \|\| undefined\)/);
+  assert.match(detail, /searchParams\.get\("workId"\)/);
+  assert.match(detail, /resolveArtDraftKey\(\{ userId: session\?\.user\.id, projectId: ctxProjectId, workId: ctxWorkId \}\)/);
   // 不得残留硬编码的 STORAGE_KEY 常量
   assert.doesNotMatch(detail, /const STORAGE_KEY = "kiikis_art_workbench_state"/);
 });
 
-// 8. ArtWorkbench 资产卡链接携带 scope query
-test("ArtWorkbench 资产卡链接携带 projectId + sourceUnitId query", async () => {
+// 8. ArtWorkbench 资产卡链接携带完整 scope query
+test("ArtWorkbench 资产卡链接携带 projectId + sourceUnitId + workId query", async () => {
   const component = await read("../components/art/ArtWorkbench.tsx");
-  assert.match(component, /new URLSearchParams\(\{ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId \}\)/);
+  assert.match(component, /new URLSearchParams\(\{ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId, workId: scopeWorkId \}\)/);
   // 嵌入模式必须接收 contextSourceUnitId prop
   assert.match(component, /contextSourceUnitId\?: string/);
+  assert.match(component, /contextWorkId\?: string/);
 });
 
 // 9. ProductionWorkbench 传递 contextSourceUnitId 给 ArtWorkbench

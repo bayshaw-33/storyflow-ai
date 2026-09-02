@@ -9,7 +9,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
-import { artStateFromProject, assetsFromExtraction, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
+import { artStateFromProject, assetsFromExtraction, backupCorruptedArtDraft, canPersistArtDraft, collectArtStoragePaths, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, recoverLegacyArtDraft, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ArtWorkbench.module.css";
@@ -105,6 +105,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
   const [archiveIndex, setArchiveIndex] = useState<ArtWorkbenchArchiveIndex>([]);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const isEmbedded = Boolean(contextProjectId || contextWorkId);
@@ -116,6 +117,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
 
   useEffect(() => {
     setIsHydrated(false);
+    setHydratedStorageKey(null);
     const supabase = getSupabaseBrowserClient();
     const localProjects = readProjectsFromStorage();
     setProjects(localProjects);
@@ -127,6 +129,14 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     };
     void supabase?.auth.getSession().then(({ data }) => loadSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { void loadSession(next); }) || {};
+    const legacyRecovery = embeddedStorageKey && contextProjectId && contextSourceUnitId
+      ? recoverLegacyArtDraft(localStorage, getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId), embeddedStorageKey)
+      : { mode: "none" as const, assetCount: 0 };
+    if (legacyRecovery.mode !== "none") {
+      setNotice(legacyRecovery.mode === "restored"
+        ? `已恢复旧版美术草稿，共 ${legacyRecovery.assetCount} 个资产；旧数据仍保留为安全备份。`
+        : `发现旧版美术草稿，已将 ${legacyRecovery.assetCount} 个资产放入「我的草稿」，未覆盖当前内容。`);
+    }
     // 加载归档索引（用于"我的草稿"下拉）
     setArchiveIndex(storageReady ? readArchiveIndex(storageKey) : []);
     const params = new URLSearchParams(window.location.search);
@@ -159,9 +169,11 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
           projectTitle: contextProjectTitle || baseState.projectTitle || "",
         });
       } catch {
+        try { backupCorruptedArtDraft(localStorage, storageKey); } catch { /* 保留原始损坏数据失败时仍阻止页面崩溃 */ }
         setState({ ...createEmptyArtWorkbenchState(), projectId: contextProjectId, projectTitle: contextProjectTitle || "" });
-        setNotice(isZh ? "当前项目的本地美术草稿数据损坏，已隔离并新建空白草稿。" : "The local art draft for this project is corrupted and was isolated.");
+        setNotice(isZh ? "当前项目的本地美术草稿数据损坏，原始数据已备份并新建空白恢复草稿。" : "The local art draft is corrupted. Original bytes were backed up before opening a recovery draft.");
       }
+      setHydratedStorageKey(storageKey);
       setIsHydrated(true);
       return () => listener?.subscription.unsubscribe();
     }
@@ -186,6 +198,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         },
         `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。`,
       );
+      setHydratedStorageKey(storageKey);
       setIsHydrated(true);
       return () => listener?.subscription.unsubscribe();
     }
@@ -195,6 +208,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
       // 自动归档当前草稿后开始新空白项目
       archiveCurrentAndStartNew(createEmptyArtWorkbenchState(), isZh ? "已新建空白美术项目。可在「我的草稿」中找回之前的草稿。" : "Started a new blank art project. Previous drafts are in \"My Drafts\".");
+      setHydratedStorageKey(storageKey);
       setIsHydrated(true);
       return () => listener?.subscription.unsubscribe();
     }
@@ -203,20 +217,30 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
     } catch (error) {
       // JSON 解析失败：备份损坏数据以便排查，并提示用户（不静默清空）
-      try {
-        const saved = storageReady ? localStorage.getItem(storageKey) : null;
-        if (saved) localStorage.setItem(`${storageKey}__corrupted_backup_${Date.now()}`, saved);
-      } catch { /* 备份失败忽略 */ }
+      try { backupCorruptedArtDraft(localStorage, storageKey); } catch { /* 备份失败忽略 */ }
       setNotice(isZh ? "本地美术草稿数据损坏，已自动备份原始数据。请重新开始或联系支持。" : "Local art draft data is corrupted. Original data has been backed up.");
     }
+    setHydratedStorageKey(storageKey);
     setIsHydrated(true);
     return () => listener?.subscription.unsubscribe();
   }, [contextProjectId, contextProjectTitle, contextSourceUnitId, contextWorkId, isZh, storageKey, storageReady]);
 
   useEffect(() => {
-    if (!isHydrated || !storageReady) return;
+    if (!isHydrated || !canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey })) return;
     try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
-  }, [isHydrated, state, storageKey, storageReady]);
+  }, [hydratedStorageKey, isHydrated, state, storageKey, storageReady]);
+
+  const artStoragePathSignature = useMemo(() => collectArtStoragePaths(state).join("\n"), [state]);
+  useEffect(() => {
+    if (!isHydrated || !canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey }) || !artStoragePathSignature) return;
+    let cancelled = false;
+    void fetchArtDraftPreviewUrls(state).then((urls) => {
+      if (!cancelled && urls) setState((current) => replaceArtVersionPreviewUrls(current, urls));
+    });
+    return () => { cancelled = true; };
+  // Re-sign once per distinct durable path set; URL changes alone do not loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artStoragePathSignature, hydratedStorageKey, isHydrated, storageKey, storageReady]);
 
   const visibleAssets = useMemo(() => state.assets.filter((asset) => asset.kind === selectedKind && (!query.trim() || `${asset.name} ${asset.role} ${asset.description}`.toLowerCase().includes(query.trim().toLowerCase()))), [state.assets, selectedKind, query]);
   const counts = useMemo(() => ({ character: state.assets.filter((asset) => asset.kind === "character").length, scene: state.assets.filter((asset) => asset.kind === "scene").length, prop: state.assets.filter((asset) => asset.kind === "prop").length }), [state.assets]);
@@ -490,7 +514,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.repoActions}><button type="button" className={styles.extractButton} onClick={extractAssets} disabled={busy === "extract" || !state.sourceText.trim()} title={!state.sourceText.trim() ? "请先关联项目或上传资料" : "AI 自动拆解角色、场景、道具"}>{busy === "extract" ? <LoaderCircle className={styles.spin} size={16} /> : <Sparkles size={16} />}{busy === "extract" ? "拆解中..." : "自动拆解"}</button><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} scopeWorkId={contextWorkId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -506,7 +530,7 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
   return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string }) {
+function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId, scopeWorkId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string; scopeWorkId?: string }) {
   const image = useMemo(() => {
     // 优先使用已设为终稿的版本图；否则取最新生成的版本图
     const masterVariant = asset.variants?.find((item) => item.type === "master");
@@ -520,12 +544,12 @@ function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }:
   // PRD §7.2 / §12.3：资产卡详情链接必须携带 projectId + sourceUnitId，详情页使用同一 scoped storage key
   const assetDetailHref = useMemo(() => {
     const path = `/art-workbench/assets/${encodeURIComponent(asset.id)}`;
-    if (scopeProjectId && scopeSourceUnitId) {
-      const params = new URLSearchParams({ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId });
+    if (scopeProjectId && scopeSourceUnitId && scopeWorkId) {
+      const params = new URLSearchParams({ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId, workId: scopeWorkId });
       return `${path}?${params.toString()}`;
     }
     return path;
-  }, [asset.id, scopeProjectId, scopeSourceUnitId]);
+  }, [asset.id, scopeProjectId, scopeSourceUnitId, scopeWorkId]);
   const cardContent = (
     <>
       <div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div>
@@ -540,4 +564,20 @@ function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId }:
       {onDelete ? <button type="button" className={styles.assetDeleteBtn} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(asset.id); }} title={isZh ? "删除" : "Delete"}>×</button> : null}
     </div>
   );
+}
+
+async function fetchArtDraftPreviewUrls(state: ArtWorkbenchState): Promise<Record<string, string> | null> {
+  const paths = collectArtStoragePaths(state);
+  if (!paths.length) return null;
+  try {
+    const response = await fetchWithAuthRetry("/api/art/sign-assets", {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
+    const payload = await response.json() as { success?: boolean; urls?: Record<string, string> };
+    if (!response.ok || !payload.success || !payload.urls) return null;
+    return payload.urls;
+  } catch {
+    return null;
+  }
 }

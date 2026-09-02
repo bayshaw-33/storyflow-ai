@@ -102,6 +102,13 @@ export async function signStoredArtImage(storagePath: string, expiresIn = 60 * 6
   return url;
 }
 
+export function assertArtStoragePathBelongsToUser(userId: string, storagePath: string): void {
+  const normalized = storagePath.trim();
+  if (!normalized || normalized.includes("..") || normalized.includes("\\") || !normalized.startsWith(`${userId}/`)) {
+    throw new Error("ART_STORAGE_PATH_FORBIDDEN");
+  }
+}
+
 async function uploadAndSign(path: string, contentType: string, body: ArrayBuffer) {
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";

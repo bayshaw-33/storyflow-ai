@@ -35,17 +35,26 @@ test("publish submit creates a draft asset with the collected metadata", () => {
   assert.match(source, /metadata/, "collected form fields ride along as metadata");
 });
 
-test("actor library dedupes same-name profiles (keeps the most recent)", async () => {
+test("actor library preserves same-name profiles created by the current user", async () => {
   const source = read("../../lib/supabase/actors.ts");
-  assert.match(source, /dedupeActorsByName|normalizeActorName/, "dedupe helper exists");
-  assert.match(source, /dedupeActorsByName\(actors\)/, "listStructuredActorsForUser output is deduped");
-  // 行为级验证
+  assert.match(source, /selectActorsForLibrary\(actors, userId\)/, "library selection is ownership-aware");
+  const { selectActorsForLibrary } = await import("../../lib/supabase/actor-dedupe.ts");
+  const selected = selectActorsForLibrary([
+    { id: "mine-1", owner_id: "user-1", name: "Lucas", updated_at: "2026-08-01T00:00:00Z" },
+    { id: "mine-2", owner_id: "user-1", name: " lucas ", updated_at: "2026-08-10T00:00:00Z" },
+    { id: "platform-1", owner_id: "seed", name: "Mira", updated_at: "2026-08-01T00:00:00Z" },
+    { id: "platform-2", owner_id: "seed", name: " mira ", updated_at: "2026-08-10T00:00:00Z" },
+  ], "user-1");
+  assert.deepEqual(selected.filter((actor) => actor.owner_id === "user-1").map((actor) => actor.id), ["mine-1", "mine-2"]);
+  assert.deepEqual(selected.filter((actor) => actor.owner_id !== "user-1").map((actor) => actor.id), ["platform-2"]);
+});
+
+test("generic actor dedupe still collapses duplicate platform seed rows", async () => {
   const { dedupeActorsByName } = await import("../../lib/supabase/actor-dedupe.ts");
   const deduped = dedupeActorsByName([
     { id: "a1", name: "Mira", updated_at: "2026-08-01T00:00:00Z" },
     { id: "a2", name: " mira ", updated_at: "2026-08-10T00:00:00Z" },
-    { id: "a3", name: "Kael", updated_at: "2026-08-05T00:00:00Z" },
   ]);
-  assert.equal(deduped.length, 2, "same-name profiles collapse (case/whitespace-insensitive)");
-  assert.equal(deduped.find((a) => a.name.trim().toLowerCase() === "mira").id, "a2", "keeps the most recently updated");
+  assert.equal(deduped.length, 1);
+  assert.equal(deduped[0].id, "a2");
 });

@@ -6,7 +6,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Pencil, Plus, Send, Sparkles, Upload, Users, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { getArtWorkbenchStorageKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
+import { appendArtVersions, approveArtAssetVersion, collectArtStoragePaths, getArtWorkbenchStorageKey, recoverLegacyArtDraft, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
 import type { ActorProfile } from "@/lib/actors";
 import { ART_MODEL_CATALOG, findDefaultArtModel } from "@/lib/art/providers/catalog";
 import styles from "./ArtAssetDetail.module.css";
@@ -20,13 +21,16 @@ export default function ArtAssetDetail() {
   const searchParams = useSearchParams();
   const ctxProjectId = searchParams.get("projectId") || "";
   const ctxSourceUnitId = searchParams.get("sourceUnitId") || "";
+  const ctxWorkId = searchParams.get("workId") || "";
   const ctxSetup = searchParams.get("setup") === "1";
-  // PRD §7.2：详情页必须使用与嵌入工作台完全相同的 scoped storage key（projectId + sourceUnitId）
-  const storageKey = getArtWorkbenchStorageKey(ctxProjectId || undefined, ctxSourceUnitId || undefined);
+  const [session, setSession] = useState<Session | null>(null);
+  const embeddedStorageKey = ctxWorkId
+    ? resolveArtDraftKey({ userId: session?.user.id, projectId: ctxProjectId, workId: ctxWorkId })
+    : null;
+  const storageKey = embeddedStorageKey || (ctxWorkId ? null : getArtWorkbenchStorageKey(ctxProjectId || undefined, ctxSourceUnitId || undefined));
   const backToArtHref = ctxProjectId && ctxSourceUnitId
     ? `/production?projectId=${encodeURIComponent(ctxProjectId)}&sourceUnitId=${encodeURIComponent(ctxSourceUnitId)}&mode=art`
-    : `/production?mode=art${ctxSetup ? "&setup=1" : ""}`;
-  const [session, setSession] = useState<Session | null>(null);
+    : `/art-workbench${ctxSetup ? "?setup=1" : ""}`;
   const [state, setState] = useState<ArtWorkbenchState | null>(null);
   const [asset, setAsset] = useState<ArtAsset | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");
@@ -45,12 +49,25 @@ export default function ArtAssetDetail() {
   const [actorModalOpen, setActorModalOpen] = useState(false);
   const [actorList, setActorList] = useState<ActorProfile[]>([]);
   const [actorLoading, setActorLoading] = useState(false);
+  const assetRef = useRef<ArtAsset | null>(null);
+  const stateRef = useRef<ArtWorkbenchState | null>(null);
+
+  useEffect(() => { assetRef.current = asset; }, [asset]);
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
+    return () => listener?.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!storageKey) return;
     try {
+      if (embeddedStorageKey && ctxProjectId && ctxSourceUnitId) {
+        recoverLegacyArtDraft(localStorage, getArtWorkbenchStorageKey(ctxProjectId, ctxSourceUnitId), embeddedStorageKey);
+      }
       const stored = JSON.parse(localStorage.getItem(storageKey) || "null") as ArtWorkbenchState | null;
       const found = stored?.assets.find((item) => item.id === assetId) || null;
       if (stored && found) {
@@ -60,10 +77,23 @@ export default function ArtAssetDetail() {
         setAsset(hydrated);
         setSelectedVariantId(variants[0].id);
         setSelectedVersionId(variants[0].approvedVersionId || variants[0].versions[0]?.id || "");
+        void fetchArtDraftPreviewUrls(stored).then((urls) => {
+          if (!urls) return;
+          setState((currentState) => {
+            if (!currentState) return currentState;
+            const refreshed = replaceArtVersionPreviewUrls(currentState, urls);
+            localStorage.setItem(storageKey, JSON.stringify(refreshed));
+            return refreshed;
+          });
+          setAsset((current) => {
+            if (!current) return current;
+            const refreshed = replaceArtVersionPreviewUrls({ ...stored, assets: [current] }, urls);
+            return refreshed.assets[0] || current;
+          });
+        });
       }
     } catch { setNotice("无法读取美术资产。"); }
-    return () => listener?.subscription.unsubscribe();
-  }, [assetId]);
+  }, [assetId, ctxProjectId, ctxSourceUnitId, embeddedStorageKey, storageKey]);
 
   const selectedVariant = asset?.variants?.find((item) => item.id === selectedVariantId) || asset?.variants?.[0];
   const selectedVersion = selectedVariant?.versions.find((item) => item.id === selectedVersionId) || selectedVariant?.versions[0];
@@ -92,9 +122,12 @@ export default function ArtAssetDetail() {
   }, [asset?.id, selectedVariantId]); // 仅在 asset/variant 切换时重置，用户手动改不被覆盖
 
   function persist(next: ArtAsset) {
+    assetRef.current = next;
     setAsset(next);
-    if (!state) return;
-    const nextState = { ...state, assets: state.assets.map((item) => item.id === next.id ? next : item), updatedAt: new Date().toISOString() };
+    const currentState = stateRef.current;
+    if (!currentState || !storageKey) return;
+    const nextState = { ...currentState, assets: currentState.assets.map((item) => item.id === next.id ? next : item), updatedAt: new Date().toISOString() };
+    stateRef.current = nextState;
     setState(nextState);
     try { localStorage.setItem(storageKey, JSON.stringify(nextState)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
   }
@@ -140,6 +173,9 @@ export default function ArtAssetDetail() {
     if (!session?.access_token) return setNotice("请先登录后再上传图片版本。");
     setBusy("upload");
     setNotice("");
+    const targetAssetId = asset.id;
+    const targetVariantId = selectedVariant.id;
+    const targetPrompt = selectedVariant.prompt;
     try {
       // 支持一次选择多张：逐个上传，全部成功后一次性合并到 versions 前面（保持选择顺序）
       const uploaded: ArtAssetVersion[] = [];
@@ -148,18 +184,19 @@ export default function ArtAssetDetail() {
         try {
           const form = new FormData();
           form.append("file", file);
-          const response = await fetch("/api/art/upload-reference", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
+          const response = await fetchWithAuthRetry("/api/art/upload-reference", { method: "POST", body: form });
           const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
           if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "图片版本上传失败");
           // 默认显示名用文件名（去扩展名），用户可后续重命名
           const baseName = file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "上传图片";
-          uploaded.push({ id: crypto.randomUUID(), imageUrl: payload.previewUrl, storagePath: payload.storagePath, source: "uploaded", prompt: selectedVariant.prompt, createdAt: new Date().toISOString(), name: baseName });
+          uploaded.push({ id: crypto.randomUUID(), imageUrl: payload.previewUrl, storagePath: payload.storagePath, source: "uploaded", prompt: targetPrompt, createdAt: new Date().toISOString(), name: baseName });
         } catch (err) {
           errors.push(`${file.name}: ${err instanceof Error ? err.message : "上传失败"}`);
         }
       }
       if (uploaded.length) {
-        patchVariant({ versions: [...uploaded, ...selectedVariant.versions] });
+        const currentAsset = assetRef.current;
+        if (currentAsset?.id === targetAssetId) persist(appendArtVersions(currentAsset, targetVariantId, uploaded));
         setSelectedVersionId(uploaded[0].id);
       }
       if (errors.length) {
@@ -193,18 +230,20 @@ export default function ArtAssetDetail() {
     if (!session?.access_token) return setNotice("请先登录后再生成图片。");
     setBusy("generate");
     setNotice("");
+    const targetAssetId = asset.id;
+    const targetVariantId = selectedVariant.id;
+    const targetPrompt = selectedVariant.prompt;
     try {
       // Use the effective reference (current version, or fall back to the master variant's latest image)
       const referenceUrls = effectiveReferenceUrl ? [effectiveReferenceUrl] : [];
       const task = taskOverride || (asset.kind === "character" && selectedVariant.type === "master" ? "reference_sheet" : referenceUrls.length ? "edit" : "concept");
-      const response = await fetch("/api/art/generate-image", {
+      const response = await fetchWithAuthRetry("/api/art/generate-image", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           projectId: state?.id,
           assetId: asset.id,
           task,
-          prompt: selectedVariant.prompt,
+          prompt: targetPrompt,
           negativePrompt: asset.negativePrompt,
           referenceUrls,
           aspectRatio,
@@ -215,16 +254,16 @@ export default function ArtAssetDetail() {
       });
       const payload = await response.json() as { success?: boolean; images?: Array<{ previewUrl: string; storagePath?: string; provider?: string; model?: string }>; error?: string };
       if (!response.ok || !payload.success) throw new Error(payload.error || "图片生成失败");
-      const versions: ArtAssetVersion[] = (payload.images || []).map((item) => ({ id: crypto.randomUUID(), imageUrl: item.previewUrl, storagePath: item.storagePath, source: "generated", provider: item.provider, model: item.model, prompt: selectedVariant.prompt, createdAt: new Date().toISOString() }));
-      patchVariant({ versions: [...versions, ...selectedVariant.versions] });
+      const versions: ArtAssetVersion[] = (payload.images || []).map((item) => ({ id: crypto.randomUUID(), imageUrl: item.previewUrl, storagePath: item.storagePath, source: "generated", provider: item.provider, model: item.model, prompt: targetPrompt, createdAt: new Date().toISOString() }));
+      const currentAsset = assetRef.current;
+      if (currentAsset?.id === targetAssetId) persist(appendArtVersions(currentAsset, targetVariantId, versions));
       setSelectedVersionId(versions[0]?.id || "");
     } catch (error) { setNotice(error instanceof Error ? error.message : "图片生成失败"); } finally { setBusy(""); }
   }
 
   function approve() {
     if (!asset || !selectedVariant || !selectedVersion) return;
-    patchVariant({ approvedVersionId: selectedVersion.id });
-    patchAsset({ approvedVersionId: selectedVersion.id, status: "ready", referenceSheetUrl: asset.kind === "character" ? selectedVersion.imageUrl : asset.referenceSheetUrl, conceptUrl: asset.kind !== "character" ? selectedVersion.imageUrl : asset.conceptUrl });
+    persist(approveArtAssetVersion(asset, selectedVariant.id, selectedVersion.id));
     setNotice("当前版本已设为终稿，尚未发布到 Universe。");
   }
 
@@ -299,7 +338,7 @@ export default function ArtAssetDetail() {
     if (actorList.length) return;
     setActorLoading(true);
     try {
-      const response = await fetch("/api/actors", { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const response = await fetchWithAuthRetry("/api/actors");
       const payload = await response.json() as { actors?: ActorProfile[]; error?: string };
       if (!response.ok || !payload.actors) throw new Error(payload.error || "读取演员库失败");
       setActorList(payload.actors);
@@ -325,9 +364,8 @@ export default function ArtAssetDetail() {
       let threeViewUrl = "";
       let usedSource = "";
       try {
-        const viewsResp = await fetch(
+        const viewsResp = await fetchWithAuthRetry(
           `/api/actors/generate-views?actorId=${encodeURIComponent(actor.id)}`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } },
         );
         if (viewsResp.ok) {
           const viewsPayload = await viewsResp.json() as {
@@ -475,6 +513,22 @@ export default function ArtAssetDetail() {
       </div>
     ) : null}
   </main>;
+}
+
+async function fetchArtDraftPreviewUrls(state: ArtWorkbenchState): Promise<Record<string, string> | null> {
+  const paths = collectArtStoragePaths(state);
+  if (!paths.length) return null;
+  try {
+    const response = await fetchWithAuthRetry("/api/art/sign-assets", {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
+    const payload = await response.json() as { success?: boolean; urls?: Record<string, string> };
+    if (!response.ok || !payload.success || !payload.urls) return null;
+    return payload.urls;
+  } catch {
+    return null;
+  }
 }
 
 function legacyVersions(asset: ArtAsset): ArtAssetVersion[] {

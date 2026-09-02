@@ -46,6 +46,80 @@ export function resolveArtDraftKey(scope: ArtDraftScope): string | null {
     .join(":");
 }
 
+type ArtDraftStorage = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+};
+
+export type LegacyArtDraftRecovery = {
+  mode: "none" | "restored" | "archived";
+  assetCount: number;
+};
+
+export function canPersistArtDraft(input: {
+  storageReady: boolean;
+  storageKey: string;
+  hydratedStorageKey: string | null;
+}): boolean {
+  return input.storageReady && input.hydratedStorageKey === input.storageKey;
+}
+
+export function backupCorruptedArtDraft(
+  storage: ArtDraftStorage,
+  storageKey: string,
+  timestamp = Date.now(),
+): string | null {
+  const raw = storage.getItem(storageKey);
+  if (!raw) return null;
+  const backupKey = `${storageKey}__corrupted_backup_${timestamp}`;
+  storage.setItem(backupKey, raw);
+  return backupKey;
+}
+
+/**
+ * Recover the pre-2.2 project/unit draft into the user/project/Work scope.
+ * The legacy value is intentionally kept as a recovery copy.
+ */
+export function recoverLegacyArtDraft(
+  storage: ArtDraftStorage,
+  legacyKey: string,
+  nextKey: string | null,
+): LegacyArtDraftRecovery {
+  if (!nextKey || legacyKey === nextKey) return { mode: "none", assetCount: 0 };
+  const markerKey = `${nextKey}__legacy_recovered_${encodeURIComponent(legacyKey)}`;
+  if (storage.getItem(markerKey)) return { mode: "none", assetCount: 0 };
+
+  const legacyRaw = storage.getItem(legacyKey);
+  const legacy = parseArtDraft(legacyRaw);
+  if (!legacy || !isMeaningfulArtDraft(legacy)) return { mode: "none", assetCount: 0 };
+
+  const currentRaw = storage.getItem(nextKey);
+  const current = parseArtDraft(currentRaw);
+  if (!current || !isMeaningfulArtDraft(current)) {
+    storage.setItem(nextKey, legacyRaw as string);
+    storage.setItem(markerKey, "restored");
+    return { mode: "restored", assetCount: legacy.assets?.length || 0 };
+  }
+
+  const archiveId = makeLegacyArchiveId(legacy, legacyKey);
+  const archiveKey = `${nextKey}__archive_${archiveId}`;
+  storage.setItem(archiveKey, legacyRaw as string);
+  const indexKey = `${nextKey}__archive_index`;
+  const existingIndex = parseArchiveIndex(storage.getItem(indexKey));
+  const nextIndex = [
+    {
+      id: archiveId,
+      title: legacy.title || "旧版美术草稿",
+      archivedAt: legacy.updatedAt || new Date(0).toISOString(),
+      assetCount: legacy.assets?.length || 0,
+    },
+    ...existingIndex.filter((item) => item.id !== archiveId),
+  ].slice(0, 20);
+  storage.setItem(indexKey, JSON.stringify(nextIndex));
+  storage.setItem(markerKey, "archived");
+  return { mode: "archived", assetCount: legacy.assets?.length || 0 };
+}
+
 export type ArtAssetKind = "character" | "scene" | "prop";
 export type ArtCharacterPriority = "lead" | "supporting" | "minor";
 export type ArtAssetStatus = "draft" | "generating" | "ready" | "error";
@@ -99,6 +173,41 @@ export type ArtAssetVariant = {
   approvedVersionId?: string;
 };
 
+export function appendArtVersions(
+  asset: ArtAsset,
+  variantId: string,
+  versions: ArtAssetVersion[],
+): ArtAsset {
+  return {
+    ...asset,
+    variants: asset.variants?.map((variant) => variant.id === variantId
+      ? { ...variant, versions: [...versions, ...variant.versions] }
+      : variant),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function approveArtAssetVersion(
+  asset: ArtAsset,
+  variantId: string,
+  versionId: string,
+): ArtAsset {
+  const variant = asset.variants?.find((item) => item.id === variantId);
+  const version = variant?.versions.find((item) => item.id === versionId);
+  if (!variant || !version) return asset;
+  return {
+    ...asset,
+    variants: asset.variants?.map((item) => item.id === variantId
+      ? { ...item, approvedVersionId: versionId }
+      : item),
+    approvedVersionId: versionId,
+    status: "ready",
+    referenceSheetUrl: asset.kind === "character" ? version.imageUrl : asset.referenceSheetUrl,
+    conceptUrl: asset.kind !== "character" ? version.imageUrl : asset.conceptUrl,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export type ArtSourceFile = {
   id: string;
   name: string;
@@ -118,6 +227,93 @@ export type ArtWorkbenchState = {
   selectedAssetId?: string;
   updatedAt: string;
 };
+
+export function collectArtStoragePaths(state: ArtWorkbenchState): string[] {
+  return Array.from(new Set(state.assets.flatMap((asset) => [
+    ...[asset.referenceSheetUrl, asset.threeViewUrl, asset.conceptUrl]
+      .map((url) => extractArtStoragePathFromPreviewUrl(url))
+      .filter((path): path is string => Boolean(path)),
+    ...(asset.variants || []).flatMap((variant) =>
+      variant.versions
+        .map((version) => version.storagePath || extractArtStoragePathFromPreviewUrl(version.imageUrl))
+        .filter((path): path is string => Boolean(path)),
+    ),
+  ])));
+}
+
+export function replaceArtVersionPreviewUrls(
+  state: ArtWorkbenchState,
+  signedUrls: Record<string, string>,
+): ArtWorkbenchState {
+  return {
+    ...state,
+    assets: state.assets.map((asset) => ({
+      ...asset,
+      referenceSheetUrl: refreshArtPreviewUrl(asset.referenceSheetUrl, signedUrls),
+      threeViewUrl: refreshArtPreviewUrl(asset.threeViewUrl, signedUrls),
+      conceptUrl: refreshArtPreviewUrl(asset.conceptUrl, signedUrls),
+      variants: asset.variants?.map((variant) => ({
+        ...variant,
+        versions: variant.versions.map((version) => {
+          const storagePath = version.storagePath || extractArtStoragePathFromPreviewUrl(version.imageUrl);
+          if (!storagePath) return version;
+          const freshUrl = signedUrls[storagePath];
+          return freshUrl ? { ...version, storagePath, imageUrl: freshUrl } : version;
+        }),
+      })),
+    })),
+  };
+}
+
+export function extractArtStoragePathFromPreviewUrl(url?: string): string | null {
+  if (!url) return null;
+  const marker = "/storage/v1/object/sign/art-assets/";
+  const markerIndex = url.indexOf(marker);
+  if (markerIndex < 0) return null;
+  const encodedPath = url.slice(markerIndex + marker.length).split(/[?#]/, 1)[0];
+  if (!encodedPath) return null;
+  try {
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return encodedPath;
+  }
+}
+
+function refreshArtPreviewUrl(url: string | undefined, signedUrls: Record<string, string>): string | undefined {
+  const storagePath = extractArtStoragePathFromPreviewUrl(url);
+  return storagePath && signedUrls[storagePath] ? signedUrls[storagePath] : url;
+}
+
+function parseArtDraft(raw: string | null): ArtWorkbenchState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ArtWorkbenchState;
+    return parsed && typeof parsed === "object" && Array.isArray(parsed.assets) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isMeaningfulArtDraft(draft: ArtWorkbenchState): boolean {
+  return Boolean(draft.assets?.length || draft.sourceText?.trim() || draft.sourceFiles?.length);
+}
+
+function makeLegacyArchiveId(draft: ArtWorkbenchState, legacyKey: string): string {
+  const raw = `${draft.id || "draft"}-${draft.updatedAt || "legacy"}-${legacyKey}`;
+  let hash = 0;
+  for (let index = 0; index < raw.length; index += 1) hash = ((hash << 5) - hash + raw.charCodeAt(index)) | 0;
+  return `legacy-${Math.abs(hash).toString(36)}`;
+}
+
+function parseArchiveIndex(raw: string | null): Array<{ id: string; title: string; archivedAt: string; assetCount: number }> {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export type ExtractedArtAssets = {
   title?: string;

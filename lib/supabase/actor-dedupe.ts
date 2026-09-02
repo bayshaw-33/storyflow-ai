@@ -16,6 +16,18 @@ export function dedupeActorsByName<T extends { id: string; name: string; updated
   return [...byName.values()];
 }
 
+/**
+ * Personal actor records are authored objects, so equal display names do not
+ * make them duplicates. Only shared rows keep the seed/import dedupe rule.
+ */
+export function selectActorsForLibrary<
+  T extends { id: string; owner_id: string; name: string; updated_at?: string | null },
+>(actors: T[], currentUserId: string): T[] {
+  const owned = actors.filter((actor) => actor.owner_id === currentUserId);
+  const shared = actors.filter((actor) => actor.owner_id !== currentUserId);
+  return [...owned, ...dedupeActorsByName(shared)];
+}
+
 function normalizeActorName(name: string): string {
   return name.trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }
