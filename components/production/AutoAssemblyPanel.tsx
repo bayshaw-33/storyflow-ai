@@ -10,6 +10,7 @@ import {
 } from "@/lib/production/state";
 import type { ProductionProjectState } from "@/lib/production/types";
 import { formatSeconds } from "@/lib/production/state";
+import { downloadBlob } from "@/lib/client/download";
 
 type Props = {
   state: ProductionProjectState;
@@ -87,23 +88,13 @@ export function AutoAssemblyPanel({ state }: Props) {
   function exportEDL() {
     const content = productionStateToEDL(state);
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${state.title || "production"}.edl`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${state.title || "production"}.edl`);
   }
 
   function exportFCPXML() {
     const content = productionStateToFCPXML(state);
     const blob = new Blob([content], { type: "application/xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${state.title || "production"}.fcpxml`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${state.title || "production"}.fcpxml`);
   }
 
   return (

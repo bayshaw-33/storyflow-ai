@@ -15,6 +15,7 @@ import test from "node:test";
 import { ScreenplayGenerationService, ScreenplayGenerationError } from "../../lib/server/v2/screenplays/generation.ts";
 import { classifyServiceError } from "../../lib/server/v2/service-errors.ts";
 import { clientErrorMessage } from "../../lib/client/v2/screenplay-studio/api.ts";
+import { readFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Test fetcher: records calls; returns queued rows per path.
@@ -48,6 +49,14 @@ const WORK = "22222222-2222-2222-2222-222222222222";
 const THREAD = "kk-22222222-2222-2222-2222-222222222222";
 const CANDIDATE = "33333333-3333-3333-3333-333333333333";
 const VERSION = "44444444-4444-4444-4444-444444444444";
+
+test("propose-change route initializes a Work base version before creating a snapshot", () => {
+  const source = readFileSync(new URL("../../app/api/v2/works/[workId]/screenplay/propose-change/route.ts", import.meta.url), "utf8");
+  assert.match(source, /ensureScreenplayWorkBaseVersion/);
+  assert.match(source, /const baseVersionId = await ensureScreenplayWorkBaseVersion/);
+  assert.match(source, /baseVersionId: body\.baseVersionId \?\? baseVersionId/);
+  assert.doesNotMatch(source, /baseVersionId: body\.baseVersionId \?\? work\.current_version_id \?\? ""/);
+});
 
 function baseDeps() {
   return {

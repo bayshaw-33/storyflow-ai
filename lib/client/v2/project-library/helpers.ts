@@ -94,6 +94,9 @@ export function getProjectWorkbenchHref(project: ProjectLibraryProject) {
   if (project.workflowType === "storyboard") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "storyboard", unitId });
   if (project.workflowType === "video") return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "video", unitId });
   if (project.workflowType === "art") {
+    if (project.source === "project") {
+      return buildUnifiedWorkbenchUrl({ projectId: project.id, tab: "art", unitId });
+    }
     // P0-02：legacy 美术库行是 storyflow_art_projects（id 形如 art-<uuid>），
     // 不是 storyflow_projects 主键 —— 伪造 id 进 /production 必然 404。
     // 有关联源项目走统一路由，否则进独立美术工作台。

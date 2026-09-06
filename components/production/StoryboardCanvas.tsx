@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import type { StoryboardScene } from "@/lib/storyboard/contracts";
+import { downloadBlob } from "@/lib/client/download";
 import { fitViewport, getCanvasBounds, layoutShotsByScene, normalizeStoryboardCanvas } from "@/lib/production/storyboard-canvas";
 import type { StoryboardCanvasEdge, StoryboardCanvasGroup, StoryboardCanvasState } from "@/lib/production/types";
 
@@ -35,12 +36,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 function downloadFile(name: string, content: BlobPart, type: string): void {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob([content], { type }), name);
 }
 
 function objectPosition(state: StoryboardCanvasState, id: CanvasId): Point | null {

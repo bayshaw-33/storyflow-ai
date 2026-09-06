@@ -105,6 +105,13 @@ test("project library routes audiovisual projects into production and preserves 
   assert.equal(getProjectWorkbenchHref(project({ id: "viral-source", workflowType: "viral" })), "/viral-workbench?projectId=source&dashboardProjectId=viral-source");
 });
 
+test("real art projects keep their identity instead of opening the shared legacy draft", () => {
+  assert.equal(
+    getProjectWorkbenchHref(project({ id: "proj-art-1", workflowType: "art", source: "project" })),
+    "/production?projectId=proj-art-1&tab=art",
+  );
+});
+
 test("project library records preserve their source identity for safe deletion", async () => {
   const { toProjectLibraryRecord } = await import("../../../lib/client/v2/project-library/types.ts");
   const record = toProjectLibraryRecord({

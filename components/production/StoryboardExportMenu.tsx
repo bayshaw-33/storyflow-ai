@@ -16,6 +16,7 @@ import { ChevronDown, Download, FileArchive, Loader2, ShieldCheck } from "lucide
 import type { StoryboardScene, StoryboardShot } from "@/lib/storyboard/contracts";
 import { requestEvidencePackageDownload } from "@/lib/evidence/download";
 import type { VideoJobMap } from "./ShotVideoPanel";
+import { downloadBlob } from "@/lib/client/download";
 
 type Props = {
   projectId: string;
@@ -90,12 +91,7 @@ export function StoryboardExportMenu(props: Props) {
       const fnameMatch = cd.match(/filename="([^"]+)"/);
       const filename = fnameMatch ? fnameMatch[1] : `${projectTitle || "production"}-production-package.zip`;
 
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
 
       if (exportStatus === "partial_failure") {
         setProgress(`导出完成（部分失败：${failedCount} 个文件缺失，详见 ZIP 内 manifest.json）`);

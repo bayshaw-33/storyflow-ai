@@ -5,6 +5,7 @@ import { ChevronDown, Download, FileJson, FileText, Film, Table } from "lucide-r
 import type { ExportFormat } from "@/lib/production/state";
 import { productionStateToExport } from "@/lib/production/state";
 import type { ProductionProjectState } from "@/lib/production/types";
+import { downloadBlob } from "@/lib/client/download";
 
 type Props = {
   state: ProductionProjectState;
@@ -30,12 +31,7 @@ export function ExportMenu({ state }: Props) {
   function handleExport(format: ExportFormat) {
     const { content, mimeType, extension } = productionStateToExport(state, format);
     const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${state.title || "production-workbench"}.${extension}`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${state.title || "production-workbench"}.${extension}`);
     setOpen(false);
   }
 

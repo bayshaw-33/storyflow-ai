@@ -27,6 +27,7 @@ import {
   type UnitVersionHistoryClientDto,
 } from "@/lib/client/v2/screenplay-studio/api";
 import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
+import { downloadBlob } from "@/lib/client/download";
 import {
   SCREENPLAY_STUDIO_WORKFLOW_STAGES,
   type StudioWorkflowStage,
@@ -572,14 +573,7 @@ export function ScreenplayStudio({
       ].filter(Boolean).join("\n");
       const body = `${meta}\n${"=".repeat(36)}\n\n${activeContent || "（无内容）"}\n`;
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${(activeUnit.title || activeUnit.type).replace(/[\\/:*?"<>|]/g, "_")}-kiikis.txt`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${(activeUnit.title || activeUnit.type).replace(/[\\/:*?"<>|]/g, "_")}-kiikis.txt`);
       setExportNotice("定稿草稿已导出为文本文件。");
     } finally {
       setExportBusy(null);

@@ -17,6 +17,7 @@ import { getWork } from "@/lib/server/v2/works/versions";
 import { ScreenplayUnitsService } from "@/lib/server/v2/screenplays/units";
 import { classifyServiceError } from "@/lib/server/v2/service-errors";
 import { normalizeScreenplayConversationId } from "@/lib/server/v2/screenplays/conversation-id";
+import { ensureScreenplayWorkBaseVersion } from "@/lib/server/v2/screenplays/work-base";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,6 +93,12 @@ export async function POST(
       return NextResponse.json({ success: false, error: "conversationId must be a UUID.", code: "validation_failed" }, { status: 422 });
     }
     const work = await getWork({ ownerId: viewer.id, workId }, serviceFetch);
+    const baseVersionId = await ensureScreenplayWorkBaseVersion({
+      ownerId: viewer.id,
+      workId,
+      currentVersionId: work.current_version_id,
+      fetcher: serviceFetch,
+    });
     const service = new ScreenplayGenerationService(serviceFetch, buildDeps(viewer.id));
     const result = await service.proposeChange({
       ownerId: viewer.id,
@@ -99,7 +106,7 @@ export async function POST(
       conversationId,
       userMessage: String(body.userMessage ?? ""),
       scope: (body.scope ?? { kind: "all" }) as ProposeScope,
-      baseVersionId: body.baseVersionId ?? work.current_version_id ?? "",
+      baseVersionId: body.baseVersionId ?? baseVersionId,
       clientContext: body.clientContext ? String(body.clientContext).slice(0, 200) : null,
       idempotencyKey: body.idempotencyKey,
     });

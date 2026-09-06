@@ -11,12 +11,23 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { registerHooks } from "node:module";
 
-import {
+// The application resolves this alias through Next; bare node needs the same mapping.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "@/lib/validation/ids") {
+      return { url: new URL("../lib/validation/ids.ts", import.meta.url).href, shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const {
   buildVoiceUsageLinks,
   replaceDubbing,
   privateTrialOnly,
-} from "../lib/voice/queries.ts";
+} = await import("../lib/voice/queries.ts");
 
 // ============================================================
 // 1. 显式关系

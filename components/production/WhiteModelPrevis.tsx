@@ -33,6 +33,7 @@ import {
 import type { PrevisVersionRecord } from "@/lib/director/previs-version";
 import type { StoryboardClient } from "@/lib/storyboard/client";
 import styles from "./WhiteModelPrevis.module.css";
+import { downloadBlob } from "@/lib/client/download";
 
 export interface WhiteModelPrevisProps {
   projectId: string;
@@ -81,12 +82,7 @@ function updateVector(vector: PrevisVector3, index: number, value: number): Prev
 }
 
 function downloadText(filename: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob([content], { type }), filename);
 }
 
 function downloadDataUrl(filename: string, dataUrl: string) {
@@ -102,7 +98,8 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const sceneGroupRef = useRef<THREE.Group | null>(null);
   const [scene, setScene] = useState<PrevisScene>(() => createDefaultPrevisScene());
-  const [hydrated, setHydrated] = useState(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState("");
   const [selectedId, setSelectedId] = useState("actor-1");
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -124,20 +121,30 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
   }, [selectedShotId, shotOptions]);
 
   useEffect(() => {
+    setHydratedStorageKey(null);
+    setStorageError("");
+    setSelectedId("actor-1");
+    setCurrentTime(0);
+    setPlaying(false);
     try {
       const saved = window.localStorage.getItem(storageKey);
-      if (saved) setScene(parsePrevisScene(saved));
+      setScene(saved ? parsePrevisScene(saved) : createDefaultPrevisScene());
+      setHydratedStorageKey(storageKey);
     } catch {
-      setNotice("本地预演草稿无法读取，已使用空白场景。");
-    } finally {
-      setHydrated(true);
+      setScene(createDefaultPrevisScene());
+      setStorageError("本地预演草稿无法读取，原草稿已保留，自动保存已暂停。新编辑请导出场景 JSON 保存。");
     }
   }, [storageKey]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(storageKey, serializePrevisScene(scene));
-  }, [hydrated, scene, storageKey]);
+    if (hydratedStorageKey !== storageKey) return;
+    try {
+      window.localStorage.setItem(storageKey, serializePrevisScene(scene));
+      setStorageError("");
+    } catch {
+      setStorageError("本地空间不足或不可用，修改未保存。请导出场景 JSON，避免刷新后丢失。");
+    }
+  }, [hydratedStorageKey, scene, storageKey]);
 
   useEffect(() => {
     playbackRef.current = { playing, currentTime, durationSeconds: scene.durationSeconds };
@@ -276,7 +283,7 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
       cameraRef.current.fov = camera.focalLength === 50 ? 27 : camera.focalLength === 85 ? 16 : 35;
       cameraRef.current.updateProjectionMatrix();
     }
-  }, [currentTime, scene, selectedId]);
+  }, [currentTime, scene, selectedId, hasShotOptions]);
 
   const updateSelected = (nextTransform: PrevisTransform) => {
     if (!selectedObject) return;
@@ -357,7 +364,11 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
         promptInputHash: selectedShot.promptInputHash,
         referenceVersionIds: selectedShot.referenceVersionIds,
       });
-      window.localStorage.setItem(previsHandoffStorageKey(projectId, workId, unitId, selectedShot.shotId), JSON.stringify(saved.snapshot));
+      try {
+        window.localStorage.setItem(previsHandoffStorageKey(projectId, workId, unitId, selectedShot.shotId), JSON.stringify(saved.snapshot));
+      } catch {
+        setStorageError("白模版本已保存到云端，本地缓存不可用，不影响送往视频阶段。");
+      }
       downloadText(`${projectId}-${selectedShot.shotId}-video-handoff.json`, JSON.stringify(saved.snapshot, null, 2), "application/json");
       setNotice("白模版本已保存，正在送往视频阶段确认。");
       onPrevisAdopted(saved);
@@ -445,6 +456,7 @@ export function WhiteModelPrevis({ projectId, workId, unitId, shotOptions = [], 
             <button type="button" onClick={() => setScene((value) => ({ ...value, camera: { ...value.camera, position: [0, 2.2, 8] } }))}>恢复摄影机位置</button>
           </div>
           {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
+          {storageError ? <div className={styles.notice} role="alert">{storageError}</div> : null}
         </aside>
       </div>
     </section>
