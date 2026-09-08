@@ -17,7 +17,7 @@
 import JSZip from "jszip";
 
 import { canonicalJson, sha256Hex, utf8Bytes } from "../../../compliance/manifest.ts";
-import { buildEvidenceManifestV2, type ManifestFetcher } from "./manifest-v2.ts";
+import { buildEvidenceSnapshotV2, type ManifestFetcher } from "./manifest-v2.ts";
 
 export const MAX_DOWNLOAD_TTL_SECONDS = 300;
 export const EVIDENCE_V2_STORAGE_BUCKET = "evidence-artifacts";
@@ -59,11 +59,6 @@ export class EvidencePackageV2Error extends Error {
   }
 }
 
-interface VersionContentRow {
-  id: string;
-  content_json: unknown;
-  content_hash: string;
-}
 
 // ---------------------------------------------------------------------------
 // materializeEvidencePackageV2
@@ -92,7 +87,7 @@ export async function materializeEvidencePackageV2(
   }
 
   // Build the deterministic manifest from persisted facts.
-  const manifest = await buildEvidenceManifestV2(input, fetcher);
+  const { manifest, contents } = await buildEvidenceSnapshotV2(input, fetcher);
 
   // Idempotency: if a package already exists for this manifestHash, return it.
   const existing = await store.getPackageByManifestHash(manifest.manifestHash);
@@ -100,23 +95,18 @@ export async function materializeEvidencePackageV2(
     return { package: existing, idempotent: true };
   }
 
-  // Fetch version content_json for packaging (separate query because
-  // manifest-v2.ts fetchVersions only selects metadata fields).
-  const versionContents = await fetchVersionContents(input.workId, fetcher);
-
   // Build the ZIP package.
   const zip = new JSZip();
   const manifestBytes = utf8Bytes(`${canonicalJson(manifest)}\n`);
   zip.file("manifest.json", manifestBytes, { date: PACKAGE_DATE, createFolders: true });
 
   let totalByteSize = manifestBytes.byteLength;
-  for (const v of versionContents) {
-    const contentBytes = utf8Bytes(`${canonicalJson(v.content_json)}\n`);
-    zip.file(`versions/${v.id}/content.json`, contentBytes, {
+  for (const file of contents) {
+    zip.file(file.archivePath, file.bytes, {
       date: PACKAGE_DATE,
       createFolders: true,
     });
-    totalByteSize += contentBytes.byteLength;
+    totalByteSize += file.bytes.byteLength;
   }
 
   const packageBytes = await zip.generateAsync({
@@ -146,26 +136,13 @@ export async function materializeEvidencePackageV2(
     storage_bucket: EVIDENCE_V2_STORAGE_BUCKET,
     storage_path: storagePath,
     status: "ready",
-    file_count: versionContents.length,
+    file_count: contents.length + 1,
     total_byte_size: totalByteSize,
   });
 
   return { package: pkg, idempotent: false };
 }
 
-async function fetchVersionContents(
-  workId: string,
-  fetcher: ManifestFetcher,
-): Promise<VersionContentRow[]> {
-  try {
-    const rows = await fetcher<VersionContentRow[]>(
-      `/rest/v1/storyflow_work_versions?work_id=eq.${encodeURIComponent(workId)}&select=id,content_json,content_hash&order=created_at.asc`,
-    );
-    return Array.isArray(rows) ? rows : [];
-  } catch {
-    return [];
-  }
-}
 
 // ---------------------------------------------------------------------------
 // signEvidencePackageV2
@@ -242,6 +219,12 @@ export function createServerEvidencePackageV2Store(): EvidencePackageV2Store {
       return rows.length > 0 ? (rows[0] as EvidencePackageV2Row) : null;
     },
     async insertPackage(row) {
+      // Project start encodes a UUID as proj_<32 hex>. This legacy table has a
+      // UUID metadata column (no project FK); retain the real ID in the manifest.
+      const projectId = row.project_id.replace(
+        /^proj_([\da-f]{8})([\da-f]{4})([\da-f]{4})([\da-f]{4})([\da-f]{12})$/i,
+        "$1-$2-$3-$4-$5",
+      );
       const res = await fetchWithServiceRole(
         `${supabaseUrl}/rest/v1/storyflow_evidence_packages_v22`,
         {
@@ -250,7 +233,7 @@ export function createServerEvidencePackageV2Store(): EvidencePackageV2Store {
             "Content-Type": "application/json",
             Prefer: "return=representation",
           },
-          body: JSON.stringify(row),
+          body: JSON.stringify({ ...row, project_id: projectId }),
         },
       );
       if (!res.ok) {
@@ -264,7 +247,7 @@ export function createServerEvidencePackageV2Store(): EvidencePackageV2Store {
     },
     async upload(path, bytes) {
       const res = await fetchWithServiceRole(
-        `${supabaseUrl}/storage/v1/object/${EVIDENCE_V2_STORAGE_BUCKET}/${encodeURIComponent(path)}`,
+        `${supabaseUrl}/storage/v1/object/${EVIDENCE_V2_STORAGE_BUCKET}/${path.split("/").map(encodeURIComponent).join("/")}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/zip" },
@@ -280,12 +263,12 @@ export function createServerEvidencePackageV2Store(): EvidencePackageV2Store {
     },
     async sign(path, ttlSeconds) {
       const res = await fetchWithServiceRole(
-        `${supabaseUrl}/storage/v1/object/sign/${EVIDENCE_V2_STORAGE_BUCKET}/${encodeURIComponent(path)}?expiresIn=${ttlSeconds}`,
-        { method: "POST", headers: { "Content-Type": "application/json" } },
+        `${supabaseUrl}/storage/v1/object/sign/${EVIDENCE_V2_STORAGE_BUCKET}/${path.split("/").map(encodeURIComponent).join("/")}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: ttlSeconds }) },
       );
       if (!res.ok) throw new Error("EVIDENCE_SIGN_FAILED");
       const body = (await res.json()) as { signedURL: string };
-      return { url: `${supabaseUrl}${body.signedURL}`, expiresIn: ttlSeconds };
+      return { url: `${supabaseUrl}/storage/v1${body.signedURL}`, expiresIn: ttlSeconds };
     },
   };
 }

@@ -135,7 +135,7 @@ test("materializeEvidencePackageV2: returns a ready package with correct metadat
   assert.equal(result.package.work_id, WORK);
   assert.ok(result.package.manifest_hash.length > 0);
   assert.ok(result.package.package_sha256.length > 0);
-  assert.equal(result.package.file_count, 2); // 2 versions
+  assert.equal(result.package.file_count, 6); // manifest, 2 versions, unit index, conversations, generations
   assert.equal(result.idempotent, false); // first build
   assert.equal(store.uploadCount(), 1);
   assert.equal(store.insertCount(), 1);

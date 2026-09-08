@@ -24,6 +24,7 @@ import { normalizeScreenplayConversationId } from "@/lib/server/v2/screenplays/c
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function buildDeps(ownerId: string): GenerationDeps {
   return {

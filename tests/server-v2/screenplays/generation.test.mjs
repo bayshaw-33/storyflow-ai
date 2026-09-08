@@ -36,6 +36,8 @@ function makeStore() {
     storyflow_work_versions: [],
     storyflow_generation_candidates: [],
     storyflow_context_packets: [],
+    storyflow_screenplay_units: [{ id: 'unit-scene-1', work_id: WORK, type: 'scene', title: '第一场', readiness: 'draft', current_version_id: 'uv-001', finalized_version_id: null }],
+    storyflow_screenplay_unit_versions: [{ id: 'uv-001', work_id: WORK, unit_id: 'unit-scene-1', content_json: { body: '夜。城市废墟。', notes: '保留' }, created_at: '2023-01-01T00:00:00Z' }],
   };
   let seq = 0;
   const nextId = (prefix) => `${prefix}-${String(++seq).padStart(3, "0")}`;
@@ -82,6 +84,9 @@ function makeStore() {
         if (rpc === "apply_screenplay_candidate") {
           const candidate = tables.storyflow_generation_candidates.find((row) => row.id === body.p_candidate_id);
           if (!candidate) return [];
+          if (candidate.status === "applied") {
+            return [{ candidate_id: candidate.id, new_version_id: candidate.applied_version_id }];
+          }
           candidate.status = "applied";
           const version = {
             id: nextId("version"),
@@ -90,6 +95,7 @@ function makeStore() {
             content_json: body.p_content_json,
           };
           tables.storyflow_work_versions.push(version);
+          candidate.applied_version_id = version.id;
           return [{ candidate_id: candidate.id, new_version_id: version.id }];
         }
         if (rpc === "reject_generation_candidate") {
@@ -113,8 +119,22 @@ function makeStore() {
 
     if (method === "PATCH") {
       const body = JSON.parse(String(init?.body ?? "{}"));
-      const idCond = url.searchParams.get("id");
-      const targets = rows.filter((r) => r.id === idCond.slice(3));
+      const targets = rows.filter((row) => {
+        for (const [key, rawValue] of url.searchParams.entries()) {
+          if (["order", "limit", "select"].includes(key)) continue;
+          const match = /^(eq|is)\.(.*)$/.exec(rawValue);
+          if (match) {
+            if (match[1] === "is" && match[2] === "null") {
+              if (row[key] != null) return false;
+            } else if (String(row[key]) !== match[2]) {
+              return false;
+            }
+          } else if (String(row[key]) !== rawValue) {
+            return false;
+          }
+        }
+        return true;
+      });
       for (const t of targets) Object.assign(t, body);
       return targets;
     }
@@ -130,7 +150,7 @@ function makeService(overrides = {}) {
   const service = new ScreenplayGenerationService(store.fetcher, {
     // Deterministic test double for the model provider.
     modelInvoke: async () => ({ assistantText: "KK：这版开头节奏更快，建议保留。", patches: [{ unitPath: "scene:1", before: "夜。城市废墟。", after: "黎明前。城市废墟静得可怕。" }] }),
-    contextPacket: async () => ({ packetId: "packet-test", references: [] }),
+    contextPacket: async () => ({ packetId: "11111111-1111-4111-8111-111111111111", references: [] }),
     ...overrides,
   });
   return { service, store };
@@ -214,7 +234,7 @@ test("apply creates version only for accepted hunks; reject leaves body untouche
     workId: WORK,
     conversationId: "conv-3",
     userMessage: "改一版",
-    scope: { kind: "all" },
+    scope: { kind: "scene", unitId: "unit-scene-1" },
     baseVersionId: "uv-002",
   });
   // apply with only the first hunk accepted
@@ -228,6 +248,11 @@ test("apply creates version only for accepted hunks; reject leaves body untouche
   assert.equal(applied.version.kind, "editing_draft");
   const row = store.tables.storyflow_generation_candidates.find((c) => c.id === candidate.id);
   assert.equal(row.status, "applied");
+  const unit = store.tables.storyflow_screenplay_units[0];
+  const saved = store.tables.storyflow_screenplay_unit_versions.find(v => v.id === unit.current_version_id);
+  assert.equal(saved.content_json.body, '黎明前。城市废墟静得可怕。');
+  assert.equal(saved.content_json.notes, '保留');
+  assert.equal(saved.source, 'ai');
 
   // reject path
   const second = await service.proposeChange({
@@ -296,6 +321,99 @@ test("generation failure keeps input/messages/body/old candidates; retry reuses 
 // ============================================================
 // 4. Access control
 // ============================================================
+
+const proposalInput = { ownerId: OWNER, workId: WORK, conversationId: 'conv-regression', userMessage: '调整开场', scope: { kind: 'scene', unitId: 'unit-scene-1' }, baseVersionId: 'uv-001' };
+
+test('proposal uses the persisted unit and Universe context; retry returns the same candidate', async () => {
+  let calls = 0;
+  const { service, store } = makeService({
+    contextPacket: async () => ({ packetId: 'ctx_content_hash', packetContent: { universe: '已确认设定' }, references: ['world-version-1'] }),
+    modelInvoke: async input => {
+      calls++;
+      assert.equal(input.unit.body, '夜。城市废墟。');
+      assert.deepEqual(input.packetContent, { universe: '已确认设定' });
+      assert.deepEqual(input.references, ['world-version-1']);
+      return { assistantText: '候选', patches: [{ before: '夜。', after: '黎明。', unitPath: 'scene:1' }] };
+    },
+  });
+  const first = await service.proposeChange({ ...proposalInput, idempotencyKey: 'same-request' });
+  const retry = await service.proposeChange({ ...proposalInput, idempotencyKey: 'same-request' });
+  assert.equal(first.candidate.id, retry.candidate.id);
+  assert.equal(calls, 1);
+  assert.equal(store.tables.storyflow_generation_request_snapshots[0].context_packet_id, null);
+  assert.equal(store.tables.storyflow_generation_request_snapshots[0].request_json.packetId, 'ctx_content_hash');
+  assert.equal(store.tables.storyflow_screenplay_unit_versions.length, 1);
+});
+
+test('a changed document rejects old patches without creating a misleading Work version', async () => {
+  const { service, store } = makeService();
+  const { candidate } = await service.proposeChange(proposalInput);
+  store.tables.storyflow_screenplay_units[0].current_version_id = 'newer-version';
+  await assert.rejects(() => service.applyCandidate({ ownerId: OWNER, workId: WORK, candidateId: candidate.id, acceptedPatchIndexes: [0] }), e => e.code === 'conflict');
+  assert.equal(store.tables.storyflow_work_versions.length, 0);
+  assert.equal(store.tables.storyflow_screenplay_unit_versions.length, 1);
+});
+
+test('version changed while generating is detected before persisting a candidate', async () => {
+  const { service, store } = makeService({ modelInvoke: async () => {
+    store.tables.storyflow_screenplay_units[0].current_version_id = 'concurrent-version';
+    return { assistantText: 'outdated', patches: [] };
+  } });
+  await assert.rejects(() => service.proposeChange(proposalInput), e => e.code === 'conflict');
+  assert.equal(store.tables.storyflow_generation_candidates.length, 0);
+});
+
+test('legacy unscoped candidates cannot report successful application without changing a document', async () => {
+  const { service, store } = makeService();
+  const { candidate } = await service.proposeChange({ ...proposalInput, scope: { kind: 'all' } });
+  await assert.rejects(() => service.applyCandidate({ ownerId: OWNER, workId: WORK, candidateId: candidate.id, acceptedPatchIndexes: [0] }), e => e.code === 'validation_failed');
+  assert.equal(store.tables.storyflow_work_versions.length, 0);
+});
+
+test('an RPC failure leaves the candidate pending and the screenplay body unchanged', async () => {
+  const store = makeStore();
+  const service = new ScreenplayGenerationService(async (path, init) => {
+    if (path === '/rest/v1/rpc/apply_screenplay_candidate') throw new Error('work ledger unavailable');
+    return store.fetcher(path, init);
+  }, {
+    modelInvoke: async () => ({ assistantText: '候选', patches: [{ before: '夜。', after: '黎明。', unitPath: 'scene:1' }] }),
+    contextPacket: async () => ({ packetId: null, references: [] }),
+  });
+  const { candidate } = await service.proposeChange(proposalInput);
+  await assert.rejects(
+    () => service.applyCandidate({ ownerId: OWNER, workId: WORK, candidateId: candidate.id, acceptedPatchIndexes: [0] }),
+    (error) => error instanceof ScreenplayGenerationError && error.code === 'service_unavailable',
+  );
+  assert.equal(store.tables.storyflow_generation_candidates[0].status, 'pending_review');
+  assert.equal(store.tables.storyflow_screenplay_units[0].current_version_id, 'uv-001');
+  assert.equal(store.tables.storyflow_screenplay_unit_versions.length, 1);
+});
+
+test('retry after an interrupted unit pointer write repairs the pointer without duplicating an accepted work version', async () => {
+  const store = makeStore();
+  let failPointer = true;
+  const service = new ScreenplayGenerationService(async (path, init) => {
+    if (path.startsWith('/rest/v1/storyflow_screenplay_units?') && init?.method === 'PATCH' && failPointer) {
+      failPointer = false;
+      throw new Error('network interrupted');
+    }
+    return store.fetcher(path, init);
+  }, {
+    modelInvoke: async () => ({ assistantText: '候选', patches: [{ before: '夜。', after: '黎明。', unitPath: 'scene:1' }] }),
+    contextPacket: async () => ({ packetId: null, references: [] }),
+  });
+  const { candidate } = await service.proposeChange(proposalInput);
+  const input = { ownerId: OWNER, workId: WORK, candidateId: candidate.id, acceptedPatchIndexes: [0] };
+  await assert.rejects(() => service.applyCandidate(input));
+  assert.equal(store.tables.storyflow_work_versions.length, 1);
+  assert.equal(store.tables.storyflow_generation_candidates[0].status, 'applied');
+  assert.equal(store.tables.storyflow_screenplay_unit_versions.length, 2);
+  assert.equal(store.tables.storyflow_screenplay_units[0].current_version_id, 'uv-001');
+  await service.applyCandidate(input);
+  assert.equal(store.tables.storyflow_screenplay_unit_versions.length, 2);
+  assert.equal(store.tables.storyflow_screenplay_units[0].current_version_id, store.tables.storyflow_screenplay_unit_versions[1].id);
+  assert.equal(store.tables.storyflow_work_versions.length, 1);
+});
 
 test("non-owner and unauthenticated are rejected", async () => {
   const { service } = makeService();

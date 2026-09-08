@@ -44,6 +44,7 @@ interface WorkVersionRow {
   content_schema: string;
   content_hash: string;
   created_at: string;
+  content_json?: unknown;
 }
 
 interface MessageRow {
@@ -60,6 +61,8 @@ interface RequestRow {
   message_ids: string[];
   operation: string;
   created_at: string;
+  scope_json?: unknown;
+  request_json?: unknown;
 }
 
 interface CandidateRow {
@@ -68,6 +71,7 @@ interface CandidateRow {
   status: string;
   content_hash: string;
   applied_version_id: string | null;
+  content_json?: unknown;
 }
 
 interface EvidenceEventRow {
@@ -99,6 +103,13 @@ export async function buildEvidenceManifestV2(
   input: BuildManifestInput,
   fetcher: ManifestFetcher,
 ): Promise<EvidenceManifestV2> {
+  return (await buildEvidenceSnapshotV2(input, fetcher)).manifest;
+}
+
+export async function buildEvidenceSnapshotV2(input: BuildManifestInput, fetcher: ManifestFetcher): Promise<{
+  manifest: EvidenceManifestV2;
+  contents: Array<{ archivePath: string; bytes: Uint8Array }>;
+}> {
   if (!input.ownerId) {
     throw new ManifestBuilderError("validation_failed", "ownerId is required.");
   }
@@ -109,20 +120,22 @@ export async function buildEvidenceManifestV2(
     throw new ManifestBuilderError("validation_failed", "projectId is required.");
   }
 
-  const now = (input.now ?? new Date()).toISOString();
-
   // Fetch all facts in parallel.
-  const [versions, messages, requests, candidates, events] = await Promise.all([
+  const [versions, messages, requests, candidates, events, units, unitVersions] = await Promise.all([
     fetchVersions(input.workId, fetcher),
     fetchMessages(input.workId, fetcher),
     fetchRequests(input.workId, fetcher),
     fetchCandidates(input.workId, fetcher),
     fetchEvidenceEvents(input.projectId, input.workId, fetcher),
+    readRows(fetcher, `/rest/v1/storyflow_screenplay_units?work_id=eq.${encodeURIComponent(input.workId)}&select=*&order=id.asc`),
+    readRows(fetcher, `/rest/v1/storyflow_screenplay_unit_versions?work_id=eq.${encodeURIComponent(input.workId)}&select=*&order=id.asc`),
   ]);
+  const timestamps = [...versions, ...messages, ...requests, ...unitVersions].map(row => String(row.created_at ?? '')).filter(Boolean).sort();
+  const now = input.now?.toISOString() ?? timestamps.at(-1) ?? "1970-01-01T00:00:00.000Z";
 
   // Build version entries (sorted by createdAt for determinism).
   const versionEntries: EvidenceManifestVersionEntryV2[] = versions
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
     .map((v) => ({
       workVersionId: v.id,
       kind: v.kind as "editing_draft" | "checkpoint" | "finalized",
@@ -133,7 +146,7 @@ export async function buildEvidenceManifestV2(
 
   // Build message entries (sorted by createdAt).
   const messageEntries: EvidenceManifestMessageEntryV2[] = messages
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
     .map((m) => ({
       messageId: m.id,
       threadId: m.thread_id,
@@ -150,8 +163,8 @@ export async function buildEvidenceManifestV2(
     candidatesByRequest.set(c.request_id, list);
   }
   const generationEntries: EvidenceManifestGenerationEntryV2[] = requests
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .map((r) => ({
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+      .map((r) => ({
       requestId: r.id,
       operation: r.operation as "discuss" | "propose_change" | "generate" | "update",
       baseVersionId: r.base_version_id,
@@ -169,15 +182,18 @@ export async function buildEvidenceManifestV2(
 
   // Build file entries — one per version (content.json).
   // Files are sorted by archivePath for determinism.
-  const files: EvidenceManifestFileV2[] = versions
-    .map((v, i) => ({
-      archivePath: `versions/${v.id}/content.json`,
-      fileName: `content.json`,
-      sha256: v.content_hash,
-      byteSize: utf8Bytes(canonicalJson(v)).length,
-      contentType: "application/json",
-    }))
-    .sort((a, b) => a.archivePath.localeCompare(b.archivePath));
+  const contents = [
+    ...versions.map(v => ({ archivePath: `versions/${v.id}/content.json`, data: v.content_json ?? {} })),
+    ...unitVersions.map(v => ({ archivePath: `screenplay/versions/${v.id}.json`, data: v })),
+    { archivePath: "screenplay/units.json", data: units.sort((a,b) => String(a.id).localeCompare(String(b.id))) },
+    { archivePath: "conversations.json", data: messages },
+    { archivePath: "generations.json", data: { requests, candidates: candidates.sort((a,b) => a.id.localeCompare(b.id)) } },
+  ].map(file => ({ archivePath: file.archivePath, bytes: utf8Bytes(`${canonicalJson(file.data)}\n`) }))
+    .sort((a,b) => a.archivePath.localeCompare(b.archivePath));
+  const files: EvidenceManifestFileV2[] = contents.map(file => ({
+    archivePath: file.archivePath, fileName: file.archivePath.split('/').at(-1)!,
+    sha256: sha256Hex(file.bytes), byteSize: file.bytes.byteLength, contentType: "application/json",
+  }));
 
   // Highest event sequence and chain tip.
   const highestEventSequence = events.length > 0
@@ -213,50 +229,60 @@ export async function buildEvidenceManifestV2(
   // Validate the built manifest.
   assertEvidenceManifestV2(manifest);
 
-  return manifest;
+  return { manifest, contents };
+}
+
+async function readRows<T = Record<string, unknown>>(fetcher: ManifestFetcher, path: string): Promise<T[]> {
+  const result: T[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const rows = await fetcher<T[]>(`${path}&limit=500&offset=${offset}`);
+    if (!Array.isArray(rows)) throw new ManifestBuilderError("service_unavailable", "Evidence facts could not be loaded.");
+    result.push(...rows);
+    if (rows.length < 500) return result;
+  }
 }
 
 async function fetchVersions(workId: string, fetcher: ManifestFetcher): Promise<WorkVersionRow[]> {
   try {
-    const rows = await fetcher<WorkVersionRow[]>(
-      `/rest/v1/storyflow_work_versions?work_id=eq.${encodeURIComponent(workId)}&select=id,kind,content_schema,content_hash,created_at&order=created_at.asc`,
+    const rows = await readRows<WorkVersionRow>(fetcher,
+      `/rest/v1/storyflow_work_versions?work_id=eq.${encodeURIComponent(workId)}&select=id,kind,content_schema,content_hash,content_json,created_at&order=created_at.asc,id.asc`,
     );
     return Array.isArray(rows) ? rows : [];
   } catch {
-    return [];
+    throw new ManifestBuilderError("service_unavailable", "Version history could not be loaded.");
   }
 }
 
 async function fetchMessages(workId: string, fetcher: ManifestFetcher): Promise<MessageRow[]> {
   try {
-    const rows = await fetcher<MessageRow[]>(
-      `/rest/v1/storyflow_conversation_messages?work_id=eq.${encodeURIComponent(workId)}&select=id,thread_id,role,content,created_at&order=created_at.asc`,
+    const rows = await readRows<MessageRow>(fetcher,
+      `/rest/v1/storyflow_conversation_messages?work_id=eq.${encodeURIComponent(workId)}&select=id,thread_id,role,content,created_at&order=created_at.asc,id.asc`,
     );
     return Array.isArray(rows) ? rows : [];
   } catch {
-    return [];
+    throw new ManifestBuilderError("service_unavailable", "Conversation history could not be loaded.");
   }
 }
 
 async function fetchRequests(workId: string, fetcher: ManifestFetcher): Promise<RequestRow[]> {
   try {
-    const rows = await fetcher<RequestRow[]>(
-      `/rest/v1/storyflow_generation_request_snapshots?work_id=eq.${encodeURIComponent(workId)}&select=id,base_version_id,message_ids,operation,created_at&order=created_at.asc`,
+    const rows = await readRows<RequestRow>(fetcher,
+      `/rest/v1/storyflow_generation_request_snapshots?work_id=eq.${encodeURIComponent(workId)}&select=id,base_version_id,message_ids,operation,scope_json,request_json,created_at&order=created_at.asc`,
     );
     return Array.isArray(rows) ? rows : [];
   } catch {
-    return [];
+    throw new ManifestBuilderError("service_unavailable", "Generation history could not be loaded.");
   }
 }
 
 async function fetchCandidates(workId: string, fetcher: ManifestFetcher): Promise<CandidateRow[]> {
   try {
-    const rows = await fetcher<CandidateRow[]>(
-      `/rest/v1/storyflow_generation_candidates?work_id=eq.${encodeURIComponent(workId)}&select=id,request_id,status,content_hash,applied_version_id&order=id.asc`,
+    const rows = await readRows<CandidateRow>(fetcher,
+      `/rest/v1/storyflow_generation_candidates?work_id=eq.${encodeURIComponent(workId)}&select=id,request_id,status,content_hash,content_json,applied_version_id&order=id.asc`,
     );
     return Array.isArray(rows) ? rows : [];
   } catch {
-    return [];
+    throw new ManifestBuilderError("service_unavailable", "Candidate history could not be loaded.");
   }
 }
 
@@ -268,12 +294,12 @@ async function fetchEvidenceEvents(
   try {
     // Legacy V1 evidence events are scoped by project_id + source_unit_id.
     // We use the workId as source_unit_id for V2.2.
-    const rows = await fetcher<EvidenceEventRow[]>(
+    const rows = await readRows<EvidenceEventRow>(fetcher,
       `/rest/v1/storyflow_evidence_events?project_id=eq.${encodeURIComponent(projectId)}&source_unit_id=eq.${encodeURIComponent(workId)}&select=sequence_number,event_hash&order=sequence_number.asc`,
     );
-    return Array.isArray(rows) ? rows : [];
+    return rows;
   } catch {
-    return [];
+    throw new ManifestBuilderError("service_unavailable", "Evidence event history could not be loaded.");
   }
 }
 

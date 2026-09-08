@@ -15,6 +15,7 @@ import test from "node:test";
 
 import {
   buildEvidenceManifestV2,
+  buildEvidenceSnapshotV2,
   ManifestBuilderError,
 } from "../../../lib/server/v2/evidence/manifest-v2.ts";
 
@@ -84,6 +85,8 @@ const baseFacts = {
       base_version_id: "v1",
       message_ids: ["m1"],
       operation: "generate",
+      scope_json: { kind: "scene", unitId: "unit-1" },
+      request_json: { userMessage: "把开场改得更悬念" },
       created_at: "2026-08-28T00:07:00Z",
     },
   ],
@@ -94,6 +97,7 @@ const baseFacts = {
       status: "applied",
       content_hash: "c".repeat(64),
       applied_version_id: "v2",
+      content_json: { patches: [{ before: "旧句", after: "新句" }] },
     },
   ],
   events: [
@@ -212,12 +216,48 @@ test("manifest includes all versions, conversations, and generations", async () 
   assert.equal(manifest.conversations.length, 2);
   assert.equal(manifest.generations.length, 1);
   assert.equal(manifest.generations[0].candidates.length, 1);
-  assert.equal(manifest.files.length, 2);
+  assert.equal(manifest.files.length, 5);
+  assert.ok(manifest.files.some(file => file.archivePath === 'conversations.json'));
+  assert.ok(manifest.files.some(file => file.archivePath === 'screenplay/units.json'));
   // Every file has sha256
   for (const file of manifest.files) {
     assert.ok(file.sha256.length > 0, "file.sha256 must be non-empty");
     assert.ok(file.byteSize >= 0, "file.byteSize must be non-negative");
   }
+});
+
+test("evidence contents retain the actual generation request scope and accepted candidate payload", async () => {
+  const snapshot = await buildEvidenceSnapshotV2(
+    { ownerId: OWNER, projectId: PROJECT, workId: WORK, now: NOW },
+    makeFetcher(baseFacts),
+  );
+  const generations = snapshot.contents.find((file) => file.archivePath === "generations.json");
+  assert.ok(generations);
+  const body = JSON.parse(new TextDecoder().decode(generations.bytes));
+  assert.deepEqual(body.requests[0].scope_json, { kind: "scene", unitId: "unit-1" });
+  assert.equal(body.requests[0].request_json.userMessage, "把开场改得更悬念");
+  assert.deepEqual(body.candidates[0].content_json.patches, [{ before: "旧句", after: "新句" }]);
+});
+
+test("evidence event reads paginate and fail closed when the chain cannot be loaded", async () => {
+  const paged = async (path) => {
+    if (!path.includes("storyflow_evidence_events")) return makeFetcher(baseFacts)(path);
+    return path.includes("offset=0")
+      ? Array.from({ length: 500 }, (_, index) => ({ sequence_number: index + 1, event_hash: `h-${index + 1}` }))
+      : [{ sequence_number: 501, event_hash: "h-501" }];
+  };
+  const manifest = await buildEvidenceManifestV2(
+    { ownerId: OWNER, projectId: PROJECT, workId: WORK, now: NOW },
+    paged,
+  );
+  assert.equal(manifest.highestEventSequence, 501);
+  await assert.rejects(
+    () => buildEvidenceManifestV2(
+      { ownerId: OWNER, projectId: PROJECT, workId: WORK, now: NOW },
+      async (path) => path.includes("storyflow_evidence_events") ? Promise.reject(new Error("events unavailable")) : makeFetcher(baseFacts)(path),
+    ),
+    (error) => error instanceof ManifestBuilderError && error.code === "service_unavailable",
+  );
 });
 
 // ============================================================
@@ -261,7 +301,7 @@ test("empty facts produce a valid manifest with zero entries", async () => {
   assert.equal(manifest.versions.length, 0);
   assert.equal(manifest.conversations.length, 0);
   assert.equal(manifest.generations.length, 0);
-  assert.equal(manifest.files.length, 0);
+  assert.deepEqual(manifest.files.map(file => file.archivePath).sort(), ['conversations.json', 'generations.json', 'screenplay/units.json']);
   assert.equal(manifest.highestEventSequence, 0);
   assert.equal(manifest.eventChainTip, null);
   assert.match(manifest.manifestHash, /^[0-9a-f]{64}$/);

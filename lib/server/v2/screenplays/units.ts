@@ -190,11 +190,18 @@ export class ScreenplayUnitsService {
     const version = await this.readVersion(params.workId, params.unitId, params.versionId);
     const rows = await patch<UnitRow[]>(
       this.fetcher,
-      `/rest/v1/storyflow_screenplay_units?id=eq.${encodeURIComponent(params.unitId)}`,
+      `/rest/v1/storyflow_screenplay_units?id=eq.${encodeURIComponent(params.unitId)}&work_id=eq.${encodeURIComponent(params.workId)}&current_version_id=eq.${encodeURIComponent(version.id)}`,
       { readiness: "finalized", finalized_version_id: version.id, current_version_id: version.id, updated_at: new Date().toISOString() },
     );
     const row = rows?.[0];
-    if (!row) throw new ScreenplayUnitsError("service_unavailable", "Unable to finalize unit.");
+    if (!row) {
+      const current = await this.readUnit(params.workId, params.unitId);
+      throw new ScreenplayUnitsError(
+        "conflict",
+        "Unit was modified before it could be confirmed.",
+        { currentVersionId: current.current_version_id ?? undefined },
+      );
+    }
     return { unit: toUnitDto(row) };
   }
 
@@ -266,15 +273,26 @@ export class ScreenplayUnitsService {
     }
 
     // Bump unit readiness draft + current version pointer (identity, not content).
-    await patch(
+    const pointerPath = params.baseVersionId
+      ? `current_version_id=eq.${encodeURIComponent(params.baseVersionId)}`
+      : "current_version_id=is.null";
+    const updated = await patch<UnitRow[]>(
       this.fetcher,
-      `/rest/v1/storyflow_screenplay_units?id=eq.${encodeURIComponent(params.unitId)}`,
+      `/rest/v1/storyflow_screenplay_units?id=eq.${encodeURIComponent(params.unitId)}&work_id=eq.${encodeURIComponent(params.workId)}&${pointerPath}`,
       {
         current_version_id: row.id,
         readiness: unit.readiness === "finalized" ? "draft" : unit.readiness === "empty" ? "draft" : unit.readiness,
         updated_at: new Date().toISOString(),
       },
     );
+    if (!updated?.[0]) {
+      const current = await this.readUnit(params.workId, params.unitId);
+      throw new ScreenplayUnitsError(
+        "conflict",
+        "Unit was modified by someone else.",
+        { currentVersionId: current.current_version_id ?? undefined },
+      );
+    }
     void unit;
 
     return { version: toVersionDto(row), references: params.references ?? [] };

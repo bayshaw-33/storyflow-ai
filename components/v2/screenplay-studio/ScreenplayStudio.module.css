@@ -13,8 +13,8 @@
 }
 
 .studio.embedded {
-  height: auto;
-  min-height: calc(100dvh - 66px);
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -22,13 +22,14 @@
 
 .studio.narrow {
   grid-template-columns: minmax(0, 1fr);
-  height: auto;
-  min-height: 100dvh;
-  overflow: visible;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .studio.embedded.narrow {
-  min-height: calc(100dvh - 66px);
+  height: 100%;
+  min-height: 0;
 }
 
 .leftPanel {
@@ -41,6 +42,7 @@
 
 .centerPanel {
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -198,6 +200,8 @@
 }
 
 .kkMessage {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   max-width: min(760px, 90%);
   margin-bottom: 14px;
   padding: 12px 15px;
@@ -827,9 +831,9 @@
 @media (max-width: 1023px) {
   .studio {
     grid-template-columns: minmax(0, 1fr);
-    height: auto;
-    min-height: 100dvh;
-    overflow: visible;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .toolDrawer {
@@ -921,6 +925,7 @@
 
 .kkModeRow {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

@@ -21,6 +21,7 @@ import { ensureScreenplayWorkBaseVersion } from "@/lib/server/v2/screenplays/wor
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function buildDeps(ownerId: string): GenerationDeps {
   return {
@@ -88,6 +89,9 @@ export async function POST(
     if (!viewer) return unauthorized();
     const { workId } = await params;
     const body = await request.json().catch(() => ({}));
+    if (!body.scope?.unitId) {
+      return NextResponse.json({ success: false, code: "validation_failed", error: "请先选择要修改的文档；新项目请按三部曲生成。" }, { status: 422 });
+    }
     const conversationId = normalizeScreenplayConversationId(workId, String(body.conversationId ?? ""));
     if (!conversationId) {
       return NextResponse.json({ success: false, error: "conversationId must be a UUID.", code: "validation_failed" }, { status: 422 });

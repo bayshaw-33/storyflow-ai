@@ -33,6 +33,7 @@ export interface KkMessage {
 
 export interface KkCandidate {
   id: string;
+  unitId?: string | null;
   status: string;
   patches: Array<{ unitPath: string; before: string; after: string }>;
 }
@@ -51,6 +52,8 @@ export interface KkPresetInput {
 export interface KkScreenplayRoomProps {
   projectId?: string | null;
   workId: string;
+  activeUnitId?: string | null;
+  beforePropose?: () => Promise<string>;
   conversationId: string;
   messages: KkMessage[];
   hasMoreMessages: boolean;
@@ -62,7 +65,8 @@ export interface KkScreenplayRoomProps {
   onPresetConsumed?: () => void;
   onMessagesChange: (messages: KkMessage[]) => void;
   onCandidateChange: (candidate: KkCandidate | null) => void;
-  onAppliedVersion: (versionId: string) => void;
+  beforeApply?: (unitId?: string | null) => void | Promise<void>;
+  onAppliedVersion: (versionId: string, unitId?: string | null) => void | Promise<void>;
   trilogyState: TrilogyState;
   onOpenTrilogyUnit: (unitId: string) => void | Promise<void>;
   onInputPreserved: (text: string) => void;
@@ -72,6 +76,8 @@ export interface KkScreenplayRoomProps {
 export function KkScreenplayRoom({
   projectId,
   workId,
+  activeUnitId,
+  beforePropose,
   conversationId,
   messages,
   hasMoreMessages,
@@ -83,6 +89,7 @@ export function KkScreenplayRoom({
   onPresetConsumed,
   onMessagesChange,
   onCandidateChange,
+  beforeApply,
   onAppliedVersion,
   trilogyState,
   onOpenTrilogyUnit,
@@ -120,7 +127,7 @@ export function KkScreenplayRoom({
   }, []);
 
   const runAction = useCallback(
-    async (action: "discuss" | "propose_change", text: string) => {
+    async (action: "discuss" | "propose_change", text: string, idempotencyKey = crypto.randomUUID()) => {
       if (!text.trim()) return;
       setBusy(true);
       setError(null);
@@ -130,6 +137,7 @@ export function KkScreenplayRoom({
           const body = await screenplayStudioApi.discuss(workId, {
             conversationId,
             userMessage: text,
+            idempotencyKey,
             clientContext: contextSummary ? `${contextSummary.label} · ${contextSummary.detail}`.slice(0, 200) : undefined,
           });
           const next = [...messages];
@@ -137,10 +145,13 @@ export function KkScreenplayRoom({
           if (!next.some((m) => m.id === body.assistantMessage.id)) next.push(body.assistantMessage);
           onMessagesChange(next);
         } else {
+          const unitId = beforePropose ? await beforePropose() : activeUnitId;
+          if (!unitId) throw new Error("请先打开要修改的文档；新项目可从对话区按三部曲顺序生成。");
           const body = await screenplayStudioApi.proposeChange(workId, {
             conversationId,
             userMessage: text,
-            scope: { kind: "all" },
+            scope: { kind: "selection", unitId },
+            idempotencyKey,
             clientContext: contextSummary ? `${contextSummary.label} · ${contextSummary.detail}`.slice(0, 200) : undefined,
           });
           // propose 的用户/助手消息在服务端追加；拉取最新会话保持一致。
@@ -164,12 +175,12 @@ export function KkScreenplayRoom({
           message: described.requestId ? `${described.message}（编号 ${described.requestId}）` : described.message,
           requestId: described.requestId,
         });
-        retryRef.current = () => void runAction(action, text);
+        retryRef.current = () => void runAction(action, text, idempotencyKey);
       } finally {
         setBusy(false);
       }
     },
-    [workId, conversationId, messages, contextSummary, onMessagesChange, onCandidateChange, onInputPreserved, describeError],
+    [workId, activeUnitId, beforePropose, conversationId, messages, contextSummary, onMessagesChange, onCandidateChange, onInputPreserved, describeError],
   );
 
   const handleSend = useCallback(() => {
@@ -182,11 +193,12 @@ export function KkScreenplayRoom({
       if (!pendingCandidate) return;
       setBusy(true);
       try {
+        await beforeApply?.(pendingCandidate.unitId);
         const body = await screenplayStudioApi.applyCandidate(workId, {
           candidateId: pendingCandidate.id,
           acceptedPatchIndexes: acceptedIndexes,
         });
-        onAppliedVersion(body.version.id);
+        await onAppliedVersion(body.version.id, pendingCandidate.unitId);
         onCandidateChange(null);
         setDiffVm(null);
       } catch (e) {
@@ -195,7 +207,7 @@ export function KkScreenplayRoom({
         setBusy(false);
       }
     },
-    [workId, pendingCandidate, onAppliedVersion, onCandidateChange, describeError],
+    [workId, pendingCandidate, beforeApply, onAppliedVersion, onCandidateChange, describeError],
   );
 
   const rejectCandidate = useCallback(async () => {

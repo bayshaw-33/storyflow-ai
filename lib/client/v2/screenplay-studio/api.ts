@@ -42,6 +42,7 @@ export interface KkMessagePageDto {
 }
 
 export interface KkCandidateDto {
+  unitId?: string | null;
   id: string;
   status: string;
   patches: Array<{ unitPath: string; before: string; after: string }>;

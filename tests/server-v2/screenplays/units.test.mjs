@@ -43,6 +43,7 @@ function makeStore() {
     storyflow_versions: [],
   };
   let seq = 0;
+  let onUnitVersionInsert = null;
   const nextId = (prefix) => `${prefix}-${String(++seq).padStart(3, "0")}`;
 
   const fetcher = async (path, init) => {
@@ -91,22 +92,44 @@ function makeStore() {
       const body = JSON.parse(String(init?.body ?? "{}"));
       const inserted = (Array.isArray(body) ? body : [body]).map((b) => ({ ...b, id: b.id ?? nextId(table), created_at: new Date(1700000000000 + seq * 1000).toISOString() }));
       rows.push(...inserted);
+      if (table === "storyflow_screenplay_unit_versions") onUnitVersionInsert?.(inserted);
       return returnRepresentation ? inserted : null;
     }
 
     if (method === "PATCH") {
       const body = JSON.parse(String(init?.body ?? "{}"));
-      const idCond = url.searchParams.get("id");
-      const target = idCond ? rows.find((r) => idCond.startsWith("eq.") ? r.id === idCond.slice(3) : true) : rows[0];
-      if (!target) throw new Error("PATCH target not found");
-      Object.assign(target, body);
-      return returnRepresentation ? [target] : null;
+      const targets = rows.filter((row) => {
+        for (const [key, rawValue] of url.searchParams.entries()) {
+          if (key === "order" || key === "limit" || key === "select") continue;
+          const opMatch = /^(eq|is)\.(.*)$/.exec(rawValue);
+          if (opMatch) {
+            const [, op, value] = opMatch;
+            if (op === "is" && value === "null") {
+              if (row[key] != null) return false;
+            } else if (String(row[key]) !== value) {
+              return false;
+            }
+          } else if (String(row[key]) !== rawValue) {
+            return false;
+          }
+        }
+        return true;
+      });
+      for (const target of targets) Object.assign(target, body);
+      return returnRepresentation ? targets : null;
     }
 
     throw new Error(`Unsupported ${method} ${path}`);
   };
 
-  return { fetcher, tables, nextId };
+  return {
+    fetcher,
+    tables,
+    nextId,
+    setOnUnitVersionInsert(callback) {
+      onUnitVersionInsert = callback;
+    },
+  };
 }
 
 async function makeService() {
@@ -208,6 +231,40 @@ test("concurrent edit on same base returns 409 with currentVersionId", async () 
     assert.equal(error.code, "conflict");
     assert.ok(error.currentVersionId);
   }
+});
+
+test("pointer update is conditional and cannot overwrite a concurrent save after version insertion", async () => {
+  const { service, store } = await makeService();
+  const { unit } = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "世界观", parentId: null, order: 1 });
+  const v1 = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: unit.id, content: { body: "v1" }, baseVersionId: null });
+
+  store.setOnUnitVersionInsert(() => {
+    store.tables.storyflow_screenplay_units[0].current_version_id = "concurrent-version";
+  });
+
+  await assert.rejects(
+    () => service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: unit.id, content: { body: "late save" }, baseVersionId: v1.version.id }),
+    (error) => error instanceof ScreenplayUnitsError
+      && error.code === "conflict"
+      && error.currentVersionId === "concurrent-version",
+  );
+  assert.equal(store.tables.storyflow_screenplay_units[0].current_version_id, "concurrent-version");
+});
+
+test("finalizing a stale version cannot replace the current version", async () => {
+  const { service } = await makeService();
+  const { unit } = await service.createUnit({ ownerId: OWNER, workId: WORK, type: "world", title: "世界观", parentId: null, order: 1 });
+  const v1 = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: unit.id, content: { body: "v1" }, baseVersionId: null });
+  const v2 = await service.saveUnitContent({ ownerId: OWNER, workId: WORK, unitId: unit.id, content: { body: "v2" }, baseVersionId: v1.version.id });
+
+  await assert.rejects(
+    () => service.markFinalized({ ownerId: OWNER, workId: WORK, unitId: unit.id, versionId: v1.version.id }),
+    (error) => error instanceof ScreenplayUnitsError
+      && error.code === "conflict"
+      && error.currentVersionId === v2.version.id,
+  );
+  const current = await service.getUnit({ ownerId: OWNER, workId: WORK, unitId: unit.id });
+  assert.equal(current.unit.currentVersionId, v2.version.id);
 });
 
 // ============================================================

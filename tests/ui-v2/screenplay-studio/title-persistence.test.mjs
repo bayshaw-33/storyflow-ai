@@ -15,7 +15,8 @@ const source = fs.readFileSync(
 
 test("title edits mark the workbench unsaved", () => {
   const handleTitleChange = extractFunction(source, "handleTitleChange");
-  assert.match(handleTitleChange, /onUnsavedChange\?\.\(true\)/, "editing a title must set the unsaved flag");
+  assert.match(handleTitleChange, /setTitleDrafts/, "editing a title must persist a per-unit draft marker");
+  assert.doesNotMatch(handleTitleChange, /onUnsavedChange\?\.\(false\)/, "editing a title must not clear another unit's unsaved state");
 });
 
 test("save persists a dirty title before the content body", () => {
@@ -29,9 +30,10 @@ test("save persists a dirty title before the content body", () => {
 
 test("save only refreshes from the server after both title and content succeed", () => {
   const saveActiveUnit = extractFunction(source, "saveActiveUnit");
-  const refreshIdx = saveActiveUnit.indexOf("getUnit");
   const contentIdx = saveActiveUnit.indexOf("saveUnitContent");
-  assert.ok(refreshIdx > contentIdx, "getUnit refresh must come after saveUnitContent, never clobbering a dirty title");
+  const returnedVersionIdx = saveActiveUnit.indexOf("currentVersionId: saved.version.id");
+  assert.ok(returnedVersionIdx > contentIdx, "the saved response must be the exact version used for local confirmation");
+  assert.equal(saveActiveUnit.indexOf("const { unit } = await screenplayStudioApi.getUnit"), -1, "save must not re-read a possibly newer writer's version");
 });
 
 test("a failed save keeps the local title and body (no state reset in the catch path)", () => {

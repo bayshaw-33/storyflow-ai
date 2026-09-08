@@ -20,6 +20,7 @@ export interface ScreenplayEditorProps {
   onSave: () => void;
   onConfirmUsable: () => void;
   confirming: boolean;
+  dirty?: boolean;
 }
 
 export function ScreenplayEditor({
@@ -32,6 +33,7 @@ export function ScreenplayEditor({
   onSave,
   onConfirmUsable,
   confirming,
+  dirty = false,
 }: ScreenplayEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [caret, setCaret] = useState(0);
@@ -107,6 +109,7 @@ export function ScreenplayEditor({
           className={styles.editorTextarea}
           value={content}
           aria-label="正文编辑区"
+          disabled={saving || confirming}
           onChange={(e) => {
             onContentChange(e.target.value);
             setCaret(e.target.selectionStart ?? 0);
@@ -115,7 +118,6 @@ export function ScreenplayEditor({
             if (unit) (unit as unknown as { __caret?: number }).__caret = caret;
           }}
           placeholder="把想法写在这里，或回到上方和 KK 对话…"
-          style={isEmpty ? { position: "absolute", left: -9999, top: 0 } : undefined}
         />
       </div>
       <div className={styles.editorFooter}>
@@ -127,10 +129,10 @@ export function ScreenplayEditor({
           type="button"
           className={styles.confirmBtn}
           onClick={onConfirmUsable}
-          disabled={saving || confirming || !unit.currentVersionId || Boolean(unit.finalizedVersionId)}
+          disabled={saving || confirming || isEmpty || (!dirty && unit.finalizedVersionId === unit.currentVersionId)}
           data-testid="confirm-usable"
         >
-          {confirming ? "确认中…" : unit.finalizedVersionId ? "已确认可用" : "确认可用版本"}
+          {confirming ? "确认中…" : !dirty && unit.finalizedVersionId === unit.currentVersionId ? "已确认可用" : dirty ? "保存并确认可用" : "确认可用版本"}
         </button>
       </div>
       {conflict ? (

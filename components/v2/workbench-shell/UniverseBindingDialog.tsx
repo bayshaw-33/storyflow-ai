@@ -11,7 +11,8 @@
 //   - 不自动创建空 Universe：创建新 Universe 走独立入口（跳转 /universes/new）。
 //   - 绑定是原子操作：成功后 Manifest + Snapshot 同时生成。
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { X, Loader2, AlertCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import {
@@ -59,6 +60,31 @@ export function UniverseBindingDialog({
   const [canonPolicy, setCanonPolicy] = useState<V22CanonPolicy>("strict");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const [universes, setUniverses] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setUniverseId("");
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetchWithAuthRetry(`/api/v2/universes?limit=50&search=${encodeURIComponent(search.trim())}`, { signal: controller.signal });
+        if (!response.ok) throw new Error(isZh ? "Universe 列表加载失败，请重新搜索。" : "Unable to load Universes. Please search again.");
+        const result = await response.json();
+        if (controller.signal.aborted) return;
+        setUniverses(result.items ?? []);
+        setError("");
+      } catch (err) {
+        if (!controller.signal.aborted) { setUniverses([]); setError(err instanceof Error ? err.message : "Unable to load Universes"); }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [open, search, isZh]);
 
   if (!open) return null;
 
@@ -112,16 +138,23 @@ export function UniverseBindingDialog({
 
         <div className={styles.dialogBody}>
           <label className={styles.dialogField}>
-            <span className={styles.dialogLabel}>{isZh ? "Universe ID" : "Universe ID"}</span>
+            <span className={styles.dialogLabel}>{isZh ? "搜索 Universe" : "Search Universes"}</span>
             <input
               type="text"
               className={styles.dialogInput}
-              value={universeId}
-              onChange={(e) => setUniverseId(e.target.value)}
-              placeholder={isZh ? "输入要绑定的 Universe ID" : "Enter Universe ID to bind"}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={isZh ? "输入名称搜索" : "Search by name"}
               disabled={submitting}
               autoFocus
             />
+          </label>
+          <label className={styles.dialogField}>
+            <span className={styles.dialogLabel}>{isZh ? "选择 Universe" : "Select Universe"}</span>
+            <select className={styles.dialogSelect} value={universeId} onChange={e => setUniverseId(e.target.value)} disabled={submitting || loading}>
+              <option value="">{loading ? (isZh ? "加载中…" : "Loading…") : universes.length ? (isZh ? "请选择" : "Choose a Universe") : (isZh ? "没有匹配的 Universe" : "No matching Universes")}</option>
+              {universes.map(universe => <option key={universe.id} value={universe.id}>{universe.name}</option>)}
+            </select>
           </label>
 
           <label className={styles.dialogField}>

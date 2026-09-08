@@ -95,6 +95,7 @@ import type { BindWorkToUniverseInput } from "@/lib/client/v2/universe/types";
 import { buildPrevisShotOptions } from "@/lib/director/previs-integration";
 import { summarizePrevisVersion, type PrevisVersionRecord, type PrevisVersionSummary } from "@/lib/director/previs-version";
 import { UniverseBindingDialog } from "@/components/v2/workbench-shell/UniverseBindingDialog";
+import type { ScreenplayActions } from "@/components/v2/screenplay-studio/ScreenplayStudio";
 import { UnifiedProductionHeader } from "./UnifiedProductionHeader";
 import styles from "./ProductionWorkbench.module.css";
 
@@ -131,6 +132,7 @@ export function ProductionWorkbench() {
 
   // --- 顶层状态 ---
   const [activeStage, setActiveStage] = useState<UnifiedProductionStage>("script");
+  const [scriptActions, setScriptActions] = useState<ScreenplayActions | null>(null);
   const [storyboardSubview, setStoryboardSubview] = useState<StoryboardSubview>("shot_table");
   // 分镜画布：自由排布状态，随分镜草稿管线持久化
   const [canvas, setCanvas] = useState<StoryboardCanvasState | null>(null);
@@ -378,6 +380,13 @@ export function ProductionWorkbench() {
     await reloadContext();
     setNotice("Universe 已绑定到当前作品。");
   }
+
+  // Project-library links can omit workId; recover an existing Work, never create one on entry.
+  useEffect(() => {
+    if (workId || context?.project.id !== projectId) return;
+    const existingWorkId = context.stages[activeStage]?.workId;
+    if (existingWorkId) setWorkId(existingWorkId);
+  }, [context, projectId, activeStage, workId]);
 
   // 正式项目先读取只读上下文；缺失阶段只展示空状态，不在这里创建 Work。
   useEffect(() => {
@@ -1526,7 +1535,7 @@ export function ProductionWorkbench() {
   }
 
   return (
-    <main className={styles.shell}>
+    <main className={`${styles.shell} ${activeStage === "script" ? styles.scriptShell : ""}`}>
       {productionGateError && !gateWarningDismissed ? (
         <div
           role="status"
@@ -1560,16 +1569,26 @@ export function ProductionWorkbench() {
       <UnifiedProductionHeader
         context={displayContext}
         activeStage={activeStage}
-        saveStatus={saving ? "saving" : unsaved ? "unsaved" : "saved"}
+        saveStatus={(activeStage === "script" ? scriptActions?.saving : saving) ? "saving" : unsaved ? "unsaved" : "saved"}
         onStageChange={handleStageChange}
         onCreateUniverse={() => router.push("/universes?create=1")}
         onBindUniverse={workId ? () => setBindingDialogOpen(true) : undefined}
         onOpenUniverse={displayContext.universe ? () => router.push(`/universes/${displayContext.universe?.id}`) : undefined}
-        onVersionClick={() => setShowVersionHistory(true)}
-        onEvidenceClick={() => setNotice("证据记录会随当前版本一并保留。")}
+        onVersionClick={() => activeStage === "script" ? scriptActions?.versions() : setShowVersionHistory(true)}
+        onEvidenceClick={() => activeStage === "script" ? scriptActions?.evidence() : setNotice("证据记录会随当前版本一并保留。")}
         onMoreClick={() => setShowSecondaryMenu((value) => !value)}
         primaryActions={(
           <>
+          {activeStage === "script" ? (
+            <>
+              <button className={styles.headerActionButton} type="button" onClick={() => scriptActions?.save()} disabled={!scriptActions?.ready || scriptActions.saving}>
+                <Save size={15} /><span>{scriptActions?.saving ? "保存中…" : "保存"}</span>
+              </button>
+              <button className={styles.headerActionButton} type="button" onClick={() => scriptActions?.delivery()} disabled={!scriptActions}>
+                导出
+              </button>
+            </>
+          ) : (<>
           {backToCreation.visible ? (
             <button
               className={styles.headerIconButton}
@@ -1603,13 +1622,14 @@ export function ProductionWorkbench() {
             videoJobs={videoJobs}
             accessToken={session?.access_token}
           />
+          </>)}
           </>
         )}
       />
 
       {showSecondaryMenu ? (
         <div className={styles.secondaryMenuFloating} role="menu">
-          <button type="button" className={styles.secondaryMenuItem} onClick={() => { setShowVersionHistory(true); setShowSecondaryMenu(false); }} role="menuitem">
+          <button type="button" className={styles.secondaryMenuItem} onClick={() => { if (activeStage === "script") scriptActions?.versions(); else setShowVersionHistory(true); setShowSecondaryMenu(false); }} role="menuitem">
             <Clock size={14} /> 版本历史
           </button>
           <button type="button" className={styles.secondaryMenuItem} onClick={() => { setShowTeamPanel(true); setShowSecondaryMenu(false); }} role="menuitem">
@@ -1685,6 +1705,7 @@ export function ProductionWorkbench() {
                   unitId={unitId || null}
                   onUnitChange={setUnitId}
                   onUnsavedChange={setUnsaved}
+                  onActionsChange={setScriptActions}
                 />
               ) : (
                 <section className={styles.stageEmpty}>

@@ -11,6 +11,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getViewerFromRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { buildEvidenceManifestV2, ManifestBuilderError } from "@/lib/server/v2/evidence/manifest-v2";
+import { getWork, WorkVersionsServiceError } from "@/lib/server/v2/works/versions";
+import { classifyServiceError } from "@/lib/server/v2/service-errors";
 import {
   materializeEvidencePackageV2,
   createServerEvidencePackageV2Store,
@@ -39,7 +41,7 @@ export async function GET(
       );
     }
     const { workId } = await params;
-    const projectId = await resolveProjectId(workId);
+    const projectId = (await getWork({ ownerId: viewer.id, workId }, serviceFetch)).project_id;
     if (!projectId) {
       return NextResponse.json(
         { success: false, error: "Work not found or missing project.", code: "not_found" },
@@ -79,7 +81,7 @@ export async function POST(
       );
     }
     const { workId } = await params;
-    const projectId = await resolveProjectId(workId);
+    const projectId = (await getWork({ ownerId: viewer.id, workId }, serviceFetch)).project_id;
     if (!projectId) {
       return NextResponse.json(
         { success: false, error: "Work not found or missing project.", code: "not_found" },
@@ -111,6 +113,10 @@ export async function POST(
 }
 
 function evidenceErrorResponse(error: unknown) {
+  if (error instanceof WorkVersionsServiceError) {
+    const status = error.code === "forbidden" || error.code === "not_found" ? 404 : 503;
+    return NextResponse.json({ success: false, error: status === 404 ? "Work not found." : "Evidence unavailable.", code: status === 404 ? "not_found" : "service_unavailable" }, { status });
+  }
   if (error instanceof ManifestBuilderError) {
     const status = error.code === "validation_failed" ? 422 : 503;
     return NextResponse.json(
@@ -130,22 +136,9 @@ function evidenceErrorResponse(error: unknown) {
       { status },
     );
   }
+  const classified = classifyServiceError(error, "api/v2/works/evidence");
   return NextResponse.json(
-    { success: false, error: "Evidence service unavailable.", code: "service_unavailable" },
+    { success: false, error: "Evidence service unavailable.", code: "service_unavailable", requestId: classified.requestId },
     { status: 503 },
   );
-}
-
-async function resolveProjectId(workId: string): Promise<string | null> {
-  try {
-    const rows = await serviceFetch<{ project_id?: string }[] | null>(
-      `/rest/v1/storyflow_works?id=eq.${encodeURIComponent(workId)}&select=project_id`,
-    );
-    if (Array.isArray(rows) && rows.length > 0 && rows[0].project_id) {
-      return rows[0].project_id;
-    }
-  } catch {
-    // fall through
-  }
-  return null;
 }

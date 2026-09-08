@@ -103,9 +103,9 @@ test("embedded screenplay keeps global navigation and uses parent-bounded height
   assert.match(source, /if \(embedded \|\| !workId\) return/);
   assert.match(source, /embedded \? styles\.embedded : ""/);
   assert.match(source, /styles\.structureToggle/);
-  assert.match(css, /\.studio\.embedded\s*\{[\s\S]*height:\s*auto/);
-  assert.match(css, /\.studio\.embedded\s*\{[\s\S]*min-height:\s*calc\(100dvh/);
-  assert.match(css, /\.studio\.embedded\.narrow\s*\{[\s\S]*min-height:\s*calc\(100dvh/);
+  assert.match(css, /\.studio\.embedded\s*\{[^}]*height:\s*100%/);
+  assert.match(css, /\.studio\.embedded\s*\{[^}]*min-height:\s*0/);
+  assert.match(css, /\.studio\.embedded\.narrow\s*\{[^}]*min-height:\s*0/);
   assert.match(css, /\.narrow \.structureToggle\s*\{[\s\S]*position:\s*absolute/);
 });
 

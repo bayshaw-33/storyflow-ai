@@ -27,6 +27,7 @@ import {
   type UnitVersionHistoryClientDto,
 } from "@/lib/client/v2/screenplay-studio/api";
 import { fetchScreenplayStudio } from "@/lib/client/v2/screenplay-studio/auth";
+import { hasCompletedVersionReview } from "@/lib/client/v2/screenplay-studio/review-state";
 import { downloadBlob } from "@/lib/client/download";
 import {
   SCREENPLAY_STUDIO_WORKFLOW_STAGES,
@@ -87,6 +88,16 @@ export interface ScreenplayStudioProps {
   unitId?: string | null;
   onUnitChange?: (unitId: string) => void;
   onUnsavedChange?: (unsaved: boolean) => void;
+  onActionsChange?: (actions: ScreenplayActions) => void;
+}
+
+export interface ScreenplayActions {
+  save: () => void;
+  delivery: () => void;
+  versions: () => void;
+  evidence: () => void;
+  saving: boolean;
+  ready: boolean;
 }
 
 type ScreenplayMainView = "conversation" | "document" | "diff";
@@ -98,6 +109,7 @@ export function ScreenplayStudio({
   unitId: unitIdProp,
   onUnitChange,
   onUnsavedChange,
+  onActionsChange,
 }: ScreenplayStudioProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -107,6 +119,7 @@ export function ScreenplayStudio({
   const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
   const [activeContent, setActiveContent] = useState("");
   const [loadedContent, setLoadedContent] = useState<Record<string, string>>({});
+  const [savedContent, setSavedContent] = useState<Record<string, string>>({});
   // P0-04：按 unitId 记录未持久化的标题草稿（存在即脏）
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({});
   // P1-02：版本面板 —— 当前单元的不可变版本历史
@@ -161,10 +174,11 @@ export function ScreenplayStudio({
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // 雷同审查状态：从已持久化的会话推导（刷新后不丢）。
+  const outlineVersion = units.find(unit => unit.type === "outline")?.currentVersionId ?? null;
+  // A request alone is not a completed review; older versions must be reviewed again.
   const similarityReviewed = useMemo(
-    () => kkMessages.some((m) => m.role === "user" && m.content.startsWith(SIMILARITY_REVIEW_PROMPT_PREFIX)),
-    [kkMessages],
+    () => hasCompletedVersionReview(kkMessages, SIMILARITY_REVIEW_PROMPT_PREFIX, outlineVersion),
+    [kkMessages, outlineVersion],
   );
 
   // 雷同审查门禁：未创建或未确认可用大纲时禁用并解释。
@@ -173,7 +187,7 @@ export function ScreenplayStudio({
     if (!outline) {
       return { ready: false, reason: "尚未创建「剧情及大纲」。请先创建大纲并确认可用版本，再进行雷同审查。" };
     }
-    if (!outline.finalizedVersionId) {
+    if (!outline.finalizedVersionId || outline.finalizedVersionId !== outline.currentVersionId) {
       return { ready: false, reason: "大纲尚未「确认可用」。请先在大纲上保存并确认可用版本，再进行雷同审查。" };
     }
     return { ready: true, reason: "" };
@@ -185,6 +199,7 @@ export function ScreenplayStudio({
     setActiveUnitId(null);
     setActiveContent("");
     setLoadedContent({});
+    setSavedContent({});
     setStaleEdges([]);
     setKkMessages([]);
     setKkHistoryHasMore(false);
@@ -271,6 +286,21 @@ export function ScreenplayStudio({
   }, [embedded, loading, projectId, workId, units, urlUnitId, searchParams, router]);
 
   const activeUnit = useMemo(() => units.find((u) => u.id === activeUnitId) ?? null, [units, activeUnitId]);
+  const contentReady = Boolean(activeUnitId && savedContent[activeUnitId] !== undefined);
+  const isUnitDirty = useCallback((unitId: string) => {
+    const saved = savedContent[unitId];
+    if (saved === undefined) return titleDrafts[unitId] !== undefined;
+    const current = unitId === activeUnitId ? activeContent : loadedContent[unitId];
+    return current !== saved || titleDrafts[unitId] !== undefined;
+  }, [activeContent, activeUnitId, loadedContent, savedContent, titleDrafts]);
+  const hasAnyUnsaved = useMemo(
+    () => Object.keys(savedContent).some(isUnitDirty) || Object.keys(titleDrafts).some(isUnitDirty),
+    [isUnitDirty, savedContent, titleDrafts],
+  );
+  const isActiveDirty = Boolean(activeUnitId && contentReady && isUnitDirty(activeUnitId));
+  useEffect(() => {
+    onUnsavedChange?.(hasAnyUnsaved);
+  }, [hasAnyUnsaved, onUnsavedChange]);
   const trilogyState = useMemo(() => resolveTrilogyState(units), [units]);
 
   useEffect(() => {
@@ -286,6 +316,7 @@ export function ScreenplayStudio({
         if (cancelled) return;
         const body = (result.content as { body?: string } | null)?.body ?? "";
         setLoadedContent((prev) => ({ ...prev, [activeUnitId]: body }));
+        setSavedContent((prev) => ({ ...prev, [activeUnitId]: body }));
         setActiveContent(body);
       })
       .catch((error) => {
@@ -373,6 +404,7 @@ export function ScreenplayStudio({
       const body = (content as { body?: string } | null)?.body ?? "";
       setActiveContent(body);
       if (activeUnitId) setLoadedContent((prev) => ({ ...prev, [activeUnitId]: body }));
+      if (activeUnitId) setSavedContent((prev) => ({ ...prev, [activeUnitId]: body }));
       await loadUnitVersions();
     } catch (error) {
       setVersionsError(error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "恢复失败");
@@ -385,9 +417,8 @@ export function ScreenplayStudio({
     (body: string) => {
       setActiveContent(body);
       if (activeUnitId) setLoadedContent((prev) => ({ ...prev, [activeUnitId]: body }));
-      onUnsavedChange?.(true);
     },
-    [activeUnitId, onUnsavedChange],
+    [activeUnitId],
   );
 
   const handleTitleChange = useCallback(
@@ -397,13 +428,12 @@ export function ScreenplayStudio({
       // P0-04：标题改动同样是未保存状态；此前标题只进本地 state，
       // 保存按钮不感知、离开也不被未保存守卫拦截。
       setTitleDrafts((prev) => ({ ...prev, [activeUnit.id]: title }));
-      onUnsavedChange?.(true);
     },
-    [activeUnit, onUnsavedChange],
+    [activeUnit],
   );
 
   const saveActiveUnit = useCallback(async () => {
-    if (!workId || !activeUnit) return;
+    if (!workId || !activeUnit || !contentReady || saving) return null;
     setSaving(true);
     setConflict(null);
     try {
@@ -412,22 +442,30 @@ export function ScreenplayStudio({
       // 成功后才 POST 正文并做一次刷新 —— 修复"保存后标题被服务器
       // 旧值回滚"。
       const titleDraft = titleDrafts[activeUnit.id];
+      let savedUnit = activeUnit;
       if (titleDraft !== undefined) {
-        await screenplayStudioApi.updateUnitIdentity(workId, activeUnit.id, { title: titleDraft });
+        const updated = await screenplayStudioApi.updateUnitIdentity(workId, activeUnit.id, { title: titleDraft });
+        savedUnit = updated.unit;
       }
-      await screenplayStudioApi.saveUnitContent(workId, activeUnit.id, {
-        content: { body: activeContent },
+      const { content: persistedContent } = await screenplayStudioApi.getUnit(workId, activeUnit.id);
+      const saved = await screenplayStudioApi.saveUnitContent(workId, activeUnit.id, {
+        content: { ...(persistedContent && typeof persistedContent === "object" ? persistedContent : {}), body: activeContent },
         baseVersionId: activeUnit.currentVersionId,
       });
-      const { unit } = await screenplayStudioApi.getUnit(workId, activeUnit.id);
-      setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
+      savedUnit = {
+        ...savedUnit,
+        currentVersionId: saved.version.id,
+        readiness: savedUnit.readiness === "finalized" || savedUnit.readiness === "empty" ? "draft" : savedUnit.readiness,
+      };
+      setSavedContent((prev) => ({ ...prev, [activeUnit.id]: activeContent }));
+      setUnits((prev) => prev.map((u) => (u.id === savedUnit.id ? savedUnit : u)));
       setTitleDrafts((prev) => {
         if (!(activeUnit.id in prev)) return prev;
         const next = { ...prev };
         delete next[activeUnit.id];
         return next;
       });
-      onUnsavedChange?.(false);
+      return savedUnit;
     } catch (error) {
       if (error instanceof ScreenplayStudioApiError && error.status === 409) {
         setConflict({ currentVersionId: error.currentVersionId ?? null });
@@ -437,22 +475,24 @@ export function ScreenplayStudio({
           (error instanceof ScreenplayStudioApiError ? error.userMessage : error instanceof Error ? error.message : "保存失败") + requestId,
         );
       }
+      return null;
     } finally {
       setSaving(false);
     }
-  }, [workId, activeUnit, activeContent, titleDrafts, onUnsavedChange]);
+  }, [workId, activeUnit, activeContent, titleDrafts, contentReady, saving]);
 
   const confirmUsable = useCallback(async () => {
-    if (!workId || !activeUnit?.currentVersionId) {
+    if (!workId || !activeUnit || !contentReady || !activeContent.trim()) {
       setLoadError("请先保存当前版本，再确认可用。");
       return;
     }
     setConfirming(true);
     setLoadError(null);
     try {
-      const { unit } = await screenplayStudioApi.finalizeUnit(workId, activeUnit.id, activeUnit.currentVersionId);
+      const latest = isActiveDirty ? await saveActiveUnit() : activeUnit;
+      if (!latest?.currentVersionId) return;
+      const { unit } = await screenplayStudioApi.finalizeUnit(workId, latest.id, latest.currentVersionId);
       setUnits((prev) => prev.map((u) => (u.id === unit.id ? unit : u)));
-      onUnsavedChange?.(false);
       if (unit.type === "world" || unit.type === "character" || unit.type === "outline") {
         setMainView("conversation");
         setActiveTool(null);
@@ -462,7 +502,7 @@ export function ScreenplayStudio({
     } finally {
       setConfirming(false);
     }
-  }, [workId, activeUnit, onUnsavedChange]);
+  }, [workId, activeUnit, contentReady, activeContent, isActiveDirty, saveActiveUnit]);
 
   const resolveStaleEdge = useCallback(
     async (edge: StaleEdgeDto, resolution: string) => {
@@ -507,7 +547,7 @@ export function ScreenplayStudio({
       const body = await screenplayStudioApi.discuss(workId, {
         conversationId,
         purpose: "similarity_review",
-        userMessage: `${SIMILARITY_REVIEW_PROMPT_PREFIX}：对照当前世界规则、角色关系、剧情主线和关键转折，列出可能的相似风险位置、风险原因、需要保留的类型母题，以及可执行的原创化建议。只记录核验结果，不要自动改写正文，也不做法律裁定。`,
+        userMessage: `${SIMILARITY_REVIEW_PROMPT_PREFIX}（大纲版本：${outlineVersion}）：对照当前世界规则、角色关系、剧情主线和关键转折，列出可能的相似风险位置、风险原因、需要保留的类型母题，以及可执行的原创化建议。只记录核验结果，不要自动改写正文，也不做法律裁定。`,
         clientContext: "剧情及大纲 · 雷同审查（以当前已确认的大纲版本为准）",
       });
       const next = [...kkMessages];
@@ -520,7 +560,7 @@ export function ScreenplayStudio({
     } finally {
       setSimilarityBusy(false);
     }
-  }, [workId, similarityGate.ready, similarityBusy, conversationId, kkMessages]);
+  }, [workId, similarityGate.ready, similarityBusy, conversationId, kkMessages, outlineVersion]);
 
   /** 工具状态 → KK 上下文（当前对象、阶段目标、下一步）。 */
   const kkContext = useMemo(() => {
@@ -568,17 +608,17 @@ export function ScreenplayStudio({
         workMeta?.projectTitle ? `项目：${workMeta.projectTitle}` : null,
         workMeta?.universeName ? `Universe：${workMeta.universeName}` : null,
         `单元：${UNIT_TYPE_LABELS[activeUnit.type] ?? activeUnit.type} · ${activeUnit.title || "未命名"}`,
-        activeUnit.finalizedVersionId ? `版本：可用版本 ${activeUnit.finalizedVersionId}` : activeUnit.currentVersionId ? `版本：草稿 ${activeUnit.currentVersionId}` : "版本：尚未保存",
+        isActiveDirty ? "版本：未保存草稿" : activeUnit.finalizedVersionId === activeUnit.currentVersionId ? `版本：可用版本 ${activeUnit.currentVersionId}` : activeUnit.currentVersionId ? `版本：草稿 ${activeUnit.currentVersionId}` : "版本：尚未保存",
         `导出时间：${new Date().toLocaleString("zh-CN")}`,
       ].filter(Boolean).join("\n");
       const body = `${meta}\n${"=".repeat(36)}\n\n${activeContent || "（无内容）"}\n`;
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
       downloadBlob(blob, `${(activeUnit.title || activeUnit.type).replace(/[\\/:*?"<>|]/g, "_")}-kiikis.txt`);
-      setExportNotice("定稿草稿已导出为文本文件。");
+      setExportNotice("当前内容已导出，版本状态已写入文件。");
     } finally {
       setExportBusy(null);
     }
-  }, [activeUnit, activeContent, workMeta]);
+  }, [activeUnit, activeContent, workMeta, isActiveDirty]);
 
   // 下载创作留痕：真实 evidence package（生成 → 签名下载链接）。
   const downloadEvidence = useCallback(async () => {
@@ -596,14 +636,27 @@ export function ScreenplayStudio({
       if (!dl.ok || !dlBody.success || !(dlBody.downloadUrl ?? dlBody.url)) {
         throw new Error(clientErrorMessage(String(dlBody.code ?? "service_unavailable"), dlBody.error ?? ""));
       }
-      window.open(String(dlBody.downloadUrl ?? dlBody.url), "_blank", "noopener");
+      const file = await fetch(String(dlBody.downloadUrl ?? dlBody.url));
+      if (!file.ok) throw new Error("证据包文件下载失败，请重试。");
+      downloadBlob(await file.blob(), `${workMeta?.title || "剧本"}-创作留痕.zip`);
       setExportNotice(body.manifestHash ? `证据包已生成（manifest ${body.manifestHash.slice(0, 12)}…），正在下载。` : "证据包已生成，正在下载。");
     } catch (error) {
       setExportNotice(error instanceof Error ? error.message : "证据包生成失败，请重试。");
     } finally {
       setExportBusy(null);
     }
-  }, [workId]);
+  }, [workId, workMeta?.title]);
+
+  useEffect(() => {
+    onActionsChange?.({
+      save: () => { void saveActiveUnit(); },
+      delivery: () => setActiveTool("delivery"),
+      versions: () => setActiveTool("versions"),
+      evidence: () => setActiveTool("delivery"),
+      saving: saving || confirming,
+      ready: contentReady,
+    });
+  }, [onActionsChange, saveActiveUnit, saving, confirming, contentReady]);
 
   const staleDownstreamIds = useMemo(() => new Set(staleEdges.map((e) => e.downstreamUnitId)), [staleEdges]);
   const unitTitleById = useCallback((id: string) => units.find((u) => u.id === id)?.title || "(未命名)", [units]);
@@ -640,6 +693,7 @@ export function ScreenplayStudio({
       saving={saving}
       conflict={conflict}
       confirming={confirming}
+      dirty={isActiveDirty}
       onContentChange={handleContentChange}
       onTitleChange={handleTitleChange}
       onSave={saveActiveUnit}
@@ -689,17 +743,17 @@ export function ScreenplayStudio({
     <div className={styles.toolContent} data-testid="delivery-stage">
       <div className={styles.toolEyebrow}>贯穿工作台的最终输出</div>
       <h2>定稿与创作留痕</h2>
-      <p>正式交付使用样稿格式：标题与集数信息、灰色 ESCENA 场次带、INT/EXT 场景行、角色台词与中文括注、表演备注、镜头时长、Final Hook、最后三秒和 EPxx FIN。</p>
+      <p>下载当前文档或带版本记录的创作留痕。文本导出保留正文原文，不自动改写格式。</p>
       <div className={styles.deliveryActions}>
-        <button type="button" className={styles.primaryToolBtn} onClick={exportScriptDraft} disabled={exportBusy === "script"}>
-          {exportBusy === "script" ? "导出中…" : "导出定稿（当前单元）"}
+        <button type="button" className={styles.primaryToolBtn} onClick={exportScriptDraft} disabled={exportBusy === "script" || !contentReady || !activeContent.trim()}>
+          {exportBusy === "script" ? "导出中…" : "下载当前文档（TXT）"}
         </button>
         <button type="button" className={styles.primaryToolBtn} onClick={() => void downloadEvidence()} disabled={exportBusy === "evidence"}>
           {exportBusy === "evidence" ? "生成证据包…" : "下载创作留痕（证据包）"}
         </button>
       </div>
       {exportNotice ? <div className={styles.toolNotice}>{exportNotice}</div> : null}
-      <div className={styles.toolNotice}>只有用户确认可用的版本会进入正式交付；历史版本、对话、候选修改和处置记录一并保留。</div>
+      <div className={styles.toolNotice}>当前文档包含编辑框中的修改；创作留痕仅包含已保存内容。交付前请保存并确认可用。</div>
     </div>
   ) : activeTool === "continuity" ? (
     <div className={styles.toolContent}><ContinuityPanel workId={workId} findings={findings} unitTitleById={unitTitleById} onOpenUnit={openUnit} onFindingsChange={setFindings} /></div>
@@ -772,6 +826,12 @@ export function ScreenplayStudio({
     <KkScreenplayRoom
       projectId={projectId}
       workId={workId}
+      activeUnitId={activeUnitId}
+      beforePropose={async () => {
+        if (!activeUnitId || !contentReady) throw new Error("请先打开要修改的文档，等待内容加载完成。");
+        if (isActiveDirty && !(await saveActiveUnit())) throw new Error("文档尚未保存成功，请保存后再生成修改方案。");
+        return activeUnitId;
+      }}
       conversationId={conversationId}
       messages={kkMessages}
       hasMoreMessages={kkHistoryHasMore}
@@ -786,9 +846,14 @@ export function ScreenplayStudio({
         setKkCandidate(candidate);
         setMainView(candidate ? "diff" : "conversation");
       }}
-      onAppliedVersion={async () => {
-        try { await refreshUnits(); } catch { /* best-effort refresh */ }
-        setMainView("conversation");
+      beforeApply={async (targetUnitId) => {
+        if (targetUnitId && isUnitDirty(targetUnitId)) {
+          throw new Error("修改方案对应的文档有未保存编辑。请先保存或放弃本地修改，再采用方案。");
+        }
+      }}
+      onAppliedVersion={async (_versionId, targetUnitId) => {
+        if (targetUnitId ?? activeUnitId) await openTrilogyUnit((targetUnitId ?? activeUnitId)!);
+        else await refreshUnits();
       }}
       trilogyState={trilogyState}
       onOpenTrilogyUnit={openTrilogyUnit}
@@ -868,6 +933,7 @@ export function ScreenplayStudio({
                 saving={saving}
                 conflict={conflict}
                 confirming={confirming}
+                dirty={isActiveDirty}
                 onContentChange={handleContentChange}
                 onTitleChange={handleTitleChange}
                 onSave={saveActiveUnit}
