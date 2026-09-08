@@ -57,12 +57,13 @@ test("context rejects a project owned by another user", async () => {
 test("context returns one slot for each production stage", async () => {
   const fetcher = makeFetcher({ project: ownedProject });
   const result = await getUnifiedWorkbenchContext({ projectId: "p1", ownerId: "u1", fetcher });
-  assert.deepEqual(Object.keys(result.stages), ["script", "art", "storyboard", "video"]);
+  assert.deepEqual(Object.keys(result.stages), ["script", "art", "storyboard", "video", "editing"]);
   assert.deepEqual(result.stages, {
     script: null,
     art: null,
     storyboard: null,
     video: null,
+    editing: null,
   });
 });
 

@@ -28,7 +28,7 @@ function makeFetcher() {
   const fetcher = async (path, init) => {
     calls.push({ path, init });
     for (const [prefix, rows] of rowsByPath) {
-      if (path.startsWith(prefix)) return rows;
+      if (path.startsWith(prefix) && (!init?.method || init.method === "GET")) return rows;
     }
     if (queue.length) {
       const handler = queue.shift();
@@ -49,6 +49,8 @@ const WORK = "22222222-2222-2222-2222-222222222222";
 const THREAD = "kk-22222222-2222-2222-2222-222222222222";
 const CANDIDATE = "33333333-3333-3333-3333-333333333333";
 const VERSION = "44444444-4444-4444-4444-444444444444";
+const UNIT = "55555555-5555-4555-8555-555555555555";
+const UNIT_VERSION = "66666666-6666-4666-8666-666666666666";
 
 test("propose-change route initializes a Work base version before creating a snapshot", () => {
   const source = readFileSync(new URL("../../app/api/v2/works/[workId]/screenplay/propose-change/route.ts", import.meta.url), "utf8");
@@ -142,9 +144,16 @@ test("proposeChange: candidate is inserted with status pending_review", async ()
 test("applyCandidate: uses apply_screenplay_candidate RPC with actor + filtered patches (no direct PATCH)", async () => {
   const fx = makeFetcher();
   fx.respond(`/rest/v1/storyflow_works?`, workRows());
+  fx.respond(`/rest/v1/storyflow_screenplay_units?`, [{
+    id: UNIT, work_id: WORK, type: "scene", parent_id: null, order_index: 1,
+    title: "第一场", readiness: "draft", current_version_id: null, finalized_version_id: null, legacy_id: null,
+  }]);
   fx.respond(`/rest/v1/storyflow_generation_candidates?`, [{
     id: CANDIDATE, request_id: "snap1", work_id: WORK, status: "pending_review",
-    content_json: { patches: [{ unitPath: "a", before: "x", after: "1" }, { unitPath: "b", before: "y", after: "2" }], baseVersionId: VERSION },
+    content_json: {
+      patches: [{ unitPath: "a", before: "", after: "1" }, { unitPath: "b", before: "", after: "2" }],
+      baseVersionId: null, scope: { kind: "scene", unitId: UNIT }, unitVersionId: null,
+    },
     applied_version_id: null,
   }]);
   fx.next(async (path, init) => {
@@ -158,15 +167,46 @@ test("applyCandidate: uses apply_screenplay_candidate RPC with actor + filtered 
     assert.ok(body.p_content_hash);
     return [{ candidate_id: CANDIDATE, new_version_id: VERSION }];
   });
+  fx.next(async (path) => {
+    assert.match(path, /storyflow_screenplay_unit_versions\?.*idempotency_key=/);
+    return [];
+  });
+  fx.next(async (path) => {
+    assert.match(path, /storyflow_screenplay_unit_versions\?.*idempotency_key=/);
+    return [];
+  });
+  fx.next(async (path) => {
+    assert.match(path, /storyflow_screenplay_unit_versions\?.*order=created_at\.desc/);
+    return [];
+  });
+  fx.next(async (path, init) => {
+    assert.equal(path, "/rest/v1/storyflow_screenplay_unit_versions");
+    const body = JSON.parse(init.body);
+    assert.equal(body.source, "ai");
+    return [{
+      id: UNIT_VERSION, work_id: WORK, unit_id: UNIT, parent_version_id: null,
+      content_schema: body.content_schema, content_json: body.content_json,
+      content_hash: body.content_hash, source: body.source, source_message_ids: [],
+      created_at: "2026-09-08T00:00:00.000Z",
+    }];
+  });
+  fx.next(async (path, init) => {
+    assert.match(path, /storyflow_screenplay_units\?.*current_version_id=is\.null/);
+    assert.equal(JSON.parse(init.body).current_version_id, UNIT_VERSION);
+    return [{ id: UNIT }];
+  });
 
   const service = new ScreenplayGenerationService(fx.fetcher, baseDeps());
   const result = await service.applyCandidate({ ownerId: OWNER, workId: WORK, candidateId: CANDIDATE, acceptedPatchIndexes: [1] });
   assert.equal(result.applied, true);
   assert.equal(result.version.id, VERSION);
-  assert.ok(fx.calls.every((c) => c.init?.method !== "PATCH"), "no direct PATCH on candidates");
+  assert.ok(
+    fx.calls.every((c) => !(c.path.startsWith("/rest/v1/storyflow_generation_candidates") && c.init?.method === "PATCH")),
+    "no direct PATCH on candidates",
+  );
 });
 
-test("applyCandidate: rejects already-applied candidates with conflict", async () => {
+test("applyCandidate: fails closed when an accepted candidate ledger is incomplete", async () => {
   const fx = makeFetcher();
   fx.respond(`/rest/v1/storyflow_works?`, workRows());
   fx.respond(`/rest/v1/storyflow_generation_candidates?`, [{
@@ -176,7 +216,7 @@ test("applyCandidate: rejects already-applied candidates with conflict", async (
   const service = new ScreenplayGenerationService(fx.fetcher, baseDeps());
   await assert.rejects(
     () => service.applyCandidate({ ownerId: OWNER, workId: WORK, candidateId: CANDIDATE, acceptedPatchIndexes: [0] }),
-    (e) => e instanceof ScreenplayGenerationError && e.code === "conflict",
+    (e) => e instanceof ScreenplayGenerationError && e.code === "service_unavailable",
   );
 });
 

@@ -57,9 +57,16 @@ function makeStore() {
       return [row];
     }
     if (method === "PATCH" && path.startsWith("/rest/v1/storyflow_screenplay_units")) {
-      const id = /id=eq\.([^&]+)/.exec(path)[1];
-      Object.assign(units.get(id), body);
-      return [];
+      const id = /[?&]id=eq\.([^&]+)/.exec(path)?.[1];
+      const workId = /[?&]work_id=eq\.([^&]+)/.exec(path)?.[1];
+      const currentEq = /[?&]current_version_id=eq\.([^&]+)/.exec(path)?.[1];
+      const currentIsNull = path.includes("current_version_id=is.null");
+      const unit = id ? units.get(id) : null;
+      if (!unit || (workId && unit.work_id !== workId)) return [];
+      if (currentEq && unit.current_version_id !== currentEq) return [];
+      if (currentIsNull && unit.current_version_id !== null) return [];
+      Object.assign(unit, body);
+      return [unit];
     }
     throw new Error(`unsupported ${method} ${path}`);
   };

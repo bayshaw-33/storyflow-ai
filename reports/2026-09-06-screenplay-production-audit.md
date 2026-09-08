@@ -47,7 +47,7 @@
 
 - `pnpm audit:kiikis22`：48 个 PRD 验收 ID、生产 fixture fail-closed、K22 migration 审计全部通过。
 - `pnpm verify:supabase-target`：当前目标为 production `vgcafbzksizlwmylphzu`；本次没有新增或修改 migration。
-- 完整仓库测试为 3489 通过、11 失败；失败来自未改动模块的旧契约测试（旧 `/editor` 路由、旧 fixture 默认值、未包含 editing 阶段等），目标范围 80 项已全部通过。
+- 完整仓库测试为 3500 通过、0 失败、2 跳过；此前 11 个失败均为未更新的旧契约测试，已按当前行为补齐测试隔离层。
 - 未完成项不得标为可生产使用；线上发布只包含本报告所列剧本工作台修复，不改变数据库结构。
 
 TXT 不等于已实现原样本 DOCX 排版；本次不扩展导出格式范围。

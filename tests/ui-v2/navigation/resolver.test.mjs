@@ -23,7 +23,7 @@ test("resolveWorkbenchRoute keeps non-production work types on professional rout
   const expected = {
     song: "/song-workbench?projectId=p1&workId=w1",
     voice: "/casting?projectId=p1&workId=w1",
-    editing: "/editor?projectId=p1&workId=w1",
+    editing: "/production?projectId=p1&workId=w1&tab=editing",
   };
   for (const t of WORK_TYPES.filter((type) => type in expected)) {
     assert.equal(resolveWorkbenchRoute(t, { projectId: "p1", workId: "w1" }), expected[t]);
@@ -39,7 +39,7 @@ test("resolveProjectWorkbenchRoute keeps professional workflows professional and
     video: "/production?projectId=p1&tab=video",
     song: "/song-workbench?projectId=p1",
     voice: "/casting?projectId=p1",
-    editing: "/editor?projectId=p1",
+    editing: "/production?projectId=p1&tab=editing",
     viral: "/viral-workbench?projectId=source&dashboardProjectId=viral-source",
   };
 

@@ -252,16 +252,17 @@ test("fixture 结构通过基础校验（stages/proposals/recoveryPoint 齐全�
   }
 });
 
-test("USE_FIXTURE 默认为 true（保持向后兼容）", () => {
-  // 测试环境未设置 NEXT_PUBLIC_USE_SHORT_DRAMA_FIXTURE，应为 true。
-  assert.equal(USE_FIXTURE, true);
+test("USE_FIXTURE 默认关闭，避免生产环境静默使用 fixture", () => {
+  // 测试环境未显式开启 NEXT_PUBLIC_USE_SHORT_DRAMA_FIXTURE，应保持 fail-closed。
+  assert.equal(USE_FIXTURE, false);
 });
 
-test("fetchShortDramaFlow 在 USE_FIXTURE=true 时走 fixture", async () => {
-  // USE_FIXTURE 是编译期常量，这里验证 fixture 路径返回正确数据。
-  const data = await fetchShortDramaFlow("token", "any-project-id");
-  assert.equal(data.contractVersion, CONTRACT_VERSION);
-  assert.equal(data.project.id, "proj-drama-ep01");
+test("fetchShortDramaFlow 默认不静默回退 fixture", async () => {
+  await assert.rejects(
+    () => fetchShortDramaFlow(null, "any-project-id"),
+    (error) => error instanceof ShortDramaApiError
+      && error.code === SHORT_DRAMA_API_ERROR_CODES.UNAUTHENTICATED,
+  );
 });
 
 // ─── buildScriptCandidatesFromSnapshot ───

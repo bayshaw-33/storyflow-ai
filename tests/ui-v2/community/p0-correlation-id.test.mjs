@@ -188,8 +188,8 @@ test("ActorMarketSection: 数据源端点为 /api/actors/platform（fetch 调用
   const { readFile } = await import("node:fs/promises");
   const src = await readFile(new URL("../../../components/marketplace/ActorMarketSection.tsx", import.meta.url), "utf8");
 
-  // 必须在 fetch(...) 调用中使用真实端点 /api/actors/platform
-  assert.match(src, /fetch\(`\/api\/actors\/platform\?\$\{params\.toString\(\)\}`/);
+  // 必须在带认证重试的 fetch 调用中使用真实端点 /api/actors/platform
+  assert.match(src, /fetchWithAuthRetry\(`\/api\/actors\/platform\?\$\{params\.toString\(\)\}`/);
   // 不应在 fetch(...) 调用中使用不存在的 /api/actors/market（会被 [actorId] 动态路由误命中）
   assert.doesNotMatch(src, /fetch\(['"`]\/api\/actors\/market/, "fetch 不应调用 /api/actors/market");
 });
