@@ -35,3 +35,10 @@ test("reconciliation expires instead of leaving an audio job pending forever", a
   assert.equal(shouldExpireAudioReconciliation(now - 60_000, now), false);
   assert.equal(shouldExpireAudioReconciliation(now - 181_000, now), true);
 });
+
+test("music idempotency separates vocal, instrumental, and SFX requests", async () => {
+  const { computeAudioIdempotencyHash } = await import("../lib/audio/jobs.ts");
+  const base = { ownerId: "u1", kind: "music", targetId: "song1", text: "same prompt", provider: "atlascloud", model: "minimax/music-3.0" };
+  assert.notEqual(computeAudioIdempotencyHash({ ...base, musicMode: "vocal" }), computeAudioIdempotencyHash({ ...base, musicMode: "instrumental" }));
+  assert.notEqual(computeAudioIdempotencyHash({ ...base, musicMode: "instrumental" }), computeAudioIdempotencyHash({ ...base, musicMode: "sfx" }));
+});

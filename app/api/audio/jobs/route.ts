@@ -6,6 +6,7 @@ import { persistAudioArtifact } from "@/lib/audio/storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
 import { buildAudioUniverseBinding } from "@/lib/audio/universe-links";
 import type { AudioKind, AudioProviderName } from "@/lib/audio/types";
+import { getDefaultAtlasCloudMusicModel, isAtlasCloudMusicModel } from "@/lib/audio/music-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,12 +47,29 @@ export async function POST(request: NextRequest) {
   const requestKey = typeof body.requestKey === "string" ? body.requestKey.slice(0, 120) : "";
   const idempotencyTargetId = requestKey ? `${targetId}:${requestKey}` : targetId;
   const providerName = typeof body.provider === "string" ? body.provider as AudioProviderName : undefined;
-  const model = typeof body.model === "string" && body.model ? body.model : null;
+  const targetType = typeof body.targetType === "string" ? body.targetType : kind === "tts" ? "voice_line" : "song_version";
+  const requestedMusicMode = typeof body.musicMode === "string" ? body.musicMode : "vocal";
+  if (kind === "music" && !["vocal", "instrumental", "sfx"].includes(requestedMusicMode)) {
+    return response(422, { success: false, error: "音乐类型不受支持。", code: "INVALID_MUSIC_MODE" });
+  }
+  const musicMode = requestedMusicMode as "vocal" | "instrumental" | "sfx";
+  const songWorkbenchMusic = kind === "music" && targetType === "song_version";
+  const effectiveProviderName = songWorkbenchMusic ? "atlascloud" : providerName;
+  const requestedModel = typeof body.model === "string" && body.model ? body.model : null;
+  if (songWorkbenchMusic && effectiveProviderName !== "atlascloud") {
+    return response(422, { success: false, error: "歌曲工作台仅支持 Atlas Cloud 音乐模型。", code: "INVALID_MUSIC_PROVIDER" });
+  }
+  if (kind === "music" && effectiveProviderName === "atlascloud" && requestedModel && !isAtlasCloudMusicModel(requestedModel)) {
+    return response(422, { success: false, error: "请选择 MiniMax Music 3.0 或 Suno V5。", code: "INVALID_MUSIC_MODEL" });
+  }
   if (!kind || !text.trim()) return response(400, { success: false, error: "缺少 kind 和 text/prompt。" });
 
-  const provider = await resolveAudioProvider(kind, providerName);
+  const provider = await resolveAudioProvider(kind, effectiveProviderName);
   if (!provider.isAvailable(kind)) return response(422, { success: false, error: "当前音频 Provider 不可用。", code: "PROVIDER_UNAVAILABLE", provider: provider.name });
-  const idempotencyHash = computeAudioIdempotencyHash({ ownerId: user.id, kind, targetId: idempotencyTargetId, text, provider: provider.name, model: model || provider.capabilities().models[0] || "default" });
+  const model = kind === "music" && provider.name === "atlascloud"
+    ? requestedModel || getDefaultAtlasCloudMusicModel()
+    : requestedModel || provider.capabilities().models[0] || "default";
+  const idempotencyHash = computeAudioIdempotencyHash({ ownerId: user.id, kind, targetId: idempotencyTargetId, text, provider: provider.name, model, musicMode: kind === "music" ? musicMode : undefined });
 
   const existing = await serviceFetch<JobRow[]>(`${TABLE}?owner_id=eq.${encodeURIComponent(user.id)}&job_type=eq.audio&idempotency_hash=eq.${encodeURIComponent(idempotencyHash)}&status=not.in.(failed,provider_timeout)&limit=1`);
   if (existing?.[0]) return response(200, { success: true, created: false, job: existing[0] });
@@ -69,14 +87,14 @@ export async function POST(request: NextRequest) {
       model,
       provider_task_id: null,
       prompt: text,
-      input_params: { ...inputParams, kind, targetId, requestKey, idempotencyHash, lyrics, submittedAt },
+      input_params: { ...inputParams, kind, targetId, requestKey, idempotencyHash, lyrics, musicMode: kind === "music" ? musicMode : undefined, submittedAt },
       idempotency_hash: idempotencyHash,
       status: "queued",
       error: null,
       result_url: null,
       storage_path: null,
       result_metadata: {},
-      target_type: typeof body.targetType === "string" ? body.targetType : kind === "tts" ? "voice_line" : "song_version",
+      target_type: targetType,
       target_id: targetId,
       project_id: typeof body.projectId === "string" ? body.projectId : null,
     }),
@@ -87,7 +105,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const submitResult = kind === "music"
-      ? await provider.submitMusic({ prompt: text, lyrics: lyrics || null, model })
+      ? await provider.submitMusic({ prompt: text, lyrics: lyrics || null, model, musicMode })
       : await provider.submitTTS({ text, voiceProviderVoiceId: typeof body.voiceProviderVoiceId === "string" ? body.voiceProviderVoiceId : null, language: typeof body.language === "string" ? body.language : "zh", speed: typeof body.speed === "number" ? body.speed : 1, pitch: typeof body.pitch === "number" ? body.pitch : 0, stability: typeof body.stability === "number" ? body.stability : 0.5, stylePrompt: typeof body.stylePrompt === "string" ? body.stylePrompt : "" });
 
     if (submitResult.kind === "async_submitted") {
@@ -112,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (assetId) {
       await serviceFetch(`/rest/v1/storyflow_assets?id=eq.${encodeURIComponent(assetId)}&user_id=eq.${encodeURIComponent(user.id)}`, {
         method: "PATCH",
-        body: JSON.stringify({ metadata: { source: kind, provider: provider.name, ...submitResult.providerMetadata, ...buildAudioUniverseBinding({ assetId, universeEntityId: typeof inputParams.universeEntityId === "string" ? inputParams.universeEntityId : null, projectId: typeof body.projectId === "string" ? body.projectId : null, role: kind === "tts" ? "voice" : "song" }) } }),
+        body: JSON.stringify({ metadata: { source: kind, provider: provider.name, ...submitResult.providerMetadata, ...buildAudioUniverseBinding({ assetId, universeEntityId: typeof inputParams.universeEntityId === "string" ? inputParams.universeEntityId : null, projectId: typeof body.projectId === "string" ? body.projectId : null, role: kind === "tts" ? "voice" : musicMode === "sfx" ? "sound_effect" : "song" }) } }),
       });
     }
     const completed = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, {

@@ -1,11 +1,12 @@
 /** Shared server-side contract for music and speech generation. */
 
-export type AudioProviderName = "minimax" | "gmi" | "openai" | "placeholder";
+export type AudioProviderName = "atlascloud" | "minimax" | "gmi" | "openai" | "placeholder";
 export type AudioKind = "music" | "tts";
 
 export type MusicSubmitInput = {
   prompt: string;
   lyrics?: string | null;
+  musicMode?: "vocal" | "instrumental" | "sfx";
   language?: string;
   durationSeconds?: number;
   model?: string | null;

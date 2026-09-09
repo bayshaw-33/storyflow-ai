@@ -4,12 +4,18 @@ import type {
   AudioProvider,
   AudioProviderName,
 } from "./types";
+import { getAtlasCloudMusicModels } from "./music-models";
 
 export async function resolveAudioProvider(
   kind: AudioKind,
   providerName?: AudioProviderName,
 ): Promise<AudioProvider> {
   const name = (providerName || process.env[`${kind.toUpperCase()}_PROVIDER`] || process.env.AUDIO_PROVIDER || "placeholder").toLowerCase() as AudioProviderName;
+
+  if (name === "atlascloud") {
+    const mod = await import("./providers/atlascloud");
+    return mod.createAtlasCloudAudioProvider();
+  }
 
   if (name === "minimax") {
     const mod = await import("./providers/minimax");
@@ -32,6 +38,14 @@ export async function resolveAudioProvider(
 export function getAudioCapabilities(): AudioCapabilities[] {
   const hasMiniMaxKey = Boolean(process.env.MINIMAX_API_KEY || process.env.MINIMAX_API_KEY_PRIMARY || process.env.MINIMAX_API_KEY_SECONDARY);
   return [
+    {
+      provider: "atlascloud",
+      music: Boolean(process.env.ATLASCLOUD_API_KEY),
+      tts: false,
+      voiceClone: false,
+      asyncJobs: true,
+      models: getAtlasCloudMusicModels().map((model) => model.id),
+    },
     {
       provider: "minimax",
       music: hasMiniMaxKey,

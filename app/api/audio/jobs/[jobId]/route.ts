@@ -96,11 +96,13 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
       return NextResponse.json({ success: true, job: updated?.[0] || { ...job, status: mapped, error: poll.error } });
     }
 
+    // From this point on, any missing/invalid/download/storage result must become
+    // a terminal failure so the UI can offer a retry instead of leaving a ghost job.
+    ingestionStarted = true;
     const serverClient = getSupabaseServerClient();
     if (!serverClient) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
     const downloaded = poll.audioBytes ? { bytes: poll.audioBytes, contentType: poll.contentType || "audio/mpeg" } : poll.audioUrl ? await provider.download(poll.audioUrl) : null;
     if (!downloaded) throw new Error("AUDIO_RESULT_MISSING");
-    ingestionStarted = true;
     const ingesting = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "result_ingesting", result_url: null, result_metadata: sanitizeAudioMetadata(poll.providerMetadata || {}) }) });
     job = ingesting?.[0] || { ...job, status: "result_ingesting" };
     const artifact = await persistAudioArtifact({ serverClient, ownerId: user.id, jobId: job.id, bytes: downloaded.bytes, contentType: downloaded.contentType });
@@ -109,7 +111,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
     if (assetId) {
       await serviceFetch(`/rest/v1/storyflow_assets?id=eq.${encodeURIComponent(assetId)}&user_id=eq.${encodeURIComponent(user.id)}`, {
         method: "PATCH",
-        body: JSON.stringify({ metadata: sanitizeAudioMetadata({ source: kind, provider: job.provider, ...poll.providerMetadata, ...buildAudioUniverseBinding({ assetId, universeEntityId: typeof job.input_params.universeEntityId === "string" ? job.input_params.universeEntityId : null, projectId: typeof job.input_params.projectId === "string" ? job.input_params.projectId : null, role: kind === "tts" ? "voice" : "song" }) }) }),
+        body: JSON.stringify({ metadata: sanitizeAudioMetadata({ source: kind, provider: job.provider, ...poll.providerMetadata, ...buildAudioUniverseBinding({ assetId, universeEntityId: typeof job.input_params.universeEntityId === "string" ? job.input_params.universeEntityId : null, projectId: typeof job.input_params.projectId === "string" ? job.input_params.projectId : null, role: kind === "tts" ? "voice" : job.input_params.musicMode === "sfx" ? "sound_effect" : "song" }) }) }),
       });
     }
     if (job.input_params.voiceLineId || job.target_type === "voice_line") {

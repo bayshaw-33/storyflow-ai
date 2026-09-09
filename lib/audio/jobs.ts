@@ -80,9 +80,10 @@ export function computeAudioIdempotencyHash(input: {
   text: string;
   provider: string;
   model: string;
+  musicMode?: "vocal" | "instrumental" | "sfx";
 }): string {
   return createHash("sha256")
-    .update([input.ownerId, input.kind, input.targetId, input.text, input.provider, input.model].join("\u0001"))
+    .update([input.ownerId, input.kind, input.targetId, input.text, input.provider, input.model, input.musicMode || ""].join("\u0001"))
     .digest("hex");
 }
 

@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
     targetId?: string;
     projectId?: string | null;
     inputParams?: Record<string, unknown>;
+    provider?: string;
+    model?: string | null;
+    musicMode?: "vocal" | "instrumental" | "sfx";
   } | null;
   if (body?.kind !== "music" || !Array.isArray(body.candidates) || body.candidates.length !== 2) {
     return NextResponse.json({ success: false, error: "音乐批次必须包含 A、B 两个候选。", code: "INVALID_AUDIO_BATCH" }, { status: 422 });
@@ -41,6 +44,9 @@ export async function POST(request: NextRequest) {
         targetId: body.targetId || "standalone-song",
         requestKey: `${batchId}:${candidate.label}`,
         projectId: body.projectId || null,
+        provider: body.provider || "atlascloud",
+        model: body.model || null,
+        musicMode: body.musicMode || "vocal",
         inputParams: { ...(body.inputParams || {}), batchId, candidate: candidate.label },
       }),
     });

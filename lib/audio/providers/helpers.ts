@@ -1,4 +1,4 @@
-import type { AudioPollResult } from "../types";
+import type { AudioPollResult } from "../types.ts";
 
 export async function requestJson(
   url: string,

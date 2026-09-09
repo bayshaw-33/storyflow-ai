@@ -41,6 +41,16 @@ type OutputLanguage = "English" | "Chinese" | "Bilingual" | "Japanese" | "Korean
 type LyricsMode = "enhanced_lyrics" | "plain_lyrics" | "no_tags";
 type AuditStatus = "pass" | "low_risk" | "medium_risk" | "high_risk";
 type SongModelProvider = "auto" | "deepseek";
+type SongMusicMode = "vocal" | "instrumental" | "sfx";
+
+type AtlasCloudMusicModelOption = {
+  id: "minimax/music-3.0" | "suno/chirp-v5";
+  labelZh: string;
+  labelEn: string;
+  descriptionZh?: string;
+  descriptionEn?: string;
+  available?: boolean;
+};
 
 type SongChatMessage = {
   id: string;
@@ -124,6 +134,11 @@ type UploadedReference = {
 
 const STORAGE_KEY = "kiikis-song-workbench-v1";
 const MUSIC_PROMPT_MAX_BYTES = 1000;
+const DEFAULT_MUSIC_MODEL: AtlasCloudMusicModelOption["id"] = "minimax/music-3.0";
+const FALLBACK_MUSIC_MODELS: AtlasCloudMusicModelOption[] = [
+  { id: "minimax/music-3.0", labelZh: "MiniMax Music 3.0", labelEn: "MiniMax Music 3.0", descriptionZh: "歌词、曲风提示词或纯音乐均可生成", descriptionEn: "Lyrics, style prompts, or instrumental music" },
+  { id: "suno/chirp-v5", labelZh: "Suno V5", labelEn: "Suno V5", descriptionZh: "使用当前歌词和曲风提示词生成歌曲", descriptionEn: "Generate a song from the current lyrics and style prompt" },
+];
 const translationLanguages: LyricsTranslationLanguage[] = ["Chinese", "English", "Spanish", "French", "Japanese", "Korean"];
 
 const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: string; strategy: string }> = [
@@ -600,6 +615,9 @@ export default function SongWorkbenchPage() {
   const [generationProgress, setGenerationProgress] = useState("");
   const [audioCandidates, setAudioCandidates] = useState<SongAudioCandidate[]>([]);
   const [audioGenerating, setAudioGenerating] = useState(false);
+  const [musicModels, setMusicModels] = useState<AtlasCloudMusicModelOption[]>(FALLBACK_MUSIC_MODELS);
+  const [selectedMusicModel, setSelectedMusicModel] = useState<AtlasCloudMusicModelOption["id"]>(DEFAULT_MUSIC_MODEL);
+  const [musicMode, setMusicMode] = useState<SongMusicMode>("vocal");
   // 自动保存状态："idle" | "saving" | "saved" | "failed"
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [autoSaveTime, setAutoSaveTime] = useState<string>("");
@@ -652,8 +670,15 @@ export default function SongWorkbenchPage() {
       const response = await fetch(`/api/audio/jobs/${encodeURIComponent(jobId)}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) return;
-      const payload = await response.json() as { job?: { status?: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null } };
+      const payload = await response.json().catch(() => ({})) as { job?: { status?: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
+      if (!response.ok) {
+        setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? {
+          ...candidate,
+          status: response.status === 504 ? "provider_timeout" : "failed",
+          error: payload.error || (isZh ? "音频文件入库失败，请重试。" : "Audio file could not be saved. Please retry."),
+        } : candidate));
+        return;
+      }
       const job = payload.job;
       if (!job) return;
       setAudioCandidates((current) => current.map((candidate) => candidate.id === candidateId ? {
@@ -700,6 +725,9 @@ export default function SongWorkbenchPage() {
           targetType: "song_version",
           targetId: songProjectId || form.title || "standalone-song",
           projectId: songProjectId,
+          provider: "atlascloud",
+          model: selectedMusicModel,
+          musicMode: musicMode,
           inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage },
         }),
       });
@@ -742,6 +770,9 @@ export default function SongWorkbenchPage() {
           targetId: songProjectId || form.title || "standalone-song",
           requestKey: `retry:${candidate.id}:${Date.now()}`,
           projectId: songProjectId,
+          provider: "atlascloud",
+          model: selectedMusicModel,
+          musicMode: musicMode,
           inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label, retryOf: candidate.jobId },
         }),
       });
@@ -764,6 +795,20 @@ export default function SongWorkbenchPage() {
 
     return () => listener?.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    void fetch("/api/audio/capabilities", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const payload = await response.json() as { musicModels?: AtlasCloudMusicModelOption[] };
+      const nextModels = payload.musicModels?.filter((model) => model.id === "minimax/music-3.0" || model.id === "suno/chirp-v5") || [];
+      if (!nextModels.length) return;
+      setMusicModels(nextModels);
+      setSelectedMusicModel((current) => nextModels.some((model) => model.id === current) ? current : DEFAULT_MUSIC_MODEL);
+    }).catch(() => undefined);
+  }, [session?.access_token]);
 
   useEffect(() => {
     const entry = getSongEntry();
@@ -820,6 +865,8 @@ export default function SongWorkbenchPage() {
       if (data.translationLanguage) setTranslationLanguage(data.translationLanguage);
       if (data.translatedLyrics) setTranslatedLyrics(data.translatedLyrics);
       if (data.selectedModelProvider) setSelectedModelProvider(data.selectedModelProvider);
+      if (data.selectedMusicModel === "minimax/music-3.0" || data.selectedMusicModel === "suno/chirp-v5") setSelectedMusicModel(data.selectedMusicModel);
+      if (data.musicMode === "vocal" || data.musicMode === "instrumental" || data.musicMode === "sfx") setMusicMode(data.musicMode);
       if (data.uploadedReference) setUploadedReference(data.uploadedReference);
       if (data.referenceMode) setReferenceMode(data.referenceMode);
       loadedEntryRef.current = "draft";
@@ -870,9 +917,9 @@ export default function SongWorkbenchPage() {
   useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, uploadedReference, referenceMode }),
+      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode }),
     );
-  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, uploadedReference, referenceMode]);
+  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode]);
 
   useEffect(() => {
     if (songDevelopmentNotes.trim()) return;
@@ -924,6 +971,8 @@ export default function SongWorkbenchPage() {
     setTranslationError("");
     setUploadedReference(null);
     setReferenceMode("similar_style");
+    setSelectedMusicModel(DEFAULT_MUSIC_MODEL);
+    setMusicMode("vocal");
     setVersions([]);
     setSongProjectId(null);
     setError("");
@@ -1353,7 +1402,7 @@ export default function SongWorkbenchPage() {
           taskType: "song_workbench",
           projectTitle: form.title,
           genre: normalizedGenres(form).join(", "),
-          input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject),
+          input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject, musicMode),
           context: [
             songDevelopmentNotes.trim() ? `Music development chat notes:\n${songDevelopmentNotes}` : "",
             uploadedReference ? `Uploaded reference (${uploadedReference.type}, ${uploadedReference.mode}):\n${uploadedReference.text}` : "",
@@ -1910,7 +1959,7 @@ export default function SongWorkbenchPage() {
           taskType: "song_workbench",
           projectTitle: form.title || "Song revision",
           genre: normalizedGenres(form).join(", "),
-          input: buildSongRevisionInput(form, instruction),
+          input: buildSongRevisionInput(form, instruction, musicMode),
           context: [
             `Current lyrics:\n${lyrics}`,
             stylePrompt.trim() ? `Current style prompt:\n${stylePrompt}` : "",
@@ -2239,7 +2288,7 @@ export default function SongWorkbenchPage() {
                 placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
               />
             </div>
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
           </div>
         </section>
       </section>
@@ -2577,7 +2626,13 @@ export default function SongWorkbenchPage() {
   );
 }
 
-function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sourceProject: DramaProject | null) {
+function getMusicModeInstruction(mode: SongMusicMode) {
+  if (mode === "instrumental") return "Create an instrumental track only. Do not write lyrics, do not plan vocals, and prioritize arrangement, instrumentation, dynamics, texture, and a clean ending.";
+  if (mode === "sfx") return "Create a short sound-effect-oriented audio prompt. Do not write lyrics or vocals. Describe the action, material, space, distance, impact, movement, decay, duration, and whether it should loop. Treat this as experimental because the selected providers are music models.";
+  return "Create a vocal song with singable lyrics, clear sections, vocal direction, and a production-ready style prompt.";
+}
+
+function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sourceProject: DramaProject | null, musicMode: SongMusicMode) {
   const projectType = projectTypes.find((item) => item.value === form.projectType);
   const language = form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage;
 
@@ -2587,6 +2642,8 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sour
       projectType: projectType ? `${projectType.label} / ${projectType.labelEn}` : form.projectType,
       strategy: projectType?.strategy || "",
       outputLanguage: language,
+      musicMode,
+      requiredBehavior: getMusicModeInstruction(musicMode),
       lyricsMode: form.lyricsMode,
       concept: form.concept,
       primaryEmotion: form.primaryEmotion,
@@ -2619,12 +2676,13 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sour
   );
 }
 
-function buildSongRevisionInput(form: SongForm, instruction: string) {
+function buildSongRevisionInput(form: SongForm, instruction: string, musicMode: SongMusicMode) {
   return JSON.stringify(
     {
       mode: "revise_existing_song",
       revisionInstruction: instruction,
-      requiredBehavior: "Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.",
+      musicMode,
+      requiredBehavior: `${getMusicModeInstruction(musicMode)} Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.`,
       title: form.title,
       outputLanguage: form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage,
       lyricsMode: form.lyricsMode,

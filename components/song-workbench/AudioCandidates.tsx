@@ -15,12 +15,27 @@ export type SongAudioCandidate = {
   createdAt: string;
 };
 
+type SongMusicMode = "vocal" | "instrumental" | "sfx";
+type MusicModelOption = {
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  descriptionZh?: string;
+  descriptionEn?: string;
+  available?: boolean;
+};
+
 type AudioCandidatesProps = {
   candidates: SongAudioCandidate[];
   busy: boolean;
   isZh: boolean;
   onGenerate: () => void;
   onRetry?: (candidateId: string) => void;
+  musicModels: MusicModelOption[];
+  selectedMusicModel: string;
+  onMusicModelChange: (model: string) => void;
+  musicMode: SongMusicMode;
+  onMusicModeChange: (mode: SongMusicMode) => void;
 };
 
 const WAVEFORM_BARS = [24, 40, 31, 56, 38, 68, 45, 78, 52, 34, 62, 44, 72, 48, 28, 58, 39, 65, 47, 30, 55, 42, 70, 36];
@@ -45,7 +60,7 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry }: AudioCandidatesProps) {
+export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange }: AudioCandidatesProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -98,13 +113,31 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry }:
       <div className="song-output-card-head">
         <div>
           <span className="song-card-title">{isZh ? "音频候选" : "Audio candidates"}</span>
-          <small className="song-audio-subtitle">{isZh ? "选择版本试听，播放器保持在这里" : "Select a version to preview"}</small>
+          <small className="song-audio-subtitle">{isZh ? "选择模型与生成类型，版本会保留在这里试听" : "Choose a model and mode; versions stay here for preview"}</small>
         </div>
-        <div className="song-card-actions">
+        <div className="song-audio-controls">
+          <label className="song-audio-model-selector">
+            <span>{isZh ? "音乐模型" : "Music model"}</span>
+            <select value={selectedMusicModel} onChange={(event) => onMusicModelChange(event.target.value)} aria-label={isZh ? "选择音乐模型" : "Choose music model"}>
+              {musicModels.map((model) => <option value={model.id} key={model.id}>{isZh ? model.labelZh : model.labelEn}</option>)}
+            </select>
+          </label>
+          <div className="song-audio-mode-switch" role="group" aria-label={isZh ? "选择生成类型" : "Choose generation mode"}>
+            {([
+              ["vocal", isZh ? "人声歌曲" : "Vocal"],
+              ["instrumental", isZh ? "纯音乐" : "Instrumental"],
+              ["sfx", isZh ? "音效实验" : "SFX experimental"],
+            ] as const).map(([value, label]) => <button className="song-audio-mode-button" data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
+          </div>
           <button className="primary-button" type="button" onClick={onGenerate} disabled={busy}>
             {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成 2 首" : "Generate 2 tracks")}
           </button>
         </div>
+      </div>
+      <div className="song-audio-mode-note" role="status">
+        {isZh
+          ? (musicMode === "sfx" ? "音效实验：会按动作、材质、空间、距离、冲击和尾音调整提示词；音乐模型生成结果可能带有旋律。" : musicMode === "instrumental" ? "纯音乐：后台 AI 会生成器乐提示词，提交时不会发送歌词。" : "人声歌曲：后台 AI 会保留歌词、人声段落和演唱方向。")
+          : (musicMode === "sfx" ? "SFX experimental: prompts emphasize action, material, space, distance, impact, and decay; a music model may still add melody." : musicMode === "instrumental" ? "Instrumental: the AI writes an arrangement prompt and lyrics are not submitted." : "Vocal song: the AI keeps lyrics, vocal sections, and delivery direction.")}
       </div>
       <div className="song-audio-panel-body" id="song-audio-candidates-panel">
         {!candidates.length ? (
