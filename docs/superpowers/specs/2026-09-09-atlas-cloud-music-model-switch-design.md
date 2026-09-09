@@ -2,7 +2,7 @@
 
 **日期：** 2026-09-09
 
-**状态：** 用户已确认设计方向，待书面规格复核
+**状态：** 用户已确认设计方向，已移除 MiniMax Music 2.6，待书面规格复核
 
 **范围：** 歌曲工作台的 Atlas Cloud 音乐模型选择、参数适配和生成验证
 
@@ -10,7 +10,7 @@
 
 - 用户可以在歌曲工作台手动选择 Atlas Cloud 的音乐生成模型。
 - 模型选择器只展示能生成音乐文件的模型，不展示 TTS、ASR 或其他语音模型。
-- 第一批支持 `minimax/music-3.0`、`minimax/music-2.6`，并为 Atlas Cloud 已公开的 Suno 音乐模型保留可扩展目录。
+- 第一批支持 `minimax/music-3.0`，并为 Atlas Cloud 已公开的其他音乐模型保留可扩展目录。
 - 不改变现有歌词、翻译、曲风提示词、A/B 候选、历史、播放器和下载流程。
 - 生成请求始终由服务端发送，API Key 不进入浏览器。
 
@@ -32,7 +32,6 @@
 | 显示名称 | 模型 ID | 类型 |
 | --- | --- | --- |
 | MiniMax Music 3.0 | `minimax/music-3.0` | music |
-| MiniMax Music 2.6 | `minimax/music-2.6` | music |
 | Suno Chirp v5 | `suno/chirp-v5` | music |
 
 如果某个模型当前没有可用 Atlas Cloud 配置，不从页面伪造可用状态；选择器显示为不可用或接口返回明确的配置提示。默认模型为 `minimax/music-3.0`，若服务端目录没有该模型则回退到第一个可用音乐模型。
@@ -82,7 +81,6 @@ Atlas Cloud 返回异步 prediction ID 后，复用现有音频任务轮询、�
 
 - 音乐模型目录只返回 `kind: music` 项，不返回 TTS/ASR。
 - MiniMax Music 3.0 请求使用 Atlas Cloud endpoint、完整模型 ID和正确的顶层参数。
-- MiniMax Music 2.6 请求保留其音乐参数映射。
 - Suno 请求使用对应 adapter，不误发 MiniMax 字段。
 - 选择模型会进入批次和单任务请求，重试仍使用原候选的模型。
 - 幂等键区分不同模型；切换模型不会复用旧模型的任务。
