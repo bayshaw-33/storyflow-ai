@@ -115,26 +115,26 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, m
           <span className="song-card-title">{isZh ? "音频候选" : "Audio candidates"}</span>
           <small className="song-audio-subtitle">{isZh ? "选择模型与生成类型，版本会保留在这里试听" : "Choose a model and mode; versions stay here for preview"}</small>
         </div>
-        <div className="song-audio-controls">
-          <label className="song-audio-model-selector">
+        <div className="song-audio-controls" style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end", flexWrap: "wrap", gap: 8, flex: "1 1 auto" }}>
+          <label className="song-audio-model-selector" style={{ display: "grid", gap: 3, minWidth: 154, color: "var(--text-secondary)", fontSize: 10, fontWeight: 500 }}>
             <span>{isZh ? "音乐模型" : "Music model"}</span>
-            <select value={selectedMusicModel} onChange={(event) => onMusicModelChange(event.target.value)} aria-label={isZh ? "选择音乐模型" : "Choose music model"}>
+            <select style={{ width: "100%", minHeight: 36, maxWidth: "none", fontSize: 12 }} value={selectedMusicModel} onChange={(event) => onMusicModelChange(event.target.value)} aria-label={isZh ? "选择音乐模型" : "Choose music model"}>
               {musicModels.map((model) => <option value={model.id} key={model.id}>{isZh ? model.labelZh : model.labelEn}</option>)}
             </select>
           </label>
-          <div className="song-audio-mode-switch" role="group" aria-label={isZh ? "选择生成类型" : "Choose generation mode"}>
+          <div className="song-audio-mode-switch" style={{ display: "inline-flex", alignItems: "stretch", padding: 2, border: "1px solid var(--glass-border)", borderRadius: 9, background: "rgba(255, 255, 255, 0.04)" }} role="group" aria-label={isZh ? "选择生成类型" : "Choose generation mode"}>
             {([
               ["vocal", isZh ? "人声歌曲" : "Vocal"],
               ["instrumental", isZh ? "纯音乐" : "Instrumental"],
               ["sfx", isZh ? "音效实验" : "SFX experimental"],
-            ] as const).map(([value, label]) => <button className="song-audio-mode-button" data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
+            ] as const).map(([value, label]) => <button className="song-audio-mode-button" style={{ minHeight: 32, padding: "0 9px", border: 0, borderRadius: 7, color: musicMode === value ? "#071313" : "var(--text-secondary)", background: musicMode === value ? "#5eead4" : "transparent", fontSize: 11, cursor: "pointer" }} data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
           </div>
           <button className="primary-button" type="button" onClick={onGenerate} disabled={busy}>
             {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成 2 首" : "Generate 2 tracks")}
           </button>
         </div>
       </div>
-      <div className="song-audio-mode-note" role="status">
+      <div className="song-audio-mode-note" style={{ margin: "0 14px 10px", padding: "8px 10px", border: "1px solid rgba(45, 212, 191, 0.2)", borderRadius: 8, color: "var(--text-secondary)", background: "rgba(45, 212, 191, 0.06)", fontSize: 11, lineHeight: 1.45 }} role="status">
         {isZh
           ? (musicMode === "sfx" ? "音效实验：会按动作、材质、空间、距离、冲击和尾音调整提示词；音乐模型生成结果可能带有旋律。" : musicMode === "instrumental" ? "纯音乐：后台 AI 会生成器乐提示词，提交时不会发送歌词。" : "人声歌曲：后台 AI 会保留歌词、人声段落和演唱方向。")
           : (musicMode === "sfx" ? "SFX experimental: prompts emphasize action, material, space, distance, impact, and decay; a music model may still add melody." : musicMode === "instrumental" ? "Instrumental: the AI writes an arrangement prompt and lyrics are not submitted." : "Vocal song: the AI keeps lyrics, vocal sections, and delivery direction.")}
