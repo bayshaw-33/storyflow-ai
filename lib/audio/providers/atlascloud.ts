@@ -28,12 +28,18 @@ function isInstrumentalMode(mode: ReturnType<typeof musicMode>) {
   return mode === "instrumental" || mode === "sfx";
 }
 
+const INSTRUMENTAL_ONLY_CONSTRAINT = "Instrumental only. No vocals, no lyrics, no spoken word, no rap, no chant, no choir, no humming, no breathing, no vocal samples, no vocal texture.";
+
+function providerPrompt(input: MusicSubmitInput, mode: ReturnType<typeof musicMode>) {
+  return isInstrumentalMode(mode) ? `${input.prompt.trim()}\n${INSTRUMENTAL_ONLY_CONSTRAINT}` : input.prompt;
+}
+
 function submitPayload(input: MusicSubmitInput, model: string): Record<string, unknown> {
   const mode = musicMode(input);
   if (model === "minimax/music-3.0") {
     return {
       model,
-      prompt: input.prompt,
+      prompt: providerPrompt(input, mode),
       ...(mode === "vocal" && input.lyrics ? { lyrics: input.lyrics } : {}),
       lyrics_optimizer: false,
       is_instrumental: isInstrumentalMode(mode),
@@ -45,7 +51,7 @@ function submitPayload(input: MusicSubmitInput, model: string): Record<string, u
 
   return {
     model,
-    prompt: mode === "vocal" && input.lyrics ? input.lyrics : input.prompt,
+    prompt: mode === "vocal" && input.lyrics ? input.lyrics : providerPrompt(input, mode),
     custom: mode === "vocal" && Boolean(input.lyrics),
     instrumental: isInstrumentalMode(mode),
   };

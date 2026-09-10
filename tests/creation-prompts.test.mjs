@@ -75,3 +75,16 @@ test("translation remains optional and localization returns paired audit section
   assert.match(localization, /---LOCALIZATION_CHANGES---/);
   assert.match(localization, /---SIMILARITY_REPORT---/);
 });
+
+test("song prompts switch output contracts for vocal, instrumental, and SFX modes", async () => {
+  const vocal = await buildPrompt({ taskType: "song_workbench", input: JSON.stringify({ musicMode: "vocal" }) });
+  const instrumental = await buildPrompt({ taskType: "song_workbench", input: JSON.stringify({ musicMode: "instrumental" }) });
+  const sfx = await buildPrompt({ taskType: "song_workbench", input: JSON.stringify({ musicMode: "sfx" }) });
+
+  assert.match(vocal, /完整原创歌词/);
+  assert.match(instrumental, /纯音乐/);
+  assert.match(instrumental, /no vocals/i);
+  assert.match(instrumental, /只输出 ---MUSIC_PROMPT---/);
+  assert.match(sfx, /只输出 ---SFX_DESCRIPTION---/);
+  assert.match(sfx, /不得写歌词/);
+});

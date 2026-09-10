@@ -6,11 +6,11 @@ const page = readFileSync("app/song-workbench/page.tsx", "utf8");
 const component = readFileSync("components/song-workbench/AudioCandidates.tsx", "utf8");
 const css = readFileSync("app/globals.css", "utf8");
 
-test("audio candidates share the lower workspace without overlaying the style prompt", () => {
-  const lowerStart = page.indexOf('<div className="song-right-lower">');
-  const styleCard = page.indexOf("song-style-card", lowerStart);
+test("audio candidates occupy the redesigned right-side studio without overlaying documents", () => {
+  const studioStart = page.indexOf('<div className="song-right-studio">');
   const audioComponent = page.indexOf("<AudioCandidates");
-  assert.ok(lowerStart >= 0 && styleCard > lowerStart && audioComponent > styleCard);
+  assert.ok(studioStart >= 0 && audioComponent > studioStart);
+  assert.equal(page.indexOf("song-right-lower"), -1);
   assert.doesNotMatch(page, /song-audio-dock/);
   assert.doesNotMatch(css, /\.song-audio-dock\s*\{[\s\S]*position:\s*absolute/);
   assert.match(css, /\.song-right-lower\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s);

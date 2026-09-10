@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Music2, Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import type { SongDocument } from "@/lib/song/documents";
 
 export type SongAudioCandidate = {
   id: string;
@@ -31,6 +32,13 @@ type AudioCandidatesProps = {
   isZh: boolean;
   onGenerate: () => void;
   onRetry?: (candidateId: string) => void;
+  documents: SongDocument[];
+  selectedLyricsDocumentId: string | null;
+  selectedStyleDocumentId: string | null;
+  selectedSfxDocumentId: string | null;
+  onLyricsDocumentChange: (documentId: string) => void;
+  onStyleDocumentChange: (documentId: string) => void;
+  onSfxDocumentChange: (documentId: string) => void;
   musicModels: MusicModelOption[];
   selectedMusicModel: string;
   onMusicModelChange: (model: string) => void;
@@ -60,7 +68,7 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange }: AudioCandidatesProps) {
+export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange }: AudioCandidatesProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -107,6 +115,12 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, m
   }
 
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const lyricsDocuments = documents.filter((document) => document.kind === "lyrics");
+  const styleDocuments = documents.filter((document) => document.kind === "v6_style");
+  const sfxDocuments = documents.filter((document) => document.kind === "sfx_description");
+  const hasSelectedContent = musicMode === "vocal"
+    ? Boolean(selectedLyricsDocumentId && selectedStyleDocumentId)
+    : musicMode === "instrumental" ? Boolean(selectedStyleDocumentId) : Boolean(selectedSfxDocumentId);
 
   return (
     <div className="dashboard-panel song-output-card song-audio-card">
@@ -129,10 +143,15 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, m
               ["sfx", isZh ? "音效实验" : "SFX experimental"],
             ] as const).map(([value, label]) => <button className="song-audio-mode-button" style={{ minHeight: 32, padding: "0 9px", border: 0, borderRadius: 7, color: musicMode === value ? "#071313" : "var(--text-secondary)", background: musicMode === value ? "#5eead4" : "transparent", fontSize: 11, cursor: "pointer" }} data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
           </div>
-          <button className="primary-button" type="button" onClick={onGenerate} disabled={busy}>
+          <button className="primary-button" type="button" onClick={onGenerate} disabled={busy || !hasSelectedContent}>
             {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成 2 首" : "Generate 2 tracks")}
           </button>
         </div>
+      </div>
+      <div className="song-audio-content-selectors">
+        {musicMode === "vocal" ? <label><span>{isZh ? "歌词内容" : "Lyrics content"}</span><select value={selectedLyricsDocumentId || ""} onChange={(event) => onLyricsDocumentChange(event.target.value)} aria-label={isZh ? "选择歌词文档" : "Choose lyrics document"} disabled={!lyricsDocuments.length}><option value="">{isZh ? "先在聊天中生成歌词文档" : "Generate a lyrics document in chat first"}</option>{lyricsDocuments.map((document) => <option key={document.id} value={document.id}>{isZh ? `歌词 · V${document.version}` : `Lyrics · V${document.version}`}</option>)}</select></label> : null}
+        {musicMode !== "sfx" ? <label><span>{isZh ? "V6 曲风提示词" : "V6 style prompt"}</span><select value={selectedStyleDocumentId || ""} onChange={(event) => onStyleDocumentChange(event.target.value)} aria-label={isZh ? "选择 V6 曲风提示词" : "Choose V6 style prompt"} disabled={!styleDocuments.length}><option value="">{isZh ? "先在聊天中生成曲风文档" : "Generate a style document in chat first"}</option>{styleDocuments.map((document) => <option key={document.id} value={document.id}>{isZh ? `曲风 · V${document.version}` : `Style · V${document.version}`}</option>)}</select></label> : null}
+        {musicMode === "sfx" ? <label><span>{isZh ? "音效生成描述" : "SFX description"}</span><select value={selectedSfxDocumentId || ""} onChange={(event) => onSfxDocumentChange(event.target.value)} aria-label={isZh ? "选择音效描述" : "Choose SFX description"} disabled={!sfxDocuments.length}><option value="">{isZh ? "先在聊天中生成音效描述" : "Generate an SFX description in chat first"}</option>{sfxDocuments.map((document) => <option key={document.id} value={document.id}>{isZh ? `音效 · V${document.version}` : `SFX · V${document.version}`}</option>)}</select></label> : null}
       </div>
       <div className="song-audio-mode-note" style={{ margin: "0 14px 10px", padding: "8px 10px", border: "1px solid rgba(45, 212, 191, 0.2)", borderRadius: 8, color: "var(--text-secondary)", background: "rgba(45, 212, 191, 0.06)", fontSize: 11, lineHeight: 1.45 }} role="status">
         {isZh

@@ -75,7 +75,8 @@ export async function POST(request: NextRequest) {
   if (existing?.[0]) return response(200, { success: true, created: false, job: existing[0] });
 
   const inputParams = body.inputParams && typeof body.inputParams === "object" ? body.inputParams as Record<string, unknown> : {};
-  const lyrics = typeof body.lyrics === "string" ? body.lyrics : "";
+  // 非人声模式永远不接收歌词，避免前端或重试请求意外把 vocal 内容送进纯音乐/音效任务。
+  const lyrics = musicMode === "vocal" && typeof body.lyrics === "string" ? body.lyrics : "";
   const submittedAt = Date.now();
   const insertRows = await serviceFetch<JobRow[]>(TABLE, {
     method: "POST",

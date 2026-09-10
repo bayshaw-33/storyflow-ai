@@ -55,3 +55,24 @@ test("Atlas adapter never treats an HTML error page as an audio artifact", async
     else delete process.env.ATLASCLOUD_API_KEY;
   }
 });
+
+test("Atlas instrumental submissions carry explicit no-vocal constraints and flags", async () => {
+  const originalKey = process.env.ATLASCLOUD_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
+  let requestBody;
+  globalThis.fetch = async (_url, init = {}) => {
+    requestBody = JSON.parse(String(init.body));
+    return response({ data: { id: "instrumental-prediction-1" } });
+  };
+  try {
+    await createAtlasCloudAudioProvider().submitMusic({ model: "minimax/music-3.0", prompt: "nocturnal piano and granular texture", musicMode: "instrumental" });
+    assert.equal(requestBody.is_instrumental, true);
+    assert.match(requestBody.prompt, /no vocals/i);
+    assert.match(requestBody.prompt, /no vocal samples/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey) process.env.ATLASCLOUD_API_KEY = originalKey;
+    else delete process.env.ATLASCLOUD_API_KEY;
+  }
+});

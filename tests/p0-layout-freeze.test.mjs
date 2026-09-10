@@ -13,10 +13,11 @@ const frozenFiles = [
   "app/globals.css",
 ];
 
-test("non-script workbench layout remains frozen; only approved script viewport rules are excluded", () => {
+test("non-script workbench layout remains frozen; song workbench is an approved redesign surface", () => {
   const withoutScriptRules = css => css
     .replace(/\n\.scriptShell[^{}]*\{[^}]*\}/g, '')
     .replace(/\n@media \(max-width: 1180px\) \{\n  \.scriptShell[\s\S]*?\n\}\n/g, '\n')
+    .replace(/\n\/\* 两栏 shell：38% \/ 62%，满屏不限制窄宽 \*\/[\s\S]*?\n\.app-header \{/s, '\n.app-header {')
     .replace(/(\*\/\n)\n(@media \(max-width: 980px\))/g, '$1$2')
     .replace(/\n{3,}/g, '\n\n');
   for (const path of frozenFiles) {

@@ -166,13 +166,14 @@ const commonRules = [
 ].join("\n");
 
 const songRules = [
-  "你是 Kiikis 的歌曲创作助手，专门生成可复制到 Suno 的歌词和单一 Music Prompt。",
+  "你是 Kiikis 的歌曲创作助手，服务于聊天后一键生成、剪辑师纯音乐/音效生成，以及专业 Suno V6 跳转制作。",
   "只输出生成内容本身，不输出解释、教程、免责声明或 AI 回复套话。",
   "必须严格使用用户要求的输出语言；如果是 Bilingual，歌词应提供清晰双语段落。",
   "不得输出真实歌手、艺人、乐队、唱片公司或受版权保护作品名称；只能使用安全的声音、唱法、曲风、编曲描述。",
   "歌词必须原创，避免照抄用户输入中的长句，避免套用知名歌词、影视台词或可识别的版权表达。",
-  "Suno 标签要清晰、短促、可复制；Music Prompt 是 Suno style 输入框使用的一段精炼提示词，必须少于 1000 bytes。",
-  "输出格式必须稳定，严格包含：---LYRICS---、---MUSIC_PROMPT--- 两个分隔标题。",
+  "面向 Suno V6 时，使用少量但高信息密度的自然语言提示：优先写核心流派、情绪弧线、主导乐器、声线/演唱方式、结构推进、动态和混音目标；不要用 V5.5 式标签堆砌或重复同义词。",
+  "Suno V6 Music Prompt 是可直接复制到 style 输入框的一段精炼提示词，必须少于 1000 UTF-8 bytes；生成前主动压缩冗余而不是把信息堆到上限。",
+  "输出格式必须稳定；人声歌曲严格包含 ---LYRICS---、---MUSIC_PROMPT---，纯音乐只需 ---MUSIC_PROMPT---，音效只需 ---SFX_DESCRIPTION---。",
 ].join("\n");
 
 const novelRules = [
@@ -837,7 +838,34 @@ export async function buildPrompt(payload: GeneratePayload) {
     .map((o) => o.injection_text)
     .join("\n\n");
 
-  return [prepend, basePrompt, append].filter(Boolean).join("\n\n");
+  const modePrompt = payload.taskType === "song_workbench" ? songModePrompt(payload.input) : "";
+  return [prepend, basePrompt, modePrompt, append].filter(Boolean).join("\n\n");
+}
+
+function songModePrompt(input = "") {
+  let mode = "vocal";
+  try {
+    const parsed = JSON.parse(input) as { musicMode?: unknown };
+    if (parsed.musicMode === "instrumental" || parsed.musicMode === "sfx") mode = parsed.musicMode;
+  } catch {
+    // The stable default remains the vocal-song contract for legacy callers.
+  }
+  if (mode === "instrumental") {
+    return [
+      "【歌曲工作台模式：纯音乐】",
+      "只输出 ---MUSIC_PROMPT---。绝对禁止歌词、人声、vocal、spoken word、rap、chant、choir、呼吸声、哼唱、采样人声、随机 vocal texture 或任何可辨识的人声层；提示词必须明确 instrumental only / no vocals，并聚焦器乐、编曲、动态、质感、空间和干净收尾。",
+    ].join("\n");
+  }
+  if (mode === "sfx") {
+    return [
+      "【歌曲工作台模式：音效】",
+      "只输出 ---SFX_DESCRIPTION---。不得写歌词或任何人声内容；描述动作、材质、空间、距离、冲击、运动、尾音、时长和是否循环，并注明这是实验性音乐模型音效生成描述。",
+    ].join("\n");
+  }
+  return [
+    "【歌曲工作台模式：人声歌曲】",
+    "输出完整原创歌词和一个精炼的 Suno V6 style 提示词；歌词有清晰段落与可记忆副歌，提示词不要堆标签。",
+  ].join("\n");
 }
 
 function isNovelTask(taskType: TaskType) {

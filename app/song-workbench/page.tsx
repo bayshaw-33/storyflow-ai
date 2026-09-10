@@ -14,6 +14,7 @@ import type { CreativePackage } from "@/lib/universe/creative-package";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { byteLength, trimPromptBytes } from "@/lib/song/prompt";
 import { requestLyricsTranslation, type LyricsTranslationLanguage } from "@/lib/song/translation";
+import { createSongDocument, fitV6StylePrompt, latestSongDocument, replaceSongDocument, type SongDocument, type SongDocumentKind, validateV6StylePrompt } from "@/lib/song/documents";
 import {
   createSongUniverseLink,
   getSongUniverseLink,
@@ -25,6 +26,8 @@ import {
 } from "@/lib/song/universe-links";
 import JSZip from "jszip";
 import { AudioCandidates, type SongAudioCandidate } from "@/components/song-workbench/AudioCandidates";
+import { SongDocumentCard } from "@/components/song-workbench/SongDocumentCard";
+import { SongDocumentPreview } from "@/components/song-workbench/SongDocumentPreview";
 
 type SongProjectType =
   | "original_song"
@@ -383,7 +386,7 @@ const emptySingerDraft: SingerProfile = {
 const i18n = {
   "en-US": {
     title: "Song Creation",
-    subtitle: "Create platform-ready lyrics and style prompts. No audio generation or account connection.",
+    subtitle: "Create lyrics, Suno V6 prompts, and quick music drafts. Professional V6 work continues on Suno.",
     setup: "Idea Zone",
     tools: "Tool Zone",
     singerLibrary: "Singer library",
@@ -438,7 +441,7 @@ const i18n = {
   },
   "zh-CN": {
     title: "歌曲创作",
-    subtitle: "生成可用于音乐平台的歌词和风格提示词。不生成音频，也不连接外部账号。",
+    subtitle: "生成歌词、Suno V6 曲风提示词，并通过 Atlas Cloud 快速试听；专业制作继续跳转 Suno。",
     setup: "创意区",
     tools: "工具区",
     singerLibrary: "歌手库",
@@ -504,6 +507,10 @@ function createSongChatMessage(role: SongChatMessage["role"], content: string): 
 
 function createSongAssistantMessage(content: string) {
   return createSongChatMessage("assistant", content);
+}
+
+function documentKindForMode(mode: SongMusicMode): SongDocumentKind {
+  return mode === "sfx" ? "sfx_description" : mode === "instrumental" ? "v6_style" : "lyrics";
 }
 
 /** §7 歌曲角色标签本地化 */
@@ -598,23 +605,21 @@ export default function SongWorkbenchPage() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [singerDraft, setSingerDraft] = useState<SingerProfile | null>(null);
   const loadedEntryRef = useRef("");
-  // 两栏布局：右侧上下分隔比例（上方占百分比，默认 70）
-  const [upperHeightPct, setUpperHeightPct] = useState(70);
-  // 拖动分隔线状态
-  const splitterDragging = useRef(false);
-  const rightContainerRef = useRef<HTMLDivElement | null>(null);
   // 抽屉：setup / reference / universe / history / null
   const [drawerType, setDrawerType] = useState<null | "more" | "material" | "universe" | "history">(null);
-  // 移动端歌词/翻译标签页
-  const [mobileTab, setMobileTab] = useState<"lyrics" | "translation">("lyrics");
-  // 歌词手动编辑后的"待更新"标记
-  const [lyricsDirty, setLyricsDirty] = useState(false);
   // 生成失败专用错误（显示在右侧创作区，不伪造成功结果）
   const [generationError, setGenerationError] = useState("");
   // 生成进度状态文案（明确进度，禁用重复提交）
   const [generationProgress, setGenerationProgress] = useState("");
   const [audioCandidates, setAudioCandidates] = useState<SongAudioCandidate[]>([]);
   const [audioGenerating, setAudioGenerating] = useState(false);
+  const [documents, setDocuments] = useState<SongDocument[]>([]);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  const [selectedLyricsDocumentId, setSelectedLyricsDocumentId] = useState<string | null>(null);
+  const [selectedStyleDocumentId, setSelectedStyleDocumentId] = useState<string | null>(null);
+  const [selectedSfxDocumentId, setSelectedSfxDocumentId] = useState<string | null>(null);
+  const [translatedDocumentLyrics, setTranslatedDocumentLyrics] = useState("");
+  const pendingLatestDocumentKindsRef = useRef<Set<SongDocumentKind>>(new Set());
   const [musicModels, setMusicModels] = useState<AtlasCloudMusicModelOption[]>(FALLBACK_MUSIC_MODELS);
   const [selectedMusicModel, setSelectedMusicModel] = useState<AtlasCloudMusicModelOption["id"]>(DEFAULT_MUSIC_MODEL);
   const [musicMode, setMusicMode] = useState<SongMusicMode>("vocal");
@@ -661,6 +666,44 @@ export default function SongWorkbenchPage() {
     },
   });
 
+  const latestLyricsDocument = latestSongDocument(documents, "lyrics");
+  const latestStyleDocument = latestSongDocument(documents, "v6_style");
+  const latestSfxDocument = latestSongDocument(documents, "sfx_description");
+
+  function appendSongDocuments(nextDocuments: Array<{ kind: SongDocumentKind; content: string; title?: string }>) {
+    nextDocuments.forEach((item) => pendingLatestDocumentKindsRef.current.add(item.kind));
+    setDocuments((current) => {
+      const created = nextDocuments.filter((item) => item.content.trim()).map((item) => createSongDocument(item.kind, item.kind === "v6_style" ? fitV6StylePrompt(item.content) : item.content, [...current], "ai", item.title));
+      return [...current, ...created];
+    });
+  }
+
+  useEffect(() => {
+    const pendingKinds = pendingLatestDocumentKindsRef.current;
+    if (!pendingKinds.size) return;
+    pendingLatestDocumentKindsRef.current = new Set();
+    if (pendingKinds.has("lyrics")) setSelectedLyricsDocumentId(latestSongDocument(documents, "lyrics")?.id || null);
+    if (pendingKinds.has("v6_style")) setSelectedStyleDocumentId(latestSongDocument(documents, "v6_style")?.id || null);
+    if (pendingKinds.has("sfx_description")) setSelectedSfxDocumentId(latestSongDocument(documents, "sfx_description")?.id || null);
+  }, [documents]);
+
+  function saveSongDocument(document: SongDocument, content: string) {
+    if (document.kind === "v6_style" && !validateV6StylePrompt(content).valid) {
+      setError(isZh ? "Suno V6 曲风提示词不能超过 1000 bytes。" : "Suno V6 style prompt must be 1000 bytes or less.");
+      return;
+    }
+    const next = { ...document, content };
+    setDocuments((current) => replaceSongDocument(current, next));
+    if (document.kind === "lyrics") setLyrics(content);
+    if (document.kind === "v6_style") setStylePrompt(content);
+    if (document.kind === "sfx_description") setStylePrompt(content);
+    setActiveDocumentId(null);
+  }
+
+  function openSongDocument(document: SongDocument) {
+    setActiveDocumentId(document.id);
+  }
+
   async function pollSongAudioJob(candidateId: string, jobId: string) {
     const accessToken = session?.access_token;
     if (!accessToken) return;
@@ -704,8 +747,13 @@ export default function SongWorkbenchPage() {
       setGenerationError(isZh ? "登录后才能生成音频。" : "Sign in before generating audio.");
       return;
     }
-    if (!lyrics.trim() && !stylePrompt.trim()) {
-      setGenerationError(isZh ? "请先生成歌词或曲风提示词。" : "Generate lyrics or a style prompt first.");
+    const selectedLyricsDocument = documents.find((document) => document.id === selectedLyricsDocumentId) || latestLyricsDocument;
+    const selectedStyleDocument = documents.find((document) => document.id === selectedStyleDocumentId) || latestStyleDocument;
+    const selectedSfxDocument = documents.find((document) => document.id === selectedSfxDocumentId) || latestSfxDocument;
+    const audioPrompt = musicMode === "sfx" ? selectedSfxDocument?.content : selectedStyleDocument?.content;
+    const audioLyrics = musicMode === "vocal" ? selectedLyricsDocument?.content : undefined;
+    if (!audioPrompt || (musicMode === "vocal" && !audioLyrics)) {
+      setGenerationError(isZh ? "请先在聊天中生成对应的内容文档。" : "Generate the matching content document in chat first.");
       return;
     }
     setAudioGenerating(true);
@@ -719,8 +767,8 @@ export default function SongWorkbenchPage() {
         body: JSON.stringify({
           kind: "music",
           candidates: [
-            { label: "A", prompt: stylePrompt || form.concept, lyrics },
-            { label: "B", prompt: stylePrompt || form.concept, lyrics },
+            { label: "A", prompt: audioPrompt, ...(audioLyrics ? { lyrics: audioLyrics } : {}) },
+            { label: "B", prompt: audioPrompt, ...(audioLyrics ? { lyrics: audioLyrics } : {}) },
           ],
           targetType: "song_version",
           targetId: songProjectId || form.title || "standalone-song",
@@ -728,7 +776,7 @@ export default function SongWorkbenchPage() {
           provider: "atlascloud",
           model: selectedMusicModel,
           musicMode: musicMode,
-          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage },
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
         }),
       });
       const payload = await response.json() as {
@@ -757,6 +805,15 @@ export default function SongWorkbenchPage() {
   async function retrySongAudioCandidate(candidateId: string) {
     const candidate = audioCandidates.find((item) => item.id === candidateId);
     if (!candidate || !session?.access_token) return;
+    const selectedLyricsDocument = documents.find((document) => document.id === selectedLyricsDocumentId) || latestLyricsDocument;
+    const selectedStyleDocument = documents.find((document) => document.id === selectedStyleDocumentId) || latestStyleDocument;
+    const selectedSfxDocument = documents.find((document) => document.id === selectedSfxDocumentId) || latestSfxDocument;
+    const retryPrompt = musicMode === "sfx" ? selectedSfxDocument?.content : selectedStyleDocument?.content;
+    const retryLyrics = musicMode === "vocal" ? selectedLyricsDocument?.content : undefined;
+    if (!retryPrompt || (musicMode === "vocal" && !retryLyrics)) {
+      setGenerationError(isZh ? "请先在聊天中生成对应的内容文档。" : "Generate the matching content document in chat first.");
+      return;
+    }
     setAudioCandidates((current) => current.map((item) => item.id === candidateId ? { ...item, status: "queued", error: null } : item));
     try {
       const response = await fetch("/api/audio/jobs", {
@@ -764,8 +821,8 @@ export default function SongWorkbenchPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           kind: "music",
-          prompt: stylePrompt || form.concept,
-          lyrics,
+          prompt: retryPrompt,
+          ...(retryLyrics ? { lyrics: retryLyrics } : {}),
           targetType: "song_version",
           targetId: songProjectId || form.title || "standalone-song",
           requestKey: `retry:${candidate.id}:${Date.now()}`,
@@ -773,7 +830,7 @@ export default function SongWorkbenchPage() {
           provider: "atlascloud",
           model: selectedMusicModel,
           musicMode: musicMode,
-          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label, retryOf: candidate.jobId },
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label, retryOf: candidate.jobId, lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
         }),
       });
       const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
@@ -854,7 +911,7 @@ export default function SongWorkbenchPage() {
       const data = JSON.parse(stored);
       if (data.form) setForm(normalizeStoredForm(data.form));
       if (data.singers) setSingers(data.singers);
-      if (data.lyrics) { setLyrics(data.lyrics); setLyricsDirty(false); }
+      if (data.lyrics) setLyrics(data.lyrics);
       if (data.stylePrompt || data.compositionPrompt) setStylePrompt(mergeMusicPrompt(data.stylePrompt || "", data.compositionPrompt || ""));
       if (data.compositionPrompt) setCompositionPrompt("");
       if (data.audit) setAudit(data.audit);
@@ -865,6 +922,21 @@ export default function SongWorkbenchPage() {
       if (data.translationLanguage) setTranslationLanguage(data.translationLanguage);
       if (data.translatedLyrics) setTranslatedLyrics(data.translatedLyrics);
       if (data.selectedModelProvider) setSelectedModelProvider(data.selectedModelProvider);
+      if (Array.isArray(data.documents)) {
+        const restoredDocuments = data.documents.filter((document: unknown): document is SongDocument => Boolean(document && typeof document === "object" && "id" in document && "kind" in document && "content" in document));
+        setDocuments(restoredDocuments);
+        setSelectedLyricsDocumentId(typeof data.selectedLyricsDocumentId === "string" ? data.selectedLyricsDocumentId : latestSongDocument(restoredDocuments, "lyrics")?.id || null);
+        setSelectedStyleDocumentId(typeof data.selectedStyleDocumentId === "string" ? data.selectedStyleDocumentId : latestSongDocument(restoredDocuments, "v6_style")?.id || null);
+        setSelectedSfxDocumentId(typeof data.selectedSfxDocumentId === "string" ? data.selectedSfxDocumentId : latestSongDocument(restoredDocuments, "sfx_description")?.id || null);
+      } else {
+        const legacyDocuments = [
+          data.lyrics ? createSongDocument("lyrics", String(data.lyrics), [], "manual") : null,
+          data.stylePrompt ? createSongDocument("v6_style", fitLegacyStylePrompt(String(data.stylePrompt)), [], "manual") : null,
+        ].filter(Boolean) as SongDocument[];
+        setDocuments(legacyDocuments);
+        setSelectedLyricsDocumentId(legacyDocuments.find((document) => document.kind === "lyrics")?.id || null);
+        setSelectedStyleDocumentId(legacyDocuments.find((document) => document.kind === "v6_style")?.id || null);
+      }
       if (data.selectedMusicModel === "minimax/music-3.0" || data.selectedMusicModel === "suno/chirp-v5") setSelectedMusicModel(data.selectedMusicModel);
       if (data.musicMode === "vocal" || data.musicMode === "instrumental" || data.musicMode === "sfx") setMusicMode(data.musicMode);
       if (data.uploadedReference) setUploadedReference(data.uploadedReference);
@@ -917,9 +989,9 @@ export default function SongWorkbenchPage() {
   useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode }),
+      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode }),
     );
-  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode]);
+  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode]);
 
   useEffect(() => {
     if (songDevelopmentNotes.trim()) return;
@@ -973,6 +1045,11 @@ export default function SongWorkbenchPage() {
     setReferenceMode("similar_style");
     setSelectedMusicModel(DEFAULT_MUSIC_MODEL);
     setMusicMode("vocal");
+    setDocuments([]);
+    setActiveDocumentId(null);
+    setSelectedLyricsDocumentId(null);
+    setSelectedStyleDocumentId(null);
+    setSelectedSfxDocumentId(null);
     setVersions([]);
     setSongProjectId(null);
     setError("");
@@ -991,6 +1068,11 @@ export default function SongWorkbenchPage() {
     setLyrics(snapshot.lyrics);
     setStylePrompt(trimPromptBytes(snapshot.stylePrompt, MUSIC_PROMPT_MAX_BYTES));
     setCompositionPrompt(snapshot.compositionPrompt);
+    const restoredDocuments = snapshot.documents || [];
+    setDocuments(restoredDocuments);
+    setSelectedLyricsDocumentId(restoredDocuments.find((document) => document.kind === "lyrics")?.id || null);
+    setSelectedStyleDocumentId(restoredDocuments.find((document) => document.kind === "v6_style")?.id || null);
+    setSelectedSfxDocumentId(restoredDocuments.find((document) => document.kind === "sfx_description")?.id || null);
     setAudit(snapshot.audit);
     setSongDevelopmentNotes(snapshot.songDevelopmentNotes);
     setChatInput("");
@@ -1300,10 +1382,10 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  // 手动翻译：用户点击"翻译"按钮触发，使用独立的 AbortController（不依赖自动翻译的 useEffect）
   const manualTranslateAbort = useRef<AbortController | null>(null);
-  async function handleManualTranslate() {
-    const trimmed = lyrics.trim();
+
+  async function handleDocumentTranslate(sourceLyrics: string) {
+    const trimmed = sourceLyrics.trim();
     if (!trimmed) {
       setTranslationError(isZh ? "请先生成或输入歌词。" : "Please generate or enter lyrics first.");
       return;
@@ -1312,11 +1394,27 @@ export default function SongWorkbenchPage() {
       setTranslationError(isZh ? "登录后可翻译歌词。" : "Sign in to translate lyrics.");
       return;
     }
-    // 取消正在进行的自动翻译
     manualTranslateAbort.current?.abort();
     const controller = new AbortController();
     manualTranslateAbort.current = controller;
-    await translateLyrics(trimmed, translationLanguage, controller.signal);
+    setTranslatedDocumentLyrics("");
+    setTranslationGenerating(true);
+    setTranslationError("");
+    try {
+      const output = await requestLyricsTranslation({
+        accessToken: session.access_token,
+        projectTitle: form.title,
+        sourceLyrics: trimmed,
+        targetLanguage: translationLanguage,
+        signal: controller.signal,
+        byoApi: buildSongByoApi(selectedModelProvider),
+      });
+      if (!controller.signal.aborted) setTranslatedDocumentLyrics(output);
+    } catch (translationError) {
+      if (!controller.signal.aborted) setTranslationError(translationError instanceof Error ? translationError.message : (isZh ? "翻译失败。" : "Translation failed."));
+    } finally {
+      if (!controller.signal.aborted) setTranslationGenerating(false);
+    }
   }
 
   async function handleReferenceFileUpload(file: File | null) {
@@ -1420,8 +1518,8 @@ export default function SongWorkbenchPage() {
       setGenerationProgress(isZh ? "正在解析结果…" : "Parsing result...");
       const parsed = parseSongGeneration(payload.output || "");
       const fallbackLyrics = buildLyrics(form, selectedSingers);
-      const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers);
-      const nextStylePrompt = trimPromptBytes(sanitizeForbidden(parsed.stylePrompt || buildMusicPrompt(form, selectedSingers), selectedSingers), MUSIC_PROMPT_MAX_BYTES);
+      const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers) : "";
+      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || buildModeAwarePrompt(form, selectedSingers, musicMode), selectedSingers));
       const nextCompositionPrompt = "";
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
@@ -1429,7 +1527,14 @@ export default function SongWorkbenchPage() {
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
-      setLyricsDirty(false);
+      appendSongDocuments(
+        musicMode === "vocal"
+          ? [
+              { kind: "lyrics", content: nextLyrics },
+              { kind: "v6_style", content: nextStylePrompt },
+            ]
+              : [{ kind: documentKindForMode(musicMode), content: musicMode === "sfx" ? (parsed.sfxDescription || parsed.stylePrompt || nextStylePrompt) : nextStylePrompt, title: musicMode === "sfx" ? "音效生成描述" : "纯音乐 V6 曲风提示词" }],
+      );
       void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
     } catch (generationError) {
       setGenerationError(generationError instanceof Error ? generationError.message : "AI generation failed.");
@@ -1940,7 +2045,10 @@ export default function SongWorkbenchPage() {
 
   async function applyRevision() {
     const instruction = revisionInstruction.trim();
-    if (!instruction || !lyrics.trim()) return;
+    const currentLyrics = latestLyricsDocument?.content || lyrics;
+    const currentStyle = latestStyleDocument?.content || stylePrompt;
+    const currentSfx = latestSfxDocument?.content || stylePrompt;
+    if (!instruction || (musicMode === "vocal" && !currentLyrics.trim())) return;
     if (!session?.access_token) {
       setError(text.signInRequired);
       return;
@@ -1961,8 +2069,9 @@ export default function SongWorkbenchPage() {
           genre: normalizedGenres(form).join(", "),
           input: buildSongRevisionInput(form, instruction, musicMode),
           context: [
-            `Current lyrics:\n${lyrics}`,
-            stylePrompt.trim() ? `Current style prompt:\n${stylePrompt}` : "",
+            currentLyrics.trim() ? `Current lyrics:\n${currentLyrics}` : "",
+            currentStyle.trim() ? `Current style prompt:\n${currentStyle}` : "",
+            musicMode === "sfx" && currentSfx.trim() ? `Current sound effect description:\n${currentSfx}` : "",
             compositionPrompt.trim() ? `Current composition prompt:\n${compositionPrompt}` : "",
           ].filter(Boolean).join("\n\n"),
           byoApi: buildSongByoApi(selectedModelProvider),
@@ -1972,8 +2081,8 @@ export default function SongWorkbenchPage() {
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "Revision failed.");
 
       const parsed = parseSongGeneration(payload.output || "");
-      const nextLyrics = sanitizeForbidden(parsed.lyrics || payload.output || reviseLyrics(lyrics, instruction), selectedSingers);
-      const nextStylePrompt = trimPromptBytes(sanitizeForbidden(parsed.stylePrompt || stylePrompt || buildStylePrompt(form, selectedSingers), selectedSingers), MUSIC_PROMPT_MAX_BYTES);
+      const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output || reviseLyrics(currentLyrics, instruction), selectedSingers) : "";
+      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || currentStyle || buildModeAwarePrompt(form, selectedSingers, musicMode), selectedSingers));
       const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
@@ -1982,6 +2091,13 @@ export default function SongWorkbenchPage() {
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
       setRevisionInstruction("");
+      const revisionDocuments = musicMode === "vocal"
+        ? [
+            ...(parsed.lyrics || nextLyrics ? [{ kind: "lyrics" as const, content: nextLyrics }] : []),
+            ...(parsed.stylePrompt || nextStylePrompt ? [{ kind: "v6_style" as const, content: nextStylePrompt }] : []),
+          ]
+        : [{ kind: documentKindForMode(musicMode), content: musicMode === "sfx" ? (parsed.sfxDescription || parsed.stylePrompt || nextStylePrompt) : nextStylePrompt, title: musicMode === "sfx" ? "音效生成描述" : "纯音乐 V6 曲风提示词" }];
+      appendSongDocuments(revisionDocuments);
       await saveVersion("Revision", instruction, nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
     } catch (revisionError) {
       setError(revisionError instanceof Error ? revisionError.message : "Revision failed.");
@@ -2002,7 +2118,6 @@ export default function SongWorkbenchPage() {
     setLyrics(version.lyrics);
     setStylePrompt(trimPromptBytes(version.stylePrompt, MUSIC_PROMPT_MAX_BYTES));
     setCompositionPrompt(version.compositionPrompt);
-    setLyricsDirty(false);
     setAudit(auditLyrics(version.lyrics, version.stylePrompt, version.compositionPrompt, selectedSingers, form));
   }
 
@@ -2034,32 +2149,6 @@ export default function SongWorkbenchPage() {
     setSingers((current) => current.filter((singer) => singer.id !== singerDraft.id));
     setForm((current) => ({ ...current, selectedSingerIds: current.selectedSingerIds.filter((id) => id !== singerDraft.id) }));
     setSingerDraft(null);
-  }
-
-  // 拖动分隔线：根据鼠标位置更新右侧上方占比（20%~85%）
-  function onSplitterMouseDown(event: React.MouseEvent<HTMLDivElement>) {
-    event.preventDefault();
-    splitterDragging.current = true;
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", onSplitterMouseMove);
-    window.addEventListener("mouseup", onSplitterMouseUp);
-  }
-  function onSplitterMouseMove(event: MouseEvent) {
-    if (!splitterDragging.current || !rightContainerRef.current) return;
-    const rect = rightContainerRef.current.getBoundingClientRect();
-    if (rect.height <= 0) return;
-    const offset = event.clientY - rect.top;
-    let pct = (offset / rect.height) * 100;
-    pct = Math.max(20, Math.min(85, pct));
-    setUpperHeightPct(pct);
-  }
-  function onSplitterMouseUp() {
-    splitterDragging.current = false;
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-    window.removeEventListener("mousemove", onSplitterMouseMove);
-    window.removeEventListener("mouseup", onSplitterMouseUp);
   }
 
   return (
@@ -2129,7 +2218,7 @@ export default function SongWorkbenchPage() {
       {error ? <div className="notice error song-shell-notice">{error}</div> : null}
       {saveWarning ? <div className="notice warning song-shell-notice">{saveWarning}</div> : null}
 
-      <section className="song-workbench-shell song-shell-v2" style={{ "--upper-pct": upperHeightPct } as React.CSSProperties}>
+      <section className="song-workbench-shell song-shell-v2">
         {/* 左侧 38%：AI 创作对话（只负责对话，不触发作品生成） */}
         <form
           className={`dashboard-panel song-chat-panel ${mobileView === "chat" ? "song-mobile-active" : "song-mobile-hidden"}`}
@@ -2148,6 +2237,13 @@ export default function SongWorkbenchPage() {
                 <p>{message.content}</p>
               </article>
             ))}
+            {documents.length ? (
+              <div className="song-document-feed" aria-label={isZh ? "创作文档" : "Creation documents"}>
+                {documents.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((document) => (
+                  <SongDocumentCard key={document.id} document={document} isZh={isZh} onOpen={openSongDocument} />
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="song-chat-composer">
@@ -2182,7 +2278,7 @@ export default function SongWorkbenchPage() {
         </form>
 
         {/* 右侧 62%：创作结果（上下分割，可拖动） */}
-        <section className={`song-workbench-right ${mobileView === "results" ? "song-mobile-active" : "song-mobile-hidden"}`} ref={rightContainerRef}>
+        <section className={`song-workbench-right ${mobileView === "results" ? "song-mobile-active" : "song-mobile-hidden"}`}>
           {/* 生成进度状态（明确进度，禁用重复提交） */}
           {generationProgress ? (
             <div className="song-right-status song-right-progress" role="status" aria-live="polite">
@@ -2196,99 +2292,8 @@ export default function SongWorkbenchPage() {
               <span>{generationError}</span>
             </div>
           ) : null}
-          <div className="song-right-upper">
-            {/* 移动端歌词/翻译标签页 */}
-            <div className="song-mobile-tabs" role="tablist">
-              <button className={mobileTab === "lyrics" ? "active" : ""} role="tab" aria-selected={mobileTab === "lyrics"} onClick={() => setMobileTab("lyrics")}>
-                {text.lyrics}
-              </button>
-              <button className={mobileTab === "translation" ? "active" : ""} role="tab" aria-selected={mobileTab === "translation"} onClick={() => setMobileTab("translation")}>
-                {isZh ? "翻译" : "Translation"}
-              </button>
-            </div>
-
-            <div className="song-upper-grid">
-              {/* 歌词（可编辑） */}
-              <div className={`dashboard-panel song-output-card song-lyrics-card ${mobileTab === "lyrics" ? "" : "mobile-hidden"}`}>
-                <div className="song-output-card-head">
-                  <span className="song-card-title">
-                    {text.lyrics}
-                    {lyricsDirty ? <small className="song-dirty-badge">{isZh ? "待更新" : "Unsaved"}</small> : null}
-                  </span>
-                  <div className="song-card-actions">
-                    <button className="icon-button" type="button" title={text.copy} disabled={!lyrics || !canCopyLyrics} onClick={() => copyText(lyrics, true)}>
-                      <Copy size={15} />
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  className="song-lyrics-textarea"
-                  value={lyrics}
-                  onChange={(event) => { setLyrics(event.target.value); setLyricsDirty(true); }}
-                  placeholder="[Intro - 3 seconds]..."
-                />
-              </div>
-
-              {/* 翻译（只读） */}
-              <div className={`dashboard-panel song-output-card song-translation-card ${mobileTab === "translation" ? "" : "mobile-hidden"}`}>
-                <div className="song-output-card-head">
-                  <span className="song-card-title">
-                    {isZh ? "翻译" : "Translation"}
-                    <small className="song-readonly-badge">{isZh ? "只读" : "Read-only"}</small>
-                  </span>
-                  <div className="song-card-actions">
-                    <select value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value as LyricsTranslationLanguage)}>
-                      {translationLanguages.map((language) => <option key={language}>{language}</option>)}
-                    </select>
-                    <button type="button" className="icon-button" title={isZh ? "翻译歌词" : "Translate lyrics"} disabled={translationGenerating || !lyrics.trim()} onClick={() => void handleManualTranslate()}>
-                      {translationGenerating ? <Loader2 className="spin" size={15} /> : <Languages size={15} />}
-                    </button>
-                    <button className="icon-button" type="button" title={text.copy} disabled={!translatedLyrics} onClick={() => copyText(translatedLyrics)}>
-                      <Copy size={15} />
-                    </button>
-                  </div>
-                </div>
-                {translationGenerating ? <small className="field-note">{isZh ? "正在翻译歌词…" : "Translating lyrics..."}</small> : null}
-                {translationError ? <small className="field-note song-save-warning">{translationError}</small> : null}
-                <textarea
-                  className="song-lyrics-textarea"
-                  value={translatedLyrics}
-                  readOnly
-                  placeholder={isZh ? "点击翻译按钮或自动翻译；中文歌词不翻译。" : "Click translate button or auto-translate; Chinese lyrics are not translated."}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 可拖动水平分隔线 */}
-          <div className="song-splitter" onMouseDown={onSplitterMouseDown} role="separator" aria-orientation="horizontal">
-            <div className="song-splitter-handle" />
-          </div>
-
-          {/* 下方：曲风提示词 */}
-          <div className="song-right-lower">
-            <div className="dashboard-panel song-output-card song-style-card">
-              <div className="song-output-card-head">
-                <span className="song-card-title">
-                  {isZh ? "曲风提示词" : "Style Prompt"}
-                </span>
-                <div className="song-card-actions">
-                  <small className={musicPromptBytes > MUSIC_PROMPT_MAX_BYTES ? "field-note song-save-warning" : "field-note song-byte-count"}>
-                    {musicPromptBytes}/{MUSIC_PROMPT_MAX_BYTES} bytes
-                  </small>
-                  <button className="icon-button" type="button" title={text.copy} disabled={!stylePrompt} onClick={() => copyText(stylePrompt)}>
-                    <Copy size={15} />
-                  </button>
-                </div>
-              </div>
-              <textarea
-                className="song-prompt-textarea"
-                value={stylePrompt}
-                onChange={(event) => setStylePrompt(trimPromptBytes(event.target.value, MUSIC_PROMPT_MAX_BYTES))}
-                placeholder={isZh ? "生成后会得到一段精炼的 Suno style 提示词。" : "A concise Suno style prompt appears here after generation."}
-              />
-            </div>
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
+          <div className="song-right-studio">
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
           </div>
         </section>
       </section>
@@ -2622,6 +2627,10 @@ export default function SongWorkbenchPage() {
           </div>
         </div>
       ) : null}
+      {activeDocumentId ? (() => {
+        const document = documents.find((item) => item.id === activeDocumentId);
+        return document ? <SongDocumentPreview document={document} isZh={isZh} onClose={() => { setActiveDocumentId(null); setTranslatedDocumentLyrics(""); }} onSave={(content) => saveSongDocument(document, content)} onCopy={(content) => void copyText(content)} onTranslate={() => void handleDocumentTranslate(document.content)} translatedLyrics={translatedDocumentLyrics} translating={translationGenerating} translationError={translationError} onOpenSuno={() => window.open("https://suno.com", "_blank", "noopener,noreferrer")} /> : null;
+      })() : null}
     </main>
   );
 }
@@ -2682,7 +2691,9 @@ function buildSongRevisionInput(form: SongForm, instruction: string, musicMode: 
       mode: "revise_existing_song",
       revisionInstruction: instruction,
       musicMode,
-      requiredBehavior: `${getMusicModeInstruction(musicMode)} Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.`,
+      requiredBehavior: musicMode === "vocal"
+        ? `${getMusicModeInstruction(musicMode)} Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.`
+        : `${getMusicModeInstruction(musicMode)} Rewrite the applicable prompt or sound-effect description according to the revision instruction. Do not return lyrics or a change note.`,
       title: form.title,
       outputLanguage: form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage,
       lyricsMode: form.lyricsMode,
@@ -2804,6 +2815,10 @@ function songProjectToWorkbench(project: DramaProject) {
   const stylePrompt = mergeMusicPrompt(extractMarkdownSection(content, "Music Prompt") || extractMarkdownSection(content, "Style Prompt"), extractMarkdownSection(content, "Composition Prompt"));
   const compositionPrompt = "";
   const songDevelopmentNotes = extractMarkdownSection(content, "创作沟通记录");
+  const documents = [
+    lyrics ? createSongDocument("lyrics", lyrics, [], "manual") : null,
+    stylePrompt ? createSongDocument("v6_style", stylePrompt, [], "manual") : null,
+  ].filter(Boolean) as SongDocument[];
 
   return {
     form,
@@ -2811,6 +2826,7 @@ function songProjectToWorkbench(project: DramaProject) {
     stylePrompt,
     compositionPrompt,
     songDevelopmentNotes,
+    documents,
     audit: lyrics || stylePrompt || compositionPrompt
       ? auditLyrics(lyrics, stylePrompt, compositionPrompt, [], form)
       : null,
@@ -2822,7 +2838,7 @@ function getSongEntry() {
   const params = new URLSearchParams(window.location.search);
   const projectId = params.get("projectId") || "";
   return {
-    forceNew: params.get("new") === "1" || !projectId,
+    forceNew: params.get("new") === "1",
     projectId,
   };
 }
@@ -2932,9 +2948,12 @@ function parseSongGeneration(output: string) {
     || section("STYLE_PROMPT")
     || output.match(/(?:music prompt|style prompt|音乐生成提示词|风格提示词)\s*[:：]\s*([\s\S]*?)(?=\n(?:composition prompt|编曲提示词)\s*[:：]|$)/i)?.[1]?.trim()
     || "";
+  const sfxDescription = section("SFX_DESCRIPTION")
+    || output.match(/(?:sfx description|sound effect description|音效生成描述)\s*[:：]\s*([\s\S]*?)(?=\n(?:composition prompt|编曲提示词)\s*[:：]|$)/i)?.[1]?.trim()
+    || "";
   const compositionPrompt = section("COMPOSITION_PROMPT") || output.match(/(?:composition prompt|编曲提示词)\s*[:：]\s*([\s\S]*)$/i)?.[1]?.trim() || "";
 
-  return { lyrics, stylePrompt: mergeMusicPrompt(stylePrompt, compositionPrompt), compositionPrompt: "" };
+  return { lyrics, stylePrompt: mergeMusicPrompt(stylePrompt, compositionPrompt), sfxDescription, compositionPrompt: "" };
 }
 
 function normalizedGenres(form: SongForm) {
@@ -3056,6 +3075,28 @@ function buildStylePrompt(form: SongForm, singers: SingerProfile[]) {
   return buildMusicPrompt(form, singers);
 }
 
+function buildModeAwarePrompt(form: SongForm, singers: SingerProfile[], mode: SongMusicMode) {
+  if (mode === "instrumental") {
+    const instruments = normalizedInstruments(form).slice(0, 5).join(", ") || "piano, warm bass, restrained drums";
+    return fitV6StylePrompt([
+      "Instrumental only; no vocals, no lyrics, no spoken word, no rap, no chant, no choir, no humming, no vocal samples",
+      normalizedGenres(form).slice(0, 3).join(", "),
+      `${form.primaryEmotion} arc`,
+      instruments,
+      specifiedValue(form.groove),
+      "clear motif, gradual lift, spacious mix, clean ending",
+    ].filter(Boolean).join(", "));
+  }
+  if (mode === "sfx") {
+    return fitV6StylePrompt([
+      "Experimental sound effect, no vocals or lyrics",
+      form.primaryEmotion,
+      "clear action, material, space, distance, impact, movement, decay, short duration, clean tail",
+    ].filter(Boolean).join(", "));
+  }
+  return buildMusicPrompt(form, singers);
+}
+
 function buildMusicPrompt(form: SongForm, singers: SingerProfile[]) {
   const genres = normalizedGenres(form).slice(0, 4).join(", ");
   const singerTerms = singers.flatMap((singer) => singer.safePromptTerms).slice(0, 2).join(", ");
@@ -3136,6 +3177,10 @@ function trimPrompt(value: string, max: number) {
 
 function mergeMusicPrompt(stylePrompt: string, compositionPrompt: string) {
   return trimPromptBytes([stylePrompt, compositionPrompt].map((item) => item.trim()).filter(Boolean).join(", "), MUSIC_PROMPT_MAX_BYTES);
+}
+
+function fitLegacyStylePrompt(value: string) {
+  return trimPromptBytes(value, MUSIC_PROMPT_MAX_BYTES);
 }
 
 function shouldSkipLyricsTranslation(value: string, targetLanguage: LyricsTranslationLanguage) {
