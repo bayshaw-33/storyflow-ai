@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Copy, ExternalLink, Globe, Languages, Loader2, MoreHorizontal, Package, Send, Sparkles, X } from "lucide-react";
+import { ChevronDown, Copy, ExternalLink, Globe, Languages, Loader2, MoreHorizontal, Package, Search, Send, Sparkles, X } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -2153,30 +2153,27 @@ export default function SongWorkbenchPage() {
 
   return (
     <main className="cosmic-page song-workbench-page song-workbench-v2">
-      <section className="cosmic-title-band song-title-bar">
-        {/* 歌曲标题：左上角，可直接点击编辑 */}
-        <div className="song-title-wrap">
-          {editingTitle ? (
-            <input
-              ref={titleInputRef}
-              className="song-title-input"
-              value={form.title}
-              onChange={(event) => updateForm("title", event.target.value)}
-              onBlur={() => setEditingTitle(false)}
-              onKeyDown={(event) => { if (event.key === "Enter" || event.key === "Escape") setEditingTitle(false); }}
-              placeholder={isZh ? "歌曲标题" : "Song title"}
-              autoFocus
-            />
-          ) : (
-            <h1
-              className="song-title-editable"
-              onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0); }}
-              title={isZh ? "点击编辑标题" : "Click to edit title"}
-            >
-              {form.title.trim() || (isZh ? "未命名歌曲" : "Untitled Song")}
-            </h1>
-          )}
+      <header className="song-reference-topbar">
+        <Link className="song-reference-brand" href="/song-workbench">KIIKIS AI 歌曲工作台</Link>
+        <nav className="song-reference-nav" aria-label={isZh ? "歌曲工作台导航" : "Song workbench navigation"}>
+          <Link className="active" href="/song-workbench">{isZh ? "创作" : "Create"}</Link>
+          <Link href="/archive">{isZh ? "我的作品" : "My works"}</Link>
+          <Link href="/voice-workbench">{isZh ? "音色库" : "Voices"}</Link>
+          <Link href="/templates">{isZh ? "工具箱" : "Toolkit"}</Link>
+        </nav>
+        <div className="song-reference-account">
+          <button className="song-reference-icon-button" type="button" aria-label={isZh ? "搜索" : "Search"} title={isZh ? "搜索" : "Search"}>
+            <Search size={19} />
+          </button>
+          <button className="song-reference-account-button" type="button" onClick={() => setDrawerType("more")} aria-label={isZh ? "打开账号菜单" : "Open account menu"}>
+            <span className="song-reference-avatar">K</span>
+            <span>KIIKIS</span>
+            <ChevronDown size={14} />
+          </button>
         </div>
+      </header>
+
+      <section className="song-utility-bar" aria-label={isZh ? "歌曲工具" : "Song tools"}>
         <div className="song-toolbar">
           {/* 移动端视图切换（仅手机/平板竖屏显示，桌面端隐藏） */}
           <button
@@ -2219,15 +2216,38 @@ export default function SongWorkbenchPage() {
       {saveWarning ? <div className="notice warning song-shell-notice">{saveWarning}</div> : null}
 
       <section className="song-workbench-shell song-shell-v2">
-        {/* 左侧 38%：AI 创作对话（只负责对话，不触发作品生成） */}
+        {/* 左侧：AI 创作对话（只负责对话，不触发作品生成） */}
         <form
           className={`dashboard-panel song-chat-panel ${mobileView === "chat" ? "song-mobile-active" : "song-mobile-hidden"}`}
           onSubmit={(event) => { event.preventDefault(); void sendChatMessage(); }}
         >
-          <div className="dashboard-panel-head">
-            <div>
-              <span>{isZh ? "AI 创作对话" : "AI Creation Chat"}</span>
+          <div className="dashboard-panel-head song-chat-heading">
+            <div className="song-section-heading">
+              <span className="song-section-heading-mark" aria-hidden="true" />
+              <strong>{isZh ? "KK 创作对话" : "KK Creation Chat"}</strong>
+              <small>{isZh ? "AI 创作助手" : "AI creation assistant"}</small>
             </div>
+            {editingTitle ? (
+              <input
+                ref={titleInputRef}
+                className="song-title-input song-inline-title-input"
+                value={form.title}
+                onChange={(event) => updateForm("title", event.target.value)}
+                onBlur={() => setEditingTitle(false)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === "Escape") setEditingTitle(false); }}
+                placeholder={isZh ? "歌曲标题" : "Song title"}
+                autoFocus
+              />
+            ) : (
+              <button
+                className="song-project-title"
+                type="button"
+                onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0); }}
+                title={isZh ? "点击编辑歌曲标题" : "Click to edit song title"}
+              >
+                {form.title.trim() || (isZh ? "未命名歌曲" : "Untitled Song")}
+              </button>
+            )}
           </div>
 
           <div className="song-chat-thread" aria-live="polite">
@@ -2277,7 +2297,7 @@ export default function SongWorkbenchPage() {
           </div>
         </form>
 
-        {/* 右侧 62%：创作结果（上下分割，可拖动） */}
+        {/* 右侧：音乐生成与试听中心 */}
         <section className={`song-workbench-right ${mobileView === "results" ? "song-mobile-active" : "song-mobile-hidden"}`}>
           {/* 生成进度状态（明确进度，禁用重复提交） */}
           {generationProgress ? (
@@ -2292,6 +2312,15 @@ export default function SongWorkbenchPage() {
               <span>{generationError}</span>
             </div>
           ) : null}
+          <header className="song-studio-heading">
+            <div>
+              <h2>{isZh ? "音乐生成与试听中心" : "Music generation & preview"}</h2>
+              <p>{isZh ? "从创意到音乐，让灵感即时发声" : "From an idea to music, instantly"}</p>
+            </div>
+            <button className="secondary-button song-history-button" type="button" onClick={() => setDrawerType("more")}>
+              {isZh ? "历史记录" : "History"}
+            </button>
+          </header>
           <div className="song-right-studio">
             <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
           </div>
@@ -2314,6 +2343,14 @@ export default function SongWorkbenchPage() {
             <div className="song-drawer-body">
               {drawerType === "more" ? (
                 <div className="song-more-stack">
+                  <div className="song-more-section song-more-quick-actions">
+                    <h3 className="song-step-title">{isZh ? "工作台操作" : "Workbench actions"}</h3>
+                    <div className="song-drawer-action-row">
+                      <button className="secondary-button" type="button" onClick={() => setDrawerType("universe")}><Globe size={14} />{isZh ? "关联 Universe" : "Link Universe"}</button>
+                      <button className="secondary-button" type="button" onClick={() => void exportDeliveryPackage()} disabled={exportingPackage}><Package size={14} />{exportingPackage ? (isZh ? "打包中" : "Packing") : (isZh ? "交付工作包" : "Deliver")}</button>
+                      <a className="secondary-button song-suno-link" href="https://suno.com" target="_blank" rel="noopener noreferrer">Suno <ExternalLink size={13} /></a>
+                    </div>
+                  </div>
                   {/* 创作留痕 */}
                   <div className="song-more-section">
                     <h3 className="song-step-title">{isZh ? "创作留痕" : "Creation trace"}</h3>

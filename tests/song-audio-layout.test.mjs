@@ -28,6 +28,16 @@ test("audio candidates stay expanded while keeping generation available", () => 
   assert.doesNotMatch(component, /setOpen|setExpanded/);
 });
 
+test("song workbench follows the reference composition", () => {
+  assert.match(page, /song-reference-topbar/);
+  assert.match(page, /song-studio-heading/);
+  assert.match(component, /song-audio-hero-cover/);
+  assert.match(component, /song-audio-history-heading/);
+  assert.match(css, /body:has\(main\.song-workbench-v2\)[\s\S]*?\.kk-nav-vertical[\s\S]*?display:\s*none/);
+  assert.match(css, /\.song-shell-v2\s*\{[\s\S]*?grid-template-columns:\s*minmax\(360px,\s*32fr\)\s+minmax\(0,\s*68fr\)/);
+  assert.match(css, /\.song-audio-persistent-player\s*\{[\s\S]*?min-height:\s*286px/);
+});
+
 test("song results keep the style prompt full width and stack audio tracks", () => {
   assert.match(css, /\.song-right-lower\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s);
   assert.match(css, /\.song-style-card[^}]*width:\s*100%/s);

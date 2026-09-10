@@ -18,6 +18,7 @@ test("non-script workbench layout remains frozen; song workbench is an approved 
     .replace(/\n\.scriptShell[^{}]*\{[^}]*\}/g, '')
     .replace(/\n@media \(max-width: 1180px\) \{\n  \.scriptShell[\s\S]*?\n\}\n/g, '\n')
     .replace(/\n\/\* 两栏 shell：38% \/ 62%，满屏不限制窄宽 \*\/[\s\S]*?\n\.app-header \{/s, '\n.app-header {')
+    .replace(/\n\/\* Song workbench visual alignment:[\s\S]*$/s, '')
     .replace(/(\*\/\n)\n(@media \(max-width: 980px\))/g, '$1$2')
     .replace(/\n{3,}/g, '\n\n');
   for (const path of frozenFiles) {

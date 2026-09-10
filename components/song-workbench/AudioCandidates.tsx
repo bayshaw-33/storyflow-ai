@@ -124,11 +124,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, d
 
   return (
     <div className="dashboard-panel song-output-card song-audio-card">
-      <div className="song-output-card-head">
-        <div>
-          <span className="song-card-title">{isZh ? "音频候选" : "Audio candidates"}</span>
-          <small className="song-audio-subtitle">{isZh ? "选择模型与生成类型，版本会保留在这里试听" : "Choose a model and mode; versions stay here for preview"}</small>
-        </div>
+      <div className="song-output-card-head song-audio-generation-controls">
         <div className="song-audio-controls" style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end", flexWrap: "wrap", gap: 8, flex: "1 1 auto" }}>
           <label className="song-audio-model-selector" style={{ display: "grid", gap: 3, minWidth: 154, color: "var(--text-secondary)", fontSize: 10, fontWeight: 500 }}>
             <span>{isZh ? "音乐模型" : "Music model"}</span>
@@ -157,6 +153,48 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, d
         {isZh
           ? (musicMode === "sfx" ? "音效实验：会按动作、材质、空间、距离、冲击和尾音调整提示词；音乐模型生成结果可能带有旋律。" : musicMode === "instrumental" ? "纯音乐：后台 AI 会生成器乐提示词，提交时不会发送歌词。" : "人声歌曲：后台 AI 会保留歌词、人声段落和演唱方向。")
           : (musicMode === "sfx" ? "SFX experimental: prompts emphasize action, material, space, distance, impact, and decay; a music model may still add melody." : musicMode === "instrumental" ? "Instrumental: the AI writes an arrangement prompt and lyrics are not submitted." : "Vocal song: the AI keeps lyrics, vocal sections, and delivery direction.")}
+      </div>
+      <div className="song-audio-persistent-player" data-empty={!selectedCandidate?.resultUrl}>
+        <span className="song-audio-hero-cover" aria-hidden="true">
+          <Music2 size={34} strokeWidth={1.2} />
+          <strong>KIIKIS</strong>
+          <small>{selectedCandidate ? `CANDIDATE ${selectedCandidate.label}` : "SOUND FOR TOMORROW"}</small>
+        </span>
+        <div className="song-audio-player-info">
+          <strong>{selectedCandidate ? (isZh ? `候选 ${selectedCandidate.label}` : `Candidate ${selectedCandidate.label}`) : (isZh ? "尚未生成音频" : "No audio yet")}</strong>
+          <span>{selectedCandidate ? statusLabel(selectedCandidate.status, isZh) : (isZh ? "生成后将在此播放" : "Generate a track to play it here")}</span>
+        </div>
+        <div className="song-audio-player-timeline">
+          <div className="song-audio-waveform song-audio-hero-waveform" aria-hidden="true">
+            {WAVEFORM_BARS.concat(WAVEFORM_BARS).map((height, index) => <span className="song-audio-wave-bar" style={{ height: `${height}%` }} key={`hero-bar-${index}`} />)}
+          </div>
+          <div className="song-audio-progress"><span style={{ width: `${progress}%` }} /></div>
+          <div className="song-audio-time"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
+        </div>
+        <div className="song-audio-hero-controls">
+          <button className="song-audio-play-button" type="button" onClick={togglePlay} disabled={!selectedCandidate?.resultUrl} aria-label={isPlaying ? (isZh ? "暂停" : "Pause") : (isZh ? "播放" : "Play")}>
+            {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+          </button>
+          <button className="icon-button song-audio-volume" type="button" onClick={() => {
+            setIsMuted((current) => !current);
+            if (audioRef.current) audioRef.current.muted = !audioRef.current.muted;
+          }} aria-label={isMuted ? (isZh ? "打开声音" : "Unmute") : (isZh ? "静音" : "Mute")}>
+            {isMuted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+          </button>
+        </div>
+        <audio
+          ref={audioRef}
+          className="song-audio-native"
+          preload="metadata"
+          onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+          onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+        />
+      </div>
+      <div className="song-audio-history-heading">
+        <h3>{isZh ? "生成历史" : "Generation history"}<span>{candidates.length}</span></h3>
       </div>
       <div className="song-audio-panel-body" id="song-audio-candidates-panel">
         {!candidates.length ? (
@@ -199,35 +237,6 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, d
             })}
           </div>
         )}
-        <div className="song-audio-persistent-player" data-empty={!selectedCandidate?.resultUrl}>
-          <button className="song-audio-play-button" type="button" onClick={togglePlay} disabled={!selectedCandidate?.resultUrl} aria-label={isPlaying ? (isZh ? "暂停" : "Pause") : (isZh ? "播放" : "Play")}>
-            {isPlaying ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}
-          </button>
-          <div className="song-audio-player-info">
-            <strong>{selectedCandidate ? (isZh ? `候选 ${selectedCandidate.label}` : `Candidate ${selectedCandidate.label}`) : (isZh ? "尚未生成音频" : "No audio yet")}</strong>
-            <span>{selectedCandidate ? statusLabel(selectedCandidate.status, isZh) : (isZh ? "生成后将在此播放" : "Generate a track to play it here")}</span>
-          </div>
-          <div className="song-audio-player-timeline">
-            <div className="song-audio-progress"><span style={{ width: `${progress}%` }} /></div>
-            <div className="song-audio-time"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
-          </div>
-          <button className="icon-button song-audio-volume" type="button" onClick={() => {
-            setIsMuted((current) => !current);
-            if (audioRef.current) audioRef.current.muted = !audioRef.current.muted;
-          }} aria-label={isMuted ? (isZh ? "打开声音" : "Unmute") : (isZh ? "静音" : "Mute")}>
-            {isMuted ? <VolumeX size={17} /> : <Volume2 size={17} />}
-          </button>
-          <audio
-            ref={audioRef}
-            className="song-audio-native"
-            preload="metadata"
-            onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
-            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={() => setIsPlaying(false)}
-          />
-        </div>
       </div>
     </div>
   );
