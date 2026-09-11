@@ -855,14 +855,20 @@ export default function SongWorkbenchPage() {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(payload?.error || (isZh ? "音乐下载失败，请重试。" : "Music download failed. Please retry."));
       }
-      const payload = await response.json() as { downloadUrl?: string; error?: string };
+      const payload = await response.json() as { downloadUrl?: string; filename?: string; error?: string };
       if (!payload.downloadUrl) throw new Error(payload.error || (isZh ? "音乐下载链接无效，请重试。" : "The music download link is invalid. Please retry."));
+      const audioResponse = await fetch(payload.downloadUrl);
+      if (!audioResponse.ok) throw new Error(isZh ? "音乐文件读取失败，请重试。" : "The music file could not be read. Please retry.");
+      const audioBlob = await audioResponse.blob();
+      const objectUrl = URL.createObjectURL(audioBlob);
       const link = document.createElement("a");
-      link.href = payload.downloadUrl;
+      link.href = objectUrl;
+      link.download = payload.filename || "kiikis-music.mp3";
       link.rel = "noopener";
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (downloadError) {
       setGenerationError(downloadError instanceof Error ? downloadError.message : (isZh ? "音乐下载失败，请重试。" : "Music download failed. Please retry."));
     }
@@ -889,6 +895,23 @@ export default function SongWorkbenchPage() {
       setMusicModels(nextModels);
       setSelectedMusicModel((current) => nextModels.some((model) => model.id === current) ? current : DEFAULT_MUSIC_MODEL);
     }).catch(() => undefined);
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    if (!session?.access_token) {
+      setAudioCandidates([]);
+      return;
+    }
+    let active = true;
+    void fetch("/api/audio/jobs", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const payload = await response.json() as { jobs?: SongAudioCandidate[] };
+      if (!active || !payload.jobs?.length) return;
+      setAudioCandidates((current) => current.length ? current : payload.jobs || []);
+    }).catch(() => undefined);
+    return () => { active = false; };
   }, [session?.access_token]);
 
   useEffect(() => {

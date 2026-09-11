@@ -19,6 +19,18 @@ test("song audio download uses an authenticated same-origin handler instead of a
   assert.match(songPage, /payload\.downloadUrl/);
   assert.match(audioCandidates, /onDownload/);
   assert.doesNotMatch(audioCandidates, /href=\{candidate\.resultUrl\}\s+download/);
+  assert.match(songPage, /fetch\("\/api\/audio\/jobs"/);
+  assert.match(songPage, /setAudioCandidates\(\(current\) => current\.length \? current : payload\.jobs/);
+  assert.match(songPage, /URL\.createObjectURL/);
+  assert.match(songPage, /link\.download\s*=/);
+});
+
+test("audio jobs list endpoint returns the signed history for the authenticated owner", () => {
+  const jobsRoute = readFileSync("app/api/audio/jobs/route.ts", "utf8");
+  assert.match(jobsRoute, /export async function GET/);
+  assert.match(jobsRoute, /owner_id=eq\.\$\{encodeURIComponent\(user\.id\)\}/);
+  assert.match(jobsRoute, /createSignedUrl/);
+  assert.match(jobsRoute, /history|jobs/);
 });
 
 test("audio download route is owner-scoped and creates a fresh forced-download URL", () => {

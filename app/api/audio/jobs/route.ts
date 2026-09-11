@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest, getSupabaseServerClient, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { resolveAudioProvider } from "@/lib/audio/provider";
 import { classifyAudioProviderError, computeAudioIdempotencyHash, sanitizeAudioMetadata } from "@/lib/audio/jobs";
-import { persistAudioArtifact } from "@/lib/audio/storage";
+import { AUDIO_BUCKET, persistAudioArtifact } from "@/lib/audio/storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
 import { buildAudioUniverseBinding } from "@/lib/audio/universe-links";
 import type { AudioKind, AudioProviderName } from "@/lib/audio/types";
@@ -26,12 +26,47 @@ type JobRow = {
   result_metadata: Record<string, unknown>;
   target_type: string;
   target_id: string | null;
+  created_at?: string;
 };
 
 const TABLE = "/rest/v1/storyflow_generation_jobs";
 
 function response(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
+}
+
+export async function GET(request: NextRequest) {
+  let user;
+  try { user = await authenticateRequest(request); } catch { return response(401, { success: false, error: "请先登录。" }); }
+  const serverClient = getSupabaseServerClient();
+  if (!serverClient) return response(503, { success: false, error: "服务端音频存储未配置。", code: "MISSING_CONFIG" });
+
+  const rows = await serviceFetch<JobRow[]>(
+    `${TABLE}?owner_id=eq.${encodeURIComponent(user.id)}&job_type=eq.audio&select=id,owner_id,provider,model,input_params,status,error,storage_path,target_type,created_at&order=created_at.desc&limit=100`,
+  );
+  const musicJobs = (rows || []).filter((job) =>
+    (job.input_params?.kind === "music" || job.target_type === "song_version")
+    && ["queued", "reconciling", "generating", "result_ingesting", "completed", "failed", "provider_timeout"].includes(job.status),
+  );
+  const jobs = await Promise.all(musicJobs.map(async (job) => {
+    let resultUrl: string | null = null;
+    if (job.status === "completed" && job.storage_path) {
+      const signed = await serverClient.storage.from(AUDIO_BUCKET).createSignedUrl(job.storage_path, 60 * 60);
+      resultUrl = signed.data?.signedUrl || null;
+    }
+    return {
+      id: job.id,
+      label: job.input_params?.candidate === "B" ? "B" : "A",
+      jobId: job.id,
+      status: job.status,
+      resultUrl,
+      provider: job.provider,
+      model: job.model,
+      error: job.error,
+      createdAt: job.input_params?.submittedAt ? new Date(Number(job.input_params.submittedAt)).toISOString() : job.created_at || new Date().toISOString(),
+    };
+  }));
+  return response(200, { success: true, jobs });
 }
 
 export async function POST(request: NextRequest) {
