@@ -32,6 +32,7 @@ type AudioCandidatesProps = {
   isZh: boolean;
   onGenerate: () => void;
   onRetry?: (candidateId: string) => void;
+  onDownload: (candidate: SongAudioCandidate) => Promise<void>;
   documents: SongDocument[];
   selectedLyricsDocumentId: string | null;
   selectedStyleDocumentId: string | null;
@@ -68,7 +69,7 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange }: AudioCandidatesProps) {
+export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange }: AudioCandidatesProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -229,7 +230,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, d
                   </button>
                   <span className="song-audio-track-actions">
                     {canRetry && onRetry ? <button className="icon-button song-audio-retry" type="button" onClick={() => onRetry(candidate.id)} title={isZh ? "重试" : "Retry"} aria-label={isZh ? `重试候选 ${candidate.label}` : `Retry candidate ${candidate.label}`}><RotateCcw size={16} /></button> : null}
-                    {candidate.resultUrl ? <a className="icon-button song-audio-download" href={candidate.resultUrl} download title={isZh ? "下载" : "Download"} aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label}`}><Download size={16} /></a> : null}
+                    {candidate.resultUrl && candidate.jobId ? <button className="icon-button song-audio-download" type="button" onClick={() => void onDownload(candidate)} title={isZh ? "下载" : "Download"} aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label}`}><Download size={16} /></button> : null}
                   </span>
                   {canRetry && candidate.error ? <small className="field-note song-save-warning">{candidate.error}</small> : null}
                 </article>

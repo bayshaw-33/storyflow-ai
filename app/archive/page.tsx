@@ -94,7 +94,8 @@ export default function ArchivePage() {
 function ArchiveContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectId = searchParams.get("projectId") || "draft";
+  const archiveProjectId = searchParams.get("projectId");
+  const projectId = archiveProjectId || "draft";
   const [session, setSession] = useState<Session | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [state, setState] = useState<ProductionProjectState>(() =>
@@ -161,8 +162,10 @@ function ArchiveContent() {
     setArchivesLoading(true);
     setArchivesError(null);
     try {
-      const params = new URLSearchParams({ projectId });
-      const response = await fetch(`/api/exports?${params.toString()}`, {
+      const params = new URLSearchParams();
+      if (archiveProjectId) params.set("projectId", archiveProjectId);
+      const archiveUrl = params.size ? `/api/export-archives?${params.toString()}` : "/api/export-archives";
+      const response = await fetch(archiveUrl, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const payload = await response.json().catch(() => null);
@@ -173,10 +176,10 @@ function ArchiveContent() {
         ? payload.archives.map((raw: Record<string, unknown>) => ({
             id: String(raw.id || ""),
             projectId: raw.project_id ? String(raw.project_id) : null,
-            format: String(raw.format || ""),
-            fileName: String(raw.file_name || raw.filename || ""),
+            format: String(raw.format || raw.archive_schema_version || "archive"),
+            fileName: String(raw.file_name || raw.filename || (raw.archive_schema_version ? `创作档案 v${raw.archive_schema_version}` : "创作档案")),
             url: raw.url ? String(raw.url) : null,
-            size: raw.size != null ? Number(raw.size) : null,
+            size: raw.size != null ? Number(raw.size) : raw.file_size_bytes != null ? Number(raw.file_size_bytes) : null,
             createdAt: raw.created_at ? String(raw.created_at) : null,
           }))
         : [];
@@ -186,7 +189,7 @@ function ArchiveContent() {
     } finally {
       setArchivesLoading(false);
     }
-  }, [session, projectId]);
+  }, [session, archiveProjectId]);
 
   useEffect(() => {
     if (session) void loadArchives();

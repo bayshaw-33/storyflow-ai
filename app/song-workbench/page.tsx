@@ -844,6 +844,30 @@ export default function SongWorkbenchPage() {
     }
   }
 
+  async function downloadSongAudio(candidate: SongAudioCandidate) {
+    if (!session?.access_token || !candidate.jobId) return;
+    setGenerationError("");
+    try {
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}/download`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || (isZh ? "音乐下载失败，请重试。" : "Music download failed. Please retry."));
+      }
+      const payload = await response.json() as { downloadUrl?: string; error?: string };
+      if (!payload.downloadUrl) throw new Error(payload.error || (isZh ? "音乐下载链接无效，请重试。" : "The music download link is invalid. Please retry."));
+      const link = document.createElement("a");
+      link.href = payload.downloadUrl;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (downloadError) {
+      setGenerationError(downloadError instanceof Error ? downloadError.message : (isZh ? "音乐下载失败，请重试。" : "Music download failed. Please retry."));
+    }
+  }
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
@@ -2322,7 +2346,7 @@ export default function SongWorkbenchPage() {
             </button>
           </header>
           <div className="song-right-studio">
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
           </div>
         </section>
       </section>
