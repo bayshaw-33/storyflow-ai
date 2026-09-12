@@ -43,6 +43,15 @@ test("audio OpenAI adapter remains TTS-only and voice resolver recognizes new pr
   assert.doesNotMatch(openai, /music_generation/);
   assert.match(voiceTypes, /"minimax"/);
   assert.match(voiceTypes, /"gmi"/);
+  assert.match(voiceTypes, /"elevenlabs"/);
   assert.match(voiceProvider, /name === "minimax"/);
   assert.match(voiceProvider, /name === "gmi"/);
+  assert.match(voiceProvider, /name === "elevenlabs"/);
+});
+
+test("ElevenLabs audio adapter is available only for TTS", () => {
+  const elevenlabs = source("lib/audio/providers/elevenlabs.ts");
+  assert.match(elevenlabs, /provider: "elevenlabs"/);
+  assert.match(elevenlabs, /music: false/);
+  assert.match(elevenlabs, /submitTTS/);
 });

@@ -30,6 +30,10 @@ export async function resolveAudioProvider(
     const mod = await import("./providers/openai");
     return mod.createOpenAIAudioProvider();
   }
+  if (name === "elevenlabs") {
+    const mod = await import("./providers/elevenlabs");
+    return mod.createElevenLabsAudioProvider();
+  }
 
   const mod = await import("./providers/placeholder");
   return mod.createPlaceholderAudioProvider();
@@ -69,6 +73,14 @@ export function getAudioCapabilities(): AudioCapabilities[] {
       voiceClone: false,
       asyncJobs: false,
       models: [process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts"],
+    },
+    {
+      provider: "elevenlabs",
+      music: false,
+      tts: Boolean(process.env.ELEVENLABS_API_KEY),
+      voiceClone: Boolean(process.env.ELEVENLABS_API_KEY),
+      asyncJobs: false,
+      models: [process.env.ELEVENLABS_TTS_MODEL || "eleven_multilingual_v2"],
     },
   ];
 }

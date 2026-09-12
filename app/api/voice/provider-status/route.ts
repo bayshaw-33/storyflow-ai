@@ -15,5 +15,7 @@ export async function GET() {
     contractVersion: "2.2.0-alpha.1",
     available: isTTSProviderAvailable(),
     name,
+    voiceDirectoryAvailable: name === "elevenlabs" && isTTSProviderAvailable(),
+    voiceDirectoryProvider: name === "elevenlabs" ? "elevenlabs" : null,
   });
 }

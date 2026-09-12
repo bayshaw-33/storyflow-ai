@@ -70,6 +70,7 @@ export function VoiceWorkbench() {
           <VoiceLineEditor
             target={active}
             providerAvailable={providerAvailable}
+            providerName={providerName}
             onProviderCheck={handleProviderCheck}
           />
         </main>

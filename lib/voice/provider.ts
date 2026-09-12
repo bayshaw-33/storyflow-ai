@@ -61,6 +61,7 @@ export type TTSProvider = {
  * 解析当前配置的 TTS Provider。
  * - env TTS_PROVIDER 未设或为 'placeholder' 时返回 placeholder（不可用）
  * - env TTS_PROVIDER=openai 时返回 OpenAI TTS（V1.5 增量）
+ * - env TTS_PROVIDER=elevenlabs 时返回 ElevenLabs TTS（官方 REST API）
  *
  * 安全：本函数只在服务端调用，env 读取不进日志。
  */
@@ -70,6 +71,11 @@ export async function resolveTTSProvider(): Promise<TTSProvider> {
   if (name === "openai") {
     const mod = await import("./providers/openai");
     return mod.createOpenAITTSProvider();
+  }
+
+  if (name === "elevenlabs") {
+    const mod = await import("./providers/elevenlabs");
+    return mod.createElevenLabsTTSProvider();
   }
 
   // CosyVoice HTTP adapter（Phase 5 Task 5.4）：服务地址/凭证仅服务端环境变量
@@ -107,6 +113,9 @@ export function isTTSProviderAvailable(): boolean {
   if (name === "placeholder" || !name) return false;
   if (name === "openai") {
     return Boolean(process.env.OPENAI_API_KEY || process.env.OPENAI_TTS_API_KEY);
+  }
+  if (name === "elevenlabs") {
+    return Boolean(process.env.ELEVENLABS_API_KEY);
   }
   if (name === "cosyvoice") {
     return Boolean(process.env.COSYVOICE_BASE_URL);

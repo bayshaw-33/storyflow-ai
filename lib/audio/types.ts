@@ -1,6 +1,6 @@
 /** Shared server-side contract for music and speech generation. */
 
-export type AudioProviderName = "atlascloud" | "minimax" | "gmi" | "openai" | "placeholder";
+export type AudioProviderName = "atlascloud" | "minimax" | "gmi" | "openai" | "elevenlabs" | "placeholder";
 export type AudioKind = "music" | "tts";
 
 export type MusicSubmitInput = {

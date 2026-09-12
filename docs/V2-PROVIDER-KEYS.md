@@ -14,6 +14,10 @@
 | `OPENAI_API_KEY` 或 `OPENAI_TTS_API_KEY` | OpenAI TTS 认证（当 `TTS_PROVIDER=openai` 时必需） | https://platform.openai.com/api-keys |
 | `OPENAI_TTS_MODEL` | 可选，TTS 模型，默认 `tts-1` | — |
 | `OPENAI_BASE_URL` | 可选，OpenAI 端点，默认 `https://api.openai.com` | — |
+| `ELEVENLABS_API_KEY` | ElevenLabs 音色目录与 TTS 认证（当 `TTS_PROVIDER=elevenlabs` 时必需） | https://elevenlabs.io/app/settings/api-keys |
+| `ELEVENLABS_BASE_URL` | 可选，默认 `https://api.elevenlabs.io` | — |
+| `ELEVENLABS_TTS_MODEL` | 可选，默认 `eleven_multilingual_v2` | — |
+| `ELEVENLABS_OUTPUT_FORMAT` | 可选，默认 `mp3_44100_128` | — |
 
 **默认行为**：`TTS_PROVIDER` 未设置或为 `placeholder` 时，Voice Line 生成走 placeholder provider（返回错误提示），不实际调用 TTS。
 
