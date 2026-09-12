@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ChevronDown, Copy, ExternalLink, Globe, Languages, Loader2, MoreHorizontal, Package, Search, Send, Sparkles, X } from "lucide-react";
+import { Copy, ExternalLink, Globe, Languages, Loader2, MoreHorizontal, Package, Send, Sparkles, X } from "lucide-react";
 import { readByoApiConfig } from "@/lib/ai/byoClient";
 import { createProject, readProjectsFromStorage, upsertProject, type DramaProject } from "@/lib/projects";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -28,6 +27,8 @@ import JSZip from "jszip";
 import { AudioCandidates, type SongAudioCandidate } from "@/components/song-workbench/AudioCandidates";
 import { SongDocumentCard } from "@/components/song-workbench/SongDocumentCard";
 import { SongDocumentPreview } from "@/components/song-workbench/SongDocumentPreview";
+import { SongWorkbenchNav } from "@/components/song-workbench/SongWorkbenchNav";
+import { cloneSinger, defaultSingers, emptySingerDraft, normalizeSingerDraft, SONG_SINGER_HANDOFF_STORAGE_KEY, SONG_SINGER_LIBRARY_STORAGE_KEY, type SingerProfile, uniqueSingerProfiles } from "@/lib/song/singers";
 
 type SongProjectType =
   | "original_song"
@@ -60,19 +61,6 @@ type SongChatMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
-};
-
-type SingerProfile = {
-  id: string;
-  displayName: string;
-  gender: string;
-  genres: string[];
-  voiceTexture: string[];
-  delivery: string[];
-  language: string[];
-  safePromptTerms: string[];
-  forbiddenOutputTerms: string[];
-  notes: string;
 };
 
 type SongForm = {
@@ -251,86 +239,6 @@ const genreInstrumentPresets: Record<string, string[]> = {
   "Dark Pop": ["synth bass", "pads", "ambient textures"],
 };
 
-const defaultSingers: SingerProfile[] = [
-  {
-    id: "dry-sarcastic-male",
-    displayName: "Dry Sarcastic Male Vocal",
-    gender: "male",
-    genres: ["indie pop", "rock"],
-    voiceTexture: ["dry", "tired", "warm"],
-    delivery: ["sarcastic", "spoken-sung", "emotional"],
-    language: ["English"],
-    safePromptTerms: ["male indie pop vocal", "dry sarcastic delivery", "spoken-sung phrasing"],
-    forbiddenOutputTerms: [],
-    notes: "Good for Monday burnout, dark humor, and self-aware verses.",
-  },
-  {
-    id: "velvet-rnb-female",
-    displayName: "Velvet R&B Female Vocal",
-    gender: "female",
-    genres: ["R&B", "Soul", "Pop"],
-    voiceTexture: ["smooth", "warm", "airy"],
-    delivery: ["intimate delivery", "soft runs", "melodic hook"],
-    language: ["English", "Chinese"],
-    safePromptTerms: ["female smooth R&B vocal", "warm emotional delivery", "melodic hook phrasing"],
-    forbiddenOutputTerms: [],
-    notes: "Good for romantic, nocturnal, and intimate songs.",
-  },
-];
-
-function uniqueSingerProfiles(singers: SingerProfile[]) {
-  const seen = new Set<string>();
-  return singers.filter((singer) => {
-    const key = `${singer.displayName}|${singer.safePromptTerms.join("|")}`.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function cloneSinger(singer: SingerProfile) {
-  return {
-    ...singer,
-    genres: [...singer.genres],
-    voiceTexture: [...singer.voiceTexture],
-    delivery: [...singer.delivery],
-    language: [...singer.language],
-    safePromptTerms: [...singer.safePromptTerms],
-    forbiddenOutputTerms: [...singer.forbiddenOutputTerms],
-  };
-}
-
-function normalizeSingerDraft(singer: SingerProfile) {
-  const displayName = singer.displayName.trim();
-  return {
-    ...singer,
-    id: singer.id || `manual-${Date.now()}`,
-    displayName,
-    gender: singer.gender.trim() || "custom",
-    genres: singer.genres.filter(Boolean),
-    voiceTexture: singer.voiceTexture.filter(Boolean),
-    delivery: singer.delivery.filter(Boolean),
-    language: singer.language.filter(Boolean),
-    safePromptTerms: singer.safePromptTerms.filter(Boolean),
-    forbiddenOutputTerms: singer.forbiddenOutputTerms.filter(Boolean),
-    notes: singer.notes.trim(),
-  };
-}
-
-function formatSingerProfile(singer: SingerProfile) {
-  return [
-    `Name: ${singer.displayName}`,
-    `Gender: ${singer.gender}`,
-    `Language: ${singer.language.join(", ")}`,
-    `Genres: ${singer.genres.join(", ")}`,
-    `Voice texture: ${singer.voiceTexture.join(", ")}`,
-    `Delivery: ${singer.delivery.join(", ")}`,
-    `Safe prompt terms: ${singer.safePromptTerms.join(", ")}`,
-    `Reference / blocked terms: ${singer.forbiddenOutputTerms.join(", ")}`,
-    `Notes: ${singer.notes}`,
-  ].join("\n");
-}
-
 function normalizeStoredForm(value: SongForm) {
   const normalizedStructure = value.structure === ["Standard Su", "no song structure"].join("")
     ? "Standard song structure"
@@ -368,19 +276,6 @@ const initialForm: SongForm = {
   customInstrument: "",
   structure: "Not specified",
   lyricsMode: "enhanced_lyrics",
-};
-
-const emptySingerDraft: SingerProfile = {
-  id: "",
-  displayName: "",
-  gender: "custom",
-  genres: [],
-  voiceTexture: [],
-  delivery: [],
-  language: ["English"],
-  safePromptTerms: [],
-  forbiddenOutputTerms: [],
-  notes: "",
 };
 
 const i18n = {
@@ -567,6 +462,7 @@ export default function SongWorkbenchPage() {
   const text = i18n[locale];
   const [form, setForm] = useState<SongForm>(initialForm);
   const [singers, setSingers] = useState<SingerProfile[]>(defaultSingers);
+  const singerLibraryLoadedRef = useRef(false);
   const [lyrics, setLyrics] = useState("");
   const [stylePrompt, setStylePrompt] = useState("");
   const [compositionPrompt, setCompositionPrompt] = useState("");
@@ -956,7 +852,7 @@ export default function SongWorkbenchPage() {
         return;
       }
       const data = JSON.parse(stored);
-      if (data.form) setForm(normalizeStoredForm(data.form));
+      if (data.form) setForm(withSingerSelection(normalizeStoredForm(data.form), getSongSingerHandoffId(entry.singerId)));
       if (data.singers) setSingers(data.singers);
       if (data.lyrics) setLyrics(data.lyrics);
       if (data.stylePrompt || data.compositionPrompt) setStylePrompt(mergeMusicPrompt(data.stylePrompt || "", data.compositionPrompt || ""));
@@ -1041,6 +937,27 @@ export default function SongWorkbenchPage() {
   }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode]);
 
   useEffect(() => {
+    if (!singerLibraryLoadedRef.current) return;
+    window.localStorage.setItem(SONG_SINGER_LIBRARY_STORAGE_KEY, JSON.stringify(uniqueSingerProfiles(singers)));
+  }, [singers]);
+
+  useEffect(() => {
+    if (singerLibraryLoadedRef.current) return;
+    singerLibraryLoadedRef.current = true;
+    try {
+      const raw = window.localStorage.getItem(SONG_SINGER_LIBRARY_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed)) {
+        setSingers((current) => uniqueSingerProfiles([...(parsed as SingerProfile[]), ...current]));
+      } else {
+        window.localStorage.setItem(SONG_SINGER_LIBRARY_STORAGE_KEY, JSON.stringify(defaultSingers));
+      }
+    } catch {
+      window.localStorage.setItem(SONG_SINGER_LIBRARY_STORAGE_KEY, JSON.stringify(defaultSingers));
+    }
+  }, []);
+
+  useEffect(() => {
     if (songDevelopmentNotes.trim()) return;
     setChatMessages([createSongAssistantMessage(getSongOpeningMessage(isZh))]);
   }, [isZh, songDevelopmentNotes]);
@@ -1076,7 +993,7 @@ export default function SongWorkbenchPage() {
   }, [lyrics, translationLanguage, session?.access_token, isZh, selectedModelProvider, form.title]);
 
   function resetSongWorkbench() {
-    setForm(initialForm);
+    setForm(withSingerSelection(initialForm, getSongSingerHandoffId(getSongEntry().singerId)));
     setSingers(defaultSingers);
     setLyrics("");
     setStylePrompt("");
@@ -1111,7 +1028,7 @@ export default function SongWorkbenchPage() {
 
   function applySongProject(project: DramaProject) {
     const snapshot = songProjectToWorkbench(project);
-    setForm(snapshot.form);
+    setForm(withSingerSelection(snapshot.form, getSongSingerHandoffId(getSongEntry().singerId)));
     setLyrics(snapshot.lyrics);
     setStylePrompt(trimPromptBytes(snapshot.stylePrompt, MUSIC_PROMPT_MAX_BYTES));
     setCompositionPrompt(snapshot.compositionPrompt);
@@ -1205,7 +1122,7 @@ export default function SongWorkbenchPage() {
         setUniverseBundle(bundle);
       }
 
-      setSaveStatus(locale === "zh-CN" ? "歌曲工作台已刷新。" : "Song workbench refreshed.");
+      setSaveStatus(locale === "zh-CN" ? "音乐工作台已刷新。" : "Music workbench refreshed.");
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : locale === "zh-CN" ? "刷新失败。" : "Refresh failed.");
     } finally {
@@ -1914,7 +1831,7 @@ export default function SongWorkbenchPage() {
             song_role: linkForm.songRole,
             source_project_id: linkForm.sourceProjectId || null,
             inheritance_scope: inheritanceScope,
-            notes: isZh ? "从歌曲工作台建立关联" : "Linked from song workbench",
+            notes: isZh ? "从音乐工作台建立关联" : "Linked from music workbench",
           },
           { accessToken: session.access_token },
         );
@@ -2200,25 +2117,7 @@ export default function SongWorkbenchPage() {
 
   return (
     <main className="cosmic-page song-workbench-page song-workbench-v2">
-      <header className="song-reference-topbar">
-        <Link className="song-reference-brand" href="/song-workbench">KIIKIS AI 歌曲工作台</Link>
-        <nav className="song-reference-nav" aria-label={isZh ? "歌曲工作台导航" : "Song workbench navigation"}>
-          <Link className="active" href="/song-workbench">{isZh ? "创作" : "Create"}</Link>
-          <Link href="/archive">{isZh ? "我的作品" : "My works"}</Link>
-          <Link href="/voice-workbench">{isZh ? "音色库" : "Voices"}</Link>
-          <Link href="/templates">{isZh ? "工具箱" : "Toolkit"}</Link>
-        </nav>
-        <div className="song-reference-account">
-          <button className="song-reference-icon-button" type="button" aria-label={isZh ? "搜索" : "Search"} title={isZh ? "搜索" : "Search"}>
-            <Search size={19} />
-          </button>
-          <button className="song-reference-account-button" type="button" onClick={() => setDrawerType("more")} aria-label={isZh ? "打开账号菜单" : "Open account menu"}>
-            <span className="song-reference-avatar">K</span>
-            <span>KIIKIS</span>
-            <ChevronDown size={14} />
-          </button>
-        </div>
-      </header>
+      <SongWorkbenchNav active="create" onAccountClick={() => setDrawerType("more")} />
 
       <section className="song-utility-bar" aria-label={isZh ? "歌曲工具" : "Song tools"}>
         <div className="song-toolbar">
@@ -2329,7 +2228,7 @@ export default function SongWorkbenchPage() {
             <div className="song-chat-actions">
               <button className="primary-button" type="submit" disabled={!chatInput.trim() || chatGenerating}>
                 <Send size={15} />
-                {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "发送想法" : "Send idea")}
+                {chatGenerating ? (isZh ? "反馈中" : "Replying") : (isZh ? "聊一聊" : "Chat")}
               </button>
               <button
                 className="primary-button song-generate-from-chat-btn"
@@ -2338,7 +2237,7 @@ export default function SongWorkbenchPage() {
                 disabled={generating || chatGenerating}
               >
                 <Sparkles size={15} />
-                {generating ? text.generating : (isZh ? "生成/更新歌曲" : "Generate / Update song")}
+                {generating ? text.generating : (isZh ? "生成内容文档" : "Generate content")}
               </button>
             </div>
           </div>
@@ -2364,9 +2263,6 @@ export default function SongWorkbenchPage() {
               <h2>{isZh ? "音乐生成与试听中心" : "Music generation & preview"}</h2>
               <p>{isZh ? "从创意到音乐，让灵感即时发声" : "From an idea to music, instantly"}</p>
             </div>
-            <button className="secondary-button song-history-button" type="button" onClick={() => setDrawerType("more")}>
-              {isZh ? "历史记录" : "History"}
-            </button>
           </header>
           <div className="song-right-studio">
             <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
@@ -2918,13 +2814,26 @@ function songProjectToWorkbench(project: DramaProject) {
 }
 
 function getSongEntry() {
-  if (typeof window === "undefined") return { forceNew: false, projectId: "" };
+  if (typeof window === "undefined") return { forceNew: false, projectId: "", singerId: "" };
   const params = new URLSearchParams(window.location.search);
   const projectId = params.get("projectId") || "";
   return {
     forceNew: params.get("new") === "1",
     projectId,
+    singerId: params.get("singerId") || "",
   };
+}
+
+function getSongSingerHandoffId(explicitId = "") {
+  if (typeof window === "undefined") return explicitId;
+  const storedId = window.localStorage.getItem(SONG_SINGER_HANDOFF_STORAGE_KEY) || "";
+  if (storedId) window.localStorage.removeItem(SONG_SINGER_HANDOFF_STORAGE_KEY);
+  return explicitId || storedId;
+}
+
+function withSingerSelection(form: SongForm, singerId: string) {
+  if (!singerId || form.selectedSingerIds.includes(singerId)) return form;
+  return { ...form, selectedSingerIds: [...form.selectedSingerIds, singerId] };
 }
 
 function mergeSourceProjects(localProjects: DramaProject[], cloudProjects: DramaProject[]) {

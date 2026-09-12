@@ -525,7 +525,7 @@ function defaultSourceWorkbench(sourceType: PublicationSourceType, workType?: st
   if (sourceType === "actor") return "演员市场";
   if (sourceType === "asset") return "素材市场";
   if (workType === "script") return "剧本工作台";
-  if (workType === "song") return "歌曲工作台";
+  if (workType === "song") return "音乐工作台";
   if (workType === "art") return "美术工作台";
   if (workType === "storyboard") return "分镜工作台";
   if (workType === "video") return "视频工作台";

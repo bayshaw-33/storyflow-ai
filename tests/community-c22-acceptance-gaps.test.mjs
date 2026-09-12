@@ -85,7 +85,7 @@ test("COM20-CARD-004: Work context resolves the concrete workbench label", () =>
     source_id: "project-1",
     work_type: "song",
   });
-  assert.equal(context.sourceWorkbench, "歌曲工作台");
+  assert.equal(context.sourceWorkbench, "音乐工作台");
 });
 
 test("COM20-NAV-001: episode and scene publications link to the resolved Work", () => {

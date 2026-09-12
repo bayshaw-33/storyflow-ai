@@ -62,6 +62,8 @@ export async function GET(request: NextRequest) {
       resultUrl,
       provider: job.provider,
       model: job.model,
+      musicMode: job.input_params?.musicMode === "instrumental" || job.input_params?.musicMode === "sfx" ? job.input_params.musicMode : "vocal",
+      title: typeof job.input_params?.title === "string" ? job.input_params.title : "",
       error: job.error,
       createdAt: job.input_params?.submittedAt ? new Date(Number(job.input_params.submittedAt)).toISOString() : job.created_at || new Date().toISOString(),
     };
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest) {
   const effectiveProviderName = songWorkbenchMusic ? "atlascloud" : providerName;
   const requestedModel = typeof body.model === "string" && body.model ? body.model : null;
   if (songWorkbenchMusic && effectiveProviderName !== "atlascloud") {
-    return response(422, { success: false, error: "歌曲工作台仅支持 Atlas Cloud 音乐模型。", code: "INVALID_MUSIC_PROVIDER" });
+    return response(422, { success: false, error: "音乐工作台仅支持 Atlas Cloud 音乐模型。", code: "INVALID_MUSIC_PROVIDER" });
   }
   if (kind === "music" && effectiveProviderName === "atlascloud" && requestedModel && !isAtlasCloudMusicModel(requestedModel)) {
     return response(422, { success: false, error: "请选择 MiniMax Music 3.0 或 Suno V5。", code: "INVALID_MUSIC_MODEL" });

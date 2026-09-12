@@ -9233,6 +9233,10 @@ body:has(main.song-workbench-v2) .kk-nav-settings-corner {
   background: transparent;
   cursor: pointer;
 }
+.song-reference-account-link {
+  color: inherit;
+  text-decoration: none;
+}
 .song-reference-icon-button {
   display: grid;
   place-items: center;
@@ -9374,6 +9378,10 @@ body:has(main.song-workbench-v2) .kk-nav-settings-corner {
 }
 .song-chat-panel .song-chat-actions {
   margin-top: 10px;
+}
+.song-chat-panel .song-chat-actions .song-generate-from-chat-btn {
+  background: #5eead4;
+  color: #071313;
 }
 .song-workbench-right {
   height: 100%;
@@ -9571,6 +9579,155 @@ body:has(main.song-workbench-v2) .kk-nav-settings-corner {
 .song-audio-candidate .song-audio-player-main { gap: 2px; }
 .song-audio-candidate .song-audio-waveform { height: 20px; }
 .song-audio-candidate .song-audio-track-meta { display: none; }
+
+/* Music workbench companion pages. */
+.song-product-page {
+  min-height: 100dvh;
+  color: #f3f6f5;
+  background: #090d0e;
+}
+.song-product-content {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+.song-product-heading,
+.song-product-section-head,
+.song-voice-card-head,
+.song-tool-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.song-product-heading { margin-bottom: 30px; }
+.song-product-heading h1 { margin: 5px 0 8px; font-size: clamp(30px, 4vw, 48px); letter-spacing: -0.045em; }
+.song-product-heading p { margin: 0; color: #899596; font-size: 14px; }
+.song-product-kicker,
+.song-product-section-head > div > span {
+  color: #5eead4;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+.song-product-heading .primary-button,
+.song-voice-card-actions .primary-button { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.song-product-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px 150px auto;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+.song-product-filters input,
+.song-product-filters select,
+.song-voice-form input,
+.song-voice-form textarea,
+.song-prompt-checker textarea {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  color: #f3f6f5;
+  background: rgba(255,255,255,0.045);
+  font: inherit;
+}
+.song-product-filters input,
+.song-product-filters select,
+.song-voice-form input { min-height: 40px; padding: 0 12px; }
+.song-product-filters select { color-scheme: dark; }
+.song-product-section { margin-top: 24px; }
+.song-product-section-head { align-items: center; margin-bottom: 12px; }
+.song-product-section-head h2 { margin: 5px 0 0; font-size: 20px; }
+.song-product-section-head > strong { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 50%; color: #b8c4c3; background: rgba(255,255,255,0.1); font-size: 12px; }
+.song-project-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.song-project-card,
+.song-generated-row,
+.song-voice-card,
+.song-tool-card {
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(18,27,28,0.92), rgba(11,17,18,0.8));
+}
+.song-project-card { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 15px; }
+.song-project-card-art,
+.song-generated-icon,
+.song-voice-avatar { display: grid; place-items: center; color: #5eead4; background: rgba(94,234,212,0.09); }
+.song-project-card-art { width: 54px; height: 54px; border-radius: 9px; }
+.song-project-card-copy { min-width: 0; }
+.song-project-card-copy > span,
+.song-project-card-copy p,
+.song-generated-copy > span,
+.song-generated-copy > small,
+.song-voice-card-head > div > span { color: #849092; font-size: 12px; }
+.song-project-card-copy h3 { margin: 4px 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.song-project-card-copy p { margin: 0; }
+.song-generated-list { display: grid; gap: 8px; }
+.song-generated-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; }
+.song-generated-icon { width: 38px; height: 38px; border-radius: 8px; }
+.song-generated-copy { min-width: 0; display: grid; gap: 5px; }
+.song-generated-copy audio { width: min(100%, 460px); height: 30px; }
+.song-generated-actions { display: flex; align-items: center; }
+.song-product-empty,
+.song-product-empty-inline,
+.song-product-loading,
+.song-product-notice,
+.song-voice-library-summary { border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; background: rgba(255,255,255,0.04); }
+.song-product-empty { width: min(520px, calc(100% - 48px)); margin: 18vh auto 0; padding: 28px; text-align: center; }
+.song-product-empty h1 { margin: 0 0 8px; }
+.song-product-empty p { color: #9ba6a7; }
+.song-product-empty .primary-button { display: inline-flex; margin-top: 12px; text-decoration: none; }
+.song-product-loading { margin: 80px auto; width: min(520px, calc(100% - 48px)); padding: 24px; text-align: center; color: #9ba6a7; }
+.song-product-empty-inline { display: flex; align-items: center; gap: 8px; padding: 24px; color: #9ba6a7; }
+.song-product-notice { margin-bottom: 14px; padding: 12px 14px; color: #bff9ee; }
+.song-product-notice.error,
+.song-health-result.bad { color: #ff9d9d; }
+.song-product-notice.warning { color: #ffd18b; }
+.song-voice-library-summary { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 12px 14px; color: #9ba6a7; }
+.song-voice-library-summary svg { color: #5eead4; }
+.song-voice-library-summary strong { color: #f3f6f5; font-size: 18px; }
+.song-voice-library-summary a { margin-left: auto; color: #5eead4; font-size: 12px; text-decoration: none; }
+.song-voice-grid,
+.song-tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.song-voice-card,
+.song-tool-card { padding: 18px; }
+.song-voice-card-head { justify-content: flex-start; align-items: center; }
+.song-voice-avatar { width: 42px; height: 42px; border-radius: 10px; flex: 0 0 auto; }
+.song-voice-card h2,
+.song-tool-card h2 { margin: 0; font-size: 17px; }
+.song-voice-card-head h2 { margin-bottom: 4px; }
+.song-voice-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 12px; }
+.song-voice-tags span { padding: 4px 8px; border-radius: 99px; color: #b8e9e2; background: rgba(94,234,212,0.09); font-size: 11px; }
+.song-voice-card > p,
+.song-tool-card > p { min-height: 38px; margin: 0 0 18px; color: #9ba6a7; font-size: 13px; line-height: 1.55; }
+.song-voice-card-actions { display: flex; align-items: center; gap: 7px; }
+.song-voice-card-actions .primary-button { flex: 1; justify-content: center; }
+.song-voice-editor-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,0.7); }
+.song-voice-editor { width: min(620px, 100%); max-height: min(760px, 92vh); overflow: auto; padding: 22px; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; background: #101718; box-shadow: 0 24px 80px rgba(0,0,0,0.4); }
+.song-voice-editor > header,
+.song-voice-editor > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.song-voice-editor h2 { margin: 5px 0 0; }
+.song-voice-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 22px 0; }
+.song-voice-form label { display: grid; gap: 6px; color: #aab5b5; font-size: 12px; }
+.song-voice-form label:last-child { grid-column: 1 / -1; }
+.song-voice-form textarea { padding: 10px 12px; resize: vertical; }
+.song-voice-editor > footer { justify-content: flex-end; }
+.song-tool-card-head { margin-bottom: 18px; }
+.song-tool-card-head > svg { color: #5eead4; }
+.song-prompt-checker textarea { min-height: 170px; padding: 12px; resize: vertical; line-height: 1.55; }
+.song-prompt-meter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 14px; color: #9ba6a7; font-size: 12px; }
+.song-prompt-meter strong { color: #5eead4; }
+.song-prompt-meter[data-valid="false"] strong { color: #ff9d9d; }
+.song-tool-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.song-tool-actions .secondary-button { display: inline-flex; align-items: center; gap: 6px; }
+.song-template-list { display: grid; gap: 10px; }
+.song-template-list article { padding: 12px; border: 1px solid rgba(255,255,255,0.09); border-radius: 9px; background: rgba(255,255,255,0.03); }
+.song-template-list article > div { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.song-template-list h3 { margin: 0; font-size: 14px; }
+.song-template-list p { margin: 4px 0 0; color: #899596; font-size: 12px; }
+.song-template-list pre { margin: 12px 0 0; overflow: auto; white-space: pre-wrap; color: #b5c5c4; font: 11px/1.55 var(--font-mono); }
+.song-health-card { grid-column: 1 / -1; }
+.song-health-card .primary-button { display: inline-flex; align-items: center; gap: 7px; }
+.song-health-result { margin-top: 14px; padding: 10px 12px; border-radius: 8px; color: #bff9ee; background: rgba(94,234,212,0.07); font-size: 12px; line-height: 1.5; }
+.song-health-result.neutral { color: #c7d1d0; }
 @media (max-width: 1199px) and (min-width: 768px) {
   .song-shell-v2 { grid-template-columns: minmax(320px, 34fr) minmax(0, 66fr); }
   .song-reference-topbar { gap: 18px; }
@@ -9596,4 +9753,21 @@ body:has(main.song-workbench-v2) .kk-nav-settings-corner {
   .song-audio-persistent-player .song-audio-player-info { grid-column: 1 / -1; }
   .song-audio-persistent-player .song-audio-player-timeline { grid-column: 1 / -1; }
   .song-audio-hero-controls { grid-column: 1 / -1; }
+  .song-product-content { width: min(100% - 28px, 620px); padding-top: 28px; }
+  .song-product-heading { flex-direction: column; }
+  .song-product-heading .primary-button { align-self: flex-start; }
+  .song-product-filters,
+  .song-project-grid,
+  .song-voice-grid,
+  .song-tool-grid { grid-template-columns: 1fr; }
+  .song-product-filters input,
+  .song-product-filters select,
+  .song-product-filters button { width: 100%; }
+  .song-project-card { grid-template-columns: 44px minmax(0, 1fr); }
+  .song-project-card .secondary-button { grid-column: 1 / -1; justify-content: center; }
+  .song-generated-row { grid-template-columns: 34px minmax(0, 1fr); }
+  .song-generated-actions { grid-column: 2; }
+  .song-voice-form { grid-template-columns: 1fr; }
+  .song-voice-form label:last-child { grid-column: auto; }
+  .song-health-card { grid-column: auto; }
 }

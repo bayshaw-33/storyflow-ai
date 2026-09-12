@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将歌曲工作台统一命名为“音乐工作台”，把顶部三个入口改造成真正可用的歌曲作品库、歌曲音色设定库和歌曲工具箱，并消除重复操作入口。
+**Goal:** 将用户界面统一命名为“音乐工作台”，把顶部三个入口改造成真正可用的歌曲作品库、歌曲音色设定库和歌曲工具箱，并消除重复操作入口。
 
 **Architecture:** 保留现有 `/song-workbench`、Atlas Cloud 音频任务和签名下载协议；新增歌曲专用页面组件，通过既有 project-library、audio jobs 和歌曲文档工具提供数据与操作。歌曲音色设定使用独立的浏览器持久化库，并兼容迁移音乐工作台现有草稿中的 singers 数据，不引入 TTS 或新的 Provider。
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 产品名称统一为“音乐工作台”；代码路由 `/song-workbench` 保持不变以兼容已有链接。
-- “我的作品”只展示歌曲工作台的歌曲、纯音乐和音效结果。
+- “我的作品”只展示音乐工作台的歌曲、纯音乐和音效结果。
 - “音色库”只管理歌曲人声设定，不接入 TTS 或语音克隆。
 - 纯音乐和音效请求不发送歌词，也不发送歌曲人声设定。
 - Suno V6 曲风提示词必须保持在 1000 UTF-8 bytes 以内。
@@ -324,4 +324,3 @@ Expected: GitHub `main` advances to the verified commit and Vercel reports a suc
 - [ ] **Step 6: Record final evidence**
 
 Capture the final commit SHA, test counts, build result, production URLs, and any non-blocking environmental warnings. Do not report completion without fresh command output and production checks.
-

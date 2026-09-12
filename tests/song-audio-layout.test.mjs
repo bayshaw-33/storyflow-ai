@@ -4,6 +4,7 @@ import test from "node:test";
 
 const page = readFileSync("app/song-workbench/page.tsx", "utf8");
 const component = readFileSync("components/song-workbench/AudioCandidates.tsx", "utf8");
+const nav = readFileSync("components/song-workbench/SongWorkbenchNav.tsx", "utf8");
 const css = readFileSync("app/globals.css", "utf8");
 
 test("audio candidates occupy the redesigned right-side studio without overlaying documents", () => {
@@ -29,7 +30,7 @@ test("audio candidates stay expanded while keeping generation available", () => 
 });
 
 test("song workbench follows the reference composition", () => {
-  assert.match(page, /song-reference-topbar/);
+  assert.match(nav, /song-reference-topbar/);
   assert.match(page, /song-studio-heading/);
   assert.match(component, /song-audio-hero-cover/);
   assert.match(component, /song-audio-history-heading/);

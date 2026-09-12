@@ -852,18 +852,18 @@ function songModePrompt(input = "") {
   }
   if (mode === "instrumental") {
     return [
-      "【歌曲工作台模式：纯音乐】",
+      "【音乐工作台模式：纯音乐】",
       "只输出 ---MUSIC_PROMPT---。绝对禁止歌词、人声、vocal、spoken word、rap、chant、choir、呼吸声、哼唱、采样人声、随机 vocal texture 或任何可辨识的人声层；提示词必须明确 instrumental only / no vocals，并聚焦器乐、编曲、动态、质感、空间和干净收尾。",
     ].join("\n");
   }
   if (mode === "sfx") {
     return [
-      "【歌曲工作台模式：音效】",
+      "【音乐工作台模式：音效】",
       "只输出 ---SFX_DESCRIPTION---。不得写歌词或任何人声内容；描述动作、材质、空间、距离、冲击、运动、尾音、时长和是否循环，并注明这是实验性音乐模型音效生成描述。",
     ].join("\n");
   }
   return [
-    "【歌曲工作台模式：人声歌曲】",
+    "【音乐工作台模式：人声歌曲】",
     "输出完整原创歌词和一个精炼的 Suno V6 style 提示词；歌词有清晰段落与可记忆副歌，提示词不要堆标签。",
   ].join("\n");
 }

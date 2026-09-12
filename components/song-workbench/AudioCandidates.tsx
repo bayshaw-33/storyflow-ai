@@ -141,7 +141,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
             ] as const).map(([value, label]) => <button className="song-audio-mode-button" style={{ minHeight: 32, padding: "0 9px", border: 0, borderRadius: 7, color: musicMode === value ? "#071313" : "var(--text-secondary)", background: musicMode === value ? "#5eead4" : "transparent", fontSize: 11, cursor: "pointer" }} data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
           </div>
           <button className="primary-button" type="button" onClick={onGenerate} disabled={busy || !hasSelectedContent}>
-            {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成 2 首" : "Generate 2 tracks")}
+            {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成音频候选" : "Generate audio candidates")}
           </button>
         </div>
       </div>

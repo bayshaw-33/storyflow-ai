@@ -8,14 +8,14 @@ const component = existsSync("components/song-workbench/AudioCandidates.tsx") ? 
 test("song workbench exposes first-party audio generation", () => {
   assert.match(page, /AudioCandidates/);
   assert.match(page, /api\/audio\/jobs/);
-  assert.match(component, /生成 2 首|Generate 2 tracks/);
+  assert.match(component, /生成音频候选|Generate audio candidates/);
 });
 
 test("song audio candidates support playback and job stages", () => {
   assert.match(component, /<audio/);
   assert.match(component, /resultUrl/);
   assert.match(component, /result_ingesting/);
-  assert.match(component, /生成 2 首|Generate 2 tracks/);
+  assert.match(component, /生成音频候选|Generate audio candidates/);
 });
 
 test("one generation action submits two independently tracked song candidates", () => {
@@ -23,7 +23,7 @@ test("one generation action submits two independently tracked song candidates", 
   assert.match(page, /api\/audio\/jobs\/batch/);
   assert.match(page, /candidates:\s*\[/);
   assert.match(page, /requestKey/);
-  assert.match(component, /生成 2 首|Generate 2 tracks/);
+  assert.match(component, /生成音频候选|Generate audio candidates/);
 });
 
 test("song candidates render as compact music players", () => {
