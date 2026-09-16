@@ -240,7 +240,7 @@ export function ScriptInputPanel({
               <input
                 id={fileInputId}
                 type="file"
-                accept=".txt,.md,.doc,.docx,.pdf,.html"
+                accept=".txt,.md,.json,.csv,.doc,.docx,.pdf,.html,.htm,.xlsx"
                 onChange={handleFile}
                 style={{ display: "none" }}
               />

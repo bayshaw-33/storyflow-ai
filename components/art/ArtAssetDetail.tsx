@@ -22,15 +22,16 @@ export default function ArtAssetDetail() {
   const ctxProjectId = searchParams.get("projectId") || "";
   const ctxSourceUnitId = searchParams.get("sourceUnitId") || "";
   const ctxWorkId = searchParams.get("workId") || "";
+  const standaloneDraftId = searchParams.get("draftId") || "";
   const ctxSetup = searchParams.get("setup") === "1";
   const [session, setSession] = useState<Session | null>(null);
   const embeddedStorageKey = ctxWorkId
     ? resolveArtDraftKey({ userId: session?.user.id, projectId: ctxProjectId, workId: ctxWorkId })
     : null;
-  const storageKey = embeddedStorageKey || (ctxWorkId ? null : getArtWorkbenchStorageKey(ctxProjectId || undefined, ctxSourceUnitId || undefined));
+  const storageKey = embeddedStorageKey || (ctxWorkId ? null : getArtWorkbenchStorageKey(ctxProjectId || standaloneDraftId || undefined, ctxSourceUnitId || undefined));
   const backToArtHref = ctxProjectId && ctxSourceUnitId
     ? `/production?projectId=${encodeURIComponent(ctxProjectId)}&sourceUnitId=${encodeURIComponent(ctxSourceUnitId)}&mode=art`
-    : `/art-workbench${ctxSetup ? "?setup=1" : ""}`;
+    : standaloneDraftId ? `/art-workbench?draftId=${encodeURIComponent(standaloneDraftId)}` : `/art-workbench${ctxSetup ? "?setup=1" : ""}`;
   const [state, setState] = useState<ArtWorkbenchState | null>(null);
   const [asset, setAsset] = useState<ArtAsset | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");

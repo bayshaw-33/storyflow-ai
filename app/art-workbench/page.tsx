@@ -45,7 +45,8 @@ function ArtWorkbenchRedirect() {
     };
   }, [projectId, router, unitId, workId, retryToken]);
 
-  if (entry.kind === "standalone") return <ArtWorkbench />;
+  const standaloneDraftId = searchParams.get("draftId") || undefined;
+  if (entry.kind === "standalone") return standaloneDraftId ? <ArtWorkbench standaloneDraftId={standaloneDraftId} /> : <ArtWorkbench />;
   if (failed) return <LegacyEntryNotice kind="failed" projectId={projectId} message={reason} onRetry={retry} />;
   return <main className="cosmic-page" aria-busy="true" />;
 }

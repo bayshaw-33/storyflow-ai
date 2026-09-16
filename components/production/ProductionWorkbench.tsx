@@ -58,7 +58,6 @@ import {
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } from "@/lib/storyboard/draft";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { createProductionId } from "@/lib/production/state";
 import { isScopeActionable, isCloudActionable } from "@/lib/production/scope";
 
 import type { ProductionSourceFile } from "@/lib/production/types";
@@ -1233,24 +1232,23 @@ export function ProductionWorkbench() {
   // 文件上传（剧本输入）
   // -------------------------------------------------------------------
 
-  function handleFileUpload(file: File) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || "");
-      const sourceFile: ProductionSourceFile = {
-        id: createProductionId("source"),
-        name: file.name,
-        mimeType: file.type || "text/plain",
-        size: file.size,
-        textPreview: text.slice(0, 500),
-        extractedText: text,
-        uploadedAt: new Date().toISOString(),
-      };
+  async function handleFileUpload(file: File) {
+    setAnalyzeError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetchWithAuthRetry("/api/production/source-file", { method: "POST", body: formData });
+      const payload = await response.json().catch(() => null) as { success?: boolean; sourceFile?: ProductionSourceFile; error?: string } | null;
+      if (!response.ok || !payload?.success || !payload.sourceFile?.extractedText?.trim()) {
+        throw new Error(payload?.error || `无法解析文件《${file.name}》（HTTP ${response.status}）。`);
+      }
+      const sourceFile = payload.sourceFile;
       setSourceFiles((current) => [sourceFile, ...current]);
-      setManuscript((current) => [text, current].filter(Boolean).join("\n\n"));
-      setNotice(`已读取资料《${file.name}》，可点击「分析剧本」。`);
-    };
-    reader.readAsText(file);
+      setManuscript((current) => [sourceFile.extractedText, current].filter(Boolean).join("\n\n"));
+      setNotice(`已解析资料《${file.name}》，可点击「分析剧本」。`);
+    } catch (error) {
+      setAnalyzeError(error instanceof Error ? error.message : `文件《${file.name}》解析失败，请重试。`);
+    }
   }
 
   // -------------------------------------------------------------------
@@ -1728,19 +1726,32 @@ export function ProductionWorkbench() {
             ) : null}
             {activeStage === "storyboard" ? (
               workId ? (
-                <UnifiedStoryboardStage
-                  projectId={projectId}
-                  workId={workId}
-                  unitId={unitId || null}
-                  subview={storyboardSubview}
-                  onSubviewChange={handleStoryboardSubviewChange}
-                  handoffId={handoffId || null}
-                  previsShots={previsShots}
-                  previsAssets={assets}
-                  storyboardClient={storyboardClient}
-                  storyboardRevision={revision}
-                  onPrevisAdopted={handlePrevisAdopted}
-                  content={{
+                <>
+                  <ScriptInputPanel
+                    projectId={projectId}
+                    sourceUnitId={sourceUnitId}
+                    projectTitle={projectTitle}
+                    manuscript={manuscript}
+                    sourceFiles={sourceFiles}
+                    analyzing={analyzing}
+                    analyzeError={analyzeError}
+                    onUploadFile={(file) => void handleFileUpload(file)}
+                    onAnalyze={() => void analyzeScript("full")}
+                    onClearAnalyzeError={() => setAnalyzeError("")}
+                  />
+                  <UnifiedStoryboardStage
+                    projectId={projectId}
+                    workId={workId}
+                    unitId={unitId || null}
+                    subview={storyboardSubview}
+                    onSubviewChange={handleStoryboardSubviewChange}
+                    handoffId={handoffId || null}
+                    previsShots={previsShots}
+                    previsAssets={assets}
+                    storyboardClient={storyboardClient}
+                    storyboardRevision={revision}
+                    onPrevisAdopted={handlePrevisAdopted}
+                    content={{
                     shot_table: (
                       <StoryboardTablePanel
                         scenes={scenes}
@@ -1773,8 +1784,9 @@ export function ProductionWorkbench() {
                       />
                     ),
                     prompts: <StoryboardPromptList scenes={scenes} prompts={prompts} onGenerate={() => void generatePromptsForShots(scenes.flatMap((scene) => scene.shots.map((shot) => shot.id ?? shot.clientId ?? "")))} />,
-                  }}
-                />
+                    }}
+                  />
+                </>
               ) : (
                 <section className={styles.stageEmpty}>
                   <h2>分镜工作流尚未启动</h2>

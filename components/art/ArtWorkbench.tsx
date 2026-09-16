@@ -87,9 +87,11 @@ type ArtWorkbenchProps = {
   contextSourceUnitId?: string;
   /** Task 6：嵌入美术台必须绑定到明确的 stage Work */
   contextWorkId?: string;
+  /** 独立美术台的本地草稿作用域；避免详情页回读账号级旧缓存 */
+  standaloneDraftId?: string;
 };
 
-export default function ArtWorkbench({ contextProjectId, contextProjectTitle, contextSourceUnitId, contextWorkId }: ArtWorkbenchProps = {}) {
+export default function ArtWorkbench({ contextProjectId, contextProjectTitle, contextSourceUnitId, contextWorkId, standaloneDraftId: standaloneDraftIdProp }: ArtWorkbenchProps = {}) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
@@ -106,14 +108,28 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   const [archiveIndex, setArchiveIndex] = useState<ArtWorkbenchArchiveIndex>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
+  const [standaloneDraftId, setStandaloneDraftId] = useState<string | null>(standaloneDraftIdProp || null);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const isEmbedded = Boolean(contextProjectId || contextWorkId);
   const embeddedStorageKey = isEmbedded
     ? resolveArtDraftKey({ userId: session?.user.id, projectId: contextProjectId, workId: contextWorkId })
     : null;
-  const storageKey = embeddedStorageKey || getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId);
+  const storageKey = embeddedStorageKey || getArtWorkbenchStorageKey(contextProjectId || standaloneDraftId || undefined, contextSourceUnitId);
   const storageReady = !isEmbedded || Boolean(embeddedStorageKey);
+
+  function setStandaloneDraftScope(draftId: string) {
+    if (isEmbedded) return;
+    setStandaloneDraftId(draftId);
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("draftId", draftId);
+        url.searchParams.delete("setup");
+        window.history.replaceState(null, "", url.toString());
+      } catch { /* URL 更新失败不阻塞新草稿创建 */ }
+    }
+  }
 
   useEffect(() => {
     setIsHydrated(false);
@@ -154,6 +170,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
           }
         }
       } catch { /* 归档失败不阻塞新草稿创建 */ }
+      setStandaloneDraftScope(newState.id);
       setState(newState);
       setMessages([{ id: crypto.randomUUID(), role: "assistant", content: welcomeMessage }]);
     };
@@ -273,6 +290,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     if (!project) return;
     const patch = artStateFromProject(project);
     patchState(patch);
+    if (!isEmbedded) setStandaloneDraftScope(project.id);
     // 嵌入模式（制作工作台美术 Tab）：同步更新 URL 的 projectId，
     // 让父组件 ProductionWorkbench 在下次刷新时能感知到 art 关联的项目切换。
     if (isEmbedded && typeof window !== "undefined") {
@@ -316,6 +334,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     } else {
       setNotice("当前未登录，项目只保存在这台设备。登录后可创建团队云端项目。");
     }
+    setStandaloneDraftScope(next.id);
     setState(next);
     setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已新建《${name.trim()}》美术项目。${session ? "项目已保存到云端。" : "当前为本地草稿。"}${archiveId ? " 之前的草稿已自动归档。" : ""}` }]);
   }
@@ -359,9 +378,9 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       for (const file of files) {
         const form = new FormData();
         form.append("file", file);
-        const response = await fetch("/api/files/parse", { method: "POST", body: form });
+        const response = await fetchWithAuthRetry("/api/files/parse", { method: "POST", body: form });
         const payload = await response.json() as { success?: boolean; text?: string; fileName?: string; error?: string };
-        if (!response.ok || !payload.text) throw new Error(payload.error || `无法解析 ${file.name}`);
+        if (!response.ok || !payload.success || !payload.text?.trim()) throw new Error(payload.error || `无法解析 ${file.name}（HTTP ${response.status}）`);
         const entry = { id: crypto.randomUUID(), name: payload.fileName || file.name, text: payload.text, addedAt: new Date().toISOString() };
         added.push(entry);
         sourceText = [sourceText, `【${entry.name}】\n${entry.text}`].filter(Boolean).join("\n\n");
@@ -467,7 +486,12 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
 
   function addAsset() {
     const asset = createArtAsset(selectedKind);
-    patchState({ assets: [asset, ...state.assets], selectedAssetId: asset.id });
+    const nextState = { ...state, assets: [asset, ...state.assets], selectedAssetId: asset.id, updatedAt: new Date().toISOString() };
+    setState(nextState);
+    // 点击卡片前先同步一次，避免详情页导航快于 React 自动保存而读不到新资产。
+    if (isHydrated && canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey })) {
+      try { localStorage.setItem(storageKey, JSON.stringify(nextState)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
+    }
   }
 
   function deleteAsset(assetId: string) {
@@ -514,7 +538,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         <section className={styles.repository}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.repoActions}><button type="button" className={styles.extractButton} onClick={extractAssets} disabled={busy === "extract" || !state.sourceText.trim()} title={!state.sourceText.trim() ? "请先关联项目或上传资料" : "AI 自动拆解角色、场景、道具"}>{busy === "extract" ? <LoaderCircle className={styles.spin} size={16} /> : <Sparkles size={16} />}{busy === "extract" ? "拆解中..." : "自动拆解"}</button><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div></div>
           <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} scopeWorkId={contextWorkId} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} scopeWorkId={contextWorkId} standaloneDraftId={isEmbedded ? undefined : standaloneDraftId || undefined} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -530,7 +554,7 @@ function mergeArtProjects(localProjects: DramaProject[], cloudProjects: DramaPro
   return Array.from(projects.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId, scopeWorkId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string; scopeWorkId?: string }) {
+function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId, scopeWorkId, standaloneDraftId }: { asset: ArtAsset; onDelete?: (id: string) => void; isZh?: boolean; scopeProjectId?: string; scopeSourceUnitId?: string; scopeWorkId?: string; standaloneDraftId?: string }) {
   const image = useMemo(() => {
     // 优先使用已设为终稿的版本图；否则取最新生成的版本图
     const masterVariant = asset.variants?.find((item) => item.type === "master");
@@ -548,8 +572,12 @@ function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId, s
       const params = new URLSearchParams({ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId, workId: scopeWorkId });
       return `${path}?${params.toString()}`;
     }
+    if (standaloneDraftId) {
+      const params = new URLSearchParams({ draftId: standaloneDraftId });
+      return `${path}?${params.toString()}`;
+    }
     return path;
-  }, [asset.id, scopeProjectId, scopeSourceUnitId, scopeWorkId]);
+  }, [asset.id, scopeProjectId, scopeSourceUnitId, scopeWorkId, standaloneDraftId]);
   const cardContent = (
     <>
       <div className={styles.assetImage}>{image ? <img src={image} alt={asset.name} /> : <ImagePlus size={28} />}</div>

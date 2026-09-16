@@ -345,6 +345,7 @@ function StandaloneStoryboardWorkbenchPage() {
   const [universeBusy, setUniverseBusy] = useState(false);
   const [universeStatus, setUniverseStatus] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState("");
+  const [uploadError, setUploadError] = useState("");
   const [savingProject, setSavingProject] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [conceptBusy, setConceptBusy] = useState<"character" | "scene" | "">("");
@@ -580,38 +581,44 @@ function StandaloneStoryboardWorkbenchPage() {
     if (!file) return;
 
     setUploadedFileName(file.name);
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await fetch("/api/files/parse", { method: "POST", body: formData });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.success) {
-      updateState("script", state.script || `${isZh ? "文件解析失败" : "File parse failed"}: ${file.name}`);
-      return;
-    }
-
-    const text = String(payload.text || "");
-    let nextScript = text;
-    let nextScenes: Scene[] | null = null;
-    let nextTitle = state.projectTitle;
-
-    if (/\.json$/i.test(file.name)) {
-      try {
-        const parsed = JSON.parse(text) as Partial<StoryboardState>;
-        nextScript = typeof parsed.script === "string" ? parsed.script : text;
-        nextTitle = typeof parsed.projectTitle === "string" ? parsed.projectTitle : nextTitle;
-        nextScenes = coerceImportedScenes(parsed.scenes);
-      } catch {
-        nextScript = text;
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetchWithAuthRetry("/api/files/parse", { method: "POST", body: formData });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success || !String(payload.text || "").trim()) {
+        throw new Error(payload?.error || `${isZh ? "文件解析失败" : "File parse failed"}（HTTP ${response.status}）`);
       }
-    }
 
-    setState((current) => ({
-      ...current,
-      projectTitle: nextTitle || current.projectTitle,
-      script: nextScript,
-      scenes: nextScenes || current.scenes,
-    }));
-    if (nextScenes?.[0]) setSelectedSceneId(nextScenes[0].id);
+      const text = String(payload.text || "");
+      let nextScript = text;
+      let nextScenes: Scene[] | null = null;
+      let nextTitle = state.projectTitle;
+
+      if (/\.json$/i.test(file.name)) {
+        try {
+          const parsed = JSON.parse(text) as Partial<StoryboardState>;
+          nextScript = typeof parsed.script === "string" ? parsed.script : text;
+          nextTitle = typeof parsed.projectTitle === "string" ? parsed.projectTitle : nextTitle;
+          nextScenes = coerceImportedScenes(parsed.scenes);
+        } catch {
+          nextScript = text;
+        }
+      }
+
+      setState((current) => ({
+        ...current,
+        projectTitle: nextTitle || current.projectTitle,
+        script: nextScript,
+        scenes: nextScenes || current.scenes,
+      }));
+      if (nextScenes?.[0]) setSelectedSceneId(nextScenes[0].id);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : (isZh ? "文件解析失败，请重试。" : "File parsing failed. Please try again."));
+    } finally {
+      event.target.value = "";
+    }
   }
 
   function buildStoryboardPackage(universeId = selectedUniverseId || null): CreativePackage {
@@ -870,6 +877,7 @@ function StandaloneStoryboardWorkbenchPage() {
             <span>{isZh ? "上传剧本文件" : "Upload script file"}</span>
             <small>{uploadedFileName || (isZh ? "支持 Word、Excel、PDF、HTML、TXT、Markdown、JSON" : "Word, Excel, PDF, HTML, TXT, Markdown, JSON supported")}</small>
           </label>
+          {uploadError ? <p role="alert" className="field-note" style={{ color: "#f87171", marginTop: -8 }}>{uploadError}</p> : null}
           <div className="studio-source-import">
             <strong>{isZh ? "从 Universe / 项目调用剧本" : "Import script from Universe / project"}</strong>
             <label className="studio-field">
