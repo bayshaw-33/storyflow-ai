@@ -151,7 +151,7 @@ export function createAtlasCloudAudioProvider(): AudioProvider {
     tts: false,
     voiceClone: false,
     asyncJobs: true,
-    models: ["minimax/music-3.0", "suno/chirp-v5"],
+    models: ["minimax/music-3.0", "suno/chirp-v6", "suno/chirp-v6-wild", "suno/chirp-v6-mini"],
   };
   return {
     name: "atlascloud",

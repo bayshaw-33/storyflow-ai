@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     return response(422, { success: false, error: "音乐工作台仅支持 Atlas Cloud 音乐模型。", code: "INVALID_MUSIC_PROVIDER" });
   }
   if (kind === "music" && effectiveProviderName === "atlascloud" && requestedModel && !isAtlasCloudMusicModel(requestedModel)) {
-    return response(422, { success: false, error: "请选择 MiniMax Music 3.0 或 Suno V5。", code: "INVALID_MUSIC_MODEL" });
+    return response(422, { success: false, error: "请选择 MiniMax Music 3.0、Suno V6、Suno V6 Wild 或 Suno V6 Mini。", code: "INVALID_MUSIC_MODEL" });
   }
   if (!kind || !text.trim()) return response(400, { success: false, error: "缺少 kind 和 text/prompt。" });
 

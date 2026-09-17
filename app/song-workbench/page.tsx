@@ -48,7 +48,7 @@ type SongModelProvider = "auto" | "deepseek";
 type SongMusicMode = "vocal" | "instrumental" | "sfx";
 
 type AtlasCloudMusicModelOption = {
-  id: "minimax/music-3.0" | "suno/chirp-v5";
+  id: "minimax/music-3.0" | "suno/chirp-v6" | "suno/chirp-v6-wild" | "suno/chirp-v6-mini";
   labelZh: string;
   labelEn: string;
   descriptionZh?: string;
@@ -125,11 +125,17 @@ type UploadedReference = {
 
 const STORAGE_KEY = "kiikis-song-workbench-v1";
 const MUSIC_PROMPT_MAX_BYTES = 1000;
-const DEFAULT_MUSIC_MODEL: AtlasCloudMusicModelOption["id"] = "minimax/music-3.0";
+const DEFAULT_MUSIC_MODEL: AtlasCloudMusicModelOption["id"] = "suno/chirp-v6-mini";
 const FALLBACK_MUSIC_MODELS: AtlasCloudMusicModelOption[] = [
   { id: "minimax/music-3.0", labelZh: "MiniMax Music 3.0", labelEn: "MiniMax Music 3.0", descriptionZh: "歌词、曲风提示词或纯音乐均可生成", descriptionEn: "Lyrics, style prompts, or instrumental music" },
-  { id: "suno/chirp-v5", labelZh: "Suno V5", labelEn: "Suno V5", descriptionZh: "使用当前歌词和曲风提示词生成歌曲", descriptionEn: "Generate a song from the current lyrics and style prompt" },
+  { id: "suno/chirp-v6", labelZh: "Suno V6", labelEn: "Suno V6", descriptionZh: "旗舰模型，稳定、精准地生成正式歌曲", descriptionEn: "Flagship model for precise, polished song generation" },
+  { id: "suno/chirp-v6-wild", labelZh: "Suno V6 Wild", labelEn: "Suno V6 Wild", descriptionZh: "实验模式，探索更大胆和不可预测的方向", descriptionEn: "Experimental mode for bolder, less predictable ideas" },
+  { id: "suno/chirp-v6-mini", labelZh: "Suno V6 Mini", labelEn: "Suno V6 Mini", descriptionZh: "更快的轻量模型，适合草稿和快速试错", descriptionEn: "Faster, lighter model for drafts and quick iteration" },
 ];
+
+function isSelectableMusicModel(value: unknown): value is AtlasCloudMusicModelOption["id"] {
+  return value === "minimax/music-3.0" || value === "suno/chirp-v6" || value === "suno/chirp-v6-wild" || value === "suno/chirp-v6-mini";
+}
 const translationLanguages: LyricsTranslationLanguage[] = ["Chinese", "English", "Spanish", "French", "Japanese", "Korean"];
 
 const projectTypes: Array<{ value: SongProjectType; label: string; labelEn: string; strategy: string }> = [
@@ -786,7 +792,7 @@ export default function SongWorkbenchPage() {
     }).then(async (response) => {
       if (!response.ok) return;
       const payload = await response.json() as { musicModels?: AtlasCloudMusicModelOption[] };
-      const nextModels = payload.musicModels?.filter((model) => model.id === "minimax/music-3.0" || model.id === "suno/chirp-v5") || [];
+      const nextModels = payload.musicModels?.filter((model) => isSelectableMusicModel(model.id)) || [];
       if (!nextModels.length) return;
       setMusicModels(nextModels);
       setSelectedMusicModel((current) => nextModels.some((model) => model.id === current) ? current : DEFAULT_MUSIC_MODEL);
@@ -880,7 +886,7 @@ export default function SongWorkbenchPage() {
         setSelectedLyricsDocumentId(legacyDocuments.find((document) => document.kind === "lyrics")?.id || null);
         setSelectedStyleDocumentId(legacyDocuments.find((document) => document.kind === "v6_style")?.id || null);
       }
-      if (data.selectedMusicModel === "minimax/music-3.0" || data.selectedMusicModel === "suno/chirp-v5") setSelectedMusicModel(data.selectedMusicModel);
+      if (isSelectableMusicModel(data.selectedMusicModel)) setSelectedMusicModel(data.selectedMusicModel);
       if (data.musicMode === "vocal" || data.musicMode === "instrumental" || data.musicMode === "sfx") setMusicMode(data.musicMode);
       if (data.uploadedReference) setUploadedReference(data.uploadedReference);
       if (data.referenceMode) setReferenceMode(data.referenceMode);
@@ -2265,7 +2271,7 @@ export default function SongWorkbenchPage() {
             </div>
           </header>
           <div className="song-right-studio">
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (model === "minimax/music-3.0" || model === "suno/chirp-v5") setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
           </div>
         </section>
       </section>

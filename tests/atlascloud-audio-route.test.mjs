@@ -9,6 +9,8 @@ const batch = read("app/api/audio/jobs/batch/route.ts");
 test("song audio jobs validate the Atlas Cloud music model allowlist", () => {
   assert.match(submit, /isAtlasCloudMusicModel/);
   assert.match(submit, /atlascloud/);
+  assert.match(submit, /Suno V6/);
+  assert.doesNotMatch(submit, /Suno V5/);
   assert.match(batch, /model/);
   assert.match(batch, /provider/);
 });

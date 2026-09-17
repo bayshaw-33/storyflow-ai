@@ -1,4 +1,4 @@
-export type AtlasCloudMusicModelId = "minimax/music-3.0" | "suno/chirp-v5";
+export type AtlasCloudMusicModelId = "minimax/music-3.0" | "suno/chirp-v6" | "suno/chirp-v6-wild" | "suno/chirp-v6-mini";
 
 export type AtlasCloudMusicModel = {
   id: AtlasCloudMusicModelId;
@@ -22,13 +22,31 @@ export const ATLAS_CLOUD_MUSIC_MODELS: readonly Omit<AtlasCloudMusicModel, "avai
     descriptionEn: "Lyrics, style prompts, or instrumental music",
   },
   {
-    id: "suno/chirp-v5",
+    id: "suno/chirp-v6",
     provider: "atlascloud",
     kind: "music",
-    labelZh: "Suno V5",
-    labelEn: "Suno V5",
-    descriptionZh: "使用当前歌词和曲风提示词生成歌曲",
-    descriptionEn: "Generate a song from the current lyrics and style prompt",
+    labelZh: "Suno V6",
+    labelEn: "Suno V6",
+    descriptionZh: "旗舰模型，稳定、精准地生成正式歌曲",
+    descriptionEn: "Flagship model for precise, polished song generation",
+  },
+  {
+    id: "suno/chirp-v6-wild",
+    provider: "atlascloud",
+    kind: "music",
+    labelZh: "Suno V6 Wild",
+    labelEn: "Suno V6 Wild",
+    descriptionZh: "实验模式，探索更大胆和不可预测的方向",
+    descriptionEn: "Experimental mode for bolder, less predictable ideas",
+  },
+  {
+    id: "suno/chirp-v6-mini",
+    provider: "atlascloud",
+    kind: "music",
+    labelZh: "Suno V6 Mini",
+    labelEn: "Suno V6 Mini",
+    descriptionZh: "更快的轻量模型，适合草稿和快速试错",
+    descriptionEn: "Faster, lighter model for drafts and quick iteration",
   },
 ];
 
@@ -42,5 +60,5 @@ export function isAtlasCloudMusicModel(value: unknown): value is AtlasCloudMusic
 }
 
 export function getDefaultAtlasCloudMusicModel(): AtlasCloudMusicModelId {
-  return "minimax/music-3.0";
+  return "suno/chirp-v6-mini";
 }

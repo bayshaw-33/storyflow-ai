@@ -7,7 +7,11 @@ const component = readFileSync("components/song-workbench/AudioCandidates.tsx", 
 
 test("song workbench exposes Atlas Cloud model selection and three music modes", () => {
   assert.match(page, /minimax\/music-3\.0/);
-  assert.match(page, /suno\/chirp-v5/);
+  assert.match(page, /suno\/chirp-v6/);
+  assert.match(page, /suno\/chirp-v6-wild/);
+  assert.match(page, /suno\/chirp-v6-mini/);
+  assert.match(page, /DEFAULT_MUSIC_MODEL[^\n]*suno\/chirp-v6-mini/);
+  assert.doesNotMatch(page, /suno\/chirp-v5/);
   assert.match(page, /musicMode/);
   assert.match(component, /vocal/);
   assert.match(component, /instrumental/);

@@ -4,11 +4,14 @@ import { existsSync, readFileSync } from "node:fs";
 
 const source = existsSync("lib/audio/providers/atlascloud.ts") ? readFileSync("lib/audio/providers/atlascloud.ts", "utf8") : "";
 
-test("Atlas adapter uses the unified Atlas Cloud audio endpoint and both model IDs", () => {
+test("Atlas adapter uses the unified Atlas Cloud audio endpoint and all music model IDs", () => {
   assert.match(source, /api\.atlascloud\.ai/);
   assert.match(source, /api\/v1\/model\/generateAudio/);
   assert.match(source, /minimax\/music-3\.0/);
-  assert.match(source, /suno\/chirp-v5/);
+  assert.match(source, /suno\/chirp-v6/);
+  assert.match(source, /suno\/chirp-v6-wild/);
+  assert.match(source, /suno\/chirp-v6-mini/);
+  assert.doesNotMatch(source, /suno\/chirp-v5/);
   assert.match(source, /lyrics_optimizer/);
   assert.match(source, /is_instrumental/);
 });

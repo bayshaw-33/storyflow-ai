@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a server-owned Atlas Cloud music provider and a song-workbench selector for MiniMax Music 3.0 or Suno V5, with vocal-song, instrumental, and experimental sound-effect generation modes.
+**Goal:** Add a server-owned Atlas Cloud music provider and a song-workbench selector for MiniMax Music 3.0 and the three Suno V6 variants, with vocal-song, instrumental, and experimental sound-effect generation modes.
 
 **Architecture:** Keep the existing audio job, polling, storage, A/B candidate, and persistent-player pipeline. Add an Atlas Cloud adapter behind the existing `AudioProvider` interface, a fixed server-side music-model catalog, and pass the selected model through the batch and retry APIs. The song UI consumes only the catalog's music entries and never renders TTS/ASR capabilities.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Support only `minimax/music-3.0` and `suno/chirp-v5` in the song model selector.
+- Support only `minimax/music-3.0`, `suno/chirp-v6`, `suno/chirp-v6-wild`, and `suno/chirp-v6-mini` in the song model selector; default to `suno/chirp-v6-mini`.
 - Support generation modes `vocal`, `instrumental`, and `sfx`; label `sfx` as experimental because the selected models are not dedicated sound-effect models.
 - Do not expose TTS, voice-clone, or ASR models in the song workbench.
 - Use `POST https://api.atlascloud.ai/api/v1/model/generateAudio` and the provider prediction polling endpoint.
@@ -48,9 +48,9 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync("lib/audio/music-models.ts", "utf8");
 
-test("Atlas Cloud song catalog contains only MiniMax Music 3.0 and Suno V5", () => {
+test("Atlas Cloud song catalog contains MiniMax Music 3.0 and the three Suno V6 variants", () => {
   assert.match(source, /minimax\/music-3\.0/);
-  assert.match(source, /suno\/chirp-v5/);
+  assert.match(source, /suno\/chirp-v6/);
   assert.doesNotMatch(source, /minimax\/music-2\.6/);
   assert.doesNotMatch(source, /speech|tts|asr/i);
 });
@@ -73,7 +73,7 @@ Expected: FAIL because `lib/audio/music-models.ts` does not exist yet.
 Create a literal catalog with these two entries and no other model IDs:
 
 ```ts
-export type AtlasCloudMusicModelId = "minimax/music-3.0" | "suno/chirp-v5";
+export type AtlasCloudMusicModelId = "minimax/music-3.0" | "suno/chirp-v6" | "suno/chirp-v6-wild" | "suno/chirp-v6-mini";
 
 export type AtlasCloudMusicModel = {
   id: AtlasCloudMusicModelId;
@@ -96,11 +96,11 @@ export const ATLAS_CLOUD_MUSIC_MODELS: readonly AtlasCloudMusicModel[] = [
     descriptionEn: "Lyrics, style prompts, or instrumental music",
   },
   {
-    id: "suno/chirp-v5",
+    id: "suno/chirp-v6",
     provider: "atlascloud",
     kind: "music",
-    labelZh: "Suno V5",
-    labelEn: "Suno V5",
+    labelZh: "Suno V6",
+    labelEn: "Suno V6",
     descriptionZh: "使用当前歌词和曲风提示词生成歌曲",
     descriptionEn: "Generate a song from the current lyrics and style prompt",
   },
@@ -180,7 +180,7 @@ Expected: FAIL because the adapter file does not exist yet.
 
 - [ ] **Step 3: Implement model-specific request mapping**
 
-For `minimax/music-3.0`, send top-level fields such as `model`, `prompt`, optional `lyrics`, `lyrics_optimizer: false`, `is_instrumental: input.musicMode !== "vocal"`, `format: "mp3"`, `sample_rate: 44100`, and `bitrate: 256000`. For `suno/chirp-v5`, send `model`, `prompt`, `custom: input.musicMode === "vocal" && Boolean(input.lyrics)`, `instrumental: input.musicMode !== "vocal"`, and `vocal_gender: "Female"` only when the existing song input provides a compatible value. Do not send lyrics in instrumental or sfx mode, and do not send MiniMax-only fields to Suno.
+For `minimax/music-3.0`, send top-level fields such as `model`, `prompt`, optional `lyrics`, `lyrics_optimizer: false`, `is_instrumental: input.musicMode !== "vocal"`, `format: "mp3"`, `sample_rate: 44100`, and `bitrate: 256000`. For each `suno/chirp-v6*` variant, send `model`, `prompt`, `custom: input.musicMode === "vocal" && Boolean(input.lyrics)`, and `instrumental: input.musicMode !== "vocal"`. Do not send lyrics in instrumental or sfx mode, and do not send MiniMax-only fields to Suno.
 
 For `musicMode === "sfx"`, the adapter receives a prompt assembled by the server-side song AI and keeps the mode in provider metadata. The adapter must not claim that either provider is a dedicated sound-effect generator.
 
@@ -400,9 +400,9 @@ Expected: no layout regressions, no horizontal overflow at the tested mobile wid
 
 With the server-side `ATLASCLOUD_API_KEY` configured, submit one song using `minimax/music-3.0`. Verify the actual response is accepted, the prediction is polled to completion, the audio bytes are stored in Supabase, the candidate shows `atlascloud · minimax/music-3.0`, and the player can play and download it. Record only status, model, job ID suffix, duration, and storage result; redact the key and authorization header.
 
-- [ ] **Step 5: Run the real Suno V5 generation**
+- [ ] **Step 5: Run the real Suno V6 generation**
 
-Submit the same or a fresh song using `suno/chirp-v5`. Verify the request uses the Suno mapping, the job is stored with `atlascloud · suno/chirp-v5`, the result is playable/downloadable, and switching from MiniMax to Suno did not clear lyrics, prompt, or the existing MiniMax candidate.
+Submit the same or a fresh song using `suno/chirp-v6-mini` (and, when credentials/quota allow, the flagship or wild variant). Verify the request uses the Suno mapping, the job is stored with the selected `atlascloud · suno/chirp-v6*` model, the result is playable/downloadable, and switching from MiniMax to Suno did not clear lyrics, prompt, or the existing MiniMax candidate.
 
 - [ ] **Step 6: Verify the TTS exclusion**
 
@@ -421,7 +421,7 @@ git commit -m "test(song): verify Atlas Cloud music generation"
 
 ## Completion Checklist
 
-- [ ] Only MiniMax Music 3.0 and Suno V5 appear in the song selector.
+- [ ] MiniMax Music 3.0 and all three Suno V6 variants appear in the song selector, with Suno V6 Mini selected by default.
 - [ ] TTS/ASR models are absent from song UI and rejected by song music routes.
 - [ ] Model-specific Atlas Cloud request mapping and vocal/instrumental/sfx mode mapping are covered by tests.
 - [ ] A/B candidates and retries preserve the actual provider/model used.

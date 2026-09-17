@@ -16,7 +16,7 @@
 - Translation is an action inside the lyrics preview and never creates a translation card.
 - V6 style prompt is measured in UTF-8 bytes and must be <= 1000 bytes at every save/copy/Suno handoff.
 - Instrumental mode must exclude vocals, singing, humming, chanting, choir, spoken word and vocal textures in both prompt and provider payload.
-- Atlas quick generation remains MiniMax Music 3.0 or Suno V5; Suno website handoff remains the professional V6 path.
+- Atlas quick generation remains MiniMax Music 3.0 or one of the Suno V6 variants; Suno website handoff remains the professional V6 path.
 
 ---
 
@@ -101,7 +101,7 @@
 - [ ] Refine the song workbench prompt so the master creative brief favors precise anchors, section transitions, arrangement relationships, dynamic arc, mix space, and resolved endings rather than tag accumulation; preserve the no-narration Intro rule.
 - [ ] Add a bounded `fitV6StylePrompt` path that compresses overlong generated style prompts while preserving required musical anchors, then rejects any remaining >1000-byte result.
 - [ ] Build the Atlas quick-generation payload from the selected documents and mode, omitting lyrics for instrumental/SFX and adding explicit negative vocal constraints to prompt text and provider flags.
-- [ ] Keep Suno V5 and MiniMax 3.0 provider identifiers unchanged until Atlas publishes a confirmed V6 mapping.
+- [x] Replace the retired Suno V5 identifier with the confirmed Atlas Suno V6 variants; keep MiniMax 3.0 unchanged.
 - [ ] Run provider tests, song tests, TypeScript, and production build.
 - [ ] Commit `fix(song): align prompts with Suno V6 and Atlas modes`.
 
