@@ -31,3 +31,8 @@ test("song candidates render as compact music players", () => {
   assert.match(component, /song-audio-cover/);
   assert.match(component, /<audio/);
 });
+
+test("song history deletion is wired through the workbench", () => {
+  assert.match(page, /onDelete=/);
+  assert.match(page, /api\/audio\/jobs\/.*method: "DELETE"/s);
+});

@@ -776,6 +776,24 @@ export default function SongWorkbenchPage() {
     }
   }
 
+  async function deleteSongAudio(candidate: SongAudioCandidate) {
+    if (!session?.access_token || !candidate.jobId || !songProjectId) return;
+    const confirmed = window.confirm(isZh ? "删除这条生成历史及其音频文件？删除后无法恢复。" : "Delete this history item and its audio file? This cannot be undone.");
+    if (!confirmed) return;
+    setGenerationError("");
+    try {
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}?projectId=${encodeURIComponent(songProjectId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || (isZh ? "删除音乐历史失败，请重试。" : "Could not delete music history. Please retry."));
+      setAudioCandidates((current) => current.filter((item) => item.id !== candidate.id));
+    } catch (deleteError) {
+      setGenerationError(deleteError instanceof Error ? deleteError.message : (isZh ? "删除音乐历史失败，请重试。" : "Could not delete music history. Please retry."));
+    }
+  }
+
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
@@ -800,12 +818,13 @@ export default function SongWorkbenchPage() {
   }, [session?.access_token]);
 
   useEffect(() => {
-    if (!session?.access_token) {
+    if (!session?.access_token || !songProjectId) {
       setAudioCandidates([]);
       return;
     }
     let active = true;
-    void fetch("/api/audio/jobs", {
+    setAudioCandidates([]);
+    void fetch(`/api/audio/jobs?projectId=${encodeURIComponent(songProjectId)}`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     }).then(async (response) => {
       if (!response.ok) return;
@@ -814,7 +833,7 @@ export default function SongWorkbenchPage() {
       setAudioCandidates((current) => current.length ? current : payload.jobs || []);
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [session?.access_token]);
+  }, [session?.access_token, songProjectId]);
 
   useEffect(() => {
     const entry = getSongEntry();
@@ -2271,7 +2290,7 @@ export default function SongWorkbenchPage() {
             </div>
           </header>
           <div className="song-right-studio">
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDelete={deleteSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
           </div>
         </section>
       </section>

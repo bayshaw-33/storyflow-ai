@@ -3,7 +3,7 @@ import { authenticateRequest, getSupabaseServerClient, serviceFetch } from "@/li
 import { resolveAudioProvider } from "@/lib/audio/provider";
 import { mapAudioPollToJobStatus, sanitizeAudioMetadata, shouldExpireAudioReconciliation } from "@/lib/audio/jobs";
 import { findAcceptedGmiRequest } from "@/lib/audio/providers/gmi-reconciliation";
-import { persistAudioArtifact } from "@/lib/audio/storage";
+import { AUDIO_BUCKET, persistAudioArtifact } from "@/lib/audio/storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
 import { buildAudioUniverseBinding } from "@/lib/audio/universe-links";
 import type { AudioKind, AudioProviderName } from "@/lib/audio/types";
@@ -24,6 +24,7 @@ type JobRow = {
   result_url: string | null;
   storage_path: string | null;
   result_metadata: Record<string, unknown>;
+  project_id: string | null;
   target_type: string;
   target_id: string | null;
   created_at?: string;
@@ -134,5 +135,39 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
       return NextResponse.json({ success: true, job: updated?.[0] || { ...job, status: "failed", error: failure } });
     }
     return NextResponse.json({ success: true, job, warning: error instanceof Error ? error.message.slice(0, 240) : "AUDIO_POLL_FAILED" });
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ jobId: string }> }) {
+  let user;
+  try { user = await authenticateRequest(request); } catch { return NextResponse.json({ success: false, error: "请先登录。" }, { status: 401 }); }
+  const projectId = new URL(request.url).searchParams.get("projectId")?.trim() || "";
+  if (!projectId) return NextResponse.json({ success: false, error: "缺少项目 ID。" }, { status: 400 });
+
+  const { jobId } = await context.params;
+  const rows = await serviceFetch<JobRow[]>(
+    `${TABLE}?id=eq.${encodeURIComponent(jobId)}&owner_id=eq.${encodeURIComponent(user.id)}&project_id=eq.${encodeURIComponent(projectId)}&job_type=eq.audio&select=id,storage_path,project_id,input_params,target_type&limit=1`,
+  );
+  const job = rows?.[0];
+  if (!job || (job.input_params?.kind !== "music" && job.target_type !== "song_version")) return NextResponse.json({ success: false, error: "音乐历史不存在或不属于当前项目。" }, { status: 404 });
+
+  const serverClient = getSupabaseServerClient();
+  if (!serverClient) return NextResponse.json({ success: false, error: "音乐存储服务未配置。" }, { status: 503 });
+  try {
+    if (job.storage_path) {
+      const { error } = await serverClient.storage.from(AUDIO_BUCKET).remove([job.storage_path]);
+      if (error) throw new Error("AUDIO_STORAGE_DELETE_FAILED");
+    }
+    await serviceFetch(
+      `/rest/v1/storyflow_assets?user_id=eq.${encodeURIComponent(user.id)}&project_id=eq.${encodeURIComponent(projectId)}&asset_type=eq.audio&storage_path=eq.${encodeURIComponent(job.storage_path || "")}`,
+      { method: "DELETE" },
+    );
+    await serviceFetch(
+      `${TABLE}?id=eq.${encodeURIComponent(jobId)}&owner_id=eq.${encodeURIComponent(user.id)}&project_id=eq.${encodeURIComponent(projectId)}&job_type=eq.audio`,
+      { method: "DELETE" },
+    );
+    return NextResponse.json({ success: true, deletedJobId: jobId });
+  } catch {
+    return NextResponse.json({ success: false, error: "删除音乐历史失败，请稍后重试。" }, { status: 502 });
   }
 }

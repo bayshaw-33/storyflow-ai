@@ -24,6 +24,7 @@ type JobRow = {
   result_url: string | null;
   storage_path: string | null;
   result_metadata: Record<string, unknown>;
+  project_id: string | null;
   target_type: string;
   target_id: string | null;
   created_at?: string;
@@ -40,9 +41,11 @@ export async function GET(request: NextRequest) {
   try { user = await authenticateRequest(request); } catch { return response(401, { success: false, error: "请先登录。" }); }
   const serverClient = getSupabaseServerClient();
   if (!serverClient) return response(503, { success: false, error: "服务端音频存储未配置。", code: "MISSING_CONFIG" });
+  const projectId = request.nextUrl.searchParams.get("projectId")?.trim() || "";
+  const projectFilter = projectId ? `&project_id=eq.${encodeURIComponent(projectId)}` : "";
 
   const rows = await serviceFetch<JobRow[]>(
-    `${TABLE}?owner_id=eq.${encodeURIComponent(user.id)}&job_type=eq.audio&select=id,owner_id,provider,model,input_params,status,error,storage_path,target_type,created_at&order=created_at.desc&limit=100`,
+    `${TABLE}?owner_id=eq.${encodeURIComponent(user.id)}${projectFilter}&job_type=eq.audio&select=id,owner_id,provider,model,input_params,status,error,storage_path,project_id,target_type,created_at&order=created_at.desc&limit=100`,
   );
   const musicJobs = (rows || []).filter((job) =>
     (job.input_params?.kind === "music" || job.target_type === "song_version")
@@ -62,6 +65,7 @@ export async function GET(request: NextRequest) {
       resultUrl,
       provider: job.provider,
       model: job.model,
+      projectId: job.project_id,
       musicMode: job.input_params?.musicMode === "instrumental" || job.input_params?.musicMode === "sfx" ? job.input_params.musicMode : "vocal",
       title: typeof job.input_params?.title === "string" ? job.input_params.title : "",
       error: job.error,
