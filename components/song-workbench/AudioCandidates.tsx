@@ -133,14 +133,8 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
 
   return (
     <div className="dashboard-panel song-output-card song-audio-card">
-      <div className="song-output-card-head song-audio-generation-controls">
+      <div className="song-output-card-head song-audio-generation-controls song-audio-top-controls">
         <div className="song-audio-controls" style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end", flexWrap: "wrap", gap: 8, flex: "1 1 auto" }}>
-          <label className="song-audio-model-selector" style={{ display: "grid", gap: 3, minWidth: 154, color: "var(--text-secondary)", fontSize: 10, fontWeight: 500 }}>
-            <span>{isZh ? "音乐模型" : "Music model"}</span>
-            <select style={{ width: "100%", minHeight: 36, maxWidth: "none", fontSize: 12 }} value={selectedMusicModel} onChange={(event) => onMusicModelChange(event.target.value)} aria-label={isZh ? "选择音乐模型" : "Choose music model"}>
-              {musicModels.map((model) => <option value={model.id} key={model.id}>{isZh ? model.labelZh : model.labelEn}</option>)}
-            </select>
-          </label>
           <div className="song-audio-mode-switch" style={{ display: "inline-flex", alignItems: "stretch", padding: 2, border: "1px solid var(--glass-border)", borderRadius: 9, background: "rgba(255, 255, 255, 0.04)" }} role="group" aria-label={isZh ? "选择生成类型" : "Choose generation mode"}>
             {([
               ["vocal", isZh ? "人声歌曲" : "Vocal"],
@@ -148,6 +142,12 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
               ["sfx", isZh ? "音效实验" : "SFX experimental"],
             ] as const).map(([value, label]) => <button className="song-audio-mode-button" style={{ minHeight: 32, padding: "0 9px", border: 0, borderRadius: 7, color: musicMode === value ? "#071313" : "var(--text-secondary)", background: musicMode === value ? "#5eead4" : "transparent", fontSize: 11, cursor: "pointer" }} data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
           </div>
+          <label className="song-audio-model-selector" style={{ display: "grid", gap: 3, minWidth: 154, color: "var(--text-secondary)", fontSize: 10, fontWeight: 500 }}>
+            <span>{isZh ? "音乐模型" : "Music model"}</span>
+            <select style={{ width: "100%", minHeight: 36, maxWidth: "none", fontSize: 12 }} value={selectedMusicModel} onChange={(event) => onMusicModelChange(event.target.value)} aria-label={isZh ? "选择音乐模型" : "Choose music model"}>
+              {musicModels.map((model) => <option value={model.id} key={model.id}>{isZh ? model.labelZh : model.labelEn}</option>)}
+            </select>
+          </label>
           {musicMode === "vocal" ? <label className="song-audio-voice-selector" style={{ display: "grid", gap: 3, minWidth: 112, color: "var(--text-secondary)", fontSize: 10, fontWeight: 500 }}>
             <span>{isZh ? "人声方向" : "Vocal direction"}</span>
             <select style={{ width: "100%", minHeight: 36, maxWidth: "none", fontSize: 12 }} value={voiceGender} onChange={(event) => onVoiceGenderChange(event.target.value as SongVoiceGender)} aria-label={isZh ? "选择人声方向" : "Choose vocal direction"}>
@@ -208,6 +208,23 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
           onEnded={() => setIsPlaying(false)}
         />
       </div>
+      <section className="song-audio-cover-module" aria-labelledby="song-audio-cover-title">
+        <div className="song-audio-cover-module-preview" aria-hidden={selectedCandidate?.coverUrl ? undefined : true}>
+          {selectedCandidate?.coverUrl ? <img src={selectedCandidate.coverUrl} alt="" /> : <><ImagePlus size={24} strokeWidth={1.4} /><span>{isZh ? "1:1 封面" : "1:1 cover"}</span></>}
+        </div>
+        <div className="song-audio-cover-module-copy">
+          <span className="song-product-kicker">{isZh ? "封面设计" : "COVER ART"}</span>
+          <h3 id="song-audio-cover-title">{isZh ? "歌曲封面" : "Song cover"}</h3>
+          <p>{isZh ? "为当前音频候选生成 1:1 封面，使用 Flux 2 Max，生成后可直接下载。" : "Generate a square Flux 2 Max cover for the selected audio candidate, then download it."}</p>
+          <div className="song-audio-cover-module-actions">
+            {selectedCandidate?.coverUrl && onDownloadCover ? <button className="secondary-button" type="button" onClick={() => void onDownloadCover(selectedCandidate)}>{isZh ? "下载封面" : "Download cover"}</button> : null}
+            {!selectedCandidate?.coverUrl && onGenerateCover ? <button className="primary-button" type="button" onClick={() => void onGenerateCover(selectedCandidate!)} disabled={!selectedCandidate?.jobId || coverGeneratingId === selectedCandidate.id}>
+              {coverGeneratingId === selectedCandidate?.id ? (isZh ? "正在生成封面…" : "Generating cover…") : (isZh ? "生成封面" : "Generate cover")}
+            </button> : null}
+            {!selectedCandidate?.jobId ? <small>{isZh ? "先生成音频候选后，即可为当前候选生成封面。" : "Generate an audio candidate first to create its cover."}</small> : null}
+          </div>
+        </div>
+      </section>
       <div className="song-audio-history-heading">
         <h3>{isZh ? "生成历史" : "Generation history"}<span>{candidates.length}</span></h3>
       </div>
