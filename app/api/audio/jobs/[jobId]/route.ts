@@ -4,6 +4,7 @@ import { resolveAudioProvider } from "@/lib/audio/provider";
 import { mapAudioPollToJobStatus, sanitizeAudioMetadata, shouldExpireAudioReconciliation } from "@/lib/audio/jobs";
 import { findAcceptedGmiRequest } from "@/lib/audio/providers/gmi-reconciliation";
 import { AUDIO_BUCKET, persistAudioArtifact } from "@/lib/audio/storage";
+import { ART_BUCKET } from "@/lib/supabase/art-storage";
 import { recordAudioJobEvent } from "@/lib/audio/kk-events";
 import { buildAudioUniverseBinding } from "@/lib/audio/universe-links";
 import type { AudioKind, AudioProviderName } from "@/lib/audio/types";
@@ -104,7 +105,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
     if (!serverClient) throw new Error("MISSING_SUPABASE_SERVICE_ROLE_KEY");
     const downloaded = poll.audioBytes ? { bytes: poll.audioBytes, contentType: poll.contentType || "audio/mpeg" } : poll.audioUrl ? await provider.download(poll.audioUrl) : null;
     if (!downloaded) throw new Error("AUDIO_RESULT_MISSING");
-    const ingesting = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "result_ingesting", result_url: null, result_metadata: sanitizeAudioMetadata(poll.providerMetadata || {}) }) });
+    const ingesting = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "result_ingesting", result_url: null, result_metadata: sanitizeAudioMetadata({ ...job.result_metadata, ...poll.providerMetadata }) }) });
     job = ingesting?.[0] || { ...job, status: "result_ingesting" };
     const artifact = await persistAudioArtifact({ serverClient, ownerId: user.id, jobId: job.id, bytes: downloaded.bytes, contentType: downloaded.contentType });
     const assets = await serviceFetch<Array<{ id: string }>>("/rest/v1/storyflow_assets", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ user_id: user.id, project_id: typeof job.input_params.projectId === "string" ? job.input_params.projectId : null, asset_type: "audio", storage_path: artifact.storagePath, public_url: null, metadata: sanitizeAudioMetadata({ source: kind, provider: job.provider, ...poll.providerMetadata }) }) });
@@ -124,7 +125,7 @@ export async function GET(request: Request, context: { params: Promise<{ jobId: 
         });
       }
     }
-    const updated = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "completed", result_url: artifact.signedUrl, storage_path: artifact.storagePath, completed_at: new Date().toISOString(), result_metadata: sanitizeAudioMetadata({ assetId, ...poll.providerMetadata }) }) });
+    const updated = await serviceFetch<JobRow[]>(`${TABLE}?id=eq.${encodeURIComponent(job.id)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status: "completed", result_url: artifact.signedUrl, storage_path: artifact.storagePath, completed_at: new Date().toISOString(), result_metadata: sanitizeAudioMetadata({ ...job.result_metadata, assetId, ...poll.providerMetadata }) }) });
     await recordAudioJobEvent({ fetcher: serviceFetch, userId: user.id, jobId: job.id, status: "completed", provider: job.provider, model: job.model, kind }).catch(() => undefined);
     return NextResponse.json({ success: true, job: updated?.[0] || { ...job, status: "completed", result_url: artifact.signedUrl, storage_path: artifact.storagePath } });
   } catch (error) {
@@ -146,7 +147,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ jobI
 
   const { jobId } = await context.params;
   const rows = await serviceFetch<JobRow[]>(
-    `${TABLE}?id=eq.${encodeURIComponent(jobId)}&owner_id=eq.${encodeURIComponent(user.id)}&project_id=eq.${encodeURIComponent(projectId)}&job_type=eq.audio&select=id,storage_path,project_id,input_params,target_type&limit=1`,
+    `${TABLE}?id=eq.${encodeURIComponent(jobId)}&owner_id=eq.${encodeURIComponent(user.id)}&project_id=eq.${encodeURIComponent(projectId)}&job_type=eq.audio&select=id,storage_path,project_id,input_params,result_metadata,target_type&limit=1`,
   );
   const job = rows?.[0];
   if (!job || (job.input_params?.kind !== "music" && job.target_type !== "song_version")) return NextResponse.json({ success: false, error: "音乐历史不存在或不属于当前项目。" }, { status: 404 });
@@ -154,6 +155,14 @@ export async function DELETE(request: Request, context: { params: Promise<{ jobI
   const serverClient = getSupabaseServerClient();
   if (!serverClient) return NextResponse.json({ success: false, error: "音乐存储服务未配置。" }, { status: 503 });
   try {
+    const cover = job.result_metadata?.cover;
+    const coverStoragePath = cover && typeof cover === "object" && typeof (cover as { storagePath?: unknown }).storagePath === "string"
+      ? (cover as { storagePath: string }).storagePath
+      : "";
+    if (coverStoragePath) {
+      const { error } = await serverClient.storage.from(ART_BUCKET).remove([coverStoragePath]);
+      if (error) throw new Error("ART_STORAGE_DELETE_FAILED");
+    }
     if (job.storage_path) {
       const { error } = await serverClient.storage.from(AUDIO_BUCKET).remove([job.storage_path]);
       if (error) throw new Error("AUDIO_STORAGE_DELETE_FAILED");

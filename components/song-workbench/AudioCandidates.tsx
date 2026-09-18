@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, Music2, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX } from "lucide-react";
+import { Download, ImagePlus, Music2, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX } from "lucide-react";
 import type { SongDocument } from "@/lib/song/documents";
 
 export type SongAudioCandidate = {
@@ -10,6 +10,7 @@ export type SongAudioCandidate = {
   jobId: string | null;
   status: "queued" | "reconciling" | "generating" | "result_ingesting" | "completed" | "failed" | "provider_timeout";
   resultUrl: string | null;
+  coverUrl: string | null;
   provider: string | null;
   model: string | null;
   error: string | null;
@@ -17,6 +18,7 @@ export type SongAudioCandidate = {
 };
 
 type SongMusicMode = "vocal" | "instrumental" | "sfx";
+export type SongVoiceGender = "unrestricted" | "male" | "female";
 type MusicModelOption = {
   id: string;
   labelZh: string;
@@ -34,6 +36,9 @@ type AudioCandidatesProps = {
   onRetry?: (candidateId: string) => void;
   onDownload: (candidate: SongAudioCandidate) => Promise<void>;
   onDelete?: (candidate: SongAudioCandidate) => Promise<void>;
+  onGenerateCover?: (candidate: SongAudioCandidate) => Promise<void>;
+  onDownloadCover?: (candidate: SongAudioCandidate) => Promise<void>;
+  coverGeneratingId?: string | null;
   documents: SongDocument[];
   selectedLyricsDocumentId: string | null;
   selectedStyleDocumentId: string | null;
@@ -46,6 +51,8 @@ type AudioCandidatesProps = {
   onMusicModelChange: (model: string) => void;
   musicMode: SongMusicMode;
   onMusicModeChange: (mode: SongMusicMode) => void;
+  voiceGender: SongVoiceGender;
+  onVoiceGenderChange: (gender: SongVoiceGender) => void;
 };
 
 const WAVEFORM_BARS = [24, 40, 31, 56, 38, 68, 45, 78, 52, 34, 62, 44, 72, 48, 28, 58, 39, 65, 47, 30, 55, 42, 70, 36];
@@ -70,7 +77,7 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, onDelete, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange }: AudioCandidatesProps) {
+export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, onDelete, onGenerateCover, onDownloadCover, coverGeneratingId, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange, voiceGender, onVoiceGenderChange }: AudioCandidatesProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -141,6 +148,14 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
               ["sfx", isZh ? "音效实验" : "SFX experimental"],
             ] as const).map(([value, label]) => <button className="song-audio-mode-button" style={{ minHeight: 32, padding: "0 9px", border: 0, borderRadius: 7, color: musicMode === value ? "#071313" : "var(--text-secondary)", background: musicMode === value ? "#5eead4" : "transparent", fontSize: 11, cursor: "pointer" }} data-active={musicMode === value} type="button" onClick={() => onMusicModeChange(value)} key={value}>{label}</button>)}
           </div>
+          {musicMode === "vocal" ? <label className="song-audio-voice-selector" style={{ display: "grid", gap: 3, minWidth: 112, color: "var(--text-secondary)", fontSize: 10, fontWeight: 500 }}>
+            <span>{isZh ? "人声方向" : "Vocal direction"}</span>
+            <select style={{ width: "100%", minHeight: 36, maxWidth: "none", fontSize: 12 }} value={voiceGender} onChange={(event) => onVoiceGenderChange(event.target.value as SongVoiceGender)} aria-label={isZh ? "选择人声方向" : "Choose vocal direction"}>
+              <option value="unrestricted">{isZh ? "不限" : "Unrestricted"}</option>
+              <option value="male">{isZh ? "男声" : "Male"}</option>
+              <option value="female">{isZh ? "女声" : "Female"}</option>
+            </select>
+          </label> : null}
           <button className="primary-button" type="button" onClick={onGenerate} disabled={busy || !hasSelectedContent}>
             {busy ? (isZh ? "正在提交 2 首" : "Submitting 2") : (isZh ? "生成音频候选" : "Generate audio candidates")}
           </button>
@@ -157,10 +172,8 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
           : (musicMode === "sfx" ? "SFX experimental: prompts emphasize action, material, space, distance, impact, and decay; a music model may still add melody." : musicMode === "instrumental" ? "Instrumental: the AI writes an arrangement prompt and lyrics are not submitted." : "Vocal song: the AI keeps lyrics, vocal sections, and delivery direction.")}
       </div>
       <div className="song-audio-persistent-player" data-empty={!selectedCandidate?.resultUrl}>
-        <span className="song-audio-hero-cover" aria-hidden="true">
-          <Music2 size={34} strokeWidth={1.2} />
-          <strong>KIIKIS</strong>
-          <small>{selectedCandidate ? `CANDIDATE ${selectedCandidate.label}` : "SOUND FOR TOMORROW"}</small>
+        <span className="song-audio-hero-cover" aria-hidden={selectedCandidate?.coverUrl ? undefined : true}>
+          {selectedCandidate?.coverUrl ? <img src={selectedCandidate.coverUrl} alt="" /> : <><Music2 size={34} strokeWidth={1.2} /><strong>KIIKIS</strong><small>{selectedCandidate ? `CANDIDATE ${selectedCandidate.label}` : "SOUND FOR TOMORROW"}</small></>}
         </span>
         <div className="song-audio-player-info">
           <strong>{selectedCandidate ? (isZh ? `候选 ${selectedCandidate.label}` : `Candidate ${selectedCandidate.label}`) : (isZh ? "尚未生成音频" : "No audio yet")}</strong>
@@ -210,9 +223,8 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
               return (
                 <article className="song-audio-candidate song-audio-track" data-selected={isSelected} key={candidate.id}>
                   <button className="song-audio-track-select" type="button" onClick={() => selectCandidate(candidate)} aria-pressed={isSelected}>
-                    <span className="song-audio-cover" aria-hidden="true">
-                      <Music2 size={20} strokeWidth={1.6} />
-                      <strong>{candidate.label}</strong>
+                    <span className="song-audio-cover" aria-hidden={candidate.coverUrl ? undefined : true}>
+                      {candidate.coverUrl ? <img src={candidate.coverUrl} alt="" /> : <><Music2 size={20} strokeWidth={1.6} /><strong>{candidate.label}</strong></>}
                     </span>
                     <span className="song-audio-player-main">
                       <span className="song-audio-candidate-head">
@@ -232,6 +244,8 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
                   <span className="song-audio-track-actions">
                     {canRetry && onRetry ? <button className="icon-button song-audio-retry" type="button" onClick={() => onRetry(candidate.id)} title={isZh ? "重试" : "Retry"} aria-label={isZh ? `重试候选 ${candidate.label}` : `Retry candidate ${candidate.label}`}><RotateCcw size={16} /></button> : null}
                     {candidate.resultUrl && candidate.jobId ? <button className="icon-button song-audio-download" type="button" onClick={() => void onDownload(candidate)} title={isZh ? "下载" : "Download"} aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label}`}><Download size={16} /></button> : null}
+                    {candidate.jobId && !candidate.coverUrl && onGenerateCover ? <button className="icon-button song-audio-cover-generate" type="button" onClick={() => void onGenerateCover(candidate)} disabled={coverGeneratingId === candidate.id} title={isZh ? "生成封面" : "Generate cover"} aria-label={isZh ? `生成候选 ${candidate.label} 封面` : `Generate cover for candidate ${candidate.label}`}><ImagePlus size={16} /></button> : null}
+                    {candidate.coverUrl && onDownloadCover ? <button className="icon-button song-audio-cover-download" type="button" onClick={() => void onDownloadCover(candidate)} title={isZh ? "下载封面" : "Download cover"} aria-label={isZh ? `下载候选 ${candidate.label} 封面` : `Download cover for candidate ${candidate.label}`}><Download size={16} /></button> : null}
                     {candidate.jobId && onDelete ? <button className="icon-button song-audio-delete" type="button" onClick={() => void onDelete(candidate)} title={isZh ? "删除历史" : "Delete history"} aria-label={isZh ? `删除候选 ${candidate.label}` : `Delete candidate ${candidate.label}`}><Trash2 size={16} /></button> : null}
                   </span>
                   {canRetry && candidate.error ? <small className="field-note song-save-warning">{candidate.error}</small> : null}

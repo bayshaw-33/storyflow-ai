@@ -24,7 +24,7 @@ import {
   type SongUniverseRole,
 } from "@/lib/song/universe-links";
 import JSZip from "jszip";
-import { AudioCandidates, type SongAudioCandidate } from "@/components/song-workbench/AudioCandidates";
+import { AudioCandidates, type SongAudioCandidate, type SongVoiceGender } from "@/components/song-workbench/AudioCandidates";
 import { SongDocumentCard } from "@/components/song-workbench/SongDocumentCard";
 import { SongDocumentPreview } from "@/components/song-workbench/SongDocumentPreview";
 import { SongWorkbenchNav } from "@/components/song-workbench/SongWorkbenchNav";
@@ -525,6 +525,8 @@ export default function SongWorkbenchPage() {
   const [musicModels, setMusicModels] = useState<AtlasCloudMusicModelOption[]>(FALLBACK_MUSIC_MODELS);
   const [selectedMusicModel, setSelectedMusicModel] = useState<AtlasCloudMusicModelOption["id"]>(DEFAULT_MUSIC_MODEL);
   const [musicMode, setMusicMode] = useState<SongMusicMode>("vocal");
+  const [voiceGender, setVoiceGender] = useState<SongVoiceGender>("unrestricted");
+  const [coverGeneratingId, setCoverGeneratingId] = useState<string | null>(null);
   // 自动保存状态："idle" | "saving" | "saved" | "failed"
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [autoSaveTime, setAutoSaveTime] = useState<string>("");
@@ -660,7 +662,7 @@ export default function SongWorkbenchPage() {
     }
     setAudioGenerating(true);
     setGenerationError("");
-    const placeholders = (["A", "B"] as const).map((label) => ({ id: crypto.randomUUID(), label, jobId: null, status: "queued" as const, resultUrl: null, provider: null, model: null, error: null, createdAt: new Date().toISOString() }));
+    const placeholders = (["A", "B"] as const).map((label) => ({ id: crypto.randomUUID(), label, jobId: null, status: "queued" as const, resultUrl: null, coverUrl: null, provider: null, model: null, error: null, createdAt: new Date().toISOString() }));
     setAudioCandidates((current) => [...placeholders, ...current]);
     try {
       const response = await fetch("/api/audio/jobs/batch", {
@@ -678,7 +680,7 @@ export default function SongWorkbenchPage() {
           provider: "atlascloud",
           model: selectedMusicModel,
           musicMode: musicMode,
-          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, ...(musicMode === "vocal" ? { voiceGender } : {}), lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
         }),
       });
       const payload = await response.json() as {
@@ -693,7 +695,7 @@ export default function SongWorkbenchPage() {
           continue;
         }
         const job = result.job;
-        setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
+        setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, coverUrl: null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
         if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidate.id, job.id);
       }
     } catch (audioError) {
@@ -732,13 +734,13 @@ export default function SongWorkbenchPage() {
           provider: "atlascloud",
           model: selectedMusicModel,
           musicMode: musicMode,
-          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, candidate: candidate.label, retryOf: candidate.jobId, lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
+          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, ...(musicMode === "vocal" ? { voiceGender } : {}), candidate: candidate.label, retryOf: candidate.jobId, lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
         }),
       });
       const payload = await response.json() as { job?: { id: string; status: SongAudioCandidate["status"]; result_url?: string | null; provider?: string; model?: string | null; error?: string | null }; error?: string };
       if (!response.ok || !payload.job) throw new Error(payload.error || "AUDIO_JOB_RETRY_FAILED");
       const job = payload.job;
-      setAudioCandidates((current) => current.map((item) => item.id === candidateId ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
+      setAudioCandidates((current) => current.map((item) => item.id === candidateId ? { ...item, jobId: job.id, status: job.status, resultUrl: job.result_url || null, coverUrl: null, provider: job.provider || null, model: job.model || null, error: job.error || null } : item));
       if (!["completed", "failed", "provider_timeout"].includes(job.status)) void pollSongAudioJob(candidateId, job.id);
     } catch (audioError) {
       const message = audioError instanceof Error ? audioError.message : "AUDIO_JOB_RETRY_FAILED";
@@ -791,6 +793,47 @@ export default function SongWorkbenchPage() {
       setAudioCandidates((current) => current.filter((item) => item.id !== candidate.id));
     } catch (deleteError) {
       setGenerationError(deleteError instanceof Error ? deleteError.message : (isZh ? "删除音乐历史失败，请重试。" : "Could not delete music history. Please retry."));
+    }
+  }
+
+  async function generateSongCover(candidate: SongAudioCandidate) {
+    if (!session?.access_token || !candidate.jobId || !songProjectId) return;
+    setCoverGeneratingId(candidate.id);
+    setGenerationError("");
+    try {
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}/cover?projectId=${encodeURIComponent(songProjectId)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const payload = await response.json().catch(() => null) as { coverUrl?: string; error?: string } | null;
+      if (!response.ok || !payload?.coverUrl) throw new Error(payload?.error || (isZh ? "歌曲封面生成失败，请重试。" : "Could not generate the song cover. Please retry."));
+      setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, coverUrl: payload.coverUrl || null } : item));
+    } catch (coverError) {
+      setGenerationError(coverError instanceof Error ? coverError.message : (isZh ? "歌曲封面生成失败，请重试。" : "Could not generate the song cover. Please retry."));
+    } finally {
+      setCoverGeneratingId(null);
+    }
+  }
+
+  async function downloadSongCover(candidate: SongAudioCandidate) {
+    if (!session?.access_token || !candidate.jobId || !songProjectId) return;
+    setGenerationError("");
+    try {
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}/cover?projectId=${encodeURIComponent(songProjectId)}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const payload = await response.json().catch(() => null) as { downloadUrl?: string; filename?: string; error?: string } | null;
+      if (!response.ok || !payload?.downloadUrl) throw new Error(payload?.error || (isZh ? "封面下载链接生成失败，请重试。" : "Could not prepare the cover download. Please retry."));
+      const anchor = document.createElement("a");
+      anchor.href = payload.downloadUrl;
+      anchor.download = payload.filename || "kiikis-song-cover.png";
+      anchor.target = "_blank";
+      anchor.rel = "noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch (coverError) {
+      setGenerationError(coverError instanceof Error ? coverError.message : (isZh ? "封面下载失败，请重试。" : "Could not download the cover. Please retry."));
     }
   }
 
@@ -907,6 +950,7 @@ export default function SongWorkbenchPage() {
       }
       if (isSelectableMusicModel(data.selectedMusicModel)) setSelectedMusicModel(data.selectedMusicModel);
       if (data.musicMode === "vocal" || data.musicMode === "instrumental" || data.musicMode === "sfx") setMusicMode(data.musicMode);
+      if (data.voiceGender === "unrestricted" || data.voiceGender === "male" || data.voiceGender === "female") setVoiceGender(data.voiceGender);
       if (data.uploadedReference) setUploadedReference(data.uploadedReference);
       if (data.referenceMode) setReferenceMode(data.referenceMode);
       loadedEntryRef.current = "draft";
@@ -957,9 +1001,9 @@ export default function SongWorkbenchPage() {
   useEffect(() => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode }),
+      JSON.stringify({ form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, voiceGender, uploadedReference, referenceMode }),
     );
-  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, uploadedReference, referenceMode]);
+  }, [form, singers, lyrics, stylePrompt, compositionPrompt, audit, versions, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, songProjectId, selectedUniverseId, songDevelopmentNotes, translationLanguage, translatedLyrics, selectedModelProvider, selectedMusicModel, musicMode, voiceGender, uploadedReference, referenceMode]);
 
   useEffect(() => {
     if (!singerLibraryLoadedRef.current) return;
@@ -1489,7 +1533,7 @@ export default function SongWorkbenchPage() {
           taskType: "song_workbench",
           projectTitle: form.title,
           genre: normalizedGenres(form).join(", "),
-          input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject, musicMode),
+          input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject, musicMode, voiceGender),
           context: [
             songDevelopmentNotes.trim() ? `Music development chat notes:\n${songDevelopmentNotes}` : "",
             uploadedReference ? `Uploaded reference (${uploadedReference.type}, ${uploadedReference.mode}):\n${uploadedReference.text}` : "",
@@ -1508,7 +1552,7 @@ export default function SongWorkbenchPage() {
       const parsed = parseSongGeneration(payload.output || "");
       const fallbackLyrics = buildLyrics(form, selectedSingers);
       const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers) : "";
-      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || buildModeAwarePrompt(form, selectedSingers, musicMode), selectedSingers));
+      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || buildModeAwarePrompt(form, selectedSingers, musicMode, voiceGender), selectedSingers));
       const nextCompositionPrompt = "";
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
@@ -2056,7 +2100,7 @@ export default function SongWorkbenchPage() {
           taskType: "song_workbench",
           projectTitle: form.title || "Song revision",
           genre: normalizedGenres(form).join(", "),
-          input: buildSongRevisionInput(form, instruction, musicMode),
+          input: buildSongRevisionInput(form, instruction, musicMode, voiceGender),
           context: [
             currentLyrics.trim() ? `Current lyrics:\n${currentLyrics}` : "",
             currentStyle.trim() ? `Current style prompt:\n${currentStyle}` : "",
@@ -2071,7 +2115,7 @@ export default function SongWorkbenchPage() {
 
       const parsed = parseSongGeneration(payload.output || "");
       const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output || reviseLyrics(currentLyrics, instruction), selectedSingers) : "";
-      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || currentStyle || buildModeAwarePrompt(form, selectedSingers, musicMode), selectedSingers));
+      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || currentStyle || buildModeAwarePrompt(form, selectedSingers, musicMode, voiceGender), selectedSingers));
       const nextCompositionPrompt = trimPrompt(sanitizeForbidden(parsed.compositionPrompt || compositionPrompt || buildCompositionPrompt(form, selectedSingers), selectedSingers), 420);
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
 
@@ -2290,7 +2334,7 @@ export default function SongWorkbenchPage() {
             </div>
           </header>
           <div className="song-right-studio">
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDelete={deleteSongAudio} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDelete={deleteSongAudio} onGenerateCover={generateSongCover} onDownloadCover={downloadSongCover} coverGeneratingId={coverGeneratingId} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} voiceGender={voiceGender} onVoiceGenderChange={setVoiceGender} />
           </div>
         </section>
       </section>
@@ -2640,13 +2684,19 @@ export default function SongWorkbenchPage() {
   );
 }
 
-function getMusicModeInstruction(mode: SongMusicMode) {
-  if (mode === "instrumental") return "Create an instrumental track only. Do not write lyrics, do not plan vocals, and prioritize arrangement, instrumentation, dynamics, texture, and a clean ending.";
-  if (mode === "sfx") return "Create a short sound-effect-oriented audio prompt. Do not write lyrics or vocals. Describe the action, material, space, distance, impact, movement, decay, duration, and whether it should loop. Treat this as experimental because the selected providers are music models.";
-  return "Create a vocal song with singable lyrics, clear sections, vocal direction, and a production-ready style prompt.";
+function getVoiceGenderInstruction(gender: SongVoiceGender) {
+  if (gender === "male") return "Use a male lead vocal direction throughout the song; do not write female lead-vocal instructions.";
+  if (gender === "female") return "Use a female lead vocal direction throughout the song; do not write male lead-vocal instructions.";
+  return "Do not constrain the singer to a gender; choose the vocal direction that best serves the song.";
 }
 
-function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sourceProject: DramaProject | null, musicMode: SongMusicMode) {
+function getMusicModeInstruction(mode: SongMusicMode, voiceGender: SongVoiceGender = "unrestricted") {
+  if (mode === "instrumental") return "Create an instrumental track only. Do not write lyrics, do not plan vocals, and prioritize arrangement, instrumentation, dynamics, texture, and a clean ending.";
+  if (mode === "sfx") return "Create a short sound-effect-oriented audio prompt. Do not write lyrics or vocals. Describe the action, material, space, distance, impact, movement, decay, duration, and whether it should loop. Treat this as experimental because the selected providers are music models.";
+  return `Create a vocal song with singable lyrics, clear sections, vocal direction, and a production-ready style prompt. ${getVoiceGenderInstruction(voiceGender)}`;
+}
+
+function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sourceProject: DramaProject | null, musicMode: SongMusicMode, voiceGender: SongVoiceGender = "unrestricted") {
   const projectType = projectTypes.find((item) => item.value === form.projectType);
   const language = form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage;
 
@@ -2657,7 +2707,8 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sour
       strategy: projectType?.strategy || "",
       outputLanguage: language,
       musicMode,
-      requiredBehavior: getMusicModeInstruction(musicMode),
+      ...(musicMode === "vocal" ? { voiceGender } : {}),
+      requiredBehavior: getMusicModeInstruction(musicMode, voiceGender),
       lyricsMode: form.lyricsMode,
       concept: form.concept,
       primaryEmotion: form.primaryEmotion,
@@ -2690,14 +2741,15 @@ function buildSongGenerationInput(form: SongForm, singers: SingerProfile[], sour
   );
 }
 
-function buildSongRevisionInput(form: SongForm, instruction: string, musicMode: SongMusicMode) {
+function buildSongRevisionInput(form: SongForm, instruction: string, musicMode: SongMusicMode, voiceGender: SongVoiceGender = "unrestricted") {
   return JSON.stringify(
     {
       mode: "revise_existing_song",
       revisionInstruction: instruction,
       musicMode,
+      ...(musicMode === "vocal" ? { voiceGender } : {}),
       requiredBehavior: musicMode === "vocal"
-        ? `${getMusicModeInstruction(musicMode)} Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.`
+        ? `${getMusicModeInstruction(musicMode, voiceGender)} Rewrite the lyrics and prompts according to the revision instruction. Return the complete revised song, not a change note.`
         : `${getMusicModeInstruction(musicMode)} Rewrite the applicable prompt or sound-effect description according to the revision instruction. Do not return lyrics or a change note.`,
       title: form.title,
       outputLanguage: form.outputLanguage === "Custom" ? form.customLanguage || "Custom" : form.outputLanguage,
@@ -3093,7 +3145,7 @@ function buildStylePrompt(form: SongForm, singers: SingerProfile[]) {
   return buildMusicPrompt(form, singers);
 }
 
-function buildModeAwarePrompt(form: SongForm, singers: SingerProfile[], mode: SongMusicMode) {
+function buildModeAwarePrompt(form: SongForm, singers: SingerProfile[], mode: SongMusicMode, voiceGender: SongVoiceGender = "unrestricted") {
   if (mode === "instrumental") {
     const instruments = normalizedInstruments(form).slice(0, 5).join(", ") || "piano, warm bass, restrained drums";
     return fitV6StylePrompt([
@@ -3112,10 +3164,10 @@ function buildModeAwarePrompt(form: SongForm, singers: SingerProfile[], mode: So
       "clear action, material, space, distance, impact, movement, decay, short duration, clean tail",
     ].filter(Boolean).join(", "));
   }
-  return buildMusicPrompt(form, singers);
+  return buildMusicPrompt(form, singers, voiceGender);
 }
 
-function buildMusicPrompt(form: SongForm, singers: SingerProfile[]) {
+function buildMusicPrompt(form: SongForm, singers: SingerProfile[], voiceGender: SongVoiceGender = "unrestricted") {
   const genres = normalizedGenres(form).slice(0, 4).join(", ");
   const singerTerms = singers.flatMap((singer) => singer.safePromptTerms).slice(0, 2).join(", ");
   const instruments = normalizedInstruments(form).slice(0, 4).join(", ");
@@ -3123,6 +3175,7 @@ function buildMusicPrompt(form: SongForm, singers: SingerProfile[]) {
     genres,
     `${form.primaryEmotion} song`,
     singerTerms,
+    getVoiceGenderPromptTerm(voiceGender),
     instruments,
     specifiedValue(form.groove),
     specifiedValue(form.key),
@@ -3132,6 +3185,12 @@ function buildMusicPrompt(form: SongForm, singers: SingerProfile[]) {
     "clean modern production-ready mix",
   ].filter(Boolean).join(", ");
   return trimPromptBytes(sanitizeForbidden(prompt, singers), MUSIC_PROMPT_MAX_BYTES);
+}
+
+function getVoiceGenderPromptTerm(gender: SongVoiceGender) {
+  if (gender === "male") return "male lead vocal";
+  if (gender === "female") return "female lead vocal";
+  return "flexible lead vocal";
 }
 
 function buildCompositionPrompt(form: SongForm, singers: SingerProfile[]) {

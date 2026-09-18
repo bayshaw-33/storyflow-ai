@@ -1,4 +1,4 @@
-const ART_BUCKET = "art-assets";
+export const ART_BUCKET = "art-assets";
 
 export async function persistUploadedArtReference(input: {
   userId: string;

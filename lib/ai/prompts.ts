@@ -844,9 +844,11 @@ export async function buildPrompt(payload: GeneratePayload) {
 
 function songModePrompt(input = "") {
   let mode = "vocal";
+  let voiceGender = "unrestricted";
   try {
-    const parsed = JSON.parse(input) as { musicMode?: unknown };
+    const parsed = JSON.parse(input) as { musicMode?: unknown; voiceGender?: unknown };
     if (parsed.musicMode === "instrumental" || parsed.musicMode === "sfx") mode = parsed.musicMode;
+    if (parsed.voiceGender === "male" || parsed.voiceGender === "female") voiceGender = parsed.voiceGender;
   } catch {
     // The stable default remains the vocal-song contract for legacy callers.
   }
@@ -865,6 +867,7 @@ function songModePrompt(input = "") {
   return [
     "【音乐工作台模式：人声歌曲】",
     "输出完整原创歌词和一个精炼的 Suno V6 style 提示词；歌词有清晰段落与可记忆副歌，提示词不要堆标签。",
+    voiceGender === "male" ? "人声方向：男声主唱。歌词和曲风提示词都要明确、稳定地服务于男声演唱，不要写女声主唱指令。" : voiceGender === "female" ? "人声方向：女声主唱。歌词和曲风提示词都要明确、稳定地服务于女声演唱，不要写男声主唱指令。" : "人声方向：不限性别。不要强行限定男声或女声，选择最适合歌曲情绪的演唱方向。",
   ].join("\n");
 }
 
