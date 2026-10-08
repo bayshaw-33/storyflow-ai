@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { assertArtStoragePathBelongsToUser, signStoredArtImage } from "@/lib/supabase/art-storage";
+import { signStoredArtImage } from "@/lib/supabase/art-storage";
+import { assertArtCloudImagePath } from "@/lib/art/cloud-store";
 import { authenticateRequest } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
       ? Array.from(new Set(body.paths.filter((path): path is string => typeof path === "string" && Boolean(path.trim()))))
       : [];
     const urls = Object.fromEntries(await Promise.all(paths.slice(0, 100).map(async (path) => {
-      assertArtStoragePathBelongsToUser(user.id, path);
+      assertArtCloudImagePath(user.id, path);
       return [path, await signStoredArtImage(path, 60 * 60 * 24 * 7)];
     })));
     return NextResponse.json({ success: true, urls, error: null });

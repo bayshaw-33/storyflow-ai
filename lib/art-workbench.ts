@@ -353,6 +353,8 @@ export function createArtAsset(kind: ArtAssetKind, overrides: Partial<ArtAsset> 
     description: overrides.description || "",
     prompt: overrides.prompt || buildDefaultAssetPrompt(kind, name, overrides.description || ""),
     negativePrompt: overrides.negativePrompt || "low quality, blurry, inconsistent face, extra limbs, watermark, logo, unreadable text, collage",
+    identityAnchor: overrides.identityAnchor || "",
+    variants: overrides.variants || [{ id: createArtId("art-variant"), name: "母版", type: "master", prompt: overrides.prompt || buildDefaultAssetPrompt(kind, name, overrides.description || ""), versions: [] }],
     referenceSheetUrl: overrides.referenceSheetUrl,
     threeViewUrl: overrides.threeViewUrl,
     conceptUrl: overrides.conceptUrl,

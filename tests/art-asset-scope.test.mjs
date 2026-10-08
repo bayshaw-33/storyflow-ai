@@ -82,7 +82,7 @@ test("ArtAssetDetail 从 URL projectId+workId 派生与工作台一致的 scoped
 // 8. ArtWorkbench 资产卡链接携带完整 scope query
 test("ArtWorkbench 资产卡链接携带 projectId + sourceUnitId + workId query", async () => {
   const component = await read("../components/art/ArtWorkbench.tsx");
-  assert.match(component, /new URLSearchParams\(\{ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId, workId: scopeWorkId \}\)/);
+  assert.match(component, /new URLSearchParams\(\{ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId \|\| "", workId: scopeWorkId \}\)/);
   // 嵌入模式必须接收 contextSourceUnitId prop
   assert.match(component, /contextSourceUnitId\?: string/);
   assert.match(component, /contextWorkId\?: string/);

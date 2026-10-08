@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 test("art signing route authenticates and only signs paths owned by the current user", async () => {
   const route = await readFile(new URL("../app/api/art/sign-assets/route.ts", import.meta.url), "utf8");
   assert.match(route, /authenticateRequest\(request\)/);
-  assert.match(route, /assertArtStoragePathBelongsToUser/);
+  assert.match(route, /assertArtCloudImagePath\(user.id, path\)/);
   assert.match(route, /signStoredArtImage/);
   assert.match(route, /paths\.slice\(0, 100\)/);
 });

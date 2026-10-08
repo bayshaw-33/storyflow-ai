@@ -7,7 +7,9 @@ import type { Session } from "@supabase/supabase-js";
 import { ArrowLeft, Check, ChevronDown, Download, ImagePlus, LoaderCircle, LockKeyhole, Pencil, Plus, Send, Sparkles, Upload, Users, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
-import { appendArtVersions, approveArtAssetVersion, collectArtStoragePaths, getArtWorkbenchStorageKey, recoverLegacyArtDraft, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
+import { appendArtVersions, approveArtAssetVersion, collectArtStoragePaths, getArtWorkbenchStorageKey, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, ArtAssetVersion, ArtAssetVariant, ArtWorkbenchState } from "@/lib/art-workbench";
+import { resolveStandaloneArtDraftKey, type ArtChatDraft } from "@/lib/art/chat-workflow";
+import { downloadArtImage } from "./ArtChatImages";
 import type { ActorProfile } from "@/lib/actors";
 import { ART_MODEL_CATALOG, findDefaultArtModel } from "@/lib/art/providers/catalog";
 import styles from "./ArtAssetDetail.module.css";
@@ -25,12 +27,19 @@ export default function ArtAssetDetail() {
   const standaloneDraftId = searchParams.get("draftId") || "";
   const ctxSetup = searchParams.get("setup") === "1";
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [cloudReady, setCloudReady] = useState(false);
+  const cloudWrites = useRef<Promise<unknown>>(Promise.resolve());
   const embeddedStorageKey = ctxWorkId
     ? resolveArtDraftKey({ userId: session?.user.id, projectId: ctxProjectId, workId: ctxWorkId })
     : null;
-  const storageKey = embeddedStorageKey || (ctxWorkId ? null : getArtWorkbenchStorageKey(ctxProjectId || standaloneDraftId || undefined, ctxSourceUnitId || undefined));
-  const backToArtHref = ctxProjectId && ctxSourceUnitId
-    ? `/production?projectId=${encodeURIComponent(ctxProjectId)}&sourceUnitId=${encodeURIComponent(ctxSourceUnitId)}&mode=art`
+  const storageKey = embeddedStorageKey || (ctxWorkId ? null : standaloneDraftId ? resolveStandaloneArtDraftKey(session?.user.id || (sessionReady ? "local" : undefined), standaloneDraftId) : ctxProjectId ? getArtWorkbenchStorageKey(ctxProjectId, ctxSourceUnitId || undefined) : null);
+  const scope: Record<string, string> = ctxWorkId ? { projectId: ctxProjectId, workId: ctxWorkId } : { draftId: standaloneDraftId };
+  const scopeRef = useRef(storageKey);
+  scopeRef.current = storageKey;
+  const backToArtHref = ctxProjectId && (ctxSourceUnitId || ctxWorkId)
+    ? `/production?projectId=${encodeURIComponent(ctxProjectId)}&sourceUnitId=${encodeURIComponent(ctxSourceUnitId)}&workId=${encodeURIComponent(ctxWorkId)}&mode=art`
     : standaloneDraftId ? `/art-workbench?draftId=${encodeURIComponent(standaloneDraftId)}` : `/art-workbench${ctxSetup ? "?setup=1" : ""}`;
   const [state, setState] = useState<ArtWorkbenchState | null>(null);
   const [asset, setAsset] = useState<ArtAsset | null>(null);
@@ -39,7 +48,7 @@ export default function ArtAssetDetail() {
   const [selection, setSelection] = useState<"smart" | "atlas" | "flux">("smart");
   const [modelId, setModelId] = useState("");
   const [count, setCount] = useState<1 | 2 | 4>(1);
-  const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:3" | "3:4" | "16:9" | "9:16">("16:9");
+  const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:3" | "3:4" | "16:9" | "9:16">("9:16");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const uploadInput = useRef<HTMLInputElement>(null);
@@ -58,18 +67,39 @@ export default function ArtAssetDetail() {
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    void supabase?.auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => setSession(next)) || {};
+    if (!supabase) setSessionReady(true);
+    void supabase?.auth.getSession().then(({ data }) => { setSession(data.session || null); setSessionReady(true); });
+    const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { setSession(next); setSessionReady(true); }) || {};
     return () => listener?.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!storageKey) return;
-    try {
-      if (embeddedStorageKey && ctxProjectId && ctxSourceUnitId) {
-        recoverLegacyArtDraft(localStorage, getArtWorkbenchStorageKey(ctxProjectId, ctxSourceUnitId), embeddedStorageKey);
+    setLoading(true);
+    setCloudReady(false);
+    setAsset(null);
+    setState(null);
+    if (!sessionReady) return;
+    if (!storageKey) { setLoading(false); if (!session) setNotice("请先登录后读取当前项目资产。"); return; }
+    let cancelled = false;
+    void (async () => { try {
+      let stored = JSON.parse(localStorage.getItem(storageKey) || "null") as ArtWorkbenchState | null;
+      if (session?.access_token && (ctxWorkId || standaloneDraftId)) {
+        try {
+        const response = await fetchWithAuthRetry(`/api/art/draft?${new URLSearchParams(scope as Record<string, string>)}`);
+        const payload = await response.json() as { draft?: ArtChatDraft };
+        if (!response.ok) throw new Error("云端资产暂时无法读取，请重试。");
+        if (!cancelled) setCloudReady(true);
+        if (payload.draft?.state && (!stored || payload.draft.state.updatedAt > stored.updatedAt)) {
+          stored = payload.draft.state;
+          localStorage.setItem(storageKey, JSON.stringify(stored));
+          localStorage.setItem(`${storageKey}__chat`, JSON.stringify({ messages: payload.draft.messages, jobs: payload.draft.jobs }));
+        }
+        } catch (error) {
+          if (!stored) throw error;
+          if (!cancelled) setNotice("云端暂时无法读取，当前使用本机资产；修改暂未同步，请勿清理浏览器数据。");
+        }
       }
-      const stored = JSON.parse(localStorage.getItem(storageKey) || "null") as ArtWorkbenchState | null;
+      if (cancelled) return;
       const found = stored?.assets.find((item) => item.id === assetId) || null;
       if (stored && found) {
         const variants = found.variants?.length ? found.variants : [{ id: crypto.randomUUID(), name: found.kind === "character" ? "角色母版" : found.kind === "scene" ? "场景母版" : "道具母版", type: "master" as const, prompt: found.kind === "character" ? REFERENCE_SHEET_PROMPT : found.prompt, versions: legacyVersions(found) }];
@@ -79,7 +109,7 @@ export default function ArtAssetDetail() {
         setSelectedVariantId(variants[0].id);
         setSelectedVersionId(variants[0].approvedVersionId || variants[0].versions[0]?.id || "");
         void fetchArtDraftPreviewUrls(stored).then((urls) => {
-          if (!urls) return;
+          if (!urls || cancelled) return;
           setState((currentState) => {
             if (!currentState) return currentState;
             const refreshed = replaceArtVersionPreviewUrls(currentState, urls);
@@ -93,8 +123,12 @@ export default function ArtAssetDetail() {
           });
         });
       }
-    } catch { setNotice("无法读取美术资产。"); }
-  }, [assetId, ctxProjectId, ctxSourceUnitId, embeddedStorageKey, storageKey]);
+    } catch (error) { if (!cancelled) setNotice(error instanceof Error ? error.message : "无法读取美术资产。"); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetId, storageKey, sessionReady]);
 
   const selectedVariant = asset?.variants?.find((item) => item.id === selectedVariantId) || asset?.variants?.[0];
   const selectedVersion = selectedVariant?.versions.find((item) => item.id === selectedVersionId) || selectedVariant?.versions[0];
@@ -115,12 +149,25 @@ export default function ArtAssetDetail() {
     if (!currentIsValid) setModelId(findDefaultArtModel(selection, requiredCapability)?.id || availableModels[0]?.id || "");
   }, [availableModels, modelId, requiredCapability, selection]);
 
-  // 画幅默认值：角色母版 4:3，其他 16:9（与原硬编码逻辑一致，用户可手动改）
+  // 默认竖屏画幅；用户修改不会在编辑期间重置。
   useEffect(() => {
     if (!asset) return;
-    const isCharacterMaster = asset.kind === "character" && selectedVariant?.type === "master";
-    setAspectRatio(isCharacterMaster ? "4:3" : "16:9");
+    setAspectRatio("9:16");
   }, [asset?.id, selectedVariantId]); // 仅在 asset/variant 切换时重置，用户手动改不被覆盖
+
+  useEffect(() => {
+    if (loading || !cloudReady || !state || !storageKey) return;
+    const draft: ArtChatDraft = { state, messages: [], jobs: [], ...JSON.parse(localStorage.getItem(`${storageKey}__chat`) || "{}") };
+    const timer = setTimeout(() => {
+      cloudWrites.current = cloudWrites.current.catch(() => undefined).then(async () => {
+        if (scopeRef.current !== storageKey) return;
+        const response = await fetchWithAuthRetry("/api/art/draft", { method: "PUT", body: JSON.stringify({ ...scope, draft }) });
+        if (!response.ok) setNotice("云端同步失败，编辑已保存在本机，请稍后重试。");
+      }).catch(() => setNotice("云端同步失败，编辑已保存在本机。"));
+    }, 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, loading, cloudReady, storageKey]);
 
   function persist(next: ArtAsset) {
     assetRef.current = next;
@@ -409,6 +456,7 @@ export default function ArtAssetDetail() {
       const newVersion: ArtAssetVersion = {
         id: crypto.randomUUID(),
         imageUrl,
+        storagePath: imageUrl.match(/\/storage\/v1\/object\/(?:sign|authenticated)\/art-assets\/([^?]+)/)?.[1],
         source: "uploaded",
         prompt: actor.base_prompt || selectedVariant?.prompt || asset.prompt,
         createdAt: new Date().toISOString(),
@@ -441,7 +489,8 @@ export default function ArtAssetDetail() {
     }
   }
 
-  if (!asset) return <main className={styles.missing}><p>{notice || "没有找到这个美术资产。"}</p><Link href={backToArtHref}>返回美术仓库</Link></main>;
+  if (loading) return <main className={styles.missing} aria-busy="true"><LoaderCircle className={styles.spin} size={22} /><p>正在载入当前美术资产…</p></main>;
+  if (!asset) return <main className={styles.missing}><p>{notice || "当前项目中没有这个美术资产。"}</p><Link href={backToArtHref}>返回美术仓库</Link></main>;
 
   return <main className={styles.page}>
     <header className={styles.header}><div><Link href={backToArtHref}><ArrowLeft size={17} />返回美术仓库</Link><strong>{asset.name}</strong><span>{asset.kind === "character" ? "角色详情" : asset.kind === "scene" ? "场景详情" : "道具详情"}</span></div><div>{asset.publishedVersionId ? <span className={styles.published}><Check size={14} />已发布</span> : asset.status === "ready" ? <span className={styles.approved}><LockKeyhole size={14} />已锁定</span> : <span>草稿</span>}<button type="button" onClick={() => persist(asset)}>保存</button></div></header>
@@ -453,7 +502,7 @@ export default function ArtAssetDetail() {
         <div className={styles.versionStrip}>{selectedVariant?.versions.map((version, index) => <div key={version.id} className={selectedVersion?.id === version.id ? `${styles.versionTile} ${styles.selectedVersion}` : styles.versionTile}><button type="button" className={styles.versionTileBtn} onClick={() => setSelectedVersionId(version.id)}><img src={version.imageUrl} alt={`版本 ${index + 1}`} /><span>{version.name || (version.source === "uploaded" ? "上传" : version.model || "AI")}</span></button>{selectedVariant.approvedVersionId === version.id ? <i><Check size={11} /></i> : null}<button type="button" className={styles.versionRename} title="重命名" onClick={() => renameVersion(version.id)}><Pencil size={11} /></button></div>)}<button className={styles.uploadTile} type="button" onClick={() => uploadInput.current?.click()}><Upload size={18} />上传版本</button><input ref={uploadInput} hidden type="file" multiple accept="image/png,image/jpeg,image/webp" onChange={uploadVersion} /></div>
       </section>
       <aside className={styles.editor}>
-        <div className={styles.editorTitle}><div><small>资产编辑器</small><h1>{asset.name}</h1></div>{selectedVersion?.imageUrl ? <a href={selectedVersion.imageUrl} download><Download size={16} /></a> : null}</div>
+        <div className={styles.editorTitle}><div><small>资产编辑器</small><h1>{asset.name}</h1></div>{selectedVersion?.storagePath ? <button type="button" aria-label="下载原图" onClick={() => void downloadArtImage(selectedVersion.storagePath!, asset.name).catch(error => setNotice(error.message))}><Download size={16} /></button> : null}</div>
         <label><span>名称</span><input value={asset.name} onChange={(event) => patchAsset({ name: event.target.value })} /></label>
         <label><span>{asset.kind === "character" ? "身份锚点" : "母版锚点"}</span><textarea value={asset.identityAnchor || ""} onChange={(event) => patchAsset({ identityAnchor: event.target.value })} placeholder="固定身份、结构、比例、材质和不可变化的识别特征" /></label>
         <label className={styles.prompt}><span>生成提示词</span><textarea ref={promptRef} value={selectedVariant?.prompt || ""} onChange={handlePromptChange} placeholder="输入提示词，@ 可提及同项目其他角色/场景/道具/演员" />{mention.open && filteredMentions.length ? <div className={styles.mentionList} style={mention.rect ? { top: mention.rect.bottom + 4, left: mention.rect.left } : undefined}>{filteredMentions.map((item) => <button key={`${item.kind}:${item.label}`} type="button" className={styles.mentionItem} onClick={() => insertMention(item.label)}><strong>{item.label}</strong><span>{item.kind}</span></button>)}</div> : null}</label>

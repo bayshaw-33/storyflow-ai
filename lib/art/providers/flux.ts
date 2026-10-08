@@ -5,8 +5,7 @@ const BFL_BASE_URL = "https://api.bfl.ai/v1";
 export async function generateFluxImages(request: ArtImageRequest, model: ArtModelDescriptor): Promise<ArtImageProviderResult[]> {
   const apiKey = process.env.BFL_API_KEY?.trim();
   if (!apiKey) throw new Error("MISSING_BFL_API_KEY");
-  const results: ArtImageProviderResult[] = [];
-  for (let index = 0; index < request.count; index += 1) {
+  return Promise.all(Array.from({ length: request.count }, async (_, index): Promise<ArtImageProviderResult> => {
     const response = await fetch(`${BFL_BASE_URL}/${model.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", accept: "application/json", "x-key": apiKey },
@@ -22,9 +21,8 @@ export async function generateFluxImages(request: ArtImageRequest, model: ArtMod
     const task = await response.json() as { id?: string; polling_url?: string };
     if (!task.id || !task.polling_url) throw new Error("BFL_INVALID_TASK_RESPONSE");
     const imageUrl = await pollFlux(task.polling_url, apiKey);
-    results.push({ imageUrl, provider: "flux", model: model.id, providerTaskId: task.id, seed: request.seed === undefined ? undefined : request.seed + index });
-  }
-  return results;
+    return { imageUrl, provider: "flux", model: model.id, providerTaskId: task.id, seed: request.seed === undefined ? undefined : request.seed + index };
+  }));
 }
 
 async function pollFlux(url: string, apiKey: string) {

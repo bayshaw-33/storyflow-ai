@@ -3,14 +3,18 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import type { Session } from "@supabase/supabase-js";
-import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Send, Sparkles, Trash2, Upload, Users } from "lucide-react";
+import { Archive, ChevronDown, FilePlus2, ImagePlus, LoaderCircle, MessageSquareText, PanelRightClose, PanelRightOpen, Plus, Search, Sparkles, Trash2, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
-import { artStateFromProject, assetsFromExtraction, backupCorruptedArtDraft, canPersistArtDraft, collectArtStoragePaths, createArtAsset, createEmptyArtWorkbenchState, getArtWorkbenchStorageKey, recoverLegacyArtDraft, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
+import { artStateFromProject, assetsFromExtraction, backupCorruptedArtDraft, canPersistArtDraft, collectArtStoragePaths, createArtAsset, createEmptyArtWorkbenchState, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
+import { addGeneratedArtCandidates, applyArtChatActions, resolveStandaloneArtDraftKey, type ArtChatDraft, type ArtChatJob, type ArtChatMessage, type ArtChatScope, type ArtReference } from "@/lib/art/chat-workflow";
+import type { ArtModelDescriptor } from "@/lib/art/providers/types";
+import ArtChatComposer from "./ArtChatComposer";
+import ArtChatImages from "./ArtChatImages";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import styles from "./ArtWorkbench.module.css";
 import collapseStyles from "./ArtWorkbenchCollapse.module.css";
@@ -25,8 +29,7 @@ function getArtWorkbenchArchiveIndexKey(storageKey: string) {
 
 type ArtWorkbenchArchiveIndex = Array<{ id: string; title: string; archivedAt: string; assetCount: number }>;
 
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string; note?: string };
-type PendingImage = { id: string; name: string; url: string; storagePath: string };
+const welcome: ArtChatMessage = { id: "hello", role: "assistant", content: "我是 KK 美术助理。上传参考图，告诉我想画什么；我会生成图片候选并放进美术仓库。也可以上传剧本，让我拆解角色、场景与道具。" };
 
 // 归档辅助：把当前草稿保存为独立存档，避免被新建/切换项目覆盖
 function archiveCurrentDraft(draft: ArtWorkbenchState, storageKey: string): string | null {
@@ -95,31 +98,57 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const [projects, setProjects] = useState<DramaProject[]>([]);
   const [state, setState] = useState<ArtWorkbenchState>(() => createEmptyArtWorkbenchState());
   const [selectedKind, setSelectedKind] = useState<ArtAssetKind>("character");
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([{ id: "hello", role: "assistant", content: "我是 KK 美术助理。关联项目或上传资料后，我会拆解角色、场景和关键道具；你也可以直接告诉我要增加或修改什么。" }]);
-  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [messages, setMessages] = useState<ArtChatMessage[]>([welcome]);
+  const [pendingImages, setPendingImages] = useState<ArtReference[]>([]);
+  const [jobs, setJobs] = useState<ArtChatJob[]>([]);
+  const [models, setModels] = useState<ArtModelDescriptor[]>([]);
+  const [modelId, setModelId] = useState("");
+  const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9" | "1:1" | "4:3" | "3:4">("9:16");
+  const [count, setCount] = useState<1 | 2 | 4>(1);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
-  const [isAssistantCollapsed, setIsAssistantCollapsed] = useState(false);
+  const [isRepositoryCollapsed, setIsRepositoryCollapsed] = useState(false);
   const [archiveIndex, setArchiveIndex] = useState<ArtWorkbenchArchiveIndex>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
+  const [cloudReady, setCloudReady] = useState(false);
   const [standaloneDraftId, setStandaloneDraftId] = useState<string | null>(standaloneDraftIdProp || null);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
+  const chatPanel = useRef<HTMLElement>(null);
   const isEmbedded = Boolean(contextProjectId || contextWorkId);
   const embeddedStorageKey = isEmbedded
     ? resolveArtDraftKey({ userId: session?.user.id, projectId: contextProjectId, workId: contextWorkId })
     : null;
-  const storageKey = embeddedStorageKey || getArtWorkbenchStorageKey(contextProjectId || standaloneDraftId || undefined, contextSourceUnitId);
-  const storageReady = !isEmbedded || Boolean(embeddedStorageKey);
+  const storageKey = embeddedStorageKey || (!isEmbedded ? resolveStandaloneArtDraftKey(session?.user.id || (sessionReady ? "local" : undefined), standaloneDraftId || undefined) : null) || "";
+  const storageReady = Boolean(storageKey);
+  const scope: ArtChatScope = isEmbedded ? { projectId: contextProjectId, workId: contextWorkId } : { draftId: standaloneDraftId || undefined };
+  const scopeRef = useRef(storageKey);
+  scopeRef.current = storageKey;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const ready = isHydrated && canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey });
+  const cloudWrites = useRef<Promise<unknown>>(Promise.resolve());
 
-  function setStandaloneDraftScope(draftId: string) {
+  useEffect(() => {
+    if (standaloneDraftIdProp) setStandaloneDraftId(standaloneDraftIdProp);
+  }, [standaloneDraftIdProp]);
+
+  useEffect(() => {
+    const panel = chatPanel.current?.querySelector<HTMLElement>("[aria-live=polite]");
+    if (panel) panel.scrollTop = panel.scrollHeight;
+  }, [messages, busy]);
+
+  function setStandaloneDraftScope(draftId: string, initialState?: ArtWorkbenchState) {
     if (isEmbedded) return;
+    const nextKey = resolveStandaloneArtDraftKey(session?.user.id || "local", draftId)!;
+    if (initialState) localStorage.setItem(nextKey, JSON.stringify(initialState));
     setStandaloneDraftId(draftId);
     if (typeof window !== "undefined") {
       try {
@@ -132,134 +161,121 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   }
 
   useEffect(() => {
-    setIsHydrated(false);
-    setHydratedStorageKey(null);
     const supabase = getSupabaseBrowserClient();
     const localProjects = readProjectsFromStorage();
     setProjects(localProjects);
     const loadSession = async (next: Session | null) => {
       setSession(next);
+      setSessionReady(true);
       if (!next?.access_token) return setProjects(localProjects);
       const cloudProjects = await readProjectsFromSupabase({ accessToken: next.access_token }).catch(() => []);
       setProjects(mergeArtProjects(localProjects, cloudProjects));
     };
+    if (!supabase) setSessionReady(true);
     void supabase?.auth.getSession().then(({ data }) => loadSession(data.session || null));
     const { data: listener } = supabase?.auth.onAuthStateChange((_event, next) => { void loadSession(next); }) || {};
-    const legacyRecovery = embeddedStorageKey && contextProjectId && contextSourceUnitId
-      ? recoverLegacyArtDraft(localStorage, getArtWorkbenchStorageKey(contextProjectId, contextSourceUnitId), embeddedStorageKey)
-      : { mode: "none" as const, assetCount: 0 };
-    if (legacyRecovery.mode !== "none") {
-      setNotice(legacyRecovery.mode === "restored"
-        ? `已恢复旧版美术草稿，共 ${legacyRecovery.assetCount} 个资产；旧数据仍保留为安全备份。`
-        : `发现旧版美术草稿，已将 ${legacyRecovery.assetCount} 个资产放入「我的草稿」，未覆盖当前内容。`);
-    }
-    // 加载归档索引（用于"我的草稿"下拉）
-    setArchiveIndex(storageReady ? readArchiveIndex(storageKey) : []);
-    const params = new URLSearchParams(window.location.search);
-
-    // 通用：开始新草稿前自动归档当前草稿（不丢失任何工作成果）
-    const archiveCurrentAndStartNew = (newState: ArtWorkbenchState, welcomeMessage: string) => {
-      try {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          const current = JSON.parse(saved) as ArtWorkbenchState;
-          const archiveId = archiveCurrentDraft(current, storageKey);
-          if (archiveId) {
-            setArchiveIndex(readArchiveIndex(storageKey));
-            setNotice(isZh ? `已自动保存上一份草稿《${current.title || "未命名"}》到「我的草稿」。` : `Previous draft "${current.title || "Untitled"}" auto-archived to "My Drafts".`);
-          }
-        }
-      } catch { /* 归档失败不阻塞新草稿创建 */ }
-      setStandaloneDraftScope(newState.id);
-      setState(newState);
-      setMessages([{ id: crypto.randomUUID(), role: "assistant", content: welcomeMessage }]);
-    };
-
-    // 任务 2：嵌入模式（制作工作台美术 Tab）——用传入的项目上下文初始化
-    if (contextProjectId) {
-      try {
-        const existing = storageReady ? localStorage.getItem(storageKey) : null;
-        const baseState = existing ? { ...createEmptyArtWorkbenchState(), ...JSON.parse(existing) as ArtWorkbenchState } : createEmptyArtWorkbenchState();
-        setState({
-          ...baseState,
-          projectId: contextProjectId,
-          projectTitle: contextProjectTitle || baseState.projectTitle || "",
-        });
-      } catch {
-        try { backupCorruptedArtDraft(localStorage, storageKey); } catch { /* 保留原始损坏数据失败时仍阻止页面崩溃 */ }
-        setState({ ...createEmptyArtWorkbenchState(), projectId: contextProjectId, projectTitle: contextProjectTitle || "" });
-        setNotice(isZh ? "当前项目的本地美术草稿数据损坏，原始数据已备份并新建空白恢复草稿。" : "The local art draft is corrupted. Original bytes were backed up before opening a recovery draft.");
-      }
-      setHydratedStorageKey(storageKey);
-      setIsHydrated(true);
-      return () => listener?.subscription.unsubscribe();
-    }
-
-    const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
-    if (handoff) {
-      params.delete("handoff");
-      params.delete("sourceProjectId");
-      window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
-      archiveCurrentAndStartNew(
-        {
-          ...createEmptyArtWorkbenchState(),
-          projectId: handoff.sourceProjectId,
-          projectTitle: handoff.title,
-          title: `${handoff.title} 美术设定`,
-          sourceText: [
-            handoff.projectBackground ? `【项目背景】\n${handoff.projectBackground}` : "",
-            handoff.worldAndOutline ? `【世界观与大纲】\n${handoff.worldAndOutline}` : "",
-            handoff.characterBible ? `【角色 Bible】\n${handoff.characterBible}` : "",
-            handoff.manuscript ? `【${handoff.contentType === "script" ? "剧本" : "小说正文"}】\n${handoff.manuscript}` : "",
-          ].filter(Boolean).join("\n\n"),
-        },
-        `已接收《${handoff.title}》的创作三件套与${handoff.contentType === "script" ? "剧本" : "小说正文"}。可以直接开始拆解角色、场景和道具。`,
-      );
-      setHydratedStorageKey(storageKey);
-      setIsHydrated(true);
-      return () => listener?.subscription.unsubscribe();
-    }
-
-    if (params.get("setup") === "1") {
-      params.delete("setup");
-      window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params.toString()}` : ""}`);
-      // 自动归档当前草稿后开始新空白项目
-      archiveCurrentAndStartNew(createEmptyArtWorkbenchState(), isZh ? "已新建空白美术项目。可在「我的草稿」中找回之前的草稿。" : "Started a new blank art project. Previous drafts are in \"My Drafts\".");
-      setHydratedStorageKey(storageKey);
-      setIsHydrated(true);
-      return () => listener?.subscription.unsubscribe();
-    }
-    try {
-      const saved = storageReady ? localStorage.getItem(storageKey) : null;
-      if (saved) setState({ ...createEmptyArtWorkbenchState(), ...JSON.parse(saved) as ArtWorkbenchState });
-    } catch (error) {
-      // JSON 解析失败：备份损坏数据以便排查，并提示用户（不静默清空）
-      try { backupCorruptedArtDraft(localStorage, storageKey); } catch { /* 备份失败忽略 */ }
-      setNotice(isZh ? "本地美术草稿数据损坏，已自动备份原始数据。请重新开始或联系支持。" : "Local art draft data is corrupted. Original data has been backed up.");
-    }
-    setHydratedStorageKey(storageKey);
-    setIsHydrated(true);
     return () => listener?.subscription.unsubscribe();
-  }, [contextProjectId, contextProjectTitle, contextSourceUnitId, contextWorkId, isZh, storageKey, storageReady]);
+  }, []);
+
+  useEffect(() => {
+    if (!session?.access_token) { setModels([]); return; }
+    let cancelled = false;
+    void fetchWithAuthRetry("/api/art/models").then(response => response.json()).then(payload => {
+      if (!cancelled) setModels(payload.models || []);
+    }).catch(() => { if (!cancelled) setNotice("图片模型暂时加载失败，请刷新后重试。"); });
+    return () => { cancelled = true; };
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    setIsHydrated(false);
+    setHydratedStorageKey(null);
+    setCloudReady(false);
+    setPendingImages([]);
+    setMessage("");
+    setBusy("");
+    setMessages([welcome]);
+    setJobs([]);
+    setState({ ...createEmptyArtWorkbenchState(), projectId: contextProjectId, projectTitle: contextProjectTitle });
+    if (!sessionReady) return;
+    const params = new URLSearchParams(window.location.search);
+    if (!isEmbedded && (!standaloneDraftId || params.get("setup") === "1")) {
+      const next = createEmptyArtWorkbenchState();
+      const handoff = params.get("handoff") === "creative" ? readCreativeHandoff(params.get("sourceProjectId")) : null;
+      if (handoff) {
+        next.projectId = handoff.sourceProjectId;
+        next.title = `${handoff.title} 美术设定`;
+        next.projectTitle = handoff.title;
+        next.sourceText = [handoff.projectBackground, handoff.worldAndOutline, handoff.characterBible, handoff.manuscript].filter(Boolean).join("\n\n");
+      }
+      try { setStandaloneDraftScope(next.id, next); } catch { setNotice("无法保存新草稿，请检查设备存储空间。"); }
+      return;
+    }
+    if (!storageReady) return;
+    let cancelled = false;
+    void (async () => {
+      let saved: ArtChatDraft | null = null;
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) saved = { state: JSON.parse(raw), messages: [welcome], jobs: [], ...JSON.parse(localStorage.getItem(`${storageKey}__chat`) || "{}") };
+      } catch {
+        try { backupCorruptedArtDraft(localStorage, storageKey); } catch { /* Keep corrupt original. */ }
+        setNotice("草稿数据损坏，已保留原始数据备份。");
+      }
+      if (session?.access_token) {
+        try {
+          const response = await fetchWithAuthRetry(`/api/art/draft?${new URLSearchParams(scope as Record<string, string>)}`);
+          const payload = await response.json() as { success?: boolean; draft?: ArtChatDraft };
+          if (!response.ok) throw new Error();
+          if (!cancelled) setCloudReady(true);
+          if (payload.draft?.state && (!saved || payload.draft.state.updatedAt > saved.state.updatedAt)) saved = payload.draft;
+        } catch { if (!cancelled) setNotice("云端草稿暂时无法读取，当前使用本地草稿；请勿清理浏览器数据。"); }
+      }
+      if (cancelled) return;
+      const next = { ...createEmptyArtWorkbenchState(), ...saved?.state, ...(isEmbedded ? { projectId: contextProjectId, projectTitle: contextProjectTitle || saved?.state.projectTitle } : {}) };
+      setState(next);
+      setMessages(saved?.messages?.length ? saved.messages : [welcome]);
+      setJobs(saved?.jobs || []);
+      setArchiveIndex(readArchiveIndex(storageKey));
+      setHydratedStorageKey(storageKey);
+      setIsHydrated(true);
+    })();
+    return () => { cancelled = true; };
+  // Only identity changes rehydrate; editing a project title must not reset chat.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, storageReady, sessionReady]);
 
   useEffect(() => {
     if (!isHydrated || !canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey })) return;
-    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
-  }, [hydratedStorageKey, isHydrated, state, storageKey, storageReady]);
+    const draft: ArtChatDraft = { state, messages, jobs };
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); localStorage.setItem(`${storageKey}__chat`, JSON.stringify({ messages, jobs })); } catch { setNotice("本地保存空间不足，请立即导出项目。"); }
+    if (!session?.access_token || !cloudReady) return;
+    const timer = setTimeout(() => {
+      cloudWrites.current = cloudWrites.current.catch(() => undefined).then(async () => {
+        if (scopeRef.current !== storageKey) return;
+        const response = await fetchWithAuthRetry("/api/art/draft", { method: "PUT", body: JSON.stringify({ ...scope, draft }) });
+        if (!response.ok && scopeRef.current === storageKey) setNotice("云端同步失败，草稿已保存在本机；请稍后重试。");
+      }).catch(() => { if (scopeRef.current === storageKey) setNotice("云端同步失败，草稿已保存在本机。"); });
+    }, 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydratedStorageKey, isHydrated, state, messages, jobs, storageKey, storageReady, cloudReady]);
 
   const artStoragePathSignature = useMemo(() => collectArtStoragePaths(state).join("\n"), [state]);
   useEffect(() => {
     if (!isHydrated || !canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey }) || !artStoragePathSignature) return;
     let cancelled = false;
     void fetchArtDraftPreviewUrls(state).then((urls) => {
-      if (!cancelled && urls) setState((current) => replaceArtVersionPreviewUrls(current, urls));
+      if (!cancelled && urls) {
+        setState((current) => replaceArtVersionPreviewUrls(current, urls));
+        setMessages(current => current.map(item => ({ ...item, images: item.images?.map(image => ({ ...image, previewUrl: urls[image.storagePath] || image.previewUrl })) })));
+      }
     });
     return () => { cancelled = true; };
   // Re-sign once per distinct durable path set; URL changes alone do not loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artStoragePathSignature, hydratedStorageKey, isHydrated, storageKey, storageReady]);
 
-  const visibleAssets = useMemo(() => state.assets.filter((asset) => asset.kind === selectedKind && (!query.trim() || `${asset.name} ${asset.role} ${asset.description}`.toLowerCase().includes(query.trim().toLowerCase()))), [state.assets, selectedKind, query]);
+  const visibleAssets = useMemo(() => ready ? state.assets.filter((asset) => asset.kind === selectedKind && (!query.trim() || `${asset.name} ${asset.role} ${asset.description}`.toLowerCase().includes(query.trim().toLowerCase()))) : [], [ready, state.assets, selectedKind, query]);
   const counts = useMemo(() => ({ character: state.assets.filter((asset) => asset.kind === "character").length, scene: state.assets.filter((asset) => asset.kind === "scene").length, prop: state.assets.filter((asset) => asset.kind === "prop").length }), [state.assets]);
 
   function patchState(patch: Partial<ArtWorkbenchState>) {
@@ -289,8 +305,11 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
     const patch = artStateFromProject(project);
-    patchState(patch);
-    if (!isEmbedded) setStandaloneDraftScope(project.id);
+    if (!isEmbedded) {
+      const next = { ...createEmptyArtWorkbenchState(), ...patch };
+      setStandaloneDraftScope(next.id, next);
+      setState(next);
+    }
     // 嵌入模式（制作工作台美术 Tab）：同步更新 URL 的 projectId，
     // 让父组件 ProductionWorkbench 在下次刷新时能感知到 art 关联的项目切换。
     if (isEmbedded && typeof window !== "undefined") {
@@ -334,7 +353,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     } else {
       setNotice("当前未登录，项目只保存在这台设备。登录后可创建团队云端项目。");
     }
-    setStandaloneDraftScope(next.id);
+    setStandaloneDraftScope(next.id, next);
     setState(next);
     setMessages([{ id: crypto.randomUUID(), role: "assistant", content: `已新建《${name.trim()}》美术项目。${session ? "项目已保存到云端。" : "当前为本地草稿。"}${archiveId ? " 之前的草稿已自动归档。" : ""}` }]);
   }
@@ -372,6 +391,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     setBusy("source");
+    const targetScope = storageKey;
     try {
       let sourceText = state.sourceText;
       const added = [];
@@ -385,37 +405,43 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         added.push(entry);
         sourceText = [sourceText, `【${entry.name}】\n${entry.text}`].filter(Boolean).join("\n\n");
       }
+      if (scopeRef.current !== targetScope) return;
       patchState({ sourceText, sourceFiles: [...added, ...state.sourceFiles] });
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: `已读取 ${added.length} 份资料。你可以让我自动拆解，或继续上传补充资料。` }]);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "资料解析失败");
     } finally {
-      setBusy("");
+      if (scopeRef.current === targetScope) setBusy("");
       event.target.value = "";
     }
   }
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length || !ready) return;
     if (!session?.access_token) return setNotice("请先登录后再上传参考图。");
     setBusy("image");
+    const targetScope = storageKey;
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetchWithAuthRetry("/api/art/upload-reference", { method: "POST", body: form });
-      const payload = await response.json() as { success?: boolean; previewUrl?: string; storagePath?: string; error?: string };
-      if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "参考图上传失败");
-      setPendingImage({ id: crypto.randomUUID(), name: file.name, url: payload.previewUrl, storagePath: payload.storagePath });
+      for (const file of files.slice(0, Math.max(0, 8 - pendingImages.length))) {
+        const form = new FormData();
+        form.append("file", file);
+        const response = await fetchWithAuthRetry("/api/art/upload-reference", { method: "POST", body: form });
+        const payload = await response.json() as { previewUrl?: string; storagePath?: string; error?: string };
+        if (!response.ok || !payload.previewUrl || !payload.storagePath) throw new Error(payload.error || "参考图上传失败");
+        if (scopeRef.current !== targetScope) return;
+        setPendingImages(current => [...current, { id: crypto.randomUUID(), name: file.name, url: payload.previewUrl!, storagePath: payload.storagePath! }]);
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "参考图上传失败");
     } finally {
-      setBusy("");
+      if (scopeRef.current === targetScope) setBusy("");
       event.target.value = "";
     }
   }
 
   async function extractAssets() {
+    if (!ready || busy) return;
     if (!session?.access_token) return setNotice("请先登录后再让 AI 拆解资产。");
 
     // 强制用最新项目数据重建 sourceText，避免 localStorage 缓存旧的/缺失剧本正文的 sourceText
@@ -435,10 +461,12 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     if (effectiveSourceText.length < 100) return setNotice("项目资料太少，无法拆解。请确认项目已关联剧本正文（最终剧本/导入剧本）。");
 
     setBusy("extract");
+    const targetScope = storageKey;
     try {
       const response = await fetchWithAuthRetry("/api/art/extract-assets", { method: "POST", body: JSON.stringify({ title: state.title, visualStyle: state.visualStyle, sourceText: effectiveSourceText }) });
       const payload = await response.json() as ExtractedArtAssets & { success?: boolean; error?: string; warning?: string; degraded?: boolean; sourceTextPreview?: string; sourceTextLength?: number };
       if (!response.ok || !payload.success) throw new Error(payload.error || "拆解失败");
+      if (scopeRef.current !== targetScope) return;
       const assets = assetsFromExtraction(payload);
       patchState({ assets, selectedAssetId: assets[0]?.id, title: payload.title || state.title, visualStyle: payload.visualStyle || state.visualStyle });
       // degraded 时在消息正文里明确标注"降级模式"，避免用户忽略 note
@@ -448,49 +476,116 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
         ? `⚠️ 降级模式：AI 调用失败，已根据剧本资料生成基础初稿（建议检查后手动修正）。\n${baseContent}\n失败原因：${payload.error || "未知错误"}${debugInfo}`
         : `${baseContent}${debugInfo}`;
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content, note: payload.warning }]);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "拆解失败"); } finally { setBusy(""); }
+    } catch (error) { if (scopeRef.current === targetScope) setNotice(error instanceof Error ? error.message : "拆解失败"); } finally { if (scopeRef.current === targetScope) setBusy(""); }
   }
 
   async function sendMessage() {
     const content = message.trim();
-    if (!content && !pendingImage) return;
+    if ((!content && !pendingImages.length) || busy || !ready) return;
+    if (jobs.some(job => job.status === "running")) return setNotice("当前图片任务尚未完成，请等结果恢复后再发送，避免重复生成。");
     if (!session?.access_token) return setNotice("请先登录后再使用 KK 美术助理。");
-    const userMessage = content || `上传图片：${pendingImage?.name}`;
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", content: userMessage }]);
-    setMessage("");
+    const targetScope = storageKey;
+    const references = [...pendingImages];
+    const userMessage = content || "请根据参考图生成图片候选，保持主体一致。";
+    const userMessageId = crypto.randomUUID();
+    setMessages((current) => [...current, { id: userMessageId, role: "user", content: userMessage, images: references.map(ref => ({ previewUrl: ref.url, storagePath: ref.storagePath })) }]);
     setBusy("chat");
+    setNotice("");
     try {
-      const response = await fetchWithAuthRetry("/api/art/chat", { method: "POST", body: JSON.stringify({ message: userMessage, projectTitle: state.title, assets: state.assets, attachments: pendingImage ? [{ id: pendingImage.id, name: pendingImage.name, kind: "image", url: pendingImage.url, storagePath: pendingImage.storagePath }] : [] }) });
-      const payload = await response.json() as { success?: boolean; assistantText?: string; actions?: ArtAction[]; error?: string; warning?: string };
+      const response = await fetchWithAuthRetry("/api/art/chat", { method: "POST", body: JSON.stringify({ message: userMessage, projectTitle: state.title, visualStyle: state.visualStyle, sourceText: state.sourceText.slice(0, 16000), history: messages.slice(-12).map(item => ({ role: item.role, content: item.content })), assets: state.assets, attachments: references.map(ref => ({ ...ref, kind: "image" })) }) });
+      const payload = await response.json() as { success?: boolean; assistantText?: string; actions?: ArtAction[]; generation?: { prompt: string; assetId?: string; kind?: ArtAssetKind; name?: string }; error?: string; warning?: string };
       if (!response.ok || !payload.success) throw new Error(payload.error || "KK 暂时无法处理这条指令");
-      applyActions(payload.actions || [], pendingImage);
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: payload.assistantText || "已完成修改。", note: payload.warning }]);
-      setPendingImage(null);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "操作失败"); } finally { setBusy(""); }
+      if (scopeRef.current !== targetScope) return;
+      const applied = applyArtChatActions(stateRef.current, payload.actions || [], references);
+      let next = applied.state;
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: [payload.assistantText || "已整理修改。", ...applied.feedback].join("\n"), note: payload.warning }]);
+      if (payload.generation?.prompt) {
+        const model = models.find(item => item.id === modelId) || models.find(item => item.capabilities.includes(references.length ? "image-edit" : "text-to-image") && item.maxReferences >= references.length);
+        if (!models.length) throw new Error("当前没有可用的图片服务，请配置服务后重试。");
+        if (!model) throw new Error("当前参考图数量没有适配的已配置模型，请减少参考图或切换模型。");
+        if (model && (references.length > model.maxReferences || (references.length && !model.capabilities.includes("image-edit")))) throw new Error("所选模型不支持当前参考图数量，请切换模型。");
+        let asset = next.assets.find(item => item.id === payload.generation?.assetId || item.id === applied.createdAssetId);
+        if (!asset) {
+          asset = createArtAsset(payload.generation.kind || selectedKind, { name: payload.generation.name || "聊天生成", description: userMessage, prompt: payload.generation.prompt });
+          next = { ...next, assets: [asset, ...next.assets] };
+        }
+        const variant = asset.variants?.[0];
+        if (!variant) throw new Error("请先在资产编辑器创建母版。");
+        const job: ArtChatJob = { id: crypto.randomUUID(), assetId: asset.id, variantId: variant.id, prompt: payload.generation.prompt, status: "running", createdAt: new Date().toISOString() };
+        setState(next);
+        stateRef.current = next;
+        localStorage.setItem(targetScope, JSON.stringify(next));
+        setJobs(current => [...current, job]);
+        // Persist the task pointer synchronously so a refresh can recover its result.
+        localStorage.setItem(`${targetScope}__chat`, JSON.stringify({ messages: [...messages, { id: userMessageId, role: "user", content: userMessage }], jobs: [...jobs, job] }));
+        setBusy("generate");
+        // Save the result destination before spending image credits.
+        cloudWrites.current = cloudWrites.current.catch(() => undefined).then(async () => {
+          if (scopeRef.current !== targetScope) throw new Error("项目已切换，未调用图片模型。");
+          const saved = await fetchWithAuthRetry("/api/art/draft", { method: "PUT", body: JSON.stringify({ ...scope, draft: { state: next, messages: [...messages, { id: userMessageId, role: "user", content: userMessage }], jobs: [...jobs, job] } }) });
+          if (!saved.ok) throw new Error("生成前保存失败，尚未调用图片模型。请检查云端存储后重试。");
+        });
+        try { await cloudWrites.current; } catch (error) {
+          if (scopeRef.current === targetScope) setJobs(current => current.map(item => item.id === job.id ? { ...item, status: "failed", error: "生成前保存失败，未调用图片模型" } : item));
+          throw error;
+        }
+        if (scopeRef.current !== targetScope) return;
+        const generated = await fetchWithAuthRetry("/api/art/generate-image", { method: "POST", body: JSON.stringify({ scope, jobId: job.id, assetId: asset.id, projectId: contextProjectId || standaloneDraftId, task: references.length ? "edit" : "concept", prompt: job.prompt, referencePaths: references.map(ref => ref.storagePath), referenceUrls: [], modelId: model?.id, selection: model?.provider || "smart", aspectRatio, count }) });
+        const result = await generated.json() as { success?: boolean; status?: string; job?: { status?: string }; images?: ArtChatJob["images"]; error?: string };
+        if (scopeRef.current !== targetScope) return;
+        if (generated.status === 202 || result.status === "running") {
+          setNotice("原任务仍在生成，完成后会自动恢复图片；请勿重复生成。");
+          return;
+        }
+        if (!generated.ok || !result.success || !result.images?.length) {
+          if (generated.status < 500 || result.status === "failed" || result.job?.status === "failed") setJobs(current => current.map(item => item.id === job.id ? { ...item, status: "failed", error: result.error || "没有返回图片" } : item));
+          throw new Error(result.error || "图片尚未完成，请稍后查看任务状态。");
+        }
+        completeJob({ ...job, status: "completed", images: result.images });
+      } else {
+        setState(next);
+      }
+      setMessage("");
+      setPendingImages([]);
+    } catch (error) { if (scopeRef.current === targetScope) setNotice(error instanceof Error ? error.message : "操作失败，输入和参考图已保留。"); } finally { if (scopeRef.current === targetScope) setBusy(""); }
   }
 
-  function applyActions(actions: ArtAction[], image: PendingImage | null) {
-    setState((current) => {
-      let assets = [...current.assets];
-      for (const action of actions) {
-        if (action.type === "create_asset") {
-          const asset = createArtAsset(action.kind, { name: action.name, role: action.narrativeRole, description: action.description, conceptUrl: image?.url, referenceSheetUrl: action.kind === "character" ? image?.url : undefined, identityAnchor: image ? `用户上传母版：${image.name}` : "" });
-          assets = [asset, ...assets];
-        } else if (action.type === "update_asset") {
-          assets = assets.map((asset) => asset.id === action.assetId ? { ...asset, name: action.patch.name ?? asset.name, role: action.patch.narrativeRole ?? asset.role, description: action.patch.description ?? asset.description, identityAnchor: action.patch.identityAnchor ?? asset.identityAnchor, updatedAt: new Date().toISOString() } : asset);
-        }
-      }
-      return { ...current, assets, updatedAt: new Date().toISOString() };
-    });
+  function completeJob(job: ArtChatJob) {
+    if (!job.images?.length) return;
+    setState(current => addGeneratedArtCandidates(current, { ...job, images: job.images! }));
+    setJobs(current => current.map(item => item.id === job.id ? job : item));
+    setMessages(current => current.some(item => item.id === `job-${job.id}`) ? current : [...current, { id: `job-${job.id}`, role: "assistant", content: "图片已生成并保存为候选。可下载原图，或作为参考继续修改。", images: job.images, assetId: job.assetId }]);
   }
+
+  useEffect(() => {
+    if (!ready || !session?.access_token || !jobs.some(job => job.status === "running")) return;
+    let cancelled = false;
+    const targetScope = storageKey;
+    const poll = async () => {
+      for (const pending of jobs.filter(job => job.status === "running")) {
+        try {
+          const response = await fetchWithAuthRetry(`/api/art/jobs/${pending.id}?${new URLSearchParams(scope as Record<string, string>)}`);
+          const payload = await response.json();
+          if (cancelled || scopeRef.current !== targetScope) return;
+          if (payload.job?.status === "completed" && payload.job.images?.length) completeJob({ ...pending, ...payload.job });
+          else if (payload.job?.status === "failed") setJobs(current => current.map(item => item.id === pending.id ? { ...item, status: "failed", error: payload.job.error } : item));
+          else if (response.ok && !payload.job && Date.now() - Date.parse(pending.createdAt) > 330000) setJobs(current => current.map(item => item.id === pending.id ? { ...item, status: "failed", error: "任务未成功提交，请确认后手动重试" } : item));
+        } catch { /* A lost connection is not evidence that a paid generation failed. */ }
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 4000);
+    return () => { cancelled = true; clearInterval(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, storageKey, jobs.map(job => `${job.id}:${job.status}`).join("|")]);
 
   function addAsset() {
+    if (!ready || busy) return;
     const asset = createArtAsset(selectedKind);
     const nextState = { ...state, assets: [asset, ...state.assets], selectedAssetId: asset.id, updatedAt: new Date().toISOString() };
-    setState(nextState);
     // 点击卡片前先同步一次，避免详情页导航快于 React 自动保存而读不到新资产。
     if (isHydrated && canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey })) {
-      try { localStorage.setItem(storageKey, JSON.stringify(nextState)); } catch { setNotice("本地保存空间不足，请删除大型本地图片或立即导出项目。"); }
+      try { localStorage.setItem(storageKey, JSON.stringify(nextState)); setState(nextState); } catch { setNotice("未能保存新资产，请检查设备空间后重试。"); }
     }
   }
 
@@ -500,7 +595,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   }
 
   return (
-    <main className={`${styles.page} art-workbench-shell`}>
+    <main className={`${styles.page} ${isEmbedded ? styles.embeddedPage : "art-workbench-shell"}`}>
       <header className={styles.header}>
         <div className={styles.brand}><span>KIIKIS</span><strong>{state.title}</strong><small>美术工作台</small></div>
         <div className={styles.headerActions}>
@@ -515,30 +610,26 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
             </>
           )}
           {isEmbedded && contextProjectTitle ? <span className={styles.provider}>{contextProjectTitle}</span> : null}
-          <span className={styles.provider}><Sparkles size={14} />智能选择</span>
+          <button type="button" aria-expanded={!isRepositoryCollapsed} aria-controls="art-repository" onClick={() => setIsRepositoryCollapsed(value => !value)}>{isRepositoryCollapsed ? <PanelRightOpen size={16} /> : <PanelRightClose size={16} />}{isRepositoryCollapsed ? "展开美术仓库" : "收起美术仓库"}</button>
         </div>
       </header>
 
-      {notice ? <button className={styles.notice} type="button" onClick={() => setNotice("")}>{notice}</button> : null}
+      {notice ? <button className={styles.notice} role="alert" type="button" onClick={() => setNotice("")}>{notice}</button> : null}
 
-      <div className={`${styles.workspace} ${collapseStyles.workspace} ${isAssistantCollapsed ? collapseStyles.assistantCollapsed : ""}`}>
-        <section className={styles.chatPanel}>
-          <div className={`${styles.chatHead} ${collapseStyles.chatHead}`}><div><MessageSquareText size={18} /><strong>KK 美术助理</strong></div><div className={collapseStyles.chatHeadActions}><button className={collapseStyles.collapseButton} type="button" aria-expanded={!isAssistantCollapsed} aria-label={isAssistantCollapsed ? "展开 KK 美术助理" : "折叠 KK 美术助理"} title={isAssistantCollapsed ? "展开 KK 美术助理" : "折叠 KK 美术助理"} onClick={() => setIsAssistantCollapsed((collapsed) => !collapsed)}>{isAssistantCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</button><button className={collapseStyles.manageSourcesButton} type="button" onClick={() => sourceInput.current?.click()}><FilePlus2 size={15} />管理资料</button></div></div>
+      <div className={`${styles.workspace} ${collapseStyles.workspace} ${isRepositoryCollapsed ? collapseStyles.repositoryCollapsed : ""}`}>
+        <section ref={chatPanel} className={styles.chatPanel}>
+          <div className={`${styles.chatHead} ${collapseStyles.chatHead}`}><div><MessageSquareText size={18} /><strong>KK 美术助理</strong></div><div className={collapseStyles.chatHeadActions}><button className={collapseStyles.manageSourcesButton} type="button" disabled={!ready || !!busy} onClick={() => sourceInput.current?.click()}><FilePlus2 size={15} />管理资料</button></div></div>
           <div className={`${styles.sourceChips} ${collapseStyles.sourceChips}`}>{state.sourceFiles.slice(0, 5).map((file) => <span key={file.id}>{file.name}</span>)}{state.projectTitle ? <span>Universe · {state.projectTitle}</span> : null}{state.sourceText.trim() ? <span title={state.sourceText.slice(0, 200)}>已同步资料 · {state.sourceText.length.toLocaleString()} 字</span> : null}{!state.sourceFiles.length && !state.projectTitle && !state.sourceText.trim() ? <small>还没有资料，上传剧本或关联项目即可开始</small> : null}</div>
-          <div className={`${styles.messages} ${collapseStyles.messages}`}>{messages.map((item) => <article key={item.id} className={item.role === "user" ? styles.userMessage : styles.assistantMessage}><p>{item.content}</p>{item.note ? <small>{item.note}</small> : null}</article>)}{busy === "chat" ? <div className={styles.thinking}><LoaderCircle className={styles.spin} size={16} />KK 正在整理美术仓库...</div> : null}</div>
-          <div className={`${styles.composer} ${collapseStyles.composer}`}>
-            {pendingImage ? <div className={styles.pendingImage}><img src={pendingImage.url} alt="待发送参考" /><span>{pendingImage.name}</span><button type="button" onClick={() => setPendingImage(null)}>×</button></div> : null}
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void sendMessage(); }} placeholder="告诉 KK 要增加、编辑或修改什么，也可以上传剧本、图片和角色参考……" />
-            <div className={styles.composerActions}><div><button type="button" onClick={() => sourceInput.current?.click()} title="上传资料"><Upload size={16} />文件</button><button type="button" onClick={() => imageInput.current?.click()} title="上传图片"><ImagePlus size={16} />图片</button></div><button className={styles.sendButton} type="button" onClick={sendMessage} disabled={busy === "chat"}><Send size={17} /></button></div>
-            <input ref={sourceInput} hidden multiple type="file" accept=".txt,.md,.json,.csv,.doc,.docx,.pdf,.html,.htm,.xlsx" onChange={uploadSource} />
-            <input ref={imageInput} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage} />
-          </div>
+          <div className={`${styles.messages} ${collapseStyles.messages}`} aria-live="polite">{!ready && <p className={styles.thinking}><LoaderCircle className={styles.spin} size={16} />正在载入当前美术项目…</p>}{messages.map((item) => <article key={item.id} className={item.role === "user" ? styles.userMessage : styles.assistantMessage}><p>{item.content}</p>{item.note ? <small>{item.note}</small> : null}{item.images?.length ? <ArtChatImages images={item.images} assetHref={item.assetId ? `/art-workbench/assets/${encodeURIComponent(item.assetId)}?${new URLSearchParams({ ...scope, ...(contextSourceUnitId ? { sourceUnitId: contextSourceUnitId } : {}) } as Record<string, string>)}` : undefined} onReference={ref => { if (!busy) setPendingImages(current => current.length >= 8 || current.some(item => item.storagePath === ref.storagePath) ? current : [...current, ref]); }} onError={setNotice} /> : null}</article>)}{busy === "chat" || busy === "generate" ? <div className={styles.thinking}><LoaderCircle className={styles.spin} size={16} />{busy === "generate" ? "正在生成图片候选…" : "KK 正在整理美术要求…"}</div> : null}{jobs.filter(job => job.status !== "completed").map(job => <p key={job.id} className={styles.thinking}>{job.status === "running" ? "图片任务进行中，刷新后可继续查看结果" : `图片生成失败：${job.error || "请修改要求后重试"}`}</p>)}</div>
+          <ArtChatComposer message={message} onMessage={setMessage} onSend={() => void sendMessage()} references={pendingImages} onRemove={id => setPendingImages(current => current.filter(ref => ref.id !== id))} onSource={() => sourceInput.current?.click()} onImage={() => imageInput.current?.click()} busy={busy} ready={ready} models={models} modelId={modelId} onModel={setModelId} aspectRatio={aspectRatio} onAspectRatio={setAspectRatio} count={count} onCount={setCount} />
+          <input ref={sourceInput} hidden multiple type="file" accept=".txt,.md,.json,.csv,.doc,.docx,.pdf,.html,.htm,.xlsx" onChange={uploadSource} />
+          <input ref={imageInput} hidden multiple type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadImage} />
         </section>
 
-        <section className={styles.repository}>
+        <section id="art-repository" className={styles.repository} hidden={isRepositoryCollapsed}>
           <div className={styles.repoHead}><div><strong>美术仓库</strong><span>{state.assets.length} 项资产</span></div><div className={styles.repoActions}><button type="button" className={styles.extractButton} onClick={extractAssets} disabled={busy === "extract" || !state.sourceText.trim()} title={!state.sourceText.trim() ? "请先关联项目或上传资料" : "AI 自动拆解角色、场景、道具"}>{busy === "extract" ? <LoaderCircle className={styles.spin} size={16} /> : <Sparkles size={16} />}{busy === "extract" ? "拆解中..." : "自动拆解"}</button><div className={styles.search}><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资产" /></div></div></div>
-          <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" onClick={addAsset}><Plus size={15} />新增</button></div>
-          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} scopeWorkId={contextWorkId} standaloneDraftId={isEmbedded ? undefined : standaloneDraftId || undefined} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>这里还没有资产</strong><p>让 KK 自动拆解资料，或直接告诉它要增加什么。</p><button type="button" onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
+          <div className={styles.tabs}>{(["character", "scene", "prop"] as ArtAssetKind[]).map((kind) => <button key={kind} type="button" className={selectedKind === kind ? styles.activeTab : ""} onClick={() => setSelectedKind(kind)}>{kind === "character" ? "角色" : kind === "scene" ? "场景" : "道具"}<span>{counts[kind]}</span></button>)}<button className={styles.addButton} type="button" disabled={!ready || !!busy} onClick={addAsset}><Plus size={15} />新增</button></div>
+          <div className={`${styles.assetGrid} ${collapseStyles.assetGrid}`}>{visibleAssets.map((asset) => <AssetCard key={asset.id} asset={asset} onDelete={deleteAsset} isZh={isZh} scopeProjectId={contextProjectId} scopeSourceUnitId={contextSourceUnitId} scopeWorkId={contextWorkId} standaloneDraftId={isEmbedded ? undefined : standaloneDraftId || undefined} />)}{!visibleAssets.length ? <div className={styles.empty}><Users size={34} /><strong>{ready ? "这里还没有资产" : "正在载入当前项目"}</strong><p>让 KK 根据参考图生图，或上传资料拆解资产。</p><button type="button" disabled={!ready || !!busy} onClick={addAsset}><Plus size={15} />手动新增</button></div> : null}</div>
         </section>
       </div>
     </main>
@@ -568,8 +659,8 @@ function AssetCard({ asset, onDelete, isZh, scopeProjectId, scopeSourceUnitId, s
   // PRD §7.2 / §12.3：资产卡详情链接必须携带 projectId + sourceUnitId，详情页使用同一 scoped storage key
   const assetDetailHref = useMemo(() => {
     const path = `/art-workbench/assets/${encodeURIComponent(asset.id)}`;
-    if (scopeProjectId && scopeSourceUnitId && scopeWorkId) {
-      const params = new URLSearchParams({ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId, workId: scopeWorkId });
+    if (scopeProjectId && scopeWorkId) {
+      const params = new URLSearchParams({ projectId: scopeProjectId, sourceUnitId: scopeSourceUnitId || "", workId: scopeWorkId });
       return `${path}?${params.toString()}`;
     }
     if (standaloneDraftId) {
