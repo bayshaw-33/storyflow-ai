@@ -5429,6 +5429,7 @@ input:focus, textarea:focus, select:focus {
   align-self: flex-start;
   gap: 4px;
 }
+.song-audio-favorite[aria-pressed="true"] { color: #5eead4; }
 .song-audio-track-actions .icon-button {
   width: 30px;
   height: 30px;

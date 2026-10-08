@@ -2,6 +2,41 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createAtlasCloudAudioProvider } from "../lib/audio/providers/atlascloud.ts";
 
+test("Suno receives style and structured vocal gender even when lyrics already exist", async () => {
+  const originalKey = process.env.ATLASCLOUD_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
+  let body;
+  globalThis.fetch = async (_url, init) => {
+    body = JSON.parse(init.body);
+    return response({ data: { id: "prediction" } });
+  };
+  try {
+    for (const model of ["suno/chirp-v6", "suno/chirp-v6-mini", "suno/chirp-v6-wild"]) {
+      for (const gender of ["male", "female", "unrestricted"]) {
+        await createAtlasCloudAudioProvider().submitMusic({ model, prompt: "cinematic piano", lyrics: "[Verse]\n城市入夜", voiceGender: gender });
+        assert.equal(body.custom, true);
+        assert.equal(body.prompt, "[Verse]\n城市入夜");
+        assert.match(body.style, /cinematic piano/);
+        assert.equal(body.vocal_gender, gender === "male" ? "Male" : gender === "female" ? "Female" : undefined);
+        assert.equal(body.auto_lyrics, false);
+      }
+    }
+    await createAtlasCloudAudioProvider().submitMusic({ model: "minimax/music-3.0", prompt: "piano", lyrics: "中文歌词", voiceGender: "female" });
+    assert.match(body.prompt, /female lead vocals only/i);
+    await createAtlasCloudAudioProvider().submitMusic({ model: "suno/chirp-v6-mini", prompt: "弦乐".repeat(200), lyrics: "中文歌词", voiceGender: "male" });
+    assert.ok(new TextEncoder().encode(body.style).length <= 1000);
+    assert.match(body.style, /^Male lead vocals only/);
+    await createAtlasCloudAudioProvider().submitMusic({ model: "suno/chirp-v6-mini", prompt: "piano", musicMode: "instrumental", voiceGender: "male" });
+    assert.equal(body.vocal_gender, undefined);
+    assert.match(body.prompt, /no vocals/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey) process.env.ATLASCLOUD_API_KEY = originalKey;
+    else delete process.env.ATLASCLOUD_API_KEY;
+  }
+});
+
 function response(body, status = 200, contentType = "application/json") {
   return {
     ok: status >= 200 && status < 300,

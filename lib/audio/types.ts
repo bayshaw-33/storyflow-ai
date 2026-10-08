@@ -7,6 +7,7 @@ export type MusicSubmitInput = {
   prompt: string;
   lyrics?: string | null;
   musicMode?: "vocal" | "instrumental" | "sfx";
+  voiceGender?: "unrestricted" | "male" | "female";
   language?: string;
   durationSeconds?: number;
   model?: string | null;

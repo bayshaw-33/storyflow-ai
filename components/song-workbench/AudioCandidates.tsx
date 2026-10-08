@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, ImagePlus, Music2, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX } from "lucide-react";
+import { Download, Heart, ImagePlus, Music2, Pause, Play, RotateCcw, Trash2, Volume2, VolumeX } from "lucide-react";
 import type { SongDocument } from "@/lib/song/documents";
 
 export type SongAudioCandidate = {
@@ -11,6 +11,7 @@ export type SongAudioCandidate = {
   status: "queued" | "reconciling" | "generating" | "result_ingesting" | "completed" | "failed" | "provider_timeout";
   resultUrl: string | null;
   coverUrl: string | null;
+  favorite?: boolean;
   provider: string | null;
   model: string | null;
   error: string | null;
@@ -36,6 +37,8 @@ type AudioCandidatesProps = {
   onRetry?: (candidateId: string) => void;
   onDownload: (candidate: SongAudioCandidate) => Promise<void>;
   onDelete?: (candidate: SongAudioCandidate) => Promise<void>;
+  onFavorite?: (candidate: SongAudioCandidate) => Promise<void>;
+  favoriteSavingId?: string | null;
   onGenerateCover?: (candidate: SongAudioCandidate) => Promise<void>;
   onDownloadCover?: (candidate: SongAudioCandidate) => Promise<void>;
   coverGeneratingId?: string | null;
@@ -77,7 +80,7 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, onDelete, onGenerateCover, onDownloadCover, coverGeneratingId, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange, voiceGender, onVoiceGenderChange }: AudioCandidatesProps) {
+export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, onDelete, onFavorite, favoriteSavingId, onGenerateCover, onDownloadCover, coverGeneratingId, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange, voiceGender, onVoiceGenderChange }: AudioCandidatesProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -259,6 +262,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
                     </span>
                   </button>
                   <span className="song-audio-track-actions">
+                    {candidate.jobId && onFavorite ? <button className="icon-button song-audio-favorite" type="button" onClick={() => void onFavorite(candidate)} disabled={Boolean(favoriteSavingId)} aria-pressed={Boolean(candidate.favorite)} title={candidate.favorite ? (isZh ? "取消收藏" : "Unfavorite") : (isZh ? "收藏" : "Favorite")} aria-label={isZh ? `${candidate.favorite ? "取消收藏" : "收藏"}候选 ${candidate.label}` : `${candidate.favorite ? "Unfavorite" : "Favorite"} candidate ${candidate.label}`}><Heart size={16} fill={candidate.favorite ? "currentColor" : "none"} /></button> : null}
                     {canRetry && onRetry ? <button className="icon-button song-audio-retry" type="button" onClick={() => onRetry(candidate.id)} title={isZh ? "重试" : "Retry"} aria-label={isZh ? `重试候选 ${candidate.label}` : `Retry candidate ${candidate.label}`}><RotateCcw size={16} /></button> : null}
                     {candidate.resultUrl && candidate.jobId ? <button className="icon-button song-audio-download" type="button" onClick={() => void onDownload(candidate)} title={isZh ? "下载" : "Download"} aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label}`}><Download size={16} /></button> : null}
                     {candidate.jobId && !candidate.coverUrl && onGenerateCover ? <button className="icon-button song-audio-cover-generate" type="button" onClick={() => void onGenerateCover(candidate)} disabled={coverGeneratingId === candidate.id} title={isZh ? "生成封面" : "Generate cover"} aria-label={isZh ? `生成候选 ${candidate.label} 封面` : `Generate cover for candidate ${candidate.label}`}><ImagePlus size={16} /></button> : null}

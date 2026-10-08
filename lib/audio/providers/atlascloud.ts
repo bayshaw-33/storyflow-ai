@@ -9,6 +9,7 @@ import type {
 } from "../types.ts";
 import { downloadAudio, parseProviderStatus, readNestedString, readString, requestJson } from "./helpers.ts";
 import { isAtlasCloudMusicModel } from "../music-models.ts";
+import { trimPromptBytes } from "../../song/prompt.ts";
 
 const DEFAULT_BASE_URL = "https://api.atlascloud.ai";
 
@@ -31,7 +32,10 @@ function isInstrumentalMode(mode: ReturnType<typeof musicMode>) {
 const INSTRUMENTAL_ONLY_CONSTRAINT = "Instrumental only. No vocals, no lyrics, no spoken word, no rap, no chant, no choir, no humming, no breathing, no vocal samples, no vocal texture.";
 
 function providerPrompt(input: MusicSubmitInput, mode: ReturnType<typeof musicMode>) {
-  return isInstrumentalMode(mode) ? `${input.prompt.trim()}\n${INSTRUMENTAL_ONLY_CONSTRAINT}` : input.prompt;
+  if (isInstrumentalMode(mode)) return `${input.prompt.trim()}\n${INSTRUMENTAL_ONLY_CONSTRAINT}`;
+  if (input.voiceGender === "male") return `Male lead vocals only, no female vocals or mixed-gender duet. ${input.prompt.trim()}`;
+  if (input.voiceGender === "female") return `Female lead vocals only, no male vocals or mixed-gender duet. ${input.prompt.trim()}`;
+  return input.prompt;
 }
 
 function submitPayload(input: MusicSubmitInput, model: string): Record<string, unknown> {
@@ -54,6 +58,8 @@ function submitPayload(input: MusicSubmitInput, model: string): Record<string, u
     prompt: mode === "vocal" && input.lyrics ? input.lyrics : providerPrompt(input, mode),
     custom: mode === "vocal" && Boolean(input.lyrics),
     instrumental: isInstrumentalMode(mode),
+    ...(mode === "vocal" && input.lyrics ? { style: trimPromptBytes(providerPrompt(input, mode), 1000), auto_lyrics: false } : {}),
+    ...(mode === "vocal" && input.voiceGender === "male" ? { vocal_gender: "Male" } : mode === "vocal" && input.voiceGender === "female" ? { vocal_gender: "Female" } : {}),
   };
 }
 

@@ -81,9 +81,11 @@ export function computeAudioIdempotencyHash(input: {
   provider: string;
   model: string;
   musicMode?: "vocal" | "instrumental" | "sfx";
+  lyrics?: string;
+  voiceGender?: "unrestricted" | "male" | "female";
 }): string {
   return createHash("sha256")
-    .update([input.ownerId, input.kind, input.targetId, input.text, input.provider, input.model, input.musicMode || ""].join("\u0001"))
+    .update([input.ownerId, input.kind, input.targetId, input.text, input.provider, input.model, input.musicMode || "", ...(input.kind === "music" ? [input.lyrics || "", input.voiceGender || ""] : [])].join("\u0001"))
     .digest("hex");
 }
 

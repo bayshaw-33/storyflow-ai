@@ -12,6 +12,7 @@ import { getUniverseBundle, listUniverses, saveInboxItems, type Universe, type U
 import type { CreativePackage } from "@/lib/universe/creative-package";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { byteLength, trimPromptBytes } from "@/lib/song/prompt";
+import { prepareSongGeneration } from "@/lib/song/generation-request";
 import { requestLyricsTranslation, type LyricsTranslationLanguage } from "@/lib/song/translation";
 import { createSongDocument, fitV6StylePrompt, latestSongDocument, replaceSongDocument, type SongDocument, type SongDocumentKind, validateV6StylePrompt } from "@/lib/song/documents";
 import {
@@ -110,6 +111,8 @@ type AuditResult = {
 
 type SaveSongProjectOptions = {
   silent?: boolean;
+  form?: SongForm;
+  developmentNotes?: string;
   lyrics?: string;
   stylePrompt?: string;
   compositionPrompt?: string;
@@ -514,6 +517,7 @@ export default function SongWorkbenchPage() {
   // 生成进度状态文案（明确进度，禁用重复提交）
   const [generationProgress, setGenerationProgress] = useState("");
   const [audioCandidates, setAudioCandidates] = useState<SongAudioCandidate[]>([]);
+  const [favoriteSavingId, setFavoriteSavingId] = useState<string | null>(null);
   const [audioGenerating, setAudioGenerating] = useState(false);
   const [documents, setDocuments] = useState<SongDocument[]>([]);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
@@ -576,10 +580,9 @@ export default function SongWorkbenchPage() {
 
   function appendSongDocuments(nextDocuments: Array<{ kind: SongDocumentKind; content: string; title?: string }>) {
     nextDocuments.forEach((item) => pendingLatestDocumentKindsRef.current.add(item.kind));
-    setDocuments((current) => {
-      const created = nextDocuments.filter((item) => item.content.trim()).map((item) => createSongDocument(item.kind, item.kind === "v6_style" ? fitV6StylePrompt(item.content) : item.content, [...current], "ai", item.title));
-      return [...current, ...created];
-    });
+    const created = nextDocuments.filter((item) => item.content.trim()).map((item) => createSongDocument(item.kind, item.kind === "v6_style" ? fitV6StylePrompt(item.content) : item.content, documents, "ai", item.title));
+    setDocuments((current) => [...current, ...created]);
+    return created;
   }
 
   useEffect(() => {
@@ -651,9 +654,20 @@ export default function SongWorkbenchPage() {
       setGenerationError(isZh ? "登录后才能生成音频。" : "Sign in before generating audio.");
       return;
     }
-    const selectedLyricsDocument = documents.find((document) => document.id === selectedLyricsDocumentId) || latestLyricsDocument;
-    const selectedStyleDocument = documents.find((document) => document.id === selectedStyleDocumentId) || latestStyleDocument;
-    const selectedSfxDocument = documents.find((document) => document.id === selectedSfxDocumentId) || latestSfxDocument;
+    if (generating || chatGenerating || audioGenerating) return;
+    let contentDocuments = documents;
+    const pendingInput = chatInput.trim();
+    const audioLanguage = prepareSongGeneration(form, songDevelopmentNotes, chatMessages, pendingInput).form.outputLanguage;
+    if (pendingInput) {
+      setAudioGenerating(true);
+      const generated = await generateAll();
+      setAudioGenerating(false);
+      if (!generated) return;
+      contentDocuments = generated;
+    }
+    const selectedLyricsDocument = contentDocuments.find((document) => document.id === selectedLyricsDocumentId) || latestSongDocument(contentDocuments, "lyrics");
+    const selectedStyleDocument = contentDocuments.find((document) => document.id === selectedStyleDocumentId) || latestSongDocument(contentDocuments, "v6_style");
+    const selectedSfxDocument = contentDocuments.find((document) => document.id === selectedSfxDocumentId) || latestSongDocument(contentDocuments, "sfx_description");
     const audioPrompt = musicMode === "sfx" ? selectedSfxDocument?.content : selectedStyleDocument?.content;
     const audioLyrics = musicMode === "vocal" ? selectedLyricsDocument?.content : undefined;
     if (!audioPrompt || (musicMode === "vocal" && !audioLyrics)) {
@@ -680,7 +694,7 @@ export default function SongWorkbenchPage() {
           provider: "atlascloud",
           model: selectedMusicModel,
           musicMode: musicMode,
-          inputParams: { title: form.title, projectType: form.projectType, language: form.outputLanguage, ...(musicMode === "vocal" ? { voiceGender } : {}), lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
+          inputParams: { title: form.title, projectType: form.projectType, language: audioLanguage, ...(musicMode === "vocal" ? { voiceGender } : {}), lyricsDocumentId: selectedLyricsDocument?.id || null, styleDocumentId: selectedStyleDocument?.id || null, sfxDocumentId: selectedSfxDocument?.id || null },
         }),
       });
       const payload = await response.json() as {
@@ -793,6 +807,25 @@ export default function SongWorkbenchPage() {
       setAudioCandidates((current) => current.filter((item) => item.id !== candidate.id));
     } catch (deleteError) {
       setGenerationError(deleteError instanceof Error ? deleteError.message : (isZh ? "删除音乐历史失败，请重试。" : "Could not delete music history. Please retry."));
+    }
+  }
+
+  async function toggleSongFavorite(candidate: SongAudioCandidate) {
+    if (!candidate.jobId || !songProjectId || favoriteSavingId) return;
+    setFavoriteSavingId(candidate.id);
+    try {
+      const response = await fetchWithAuthRetry(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}/favorite?projectId=${encodeURIComponent(songProjectId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favorite: !candidate.favorite }),
+      });
+      const payload = await response.json() as { favorite?: boolean; error?: string };
+      if (!response.ok) throw new Error(payload.error || (isZh ? "收藏保存失败，请重试。" : "Could not save favorite. Please retry."));
+      setAudioCandidates((current) => current.map((item) => item.id === candidate.id ? { ...item, favorite: payload.favorite === true } : item));
+    } catch (favoriteError) {
+      setGenerationError(favoriteError instanceof Error ? favoriteError.message : (isZh ? "收藏保存失败，请重试。" : "Could not save favorite. Please retry."));
+    } finally {
+      setFavoriteSavingId(null);
     }
   }
 
@@ -1322,10 +1355,6 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  function validateForm() {
-    return Boolean(form.title.trim() || form.concept.trim() || songDevelopmentNotes.trim());
-  }
-
   async function sendChatMessage() {
     const trimmed = chatInput.trim();
     if (!trimmed || chatGenerating) return;
@@ -1339,7 +1368,8 @@ export default function SongWorkbenchPage() {
     void appendSongLedgerMessage("user", trimmed, `song-input:${userMessage.id}`);
     const notesWithUser = appendSongNotes(songDevelopmentNotes, "USER", trimmed);
     setSongDevelopmentNotes(notesWithUser);
-    if (!form.concept.trim()) updateForm("concept", trimmed);
+    const chatForm = prepareSongGeneration(form, songDevelopmentNotes, chatMessages, trimmed).form;
+    setForm({ ...chatForm, outputLanguage: chatForm.outputLanguage as OutputLanguage });
 
     if (!session?.access_token) {
       const reply = createSongAssistantMessage(isZh
@@ -1359,7 +1389,8 @@ export default function SongWorkbenchPage() {
           projectTitle: form.title || "Song development chat",
           genre: normalizedGenres(form).join(", "),
           input: trimmed,
-          context: buildSongChatContext(form, notesWithUser, chatMessages, lyrics, stylePrompt, uploadedReference, selectedSourceProject, universeBundle),
+          context: buildSongChatContext({ ...chatForm, outputLanguage: chatForm.outputLanguage as OutputLanguage }, notesWithUser, chatMessages, lyrics, stylePrompt, uploadedReference, selectedSourceProject, universeBundle),
+          options: { interfaceLanguage: locale },
           byoApi: buildSongByoApi(selectedModelProvider),
         }),
       });
@@ -1379,17 +1410,9 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  // 聊天框直通生成：把输入作为上下文记录，但不显示为对话消息，直接调用生成
   async function generateSongFromChat() {
-    const trimmed = chatInput.trim();
-    if (trimmed) {
-      const notesWithUser = appendSongNotes(songDevelopmentNotes, "USER", trimmed);
-      setSongDevelopmentNotes(notesWithUser);
-      if (!form.concept.trim()) updateForm("concept", trimmed);
-      setChatInput("");
-    }
     setMobileView("results");
-    void generateAll();
+    await generateAll();
   }
 
   async function translateLyrics(sourceLyrics: string, targetLanguage: LyricsTranslationLanguage, signal: AbortSignal) {
@@ -1501,13 +1524,16 @@ export default function SongWorkbenchPage() {
 
   async function generateAll(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
+    if (generating || chatGenerating) return;
+    const snapshot = prepareSongGeneration(form, songDevelopmentNotes, chatMessages, chatInput);
+    const requestForm = { ...snapshot.form, outputLanguage: snapshot.form.outputLanguage as OutputLanguage };
     setError("");
     setGenerationError("");
     setGenerationProgress("");
     setSaveStatus("");
     setSaveWarning("");
     setAuditOpen(false);
-    if (!validateForm()) {
+    if (!requestForm.title.trim() && !requestForm.concept.trim() && !snapshot.notes.trim()) {
       setError(text.required);
       return;
     }
@@ -1516,10 +1542,6 @@ export default function SongWorkbenchPage() {
       return;
     }
 
-    setLyrics("");
-    setStylePrompt("");
-    setCompositionPrompt("");
-    setAudit(null);
     setGenerating(true);
     setGenerationProgress(isZh ? "正在生成歌曲…" : "Generating song...");
     try {
@@ -1533,15 +1555,16 @@ export default function SongWorkbenchPage() {
           taskType: "song_workbench",
           projectTitle: form.title,
           genre: normalizedGenres(form).join(", "),
-          input: buildSongGenerationInput(form, selectedSingers, selectedSourceProject, musicMode, voiceGender),
+          input: JSON.stringify({ ...JSON.parse(buildSongGenerationInput(requestForm, selectedSingers, selectedSourceProject, musicMode, voiceGender)), latestUserInstruction: snapshot.instruction }),
           context: [
-            songDevelopmentNotes.trim() ? `Music development chat notes:\n${songDevelopmentNotes}` : "",
+            snapshot.notes.trim() ? `Music development chat notes:\n${snapshot.notes}` : "",
             uploadedReference ? `Uploaded reference (${uploadedReference.type}, ${uploadedReference.mode}):\n${uploadedReference.text}` : "",
             selectedSourceProject ? `Source story project for OST/theme song:\n${summarizeSourceProject(selectedSourceProject)}` : "",
             universeBundle ? `Universe context for OST/theme song:\n${summarizeUniverseBundle(universeBundle)}` : "",
             lyrics.trim() ? `Existing lyrics to improve or replace:\n${lyrics}` : "",
             stylePrompt.trim() ? `Existing Suno style prompt:\n${stylePrompt}` : "",
           ].filter(Boolean).join("\n\n"),
+          options: { interfaceLanguage: locale },
           byoApi: buildSongByoApi(selectedModelProvider),
         }),
       });
@@ -1550,17 +1573,17 @@ export default function SongWorkbenchPage() {
 
       setGenerationProgress(isZh ? "正在解析结果…" : "Parsing result...");
       const parsed = parseSongGeneration(payload.output || "");
-      const fallbackLyrics = buildLyrics(form, selectedSingers);
+      const fallbackLyrics = buildLyrics(requestForm, selectedSingers);
       const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers) : "";
-      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || buildModeAwarePrompt(form, selectedSingers, musicMode, voiceGender), selectedSingers));
+      const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || buildModeAwarePrompt(requestForm, selectedSingers, musicMode, voiceGender), selectedSingers));
       const nextCompositionPrompt = "";
-      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, form);
+      const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, requestForm);
 
       setLyrics(nextLyrics);
       setStylePrompt(nextStylePrompt);
       setCompositionPrompt(nextCompositionPrompt);
       setAudit(nextAudit);
-      appendSongDocuments(
+      const generatedDocuments = appendSongDocuments(
         musicMode === "vocal"
           ? [
               { kind: "lyrics", content: nextLyrics },
@@ -1568,7 +1591,16 @@ export default function SongWorkbenchPage() {
             ]
               : [{ kind: documentKindForMode(musicMode), content: musicMode === "sfx" ? (parsed.sfxDescription || parsed.stylePrompt || nextStylePrompt) : nextStylePrompt, title: musicMode === "sfx" ? "音效生成描述" : "纯音乐 V6 曲风提示词" }],
       );
-      void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit);
+      setForm(requestForm);
+      setSongDevelopmentNotes(snapshot.notes);
+      if (snapshot.instruction) {
+        const message = createSongChatMessage("user", snapshot.instruction);
+        setChatMessages((current) => [...current, message]);
+        void appendSongLedgerMessage("user", message.content, `song-input:${message.id}`);
+        setChatInput((current) => current.trim() === snapshot.instruction ? "" : current);
+      }
+      void saveVersion("AI generation", "Generated lyrics and prompts through AI.", nextLyrics, nextStylePrompt, nextCompositionPrompt, nextAudit, { form: requestForm, developmentNotes: snapshot.notes });
+      return generatedDocuments;
     } catch (generationError) {
       setGenerationError(generationError instanceof Error ? generationError.message : "AI generation failed.");
     } finally {
@@ -1584,6 +1616,7 @@ export default function SongWorkbenchPage() {
     nextStyle = stylePrompt,
     nextComposition = compositionPrompt,
     nextAudit = audit,
+    snapshot: Pick<SaveSongProjectOptions, "form" | "developmentNotes"> = {},
   ) {
     const version: SongVersion = {
       id: `song-version-${Date.now()}`,
@@ -1598,6 +1631,7 @@ export default function SongWorkbenchPage() {
     };
     setVersions((current) => [version, ...current]);
     await saveSongProjectToList({
+      ...snapshot,
       silent: true,
       lyrics: nextLyrics,
       stylePrompt: nextStyle,
@@ -1609,12 +1643,12 @@ export default function SongWorkbenchPage() {
   async function saveSongProjectToList(options: SaveSongProjectOptions = {}) {
     const project = buildSongProjectSnapshot(
       songProjectId,
-      form,
+      options.form ?? form,
       options.lyrics ?? lyrics,
       options.stylePrompt ?? stylePrompt,
       options.compositionPrompt ?? compositionPrompt,
       options.audit ?? audit,
-      songDevelopmentNotes,
+      options.developmentNotes ?? songDevelopmentNotes,
       selectedSourceProject,
       selectedUniverseId || selectedSourceProject?.universeId || null,
     );
@@ -2334,7 +2368,7 @@ export default function SongWorkbenchPage() {
             </div>
           </header>
           <div className="song-right-studio">
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDelete={deleteSongAudio} onGenerateCover={generateSongCover} onDownloadCover={downloadSongCover} coverGeneratingId={coverGeneratingId} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} voiceGender={voiceGender} onVoiceGenderChange={setVoiceGender} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating || generating || chatGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDelete={deleteSongAudio} onFavorite={toggleSongFavorite} favoriteSavingId={favoriteSavingId} onGenerateCover={generateSongCover} onDownloadCover={downloadSongCover} coverGeneratingId={coverGeneratingId} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} voiceGender={voiceGender} onVoiceGenderChange={setVoiceGender} />
           </div>
         </section>
       </section>

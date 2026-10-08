@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
       status: job.status,
       resultUrl,
       coverUrl,
+      favorite: job.input_params?.favorite === true,
       provider: job.provider,
       model: job.model,
       projectId: job.project_id,
@@ -117,14 +118,14 @@ export async function POST(request: NextRequest) {
   const model = kind === "music" && provider.name === "atlascloud"
     ? requestedModel || getDefaultAtlasCloudMusicModel()
     : requestedModel || provider.capabilities().models[0] || "default";
-  const idempotencyHash = computeAudioIdempotencyHash({ ownerId: user.id, kind, targetId: idempotencyTargetId, text, provider: provider.name, model, musicMode: kind === "music" ? musicMode : undefined });
+  const inputParams = body.inputParams && typeof body.inputParams === "object" ? body.inputParams as Record<string, unknown> : {};
+  const voiceGender = inputParams.voiceGender === "male" || inputParams.voiceGender === "female" ? inputParams.voiceGender : "unrestricted";
+  const lyrics = musicMode === "vocal" && typeof body.lyrics === "string" ? body.lyrics : "";
+  const idempotencyHash = computeAudioIdempotencyHash({ ownerId: user.id, kind, targetId: idempotencyTargetId, text, provider: provider.name, model, musicMode: kind === "music" ? musicMode : undefined, lyrics: kind === "music" ? lyrics : undefined, voiceGender: kind === "music" && musicMode === "vocal" ? voiceGender : undefined });
 
   const existing = await serviceFetch<JobRow[]>(`${TABLE}?owner_id=eq.${encodeURIComponent(user.id)}&job_type=eq.audio&idempotency_hash=eq.${encodeURIComponent(idempotencyHash)}&status=not.in.(failed,provider_timeout)&limit=1`);
   if (existing?.[0]) return response(200, { success: true, created: false, job: existing[0] });
 
-  const inputParams = body.inputParams && typeof body.inputParams === "object" ? body.inputParams as Record<string, unknown> : {};
-  // 非人声模式永远不接收歌词，避免前端或重试请求意外把 vocal 内容送进纯音乐/音效任务。
-  const lyrics = musicMode === "vocal" && typeof body.lyrics === "string" ? body.lyrics : "";
   const submittedAt = Date.now();
   const insertRows = await serviceFetch<JobRow[]>(TABLE, {
     method: "POST",
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const submitResult = kind === "music"
-      ? await provider.submitMusic({ prompt: text, lyrics: lyrics || null, model, musicMode })
+      ? await provider.submitMusic({ prompt: text, lyrics: lyrics || null, model, musicMode, voiceGender })
       : await provider.submitTTS({ text, voiceProviderVoiceId: typeof body.voiceProviderVoiceId === "string" ? body.voiceProviderVoiceId : null, language: typeof body.language === "string" ? body.language : "zh", speed: typeof body.speed === "number" ? body.speed : 1, pitch: typeof body.pitch === "number" ? body.pitch : 0, stability: typeof body.stability === "number" ? body.stability : 0.5, stylePrompt: typeof body.stylePrompt === "string" ? body.stylePrompt : "" });
 
     if (submitResult.kind === "async_submitted") {
