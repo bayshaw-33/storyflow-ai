@@ -19,6 +19,7 @@ test("pending revisions reach generation immediately; favorites survive reload; 
   await page.route(`https://${host}/**`, (route) => route.fulfill({ json: route.request().url().includes("/auth/v1/user") ? user : [] }));
   let favorite = false;
   let failGeneration = false;
+  let emptyGeneration = false;
   let failFavorite = false;
   const generations: Record<string, any>[] = [];
   const batches: Record<string, any>[] = [];
@@ -31,7 +32,7 @@ test("pending revisions reach generation immediately; favorites survive reload; 
       const body = request.postDataJSON();
       if (body.taskType === "song_workbench") {
         generations.push(body);
-        await route.fulfill({ status: failGeneration ? 502 : 200, json: failGeneration ? { success: false, error: "测试生成失败" } : { success: true, output: `---LYRICS---\n[Verse]\n城市亮起灯火，第${generations.length}稿\n---MUSIC_PROMPT---\ncinematic piano, restrained chorus, version ${generations.length}` } });
+        await route.fulfill({ status: failGeneration ? 502 : 200, json: failGeneration ? { success: false, error: "测试生成失败" } : { success: true, output: emptyGeneration ? "" : `---LYRICS---\n[Verse]\n城市亮起灯火，第${generations.length}稿\n---MUSIC_PROMPT---\ncinematic piano, restrained chorus, version ${generations.length}` } });
       } else {
         expect(body.taskType).not.toBe("song_development_chat");
         await route.fulfill({ json: { success: true, output: "城市亮起灯火" } });
@@ -83,6 +84,12 @@ test("pending revisions reach generation immediately; favorites survive reload; 
   const previousOptions = await page.getByRole("combobox", { name: "选择歌词文档", exact: true }).locator("option").count();
   await page.getByRole("button", { name: "生成内容文档", exact: true }).click();
   await expect(page.locator(".song-right-error[role='alert']")).toContainText("测试生成失败");
+  await expect(composer).toHaveValue("失败时也要保留我的修改意见");
+  expect(await page.getByRole("combobox", { name: "选择歌词文档", exact: true }).locator("option").count()).toBe(previousOptions);
+  failGeneration = false;
+  emptyGeneration = true;
+  await page.getByRole("button", { name: "生成内容文档", exact: true }).click();
+  await expect(page.locator(".song-right-error[role='alert']")).toContainText("AI 未返回生成内容");
   await expect(composer).toHaveValue("失败时也要保留我的修改意见");
   expect(await page.getByRole("combobox", { name: "选择歌词文档", exact: true }).locator("option").count()).toBe(previousOptions);
 

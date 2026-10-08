@@ -1570,11 +1570,11 @@ export default function SongWorkbenchPage() {
       });
       const payload = await readJsonResponse<{ success?: boolean; error?: string; output?: string }>(response);
       if (!response.ok || !payload?.success) throw new Error(payload?.error || "AI generation failed.");
+      if (!payload.output?.trim()) throw new Error(isZh ? "AI 未返回生成内容，请重试。" : "The AI returned no content. Please retry.");
 
       setGenerationProgress(isZh ? "正在解析结果…" : "Parsing result...");
       const parsed = parseSongGeneration(payload.output || "");
-      const fallbackLyrics = buildLyrics(requestForm, selectedSingers);
-      const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output || fallbackLyrics, selectedSingers) : "";
+      const nextLyrics = musicMode === "vocal" ? sanitizeForbidden(parsed.lyrics || payload.output, selectedSingers) : "";
       const nextStylePrompt = fitV6StylePrompt(sanitizeForbidden(parsed.stylePrompt || (musicMode === "sfx" ? parsed.sfxDescription : "") || buildModeAwarePrompt(requestForm, selectedSingers, musicMode, voiceGender), selectedSingers));
       const nextCompositionPrompt = "";
       const nextAudit = auditLyrics(nextLyrics, nextStylePrompt, nextCompositionPrompt, selectedSingers, requestForm);
