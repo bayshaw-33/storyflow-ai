@@ -3,11 +3,12 @@ import type { ArtCandidateCount, ArtProviderSelection } from "../types.ts";
 export type ArtImageTask = "reference_sheet" | "variant" | "concept" | "edit";
 export type ArtImageCapability = "text-to-image" | "image-edit" | "multi-reference";
 export type ArtImageProvider = "atlas" | "flux";
-export type AtlasModelProfile = "flux-text" | "gpt-text" | "seedream-text" | "seedream-edit" | "grok-edit" | "grok-text" | "gpt-edit" | "banana-text" | "banana-edit" | "banana-edit-lite" | "mai-text" | "mai-edit" | "wan-text" | "qwen-text" | "qwen-edit";
+export type AtlasModelProfile = "flux2-flex-text" | "flux2-flex-edit" | "gpt25-text" | "gpt25-edit" | "gpt-text" | "gpt-edit" | "seedream-text" | "seedream-edit" | "grok-edit" | "grok-text" | "banana21-text" | "banana21-edit" | "banana-ultra-text" | "banana-edit" | "hidream-text" | "hidream-edit" | "reve-text" | "reve-edit" | "reve-remix";
 
 export type ArtModelDescriptor = {
   id: string;
   label: string;
+  family: string;
   provider: ArtImageProvider;
   capabilities: ArtImageCapability[];
   recommendedFor: ArtImageTask[];

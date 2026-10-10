@@ -6,20 +6,35 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
   const references = request.referenceUrls.slice(0, model.maxReferences);
   const profile = model.atlasProfile;
   if (!profile) throw new Error("ATLAS_MODEL_PROFILE_MISSING");
-  if (profile.endsWith("edit") && !references.length) throw new Error("ART_REFERENCE_REQUIRED");
+  if (model.capabilities.includes("image-edit") && !references.length) throw new Error("ART_REFERENCE_REQUIRED");
 
-  if (profile === "flux-text") {
-    return {
+  if (profile === "flux2-flex-text" || profile === "flux2-flex-edit") {
+    return compact({
       model: model.id,
       prompt: request.prompt,
-      size: fluxSize(request.aspectRatio),
-      num_images: request.count,
-      seed: request.seed ?? -1,
-      guidance_scale: 3.5,
+      images: profile === "flux2-flex-edit" ? references : undefined,
+      size: fluxFlexSize(request.aspectRatio),
+      guidance_scale: 5,
       num_inference_steps: 28,
+      enable_prompt_expansion: true,
+      output_format: "jpeg",
+      safety_tolerance: 2,
+      seed: request.seed ?? -1,
       enable_base64_output: false,
-      enable_safety_checker: true,
-    };
+      enable_sync_mode: false,
+    });
+  }
+  if (profile === "gpt25-text" || profile === "gpt25-edit") {
+    return compact({
+      model: model.id,
+      prompt: request.prompt,
+      images: profile === "gpt25-edit" ? references : undefined,
+      size: gptSize(request.aspectRatio),
+      quality: "medium",
+      background: "auto",
+      output_format: "jpeg",
+      n: request.count,
+    });
   }
   if (profile === "gpt-text" || profile === "gpt-edit") {
     return compact({
@@ -53,25 +68,25 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
       enable_base64_output: false,
     };
   }
-  if (profile === "banana-text") {
-    return {
+  if (profile === "banana21-text" || profile === "banana21-edit") {
+    return compact({
       model: model.id,
       prompt: request.prompt,
+      reference_images: profile === "banana21-edit" ? references : undefined,
       aspect_ratio: request.aspectRatio,
-      thinking_level: "default",
-      resolution: "1k",
-      enable_base64_output: false,
-      enable_sync_mode: false,
-    };
+      resolution: "2k",
+      thinking_level: "medium",
+      enable_web_search: false,
+      enable_image_search: false,
+    });
   }
-  if (profile === "banana-edit-lite") {
+  if (profile === "banana-ultra-text") {
     return {
       model: model.id,
       prompt: request.prompt,
-      images: references,
       aspect_ratio: request.aspectRatio,
-      thinking_level: "default",
-      resolution: "1k",
+      resolution: "4k",
+      output_format: "jpeg",
       enable_base64_output: false,
       enable_sync_mode: false,
     };
@@ -83,6 +98,7 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
       num_images: request.count,
       aspect_ratio: request.aspectRatio,
       resolution: "1k",
+      quality: "medium",
       enable_base64_output: false,
     };
   }
@@ -94,38 +110,32 @@ export function buildAtlasRequestBody(request: ArtImageRequest, model: ArtModelD
       num_images: request.count,
       aspect_ratio: request.aspectRatio,
       resolution: "1k",
+      quality: "medium",
       enable_base64_output: false,
     };
   }
-  if (profile === "mai-text" || profile === "mai-edit") {
-    const { width, height } = maiDimensions(request.aspectRatio);
+  if (profile === "hidream-text" || profile === "hidream-edit") {
     return compact({
       model: model.id,
       prompt: request.prompt,
-      width,
-      height,
-      steps: 20,
-      guidance_scale: 7.5,
-      images: profile === "mai-edit" ? references : undefined,
+      reference_image_urls: profile === "hidream-edit" ? references : undefined,
+      image_size: hidreamSize(request.aspectRatio),
+      num_inference_steps: 50,
+      guidance_scale: 5,
+      output_format: "jpeg",
     });
   }
-  if (profile === "wan-text") {
-    return {
-      model: model.id,
-      prompt: request.prompt,
-      size: "2K",
-      n: request.count,
-      thinking_mode: true,
-      enable_base64_output: false,
-    };
-  }
-  if (profile === "qwen-text" || profile === "qwen-edit") {
+  if (profile === "reve-text" || profile === "reve-edit" || profile === "reve-remix") {
     return compact({
       model: model.id,
       prompt: request.prompt,
-      size: qwenSize(request.aspectRatio),
-      seed: -1,
-      images: profile === "qwen-edit" ? references : undefined,
+      image: profile === "reve-edit" ? references[0] : undefined,
+      images: profile === "reve-remix" ? references : undefined,
+      aspect_ratio: request.aspectRatio,
+      resolution: "4k",
+      output_format: "jpeg",
+      enable_base64_output: false,
+      enable_sync_mode: false,
     });
   }
   return {
@@ -189,8 +199,8 @@ function compact(values: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 }
 
-function fluxSize(ratio: ArtImageRequest["aspectRatio"]) {
-  return { "1:1": "1024*1024", "4:3": "1024*768", "3:4": "768*1024", "16:9": "1024*576", "9:16": "576*1024" }[ratio];
+function fluxFlexSize(ratio: ArtImageRequest["aspectRatio"]) {
+  return { "1:1": "1024*1024", "4:3": "1365*1024", "3:4": "1024*1365", "16:9": "1365*768", "9:16": "768*1365" }[ratio];
 }
 
 function gptSize(ratio: ArtImageRequest["aspectRatio"]) {
@@ -201,12 +211,8 @@ function seedreamSize(ratio: ArtImageRequest["aspectRatio"]) {
   return { "1:1": "2048*2048", "4:3": "2304*1728", "3:4": "1728*2304", "16:9": "2848*1600", "9:16": "1600*2848" }[ratio];
 }
 
-function qwenSize(ratio: ArtImageRequest["aspectRatio"]) {
-  return { "1:1": "1024*1024", "4:3": "1280*960", "3:4": "960*1280", "16:9": "1280*720", "9:16": "720*1280" }[ratio];
-}
-
-function maiDimensions(ratio: ArtImageRequest["aspectRatio"]) {
-  return { "1:1": { width: 1024, height: 1024 }, "4:3": { width: 1280, height: 960 }, "3:4": { width: 960, height: 1280 }, "16:9": { width: 1280, height: 720 }, "9:16": { width: 720, height: 1280 } }[ratio];
+function hidreamSize(ratio: ArtImageRequest["aspectRatio"]) {
+  return { "1:1": "square_hd", "4:3": "landscape_4_3", "3:4": "portrait_4_3", "16:9": "landscape_16_9", "9:16": "portrait_16_9" }[ratio];
 }
 
 function delay(ms: number) {

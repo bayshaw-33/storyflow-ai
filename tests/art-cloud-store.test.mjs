@@ -215,6 +215,8 @@ test("references are owner-checked and re-signed; unsafe URLs and encoded traver
   const response = await generate(generation("ref-job", { referencePaths: ["alice/references/ref.png"] }));
   assert.equal(response.status, 200);
   assert.ok(calls.some(call => call.url.includes("/object/sign/art-assets/alice/references/ref.png")));
+  const paidRequest = JSON.parse(calls.find(call => call.url.includes("api.bfl.ai")).body);
+  assert.match(paidRequest.input_image, /^https:\/\/storage\.test\/storage\/v1\/object\/sign\/art-assets\/alice\/references\/ref\.png\?token=fresh$/);
   for (const bad of ["bob/references/ref.png", "alice/%2e%2e/bob.png", "alice//ref.png", "alice/../ref.png", "alice/ref.png?token=x"]) {
     const before = generationCount;
     assert.equal((await generate(generation(`bad-${before}`, { referencePaths: [bad] }))).status, 403);

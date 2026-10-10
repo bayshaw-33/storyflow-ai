@@ -12,6 +12,8 @@ import { readProjectsFromStorage, type DramaProject } from "@/lib/projects";
 import { artStateFromProject, assetsFromExtraction, backupCorruptedArtDraft, canPersistArtDraft, collectArtStoragePaths, createArtAsset, createEmptyArtWorkbenchState, replaceArtVersionPreviewUrls, resolveArtDraftKey, type ArtAsset, type ArtAssetKind, type ArtWorkbenchState, type ExtractedArtAssets } from "@/lib/art-workbench";
 import type { ArtAction } from "@/lib/art/types";
 import { addGeneratedArtCandidates, applyArtChatActions, resolveStandaloneArtDraftKey, type ArtChatDraft, type ArtChatJob, type ArtChatMessage, type ArtChatScope, type ArtReference } from "@/lib/art/chat-workflow";
+import { buildArtGenerationPrompt } from "@/lib/art/chat-intent";
+import { listCompatibleArtModels, resolveCompatibleArtModelId } from "@/lib/art/providers/selection";
 import type { ArtModelDescriptor } from "@/lib/art/providers/types";
 import ArtChatComposer from "./ArtChatComposer";
 import ArtChatImages from "./ArtChatImages";
@@ -185,6 +187,16 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     }).catch(() => { if (!cancelled) setNotice("图片模型暂时加载失败，请刷新后重试。"); });
     return () => { cancelled = true; };
   }, [session?.user.id]);
+
+  useEffect(() => {
+    const compatibleId = resolveCompatibleArtModelId(models, modelId, pendingImages.length);
+    if (compatibleId === modelId) return;
+    const replacement = models.find((item) => item.id === compatibleId);
+    setModelId(compatibleId);
+    setNotice(replacement
+      ? `已切换为 ${replacement.label}，适配${pendingImages.length ? "参考图生成" : "文生图"}。`
+      : `已切换为智能选择，适配${pendingImages.length ? "参考图生成" : "文生图"}。`);
+  }, [models, modelId, pendingImages.length]);
 
   useEffect(() => {
     setIsHydrated(false);
@@ -500,18 +512,20 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
       let next = applied.state;
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: [payload.assistantText || "已整理修改。", ...applied.feedback].join("\n"), note: payload.warning }]);
       if (payload.generation?.prompt) {
-        const model = models.find(item => item.id === modelId) || models.find(item => item.capabilities.includes(references.length ? "image-edit" : "text-to-image") && item.maxReferences >= references.length);
+        const compatibleModels = listCompatibleArtModels(models, references.length);
+        const model = modelId ? compatibleModels.find(item => item.id === modelId) : undefined;
         if (!models.length) throw new Error("当前没有可用的图片服务，请配置服务后重试。");
-        if (!model) throw new Error("当前参考图数量没有适配的已配置模型，请减少参考图或切换模型。");
-        if (model && (references.length > model.maxReferences || (references.length && !model.capabilities.includes("image-edit")))) throw new Error("所选模型不支持当前参考图数量，请切换模型。");
+        if (!compatibleModels.length) throw new Error("当前参考图数量没有适配的已配置模型，请减少参考图或切换模型。");
+        if (modelId && !model) throw new Error("所选模型不支持当前任务，请切换模型。");
+        const generationPrompt = buildArtGenerationPrompt(userMessage, payload.generation.prompt, references.length);
         let asset = next.assets.find(item => item.id === payload.generation?.assetId || item.id === applied.createdAssetId);
         if (!asset) {
-          asset = createArtAsset(payload.generation.kind || selectedKind, { name: payload.generation.name || "聊天生成", description: userMessage, prompt: payload.generation.prompt });
+          asset = createArtAsset(payload.generation.kind || selectedKind, { name: payload.generation.name || "聊天生成", description: userMessage, prompt: generationPrompt });
           next = { ...next, assets: [asset, ...next.assets] };
         }
         const variant = asset.variants?.[0];
         if (!variant) throw new Error("请先在资产编辑器创建母版。");
-        const job: ArtChatJob = { id: crypto.randomUUID(), assetId: asset.id, variantId: variant.id, prompt: payload.generation.prompt, status: "running", createdAt: new Date().toISOString() };
+        const job: ArtChatJob = { id: crypto.randomUUID(), assetId: asset.id, variantId: variant.id, prompt: generationPrompt, status: "running", createdAt: new Date().toISOString() };
         setState(next);
         stateRef.current = next;
         localStorage.setItem(targetScope, JSON.stringify(next));

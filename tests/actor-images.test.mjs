@@ -119,7 +119,7 @@ test("text-to-image request routes to the catalog default Atlas text model", () 
     hasReferences: request.referenceUrls.length > 0,
   });
   assert.equal(route.provider, "atlas");
-  assert.equal(route.model.id, "black-forest-labs/flux-dev");
+  assert.equal(route.model.id, "openai/gpt-image-2.5-flare/text-to-image");
 
   const payload = buildAtlasRequestBody(request, route.model);
   assert.equal(payload.prompt, "cinematic portrait");
@@ -143,7 +143,7 @@ test("reference-driven request routes to the catalog default Atlas edit model wi
     hasReferences: request.referenceUrls.length > 0,
   });
   assert.equal(route.provider, "atlas");
-  assert.equal(route.model.id, "openai/gpt-image-2/edit");
+  assert.equal(route.model.id, "openai/gpt-image-2.5-flare/edit");
   assert.ok(route.model.capabilities.includes("multi-reference"));
 
   const payload = buildAtlasRequestBody(request, route.model);

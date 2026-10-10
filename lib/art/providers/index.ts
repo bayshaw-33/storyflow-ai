@@ -5,6 +5,7 @@ import type { ArtImageProviderResult, ArtImageRequest } from "./types";
 
 export * from "./catalog";
 export * from "./router";
+export * from "./selection";
 export * from "./types";
 
 export async function generateArtImages(input: ArtImageRequest, context: { atlasAuthorized: boolean; atlasApiKey?: string }): Promise<ArtImageProviderResult[]> {

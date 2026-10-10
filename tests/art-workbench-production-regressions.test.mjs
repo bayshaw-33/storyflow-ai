@@ -185,6 +185,20 @@ test("embedded ArtWorkbench declares Work scope, hides standalone project naviga
   assert.doesNotMatch(component, /embedded \? <div className=\{styles\.assetCard\}/);
 });
 
+test("art chat model selection follows text and reference-image modes without losing the chosen family", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const [workbench, composer] = await Promise.all([
+    readFile(new URL("../components/art/ArtWorkbench.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/art/ArtChatComposer.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(workbench, /resolveCompatibleArtModelId/);
+  assert.match(workbench, /pendingImages\.length/);
+  assert.match(composer, /listCompatibleArtModels/);
+  assert.match(composer, /参考图生成模式/);
+  assert.match(composer, /文生图模式/);
+});
+
 // ============================================================
 // 2. 角色/场景/道具只在美术类别区分
 // ============================================================
