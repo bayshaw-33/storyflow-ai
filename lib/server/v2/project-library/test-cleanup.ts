@@ -27,6 +27,15 @@ export type TestCleanupResult = {
   storageWarnings: string[];
 };
 
+export type TestCleanupStorageObject = {
+  bucket: string;
+  path: string;
+};
+
+export type TestCleanupStorageDeleter = (
+  objects: TestCleanupStorageObject[],
+) => Promise<void>;
+
 type Row = Record<string, unknown>;
 
 const PROJECT_SCOPED_TABLES = [
@@ -82,6 +91,7 @@ export async function deleteTestAccountProjects(
   fetcher: ProjectLibraryFetcher,
   ownerId: string,
   selections: TestCleanupSelection[],
+  deleteStorageObjects: TestCleanupStorageDeleter,
 ): Promise<TestCleanupResult> {
   if (!ownerId) throw new Error("TEST_CLEANUP_OWNER_REQUIRED");
 
@@ -93,12 +103,12 @@ export async function deleteTestAccountProjects(
   for (const selection of selections) {
     try {
       if (selection.source === "project") {
-        const result = await deletePrimaryProject(fetcher, ownerId, selection.sourceId);
+        const result = await deletePrimaryProject(fetcher, ownerId, selection.sourceId, deleteStorageObjects);
         if (!result.deleted) throw new Error("PROJECT_NOT_FOUND_OR_FORBIDDEN");
         result.universeIds.forEach((id) => universeIds.add(id));
         result.storagePaths.forEach((path) => storageWarnings.add(path));
       } else {
-        const wasDeleted = await deleteChildProject(fetcher, ownerId, selection);
+        const wasDeleted = await deleteChildProject(fetcher, ownerId, selection, deleteStorageObjects);
         if (!wasDeleted) throw new Error("PROJECT_NOT_FOUND_OR_FORBIDDEN");
       }
       deleted.push(selection);
@@ -146,6 +156,7 @@ async function deletePrimaryProject(
   fetcher: ProjectLibraryFetcher,
   ownerId: string,
   sourceId: string,
+  deleteStorageObjects: TestCleanupStorageDeleter,
 ): Promise<{ deleted: boolean; universeIds: string[]; storagePaths: string[] }> {
   const selection: TestCleanupSelection = { source: "project", sourceId };
   const row = await readOwnedRow(fetcher, ownerId, selection);
@@ -157,7 +168,7 @@ async function deletePrimaryProject(
     `/rest/v1/storyflow_universe_project_links?project_id=eq.${project}&user_id=eq.${owner}&select=universe_id`,
   );
   const assets = await fetcher<Row[]>(
-    `/rest/v1/storyflow_assets?project_id=eq.${project}&user_id=eq.${owner}&select=storage_path`,
+    `/rest/v1/storyflow_assets?project_id=eq.${project}&user_id=eq.${owner}&select=asset_type,storage_path,metadata`,
   );
   const universeIds = new Set<string>();
   const directUniverseId = stringValue(row.universe_id);
@@ -166,9 +177,15 @@ async function deletePrimaryProject(
     const universeId = stringValue(link.universe_id);
     if (universeId) universeIds.add(universeId);
   }
+  const storageObjects = (Array.isArray(assets) ? assets : [])
+    .map(storageObjectForAsset)
+    .filter((item): item is TestCleanupStorageObject => Boolean(item));
+  const mappedPaths = new Set(storageObjects.map((item) => item.path));
   const storagePaths = (Array.isArray(assets) ? assets : [])
     .map((asset) => stringValue(asset.storage_path))
-    .filter(Boolean);
+    .filter((path) => Boolean(path) && !mappedPaths.has(path));
+
+  if (storageObjects.length > 0) await deleteStorageObjects(storageObjects);
 
   for (const scoped of PROJECT_SCOPED_TABLES) {
     await fetcher(
@@ -196,9 +213,12 @@ async function deleteChildProject(
   fetcher: ProjectLibraryFetcher,
   ownerId: string,
   selection: TestCleanupSelection,
+  deleteStorageObjects: TestCleanupStorageDeleter,
 ) {
   const row = await readOwnedRow(fetcher, ownerId, selection);
   if (!row) return false;
+  const storageObjects = await readChildStorageObjects(fetcher, selection, row);
+  if (storageObjects.length > 0) await deleteStorageObjects(storageObjects);
   const owner = encodeURIComponent(ownerId);
   const sourceId = encodeURIComponent(selection.sourceId);
   const ownerColumn = selection.source === "viral" ? "user_id" : "owner_id";
@@ -207,6 +227,54 @@ async function deleteChildProject(
     { method: "DELETE", headers: { Prefer: "return=representation" } },
   );
   return Array.isArray(rows) && rows.length === 1;
+}
+
+async function readChildStorageObjects(
+  fetcher: ProjectLibraryFetcher,
+  selection: TestCleanupSelection,
+  row: Row,
+): Promise<TestCleanupStorageObject[]> {
+  if (selection.source === "viral") {
+    const path = stringValue(row.source_video_path);
+    return path ? [{ bucket: "viral-assets", path }] : [];
+  }
+  if (selection.source !== "art") return [];
+
+  const project = encodeURIComponent(selection.sourceId);
+  const assets = await fetcher<Row[]>(
+    `/rest/v1/storyflow_art_assets?project_id=eq.${project}&select=id`,
+  );
+  const assetIds = idsFromRows(assets);
+  if (assetIds.length === 0) return [];
+  const variants = await fetcher<Row[]>(
+    `/rest/v1/storyflow_art_asset_variants?asset_id=in.(${assetIds.map(encodeURIComponent).join(",")})&select=id`,
+  );
+  const variantIds = idsFromRows(variants);
+  if (variantIds.length === 0) return [];
+  const versions = await fetcher<Row[]>(
+    `/rest/v1/storyflow_art_asset_versions?variant_id=in.(${variantIds.map(encodeURIComponent).join(",")})&select=storage_path`,
+  );
+  return (Array.isArray(versions) ? versions : [])
+    .map((version) => stringValue(version.storage_path))
+    .filter(Boolean)
+    .map((path) => ({ bucket: "art-assets", path }));
+}
+
+function storageObjectForAsset(asset: Row): TestCleanupStorageObject | null {
+  const path = stringValue(asset.storage_path);
+  if (!path) return null;
+  const metadata = objectValue(asset.metadata);
+  const explicitBucket = stringValue(metadata.storage_bucket) || stringValue(metadata.storageBucket);
+  if (explicitBucket) return { bucket: explicitBucket, path };
+  const assetType = stringValue(asset.asset_type);
+  if (assetType === "audio") return { bucket: "audio-assets", path };
+  if (assetType === "image" || assetType.startsWith("actor_avatar")) return { bucket: "art-assets", path };
+  if (assetType === "video") return { bucket: "storyboard-videos", path };
+  return null;
+}
+
+function idsFromRows(rows: Row[]) {
+  return (Array.isArray(rows) ? rows : []).map((row) => stringValue(row.id)).filter(Boolean);
 }
 
 async function deleteUniverseIfEmpty(
@@ -242,4 +310,8 @@ async function deleteUniverseIfEmpty(
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function objectValue(value: unknown): Row {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 }
