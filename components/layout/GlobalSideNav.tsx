@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { useState } from "react";
+import { WORK_TYPE_CARDS } from "@/lib/client/v2/project-start/helpers";
 
 /**
  * 左侧全局导航。
@@ -12,14 +14,22 @@ export function GlobalSideNav() {
   const { t, locale } = useI18n();
   const pathname = usePathname() || "";
   const isCommunityActive = pathname === "/community" || pathname.startsWith("/u/");
-
-  if (pathname === "/") return null;
+  const [workbenchOpen, setWorkbenchOpen] = useState(pathname === "/dashboard");
+  const isZh = locale === "zh-CN";
 
   return (
     <>
       <nav className="kk-nav-vertical" aria-label="Primary">
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>{t("nav.home")}</Link>
-        <Link href="/dashboard" aria-current={pathname === "/dashboard" ? "page" : undefined}>{t("nav.dashboard")}</Link>
+        <div className="kk-nav-workbench">
+          <div className="kk-nav-workbench-row">
+            <Link href="/dashboard" onClick={() => setWorkbenchOpen(true)} aria-current={pathname === "/dashboard" ? "page" : undefined}>{t("nav.dashboard")}</Link>
+            <button type="button" aria-label={isZh ? "展开或收起工作台入口" : "Toggle workbench entries"} aria-expanded={workbenchOpen} aria-controls="kk-workbench-entries" onClick={() => setWorkbenchOpen(open => !open)}>{workbenchOpen ? "⌄" : "›"}</button>
+          </div>
+          <ul id="kk-workbench-entries" className="kk-nav-submenu" hidden={!workbenchOpen} aria-label={isZh ? "创作模块" : "Creation modules"}>
+            {WORK_TYPE_CARDS.map(card => <li key={card.id}><Link href={card.route || `/projects/new-v2?type=${card.workType}`}>{isZh ? card.titleZh : card.titleEn}</Link></li>)}
+          </ul>
+        </div>
         <Link href="/universes" aria-current={pathname === "/universes" ? "page" : undefined}>{t("nav.universe")}</Link>
         <Link href="/actors" aria-current={pathname === "/actors" ? "page" : undefined}>{t("nav.actors")}</Link>
         <Link
@@ -28,11 +38,6 @@ export function GlobalSideNav() {
         >
           {t("nav.community")}
         </Link>
-        <span className="kk-nav-group-label">{locale === "zh-CN" ? "工作台" : "Workbenches"}</span>
-        <Link href="/production" title={locale === "zh-CN" ? "剧本、美术、分镜画布、白模预演与视频" : "Script, art, storyboard canvas, previs and video"}>{locale === "zh-CN" ? "制作工作台" : "Production"}</Link>
-        <Link href="/card-draw">{locale === "zh-CN" ? "抽卡" : "Card draw"}</Link>
-        <Link href="/job-center">{locale === "zh-CN" ? "任务中心" : "Tasks"}</Link>
-        <Link href="/kk">KK</Link>
         <Link href="/subscription" aria-current={pathname === "/subscription" ? "page" : undefined}>{t("nav.pricing")}</Link>
       </nav>
       <div className="kk-nav-settings-corner">

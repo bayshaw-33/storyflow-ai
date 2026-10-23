@@ -9831,13 +9831,9 @@ body:has(main.song-workbench-v2) .kk-nav-settings-corner {
   .song-health-card { grid-column: auto; }
 }
 
-/* Reserve space for the fixed global navigation at desktop sizes. */
-.kk-page-content { min-width: 0; }
-.kk-nav-vertical { width: 138px; gap: 14px; max-height: calc(100dvh - 112px); overflow-y: auto; }
-.kk-nav-group-label { margin-top: 8px; font-size: 11px; color: var(--ink-muted); }
-@media (min-width: 769px) {
-  body:has(.kk-nav-vertical) .kk-page-content { margin-left: 176px; }
-  html[data-screenplay-focus="on"] body .kk-page-content,
-  html[data-production-focus="on"] body .kk-page-content,
-  body:has(main.song-workbench-v2) .kk-page-content { margin-left: 0; }
-}
+.kk-nav-vertical { max-height: calc(100dvh - 112px); overflow-y: auto; }
+.kk-nav-workbench-row { display: flex; align-items: center; gap: 6px; }
+.kk-nav-workbench-row button { border: 0; padding: 2px 4px; background: transparent; color: var(--ink-secondary); font: inherit; cursor: pointer; }
+.kk-nav-submenu { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 12px 0 0; padding: 0 0 0 12px; }
+.kk-nav-submenu[hidden] { display: none; }
+.kk-nav-submenu a { font-size: 12px; }

@@ -54,7 +54,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* P1-03：fixture 兜底仅限开发环境；生产环境 offline 状态不加载演示数据 */}
               <KkRuntimeProvider allowFixtureFallback={process.env.NODE_ENV === "development"}>
                 <ThemeTimeSync />
-                <div className="kk-page-content">{children}</div>
+                {children}
                 <GlobalSideNav />
                 <KkCompanion />
                 <DevBridge />
