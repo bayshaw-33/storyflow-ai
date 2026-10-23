@@ -103,7 +103,7 @@ export function getProjectWorkbenchHref(project: ProjectLibraryProject) {
     const linkedProjectId = project.sourceProjectId || null;
     return linkedProjectId
       ? buildUnifiedWorkbenchUrl({ projectId: linkedProjectId, tab: "art", unitId })
-      : "/art-workbench";
+      : `/art-workbench?draftId=${encodeURIComponent(`legacy-art-${project.sourceId || project.id.replace(/^art-/, "")}`)}`;
   }
   if (project.workflowType === "voice") return `/casting?projectId=${projectId}`;
   if (project.workflowType === "editing") {

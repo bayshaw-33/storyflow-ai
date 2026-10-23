@@ -7,6 +7,7 @@ import { Activity, ArrowRight, Clock, Inbox as InboxIcon } from "lucide-react";
 import type { UniverseBundleV2 } from "@/lib/client/v2/universe/types";
 import { HEALTH_DIMENSION_KEYS } from "@/lib/client/v2/universe/types";
 import styles from "./universe.module.css";
+import { useI18n } from "@/lib/i18n/useI18n";
 import { GuideHint } from "./shared";
 
 type TabKey = "overview" | "bible" | "assets" | "works" | "canon" | "inbox" | "relationships" | "health" | "impact";
@@ -47,7 +48,9 @@ export function OverviewPanel({
   bundle: UniverseBundleV2;
   onNavigate: (tab: TabKey) => void;
 }) {
-  const isZh = true; // 默认中文，i18n 由上层 locale 决定，这里简化
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
+  const dateLabel = (value: string) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString(locale) : (isZh ? "未提供" : "Not provided");
   const labels = isZh ? HEALTH_LABELS_ZH : HEALTH_LABELS_EN;
   const { universe, healthSummary, recentActivity, proposals } = bundle;
   const pendingCount = proposals.filter((p) => p.status === "pending_review" || p.status === "draft").length;
@@ -65,15 +68,15 @@ export function OverviewPanel({
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <div>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: "0 0 4px" }}>{isZh ? "所有者" : "Owner"}</p>
-            <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{universe.owner}</p>
+            <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{universe.owner || (isZh ? "未提供" : "Not provided")}</p>
           </div>
           <div>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: "0 0 4px" }}>{isZh ? "创建时间" : "Created"}</p>
-            <p style={{ fontSize: 13, margin: 0 }}>{universe.createdAt}</p>
+            <p style={{ fontSize: 13, margin: 0 }}>{dateLabel(universe.createdAt)}</p>
           </div>
           <div>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: "0 0 4px" }}>{isZh ? "最近更新" : "Updated"}</p>
-            <p style={{ fontSize: 13, margin: 0 }}>{universe.updatedAt}</p>
+            <p style={{ fontSize: 13, margin: 0 }}>{dateLabel(universe.updatedAt)}</p>
           </div>
           <div>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: "0 0 4px" }}>{isZh ? "待处理候选" : "Pending proposals"}</p>

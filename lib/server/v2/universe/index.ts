@@ -25,6 +25,7 @@ type UniverseRow = {
   card_summary?: string | null;
   status?: string | null;
   updated_at: string;
+  created_at?: string | null;
   user_id?: string | null;
   team_id?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -62,6 +63,7 @@ export interface UniverseListResult {
 
 export interface UniverseReadResult {
   universe: UniverseDto;
+  details: { ownerName: string; createdAt: string | null };
   bible: { summary: string; content: string; genre: string; tags: string[] };
 }
 
@@ -118,8 +120,12 @@ export async function listUniverses(params: {
 export async function readUniverse(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseReadResult> {
   const row = await readAuthorizedUniverse(params);
   const dto = toUniverseDto(row);
+  const profiles = row.user_id ? await params.fetcher<Array<{ display_name?: string; username?: string }>>(
+    `/rest/v1/storyflow_profiles?user_id=eq.${encodeURIComponent(row.user_id)}&select=display_name,username&limit=1`,
+  ).catch(() => []) : [];
   return {
     universe: dto,
+    details: { ownerName: profiles[0]?.display_name || profiles[0]?.username || "", createdAt: row.created_at || null },
     bible: {
       summary: dto.summary,
       content: normalizeBibleContent(row.description || ""),

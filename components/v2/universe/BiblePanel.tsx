@@ -25,14 +25,14 @@ export function BiblePanel({ bundle }: { bundle: UniverseBundleV2 }) {
         </p>
       </div>
 
-      <div className={styles.card}>
+      {universe.summary.trim() && universe.summary.trim() !== universe.corePremise.trim() ? <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h2 className={styles.cardTitle}>世界摘要</h2>
         </div>
         <p style={{ fontSize: 14, lineHeight: 1.7, margin: 0, color: "rgba(255,255,255,0.8)" }}>
           {universe.summary}
         </p>
-      </div>
+      </div> : null}
 
       {bibleContent ? (
         <details className={styles.bibleReader}>

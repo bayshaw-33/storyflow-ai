@@ -6,6 +6,7 @@ import type { Locale } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { glassAssetFor, isFlagship, TIERS, type TierDef } from "@/lib/pricing/tiers";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { BillingSummary } from "./BillingSummary";
 import { withTimeout } from "@/lib/client/with-timeout";
 import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
@@ -299,6 +300,8 @@ export function MonetizationLayer() {
       <p className="kk-pricing-clarity">{copy.tierClarity}</p>
 
       {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
+
+      <BillingSummary />
 
       <section className="kk-monetization" aria-label="Tiers">
         {tiers.map((tier) => (

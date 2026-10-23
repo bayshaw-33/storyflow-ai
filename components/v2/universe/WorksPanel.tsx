@@ -282,7 +282,7 @@ function InheritanceStatus({
       <div className={styles.inheritanceHeader}>
         <span className={styles.inheritanceLabel}>
           <GitBranch size={12} />
-          继承状态
+          Canon 更新
         </span>
         {entry?.status === "loading" || entry?.busy ? (
           <span className={styles.inheritanceMuted}><Loader2 size={12} className="spin" />读取中…</span>
@@ -291,7 +291,7 @@ function InheritanceStatus({
           <span className={styles.inheritanceMuted}>预览模式</span>
         ) : null}
         {entry?.status === "unbound" ? (
-          <span className={`${styles.statusBadge} ${styles.statusDraft}`}>未绑定</span>
+          <span className={`${styles.statusBadge} ${styles.statusDraft}`}>{work.relationship === "referenced" ? "仅引用，不跟随 Canon 更新" : "尚未设置 Canon 继承"}</span>
         ) : null}
         {entry?.status === "bound" && state ? (
           <span className={`${styles.statusBadge} ${state.isStale ? styles.statusDraft : styles.statusCanon}`}>

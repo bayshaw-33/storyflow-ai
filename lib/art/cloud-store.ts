@@ -1,3 +1,5 @@
+import { serviceFetch } from "@/lib/supabase/server";
+import { loadLegacyArtDraft } from "./legacy-project.ts";
 import { ART_BUCKET, assertArtStoragePathBelongsToUser, signStoredArtImage } from "@/lib/supabase/art-storage";
 
 export type ArtCloudScope = { projectId: string; workId: string; draftId?: never } | { draftId: string; projectId?: never; workId?: never };
@@ -85,8 +87,13 @@ async function writeJson(storagePath: string, value: unknown, createOnly = false
   return true;
 }
 
-export function readArtCloudDraft(userId: string, scope: ArtCloudScope): Promise<ArtCloudDraft | null> {
-  return readJson(`${resolveArtCloudScope(userId, scope)}/draft.json`);
+export async function readArtCloudDraft(userId: string, scope: ArtCloudScope): Promise<ArtCloudDraft | null> {
+  const saved = await readJson<ArtCloudDraft>(`${resolveArtCloudScope(userId, scope)}/draft.json`);
+  if (saved) return saved;
+  if (scope.draftId?.startsWith("legacy-art-")) {
+    return loadLegacyArtDraft(userId, scope.draftId.slice("legacy-art-".length), serviceFetch, signStoredArtImage);
+  }
+  return null;
 }
 
 export async function writeArtCloudDraft(userId: string, scope: ArtCloudScope, draft: unknown): Promise<ArtCloudDraft> {

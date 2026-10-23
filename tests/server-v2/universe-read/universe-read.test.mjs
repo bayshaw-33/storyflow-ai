@@ -234,3 +234,14 @@ test("CanonObjectInput with unknown type is rejected", () => {
     (err) => err instanceof Error && /Unsupported object type/.test(err.message),
   );
 });
+
+test('Universe details include the real creation date and owner display name', async () => {
+  const result = await readUniverse({userId:'user-001',universeId:'uni-001',fetcher:async path=>{
+    if(path.includes('storyflow_universes')) return [{...UNIVERSE_ROW,created_at:'2026-01-01T00:00:00Z'}];
+    if(path.includes('storyflow_team_members')) return [];
+    if(path.includes('storyflow_profiles')) return [{display_name:'创作者',username:'creator'}];
+    throw new Error(`unexpected query: ${path}`);
+  }});
+  assert.equal(result.details?.ownerName,'创作者');
+  assert.equal(result.details?.createdAt,'2026-01-01T00:00:00Z');
+});

@@ -736,7 +736,7 @@ test("CM-006: listNotifications 查询 creative_events + 合并 read 状态", as
   assert.equal(items.length, 1);
   assert.equal(items[0].read, true);
   // URLSearchParams 将 * 编码为 %2A, 用 decodeURIComponent 比较
-  assert.ok(decodeURIComponent(receivedUrl).includes("event_type=like(notification_*)"));
+  assert.equal(new URL(receivedUrl, "https://db.test").searchParams.get("event_type"), "like.notification_*");
   assert.ok(receivedUrl.includes("owner_id=eq.user-A"));
 });
 

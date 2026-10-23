@@ -102,7 +102,7 @@ export async function listNotifications(
   // 查询事件类型以 notification: 开头的事件
   const params = new URLSearchParams();
   params.set("owner_id", `eq.${encodeURIComponent(recipientId)}`);
-  params.set("event_type", `like(notification:*)`);
+  params.set("event_type", "like.notification:*");
   params.set("order", "created_at.desc");
   params.set("limit", String(limit));
   params.set("offset", String(offset));
@@ -196,7 +196,7 @@ export async function markAllNotificationsRead(
 
   // 查询所有未读通知
   const unread = await fetcher<Array<{ id: string; payload: { read: boolean } }>>(
-    `/rest/v1/storyflow_creative_events?owner_id=eq.${encodeURIComponent(recipientId)}&event_type=like(notification:*)&limit=200`,
+    `/rest/v1/storyflow_creative_events?owner_id=eq.${encodeURIComponent(recipientId)}&event_type=like.notification:*&limit=200`,
     { headers: { Accept: "application/json" } },
   ).catch((err: unknown) => {
     throw new CollabServiceError("service_unavailable", "failed to fetch unread notifications", 503, err);

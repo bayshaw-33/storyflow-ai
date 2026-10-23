@@ -40,9 +40,9 @@ export async function listNotifications(
   const offset = Math.max(options.offset ?? 0, 0);
 
   const params = new URLSearchParams();
-  params.set("owner_id", `eq.${encodeURIComponent(recipientId)}`);
+  params.set("owner_id", `eq.${recipientId}`);
   // CM-006: 查询所有 community 通知 (notification_*)
-  params.set("event_type", `like(notification_*)`);
+  params.set("event_type", "like.notification_*");
   params.set("order", "created_at.desc");
   params.set("limit", String(limit));
   params.set("offset", String(offset));
@@ -65,14 +65,14 @@ export async function listNotifications(
   // 查询这些 event 的 read 状态
   const eventIds = rows.map((r) => r.id);
   const readParams = new URLSearchParams();
-  readParams.set("user_id", `eq.${encodeURIComponent(recipientId)}`);
+  readParams.set("user_id", `eq.${recipientId}`);
   readParams.set("event_id", `in.(${eventIds.join(",")})`);
   readParams.set("select", "event_id,read_at");
 
   const readRows = await fetcher<Array<{ event_id: string; read_at: string }>>(
     `/rest/v1/storyflow_notification_reads?${readParams.toString()}`,
     { headers: { Accept: "application/json" } },
-  ).catch(() => [] as Array<{ event_id: string; read_at: string }>);
+  ).catch((error: unknown) => { throw new CommunityServiceError("service_unavailable", "failed to read notification state", 503, error); });
 
   const readMap = new Map<string, string>();
   for (const r of readRows ?? []) {
@@ -112,7 +112,7 @@ export async function markNotificationRead(
   // 直接 POST 到 notification_reads 表 (RLS: 只能写自己的)
   await fetcher(`/rest/v1/storyflow_notification_reads`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal,resolution=ignore-duplicates" },
     body: JSON.stringify({
       user_id: recipientId,
       event_id: eventId,
@@ -140,28 +140,28 @@ export async function markAllNotificationsRead(
 
   // 查询所有未读通知
   const params = new URLSearchParams();
-  params.set("owner_id", `eq.${encodeURIComponent(recipientId)}`);
-  params.set("event_type", `like(notification_*)`);
+  params.set("owner_id", `eq.${recipientId}`);
+  params.set("event_type", "like.notification_*");
   params.set("limit", "200");
   params.set("select", "id");
 
   const rows = await fetcher<Array<{ id: string }>>(
     `/rest/v1/storyflow_creative_events?${params.toString()}`,
     { headers: { Accept: "application/json" } },
-  ).catch(() => [] as Array<{ id: string }>);
+  ).catch((error: unknown) => { throw new CommunityServiceError("service_unavailable", "failed to list notifications", 503, error); });
 
   const eventIds = (rows ?? []).map((r) => r.id);
   if (eventIds.length === 0) return { marked: 0 };
 
   // 查询已读的 event_id (避免重复)
   const readParams = new URLSearchParams();
-  readParams.set("user_id", `eq.${encodeURIComponent(recipientId)}`);
+  readParams.set("user_id", `eq.${recipientId}`);
   readParams.set("event_id", `in.(${eventIds.join(",")})`);
   readParams.set("select", "event_id");
   const readRows = await fetcher<Array<{ event_id: string }>>(
     `/rest/v1/storyflow_notification_reads?${readParams.toString()}`,
     { headers: { Accept: "application/json" } },
-  ).catch(() => [] as Array<{ event_id: string }>);
+  ).catch((error: unknown) => { throw new CommunityServiceError("service_unavailable", "failed to read notification state", 503, error); });
 
   const alreadyRead = new Set((readRows ?? []).map((r) => r.event_id));
   const toMark = eventIds.filter((id) => !alreadyRead.has(id));
@@ -176,7 +176,7 @@ export async function markAllNotificationsRead(
 
   await fetcher(`/rest/v1/storyflow_notification_reads`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal,resolution=ignore-duplicates" },
     body: JSON.stringify(payload),
   }).catch((err: unknown) => {
     throw new CommunityServiceError("service_unavailable", "failed to mark all read", 503, err);

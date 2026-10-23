@@ -12,6 +12,7 @@ globalThis.document = { title: "" };
 globalThis.window = { location: { search: "" }, addEventListener(){}, removeEventListener(){} };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const mocks = {
+  '@/lib/supabase/projects': 'export const readProjectsFromSupabase = async () => [];',
   '@/lib/i18n/useI18n': "export const useI18n=()=>({locale:'zh-CN',t:key=>key});",
   'next/link': "export default function Link({children}) {return children;}",
   '@/components/design/DesignAssetImage': "export const DesignAssetImage = () => null;",
@@ -92,4 +93,37 @@ test('new Video confirmation finishes Universe loading instead of cancelling its
   assert.equal(select.props.disabled,false);
   assert.match(JSON.stringify(select.toJSON?.() || select.findAllByType('option').map(n=>n.children)),/测试宇宙/);
  }finally{await act(async()=>view?.unmount());globalThis.fetch=original;}
+});
+const {BillingSummary} = await import('../components/pricing/BillingSummary.tsx');
+test('billing distinguishes no subscription from billing service failure',async()=>{
+ const original=globalThis.fetch;let view;
+ try{
+  globalThis.fetch=async()=>Response.json({success:true,subscription:null});
+  await act(async()=>{view=TestRenderer.create(React.createElement(BillingSummary));});
+  assert.match(JSON.stringify(view.toJSON()),/未关联付费订阅/);
+  await act(async()=>view.unmount());view=null;
+  globalThis.fetch=async()=>Response.json({success:false,code:'service_unavailable'},{status:503});
+  await act(async()=>{view=TestRenderer.create(React.createElement(BillingSummary));});
+  assert.match(JSON.stringify(view.toJSON()),/账单服务暂时不可用/);
+  assert.doesNotMatch(JSON.stringify(view.toJSON()),/暂无订阅账单/);
+ }finally{await act(async()=>view?.unmount());globalThis.fetch=original;}
+});
+
+const {default: ArtWorkbench} = await import('../components/art/ArtWorkbench.tsx');
+test('opening standalone art does not allocate or persist a draft before Start',async()=>{
+ const originalFetch=globalThis.fetch;const originalStorage=globalThis.localStorage;const previousLocation=window.location;const previousHistory=window.history;let view;const writes=[];const urls=[];
+ const data=new Map();
+ globalThis.localStorage={getItem:key=>data.get(key)||null,setItem:(key,value)=>{data.set(key,value);writes.push(key);},removeItem:key=>data.delete(key),key:index=>[...data.keys()][index],get length(){return data.size;}};
+ window.localStorage=globalThis.localStorage;window.location={search:'',href:'http://local.test/art-workbench'};window.history={replaceState:(_a,_b,url)=>urls.push(String(url))};
+ globalThis.fetch=async()=>Response.json({success:true,draft:null,models:[]});
+ try{
+  await act(async()=>{view=TestRenderer.create(React.createElement(ArtWorkbench));});
+  assert.equal(urls.filter(url=>url.includes('draftId=')).length,0);
+  assert.equal(writes.filter(key=>key.includes('kiikis_art_workbench_state')).length,0);
+  assert.match(JSON.stringify(view.toJSON()),/开始美术创作/);
+  const start=view.root.findAllByType('button').find(button=>button.children.includes('开始美术创作'));
+  await act(async()=>start.props.onClick());
+  assert.equal(urls.filter(url=>url.includes('draftId=')).length,1);
+  assert.ok(writes.some(key=>key.includes('kiikis_art_workbench_state')));
+ }finally{await act(async()=>view?.unmount());globalThis.fetch=originalFetch;globalThis.localStorage=originalStorage;window.location=previousLocation;window.history=previousHistory;}
 });

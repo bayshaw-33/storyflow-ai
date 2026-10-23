@@ -49,6 +49,7 @@ export interface FetchUniverseBundleOptions {
 
 // Codex universe 详情端点返回结构。
 interface CodexUniverseDetailResponse {
+  details?: { ownerName?: string; createdAt?: string | null };
   success: boolean;
   contractVersion: string;
   universe: {
@@ -402,10 +403,9 @@ function mapUniverseInfo(detail: CodexUniverseDetailResponse): UniverseInfo {
     // bible.summary 语义上对应核心前提（corePremise）；缺失时回退空串。
     corePremise: detail.bible?.summary ?? "",
     bibleContent: detail.bible?.content ?? "",
-    // Codex 详情未返回 createdAt/owner，用 updatedAt 兜底 createdAt，owner 留空。
-    createdAt: u.updatedAt,
+    createdAt: detail.details?.createdAt ?? "",
     updatedAt: u.updatedAt,
-    owner: "",
+    owner: detail.details?.ownerName ?? "",
     status: u.status,
     visibility: u.visibility,
     currentVersion: u.currentVersion,

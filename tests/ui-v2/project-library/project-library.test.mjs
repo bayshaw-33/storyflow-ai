@@ -86,7 +86,7 @@ test("project library routes audiovisual projects into production and preserves 
   assert.equal(getProjectWorkbenchHref(project({ id: "storyboard-1", workflowType: "storyboard" })), "/production?projectId=storyboard-1&tab=storyboard");
   assert.equal(getProjectWorkbenchHref(project({ id: "video-1", workflowType: "video" })), "/production?projectId=video-1&tab=video");
   // legacy 美术库行（无关联源项目）→ 独立美术工作台，不把伪造 id 喂给 /production
-  assert.equal(getProjectWorkbenchHref(project({ id: "art-uuid-1", workflowType: "art" })), "/art-workbench");
+  assert.equal(getProjectWorkbenchHref(project({ id: "art-uuid-1", workflowType: "art" })), "/art-workbench?draftId=legacy-art-uuid-1");
   assert.equal(
     getProjectWorkbenchHref(project({ id: "art-uuid-2", workflowType: "art", sourceProjectId: "script-9" })),
     "/production?projectId=script-9&tab=art",

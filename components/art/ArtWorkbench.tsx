@@ -120,6 +120,9 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
   const [cloudReady, setCloudReady] = useState(false);
+  const [standaloneStarted, setStandaloneStarted] = useState(false);
+  const explicitEntry = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("setup") === "1" || new URLSearchParams(window.location.search).get("handoff") === "creative");
+  const shouldStartStandalone = standaloneStarted || explicitEntry;
   const [standaloneDraftId, setStandaloneDraftId] = useState<string | null>(standaloneDraftIdProp || null);
   const sourceInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -209,6 +212,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     setJobs([]);
     setState({ ...createEmptyArtWorkbenchState(), projectId: contextProjectId, projectTitle: contextProjectTitle });
     if (!sessionReady) return;
+    if (!isEmbedded && !standaloneDraftId && !shouldStartStandalone) return;
     const params = new URLSearchParams(window.location.search);
     if (!isEmbedded && (!standaloneDraftId || params.get("setup") === "1")) {
       const next = createEmptyArtWorkbenchState();
@@ -254,7 +258,7 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
     return () => { cancelled = true; };
   // Only identity changes rehydrate; editing a project title must not reset chat.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey, storageReady, sessionReady]);
+  }, [storageKey, storageReady, sessionReady, shouldStartStandalone]);
 
   useEffect(() => {
     if (!isHydrated || !canPersistArtDraft({ storageReady, storageKey, hydratedStorageKey })) return;
@@ -606,6 +610,10 @@ export default function ArtWorkbench({ contextProjectId, contextProjectTitle, co
   function deleteAsset(assetId: string) {
     if (!window.confirm(isZh ? "确定删除这个资产吗？" : "Delete this asset?")) return;
     patchState({ assets: state.assets.filter((item) => item.id !== assetId), selectedAssetId: state.selectedAssetId === assetId ? "" : state.selectedAssetId });
+  }
+
+  if (!isEmbedded && !standaloneDraftId && !shouldStartStandalone) {
+    return <main className="cosmic-page" style={{ padding: 32 }}><h1>{isZh ? "美术工作台" : "Art workbench"}</h1><p>{isZh ? "开始后可上传参考图、拆解剧本或创建资产。" : "Start to upload references, break down a script, or create assets."}</p><button type="button" className="primary-button" onClick={() => setStandaloneStarted(true)}>{isZh ? "开始美术创作" : "Start art creation"}</button></main>;
   }
 
   return (
