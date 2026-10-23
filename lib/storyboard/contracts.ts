@@ -90,6 +90,7 @@ export type AnalyzeRequest = {
   source: string;
   aspectRatio: StoryboardAspectRatio;
   targetDurationSeconds: number;
+  maxShots?: number;
   visualStyle: string;
   outputLanguage: StoryboardOutputLanguage;
   mode: "full" | "scene";

@@ -98,6 +98,9 @@ export function validateAnalyzeRequest(body: unknown): ValidationResult<Validate
   }
 
   if (typeof input.visualStyle !== "string") fields.push("visualStyle");
+  if (input.maxShots !== undefined && (
+    typeof input.maxShots !== "number" || !Number.isInteger(input.maxShots) || input.maxShots < 1 || input.maxShots > 100
+  )) fields.push("maxShots");
   if (!isNonEmptyString(input.outputLanguage)) fields.push("outputLanguage");
 
   const mode = input.mode;
@@ -123,6 +126,7 @@ export function validateAnalyzeRequest(body: unknown): ValidationResult<Validate
       source: input.source as string,
       aspectRatio: aspectRatio as StoryboardRuntimeAspectRatio,
       targetDurationSeconds: targetDurationSeconds as number,
+      ...(input.maxShots !== undefined ? { maxShots: input.maxShots as number } : {}),
       visualStyle: (input.visualStyle as string).trim(),
       outputLanguage: input.outputLanguage as ValidatedAnalyzeRequest["outputLanguage"],
       mode: mode as "full" | "scene",

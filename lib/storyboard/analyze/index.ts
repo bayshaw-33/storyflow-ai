@@ -243,6 +243,10 @@ export async function runAnalyze(
   const providerInfo = typeof aiCallResult === "string" ? undefined : aiCallResult.provider;
 
   const aiOutput = parseAnalyzeOutput(rawOutput);
+  const proposedShotCount = aiOutput.scenes.reduce((total, scene) => total + scene.shots.length, 0);
+  if (request.maxShots !== undefined && proposedShotCount > request.maxShots) {
+    throw new StoryboardError("ANALYZE_OUTPUT_INVALID", `分析结果 ${proposedShotCount} 镜超过镜数上限 ${request.maxShots}，请重试或调整上限。`);
+  }
 
   const assets = extractAssetUsages(aiOutput.assets);
   const proposalScenes = assembleScenes(aiOutput.scenes, assets, sourceHash, revision);

@@ -836,8 +836,10 @@ function StandaloneStoryboardWorkbenchPage() {
     <main className="app-shell production-workbench-page simple-workbench-page studio-workbench-page">
       <header className="studio-workbench-header">
         <div>
-          <span>{isZh ? "分镜创作" : "Storyboard Workbench"}</span>
-          <h1>{isZh ? "脚本到镜头的生产台" : "Script-to-shot production desk"}</h1>
+          <span>{isZh ? "轻量分镜草稿" : "Quick storyboard draft"}</span>
+          <h1>{isZh ? "脚本到镜头的草稿台" : "Script-to-shot drafting desk"}</h1>
+          <p>{isZh ? "用于独立构思。项目内的分镜、画布与白模预演统一在制作工作台中继续。" : "Draft standalone ideas here. Continue project shots, canvas and previs in the production workspace."}</p>
+          <Link href="/production">{isZh ? "打开制作工作台" : "Open production workspace"}</Link>
         </div>
         <div className="studio-flow-row" aria-label="workflow">
           <span>{isZh ? "剧本" : "Script"}</span>

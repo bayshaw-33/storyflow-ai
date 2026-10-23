@@ -14,6 +14,7 @@ import { runAnalyze } from "../lib/storyboard/analyze/index.ts";
 import { parseAnalyzeOutput } from "../lib/storyboard/analyze/parse.ts";
 import { parseAnalyzeJsonBody, validateAnalyzeRequest } from "../lib/storyboard/analyze/schema.ts";
 import { StoryboardError } from "../lib/storyboard/analyze/types.ts";
+import { buildAnalyzeSystemPrompt } from "../lib/storyboard/analyze/prompt.ts";
 
 const FIXTURES = new URL("./fixtures/storyboard/", import.meta.url);
 const MOCK_AI = new URL("./fixtures/storyboard/mock-ai/", import.meta.url);
@@ -49,6 +50,24 @@ function makeDeps(mockRaw, existingScenes = []) {
     loadExistingState: async () => ({ scenes: existingScenes }),
   };
 }
+
+test("analyze: optional shot budget validates and reaches the model", () => {
+  const valid = validateAnalyzeRequest(makeRequest({ maxShots: 8 }));
+  assert.equal(valid.ok, true);
+  assert.equal(valid.value.maxShots, 8);
+  assert.match(buildAnalyzeSystemPrompt(valid.value), /最多 8 个镜头/);
+  for (const maxShots of [0, -1, 101, 1.5, "8", null]) {
+    assert.equal(validateAnalyzeRequest(makeRequest({ maxShots })).ok, false);
+  }
+  assert.equal(validateAnalyzeRequest(makeRequest()).ok, true);
+});
+
+test("analyze: over-budget proposal fails without silently dropping dialogue", async () => {
+  await assert.rejects(
+    runAnalyze(makeDeps(readMock("cn-short-drama")), makeRequest({ maxShots: 1 }), { ownerId: "u1" }),
+    (error) => error.code === "ANALYZE_OUTPUT_INVALID" && /镜数上限/.test(error.message),
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Request validation

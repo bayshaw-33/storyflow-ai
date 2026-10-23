@@ -83,6 +83,7 @@ export function buildAnalyzeSystemPrompt(request: ValidatedAnalyzeRequest): stri
     "你是一名短剧分镜导演，把剧本拆解为结构化的分镜 JSON。",
     "",
     "硬性要求：",
+    ...(request.maxShots === undefined ? [] : [`本次最多 ${request.maxShots} 个镜头。合并连续动作，避免过度拆分；台词和关键动作仍须完整保留，不得为凑目标时长新增情节。`]),
     "1. 只输出一个 JSON 对象：不要 markdown 代码块、不要任何解释文字、不要注释。第一个字符必须是 {，最后一个字符必须是 }。",
     "2. JSON 必须严格符合以下结构（字段名、层级完全一致；字符串用双引号；durationSeconds 用数字）：",
     OUTPUT_SHAPE,

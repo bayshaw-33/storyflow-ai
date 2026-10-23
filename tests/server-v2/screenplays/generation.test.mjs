@@ -160,6 +160,32 @@ function makeService(overrides = {}) {
 // 1. discuss: append-only conversation, no content versions
 // ============================================================
 
+test("discuss retry reuses both messages; a separate identical send remains distinct", async () => {
+  let calls = 0;
+  const { service, store } = makeService({ modelInvoke: async () => { calls++; return { assistantText: "reply", patches: [] }; } });
+  const params = { ownerId: OWNER, workId: WORK, conversationId: "conv-retry", userMessage: "same text", idempotencyKey: "send-1" };
+  const first = await service.discuss(params);
+  const replay = await service.discuss(params);
+  assert.equal(replay.userMessage.id, first.userMessage.id);
+  assert.equal(replay.assistantMessage.id, first.assistantMessage.id);
+  assert.equal(calls, 1);
+  await service.discuss({ ...params, idempotencyKey: "send-2" });
+  assert.equal(store.tables.storyflow_conversation_messages.length, 4);
+});
+
+test("discuss retry after provider failure does not duplicate user message in storage or model history", async () => {
+  let calls = 0;
+  const { service, store } = makeService({ modelInvoke: async ({ history }) => {
+    if (++calls === 1) throw new Error("provider unavailable");
+    assert.deepEqual(history, []);
+    return { assistantText: "reply", patches: [] };
+  } });
+  const params = { ownerId: OWNER, workId: WORK, conversationId: "conv-failure", userMessage: "retry me", idempotencyKey: "send-retry" };
+  await assert.rejects(service.discuss(params));
+  await service.discuss(params);
+  assert.equal(store.tables.storyflow_conversation_messages.length, 2);
+});
+
 test("discuss appends user+assistant messages and never creates content versions", async () => {
   const { service, store } = makeService();
   const result = await service.discuss({

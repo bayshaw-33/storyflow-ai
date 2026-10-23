@@ -141,8 +141,10 @@ export class ScreenplayGenerationService {
     const thread = await this.ensureThread(params.ownerId, params.workId, params.conversationId);
 
     const userKey = params.idempotencyKey ?? `discuss-user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const history = await this.readHistory(thread.id);
     const userMessage = await this.appendMessage(thread.id, params.workId, "user", params.userMessage, userKey);
+    const previousReply = await this.findMessage(thread.id, `${userKey}:assistant`);
+    if (previousReply) return { userMessage, assistantMessage: toMessageDto(previousReply), packetId: null };
+    const history = await this.readHistory(thread.id, userMessage.id);
 
     const packet = await this.deps.contextPacket({ workId: params.workId, threadId: thread.id }).catch(() => ({ packetId: null as string | null, packetContent: null, references: [] as unknown[] }));
 
@@ -472,14 +474,35 @@ export class ScreenplayGenerationService {
     return rows?.[0] ?? null;
   }
 
+  private async findMessage(threadId: string, idempotencyKey: string): Promise<MessageRow | null> {
+    const rows = await this.get<MessageRow[]>(`/rest/v1/storyflow_conversation_messages?thread_id=eq.${encodeURIComponent(threadId)}&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&select=${MSG_COLUMNS}&limit=1`);
+    return rows?.[0] ?? null;
+  }
+
   private async appendMessage(threadId: string, workId: string, role: "user" | "assistant", content: string, idempotencyKey: string): Promise<MessageDto> {
-    const rows = await this.post<MessageRow[]>("/rest/v1/storyflow_conversation_messages", {
+    const reuse = (row: MessageRow) => {
+      if (row.role !== role || (role === "user" && row.content !== content)) {
+        throw new ScreenplayGenerationError("validation_failed", "This send identifier already belongs to another message.");
+      }
+      return toMessageDto(row);
+    };
+    const existing = await this.findMessage(threadId, idempotencyKey);
+    if (existing) return reuse(existing);
+    let rows: MessageRow[];
+    try {
+      rows = await this.post<MessageRow[]>("/rest/v1/storyflow_conversation_messages", {
       thread_id: threadId,
       work_id: workId,
       role,
       content,
       idempotency_key: idempotencyKey,
-    });
+      });
+    } catch (error) {
+      // Concurrent retries meet the database's unique (thread_id, idempotency_key) constraint.
+      const concurrent = await this.findMessage(threadId, idempotencyKey);
+      if (concurrent) return reuse(concurrent);
+      throw error;
+    }
     const row = rows?.[0];
     if (!row) throw new ScreenplayGenerationError("service_unavailable", "Unable to append message.");
     return toMessageDto(row);

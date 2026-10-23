@@ -139,8 +139,8 @@ test("no legacy notes → no import row", async () => {
 test("appendUserMessage stores input as a real user message, idempotent per key", async () => {
   const { fetcher, tables } = makeLedgerStore(SEED);
   const ledger = new SongSessionLedger(fetcher);
-  const first = await ledger.appendUserMessage({ ownerId: OWNER, workId: WORK, threadId: THREAD, content: "加一段桥" });
-  const second = await ledger.appendUserMessage({ ownerId: OWNER, workId: WORK, threadId: THREAD, content: "加一段桥" });
+  const first = await ledger.appendUserMessage({ ownerId: OWNER, workId: WORK, threadId: THREAD, content: "加一段桥", idempotencyKey: "retry-bridge-1" });
+  const second = await ledger.appendUserMessage({ ownerId: OWNER, workId: WORK, threadId: THREAD, content: "加一段桥", idempotencyKey: "retry-bridge-1" });
   assert.equal(first.id, second.id, "same idempotency key → same message");
   const count = tables.storyflow_conversation_messages.filter((m) => m.content === "加一段桥").length;
   assert.equal(count, 1);

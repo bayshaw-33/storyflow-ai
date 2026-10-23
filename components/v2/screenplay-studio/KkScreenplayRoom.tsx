@@ -102,6 +102,7 @@ export function KkScreenplayRoom({
   const [error, setError] = useState<{ message: string; requestId?: string } | null>(null);
   const [diffVm, setDiffVm] = useState<CandidateDiffViewModel | null>(null);
   const retryRef = useRef<(() => void) | null>(null);
+  const sendingRef = useRef(false);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
 
   // 外部工具（本土化等）注入的预设输入。
@@ -128,7 +129,8 @@ export function KkScreenplayRoom({
 
   const runAction = useCallback(
     async (action: "discuss" | "propose_change", text: string, idempotencyKey = crypto.randomUUID()) => {
-      if (!text.trim()) return;
+      if (!text.trim() || sendingRef.current) return;
+      sendingRef.current = true;
       setBusy(true);
       setError(null);
       onInputPreserved(text);
@@ -177,6 +179,7 @@ export function KkScreenplayRoom({
         });
         retryRef.current = () => void runAction(action, text, idempotencyKey);
       } finally {
+        sendingRef.current = false;
         setBusy(false);
       }
     },

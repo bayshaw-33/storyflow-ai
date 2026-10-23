@@ -1,4 +1,5 @@
 "use client";
+import analysisStyles from "./AnalysisControls.module.css";
 
 /**
  * ProductionWorkbench — 分镜制作台主壳（四区页面重构版）。
@@ -179,6 +180,8 @@ export function ProductionWorkbench() {
 
   // --- 异步操作状态 ---
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisMaxShots, setAnalysisMaxShots] = useState(8);
+  const [analysisDuration, setAnalysisDuration] = useState(30);
   const [analyzingSceneId, setAnalyzingSceneId] = useState<string | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -836,7 +839,8 @@ export function ProductionWorkbench() {
       sourceUnitId,
       source: manuscript,
       aspectRatio: "9:16",
-      targetDurationSeconds: 90,
+      targetDurationSeconds: analysisDuration,
+      maxShots: analysisMaxShots,
       visualStyle: "cinematic vertical short drama",
       outputLanguage: "zh-CN",
       mode,
@@ -846,6 +850,8 @@ export function ProductionWorkbench() {
     };
     try {
       const response: AnalyzeResponse = await storyboardClient.analyze(request);
+      const shotCount = response.scenes.reduce((total, scene) => total + scene.shots.length, 0);
+      if (!window.confirm(`分析得到 ${response.scenes.length} 场、${shotCount} 个分镜（含保留的镜头）。是否采用？取消将保留当前分镜。`)) return;
       if (mode === "scene" && sceneId) {
         // 单场重分析：替换该场景，保留 locked shots
         setScenes((current) => {
@@ -853,11 +859,9 @@ export function ProductionWorkbench() {
           if (idx < 0 || response.scenes.length === 0) return current;
           const original = current[idx];
           const incoming = response.scenes[0];
-          // 合并：保留原场景的 locked shots，新增 incoming 中未匹配的 shots
-          const lockedShots = original.shots.filter((s) => s.locked);
-          const mergedShots = [...lockedShots, ...incoming.shots.map((s, i) => ({ ...s, order: lockedShots.length + i + 1 }))];
+          // 服务端已经保留并合并锁定镜头，客户端不能再次追加。
           const next = [...current];
-          next[idx] = { ...incoming, id: original.id, idSource: original.idSource, clientId: original.clientId, locked: original.locked, confirmed: original.confirmed, shots: mergedShots } as StoryboardScene;
+          next[idx] = { ...incoming, id: original.id, idSource: original.idSource, clientId: original.clientId, locked: original.locked, confirmed: original.confirmed } as StoryboardScene;
           return next;
         });
         setNotice(`已完成场景 ${sceneId} 的重分析（已保留 ${scenes.find((s) => (s.id ?? s.clientId) === sceneId)?.shots.filter((s) => s.locked).length ?? 0} 个锁定分镜）。`);
@@ -1750,6 +1754,10 @@ export function ProductionWorkbench() {
             {activeStage === "storyboard" ? (
               workId ? (
                 <>
+                  <div className={analysisStyles.controls}>
+                    <label>镜数上限 <input aria-label="镜数上限" type="number" min={1} max={100} value={analysisMaxShots} disabled={analyzing || Boolean(analyzingSceneId)} onChange={(event) => setAnalysisMaxShots(Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))))} /></label>
+                    <label>目标时长（秒） <input aria-label="目标时长（秒）" type="number" min={1} max={600} value={analysisDuration} disabled={analyzing || Boolean(analyzingSceneId)} onChange={(event) => setAnalysisDuration(Math.max(1, Math.min(600, Math.round(Number(event.target.value) || 1))))} /></label>
+                  </div>
                   <ScriptInputPanel
                     projectId={projectId}
                     sourceUnitId={sourceUnitId}

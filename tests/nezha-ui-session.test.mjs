@@ -17,7 +17,7 @@ const mocks = {
   'next/link': "export default function Link({children}) {return children;}",
   '@/components/design/DesignAssetImage': "export const DesignAssetImage = () => null;",
   'css': 'export default {};',
-  'next/navigation': `export const useRouter = () => ({push(){},replace(){}}); export const useSearchParams = () => new URLSearchParams('projectId=project');`,
+  'next/navigation': `const router={push(){},replace(href){globalThis.__nezhaRedirect?.(href);}}; export const useRouter = () => router; export const useSearchParams = () => new URLSearchParams(globalThis.__nezhaQuery ?? 'projectId=project');`,
   '@/lib/supabase/client': 'export const getSupabaseBrowserClient = () => globalThis.__nezhaClient;',
 };
 registerHooks({
@@ -39,6 +39,19 @@ registerHooks({
 });
 const {default:CardDraw} = await import('../app/card-draw/page.tsx');
 const {CastingPanel} = await import('../components/production/CastingPanel.tsx');
+const {DirectorPageClient} = await import('../app/director/DirectorPageClient.tsx');
+test('director preserves project/work/unit scope and opens unified motion preview', async () => {
+ let view; const urls=[];
+ globalThis.__nezhaQuery='projectId=project-1&workId=work-1&sourceUnitId=unit-1';
+ globalThis.__nezhaRedirect=href=>urls.push(href);
+ try {
+  await act(async()=>{view=TestRenderer.create(React.createElement(DirectorPageClient));});
+  assert.equal(urls.length,1);
+  const url=new URL(urls[0],'https://kiikis.test');
+  assert.equal(url.pathname,'/production');
+  for(const [key,value] of Object.entries({projectId:'project-1',workId:'work-1',unitId:'unit-1',tab:'storyboard',view:'motion'})) assert.equal(url.searchParams.get(key),value);
+ }finally{await act(async()=>view?.unmount());delete globalThis.__nezhaQuery;delete globalThis.__nezhaRedirect;}
+});
 const session={access_token:'valid-token',user:{id:'owner'}};
 globalThis.__nezhaClient={auth:{getSession:async()=>({data:{session}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})}};
 test('card draw settles after one history request and enables its CTA',async()=>{

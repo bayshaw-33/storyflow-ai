@@ -1,0 +1,15 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 0;
+}
+.controls label { display: flex; align-items: center; gap: 8px; }
+.controls input {
+  width: 80px;
+  padding: 8px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  color: var(--ink-primary);
+  background: var(--bg-void);
+}

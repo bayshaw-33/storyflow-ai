@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { AuthModal } from "@/components/layout/AuthModal";
@@ -20,7 +20,6 @@ export default function LoginPage() {
 }
 
 function LoginContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
@@ -40,11 +39,10 @@ function LoginContent() {
     const { data: listener } =
       supabase?.auth.onAuthStateChange((_event, nextSession) => {
         setSession(nextSession);
-        if (nextSession) router.replace("/dashboard");
       }) ?? {};
 
     return () => listener?.subscription.unsubscribe();
-  }, [router]);
+  }, []);
 
   return (
     <main className="cosmic-page auth-route-page">
