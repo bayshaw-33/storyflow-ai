@@ -86,7 +86,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState<number | null>(null);
 
   useEffect(() => {
     if (!candidates.length) {
@@ -108,7 +108,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
     audio.load();
     setIsPlaying(false);
     setCurrentTime(0);
-    setDuration(0);
+    setDuration(null);
   }, [selectedCandidate?.id, selectedCandidate?.resultUrl]);
 
   function togglePlay() {
@@ -126,7 +126,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
     if (!candidate.resultUrl) setIsPlaying(false);
   }
 
-  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const progress = duration !== null && duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const lyricsDocuments = documents.filter((document) => document.kind === "lyrics");
   const styleDocuments = documents.filter((document) => document.kind === "v6_style");
   const sfxDocuments = documents.filter((document) => document.kind === "sfx_description");
@@ -187,7 +187,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
             {WAVEFORM_BARS.concat(WAVEFORM_BARS).map((height, index) => <span className="song-audio-wave-bar" style={{ height: `${height}%` }} key={`hero-bar-${index}`} />)}
           </div>
           <div className="song-audio-progress"><span style={{ width: `${progress}%` }} /></div>
-          <div className="song-audio-time"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
+          <div className="song-audio-time"><span>{formatTime(currentTime)}</span><span>{duration === null ? "--:--" : formatTime(duration)}</span></div>
         </div>
         <div className="song-audio-hero-controls">
           <button className="song-audio-play-button" type="button" onClick={togglePlay} disabled={!selectedCandidate?.resultUrl} aria-label={isPlaying ? (isZh ? "暂停" : "Pause") : (isZh ? "播放" : "Play")}>
@@ -204,7 +204,9 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
           ref={audioRef}
           className="song-audio-native"
           preload="metadata"
-          onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
+          onLoadedMetadata={(event) => setDuration(Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration > 0 ? event.currentTarget.duration : null)}
+          onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration > 0 ? event.currentTarget.duration : null)}
+          onError={() => { setDuration(null); setIsPlaying(false); }}
           onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}

@@ -75,6 +75,16 @@ type Counts = {
   pendingInbox: number;
 };
 
+async function readProjectLinks(universeFilter: string): Promise<LinkRow[]> {
+  const links: LinkRow[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await serviceFetch<LinkRow[]>(`/rest/v1/storyflow_universe_project_links?${universeFilter}&select=id,universe_id,project_id,project_role,updated_at&order=updated_at.desc,id.desc&limit=${pageSize}&offset=${offset}`);
+    links.push(...page);
+    if (page.length < pageSize) return links;
+  }
+}
+
 export async function GET(request: NextRequest, context: { params: Promise<{ universeId: string }> }) {
   const requestId = crypto.randomUUID();
   try {
@@ -94,7 +104,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
       serviceFetch<Array<{ universe_id: string }>>(`/rest/v1/storyflow_universe_timeline_events?${universeFilter}&select=universe_id`),
       serviceFetch<Array<{ universe_id: string; is_locked: boolean }>>(`/rest/v1/storyflow_canon_facts?${universeFilter}&select=universe_id,is_locked`),
       serviceFetch<InboxRow[]>(`/rest/v1/storyflow_universe_inbox_items?${universeFilter}&status=eq.pending&select=id,universe_id,item_type,title,source_excerpt,confidence,status,updated_at&order=updated_at.desc&limit=5`),
-      serviceFetch<LinkRow[]>(`/rest/v1/storyflow_universe_project_links?${universeFilter}&select=id,universe_id,project_id,project_role,updated_at&order=updated_at.desc&limit=3`),
+      readProjectLinks(universeFilter),
       // works preview：从 links 拿 project_id 后再查 projects（避免 N+1，限制 3 条）
       Promise.resolve([] as ProjectRow[]),
       serviceFetch<CanonCheckRow[]>(`/rest/v1/storyflow_canon_check_reports?${universeFilter}&select=id,universe_id,issues_json&order=id.desc&limit=5`),

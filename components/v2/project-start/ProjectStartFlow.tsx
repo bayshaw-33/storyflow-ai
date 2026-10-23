@@ -369,7 +369,7 @@ export function ProjectStartFlow() {
                 }}
               />
               <span style={{ display: "block", marginTop: 5, fontSize: 11.5, color: "var(--ink-secondary, #9aa3b2)" }}>
-                {isZh ? "留空则使用默认名称（如“未命名剧本”），确认后生效。" : "Leave blank to use the default name after confirming."}
+                {isZh ? "建议使用“作品名 · 用途”，如“陨神之墓 · 第一集选角”，便于区分项目。留空使用默认名称，确认后生效。" : "Use a story title and purpose, such as “Fallen Gods · Episode 1 casting”, to distinguish projects. Leave blank for a default name."}
               </span>
             </label>
 

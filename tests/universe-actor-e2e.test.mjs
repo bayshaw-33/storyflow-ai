@@ -79,6 +79,24 @@ function params(...args) {
 }
 
 // 全链路正向：universe → overview → works → work detail → characters/scenes/props
+test("overview work count includes links beyond its three-card preview", async () => {
+  mockFetch((url) => {
+    if (url.includes("/rest/v1/storyflow_universes")) return jsonResponse([{ id: "uni-count", user_id: USER_A, team_id: null, name: "Count", metadata: {}, target_markets: [] }]);
+    if (url.includes("/rest/v1/storyflow_universe_project_links")) {
+      const rows = Array.from({ length: 1005 }, (_, index) => ({ id: `link-${index}`, universe_id: "uni-count", project_id: `project-${index}`, project_role: "main" }));
+      const limit = new URL(url).searchParams.get("limit");
+      const offset = Number(new URL(url).searchParams.get("offset") || 0);
+      return jsonResponse(limit ? rows.slice(offset, offset + Number(limit)) : rows);
+    }
+    return jsonResponse([]);
+  });
+  const response = await overviewRoute.GET(makeRequest("/api/universe/uni-count/overview", { token: "tok-a" }), { params: params("universeId", "uni-count") });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.counts.works, 1005);
+  assert.equal(body.works.length, 3);
+});
+
 test("正向链路：universe → overview → works → work detail（含 character/scene/prop 缩略图）", async () => {
   mockFetch((url) => {
     if (url.includes("/rest/v1/storyflow_team_members")) return jsonResponse([]);

@@ -40,6 +40,23 @@ registerHooks({
 const {default:CardDraw} = await import('../app/card-draw/page.tsx');
 const {CastingPanel} = await import('../components/production/CastingPanel.tsx');
 const {DirectorPageClient} = await import('../app/director/DirectorPageClient.tsx');
+const {AudioCandidates} = await import('../components/song-workbench/AudioCandidates.tsx');
+test('audio player distinguishes unknown duration from real metadata', async () => {
+ let view;
+ try {
+  await act(async()=>{view=TestRenderer.create(React.createElement(AudioCandidates, {
+   candidates:[{id:'audio-1',label:'A',status:'completed',resultUrl:'https://cdn.test/song.mp3',createdAt:'2026-10-23'}],
+   documents:[],musicModels:[],musicMode:'vocal',voiceGender:'unrestricted',isZh:true,busy:false,onGenerate(){},onDownload:async()=>{},
+  }));});
+  const player=view.root.findByType('audio');
+  assert.equal(player.props.preload,'metadata');
+  assert.match(JSON.stringify(view.toJSON()),/--:--/);
+  await act(async()=>player.props.onLoadedMetadata({currentTarget:{duration:125}}));
+  assert.match(JSON.stringify(view.toJSON()),/2:05/);
+  await act(async()=>player.props.onDurationChange({currentTarget:{duration:Infinity}}));
+  assert.match(JSON.stringify(view.toJSON()),/--:--/);
+ }finally{await act(async()=>view?.unmount());}
+});
 test('director preserves project/work/unit scope and opens unified motion preview', async () => {
  let view; const urls=[];
  globalThis.__nezhaQuery='projectId=project-1&workId=work-1&sourceUnitId=unit-1';
