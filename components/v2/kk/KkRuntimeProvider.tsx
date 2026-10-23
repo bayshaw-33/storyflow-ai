@@ -453,7 +453,7 @@ export function KkRuntimeProvider({
       pullEvents,
       messages: derivedMessages,
       settings: derivedSettings,
-      stats: derivedStats,
+      stats: enabled ? derivedStats : { ...derivedStats, unread: 0 },
       source: connectionState === "live" ? "api" : legacySource,
       markMessageRead,
     };

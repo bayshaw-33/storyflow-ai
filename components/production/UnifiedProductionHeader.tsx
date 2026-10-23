@@ -29,7 +29,7 @@ const STAGE_META: Record<UnifiedProductionStage, { label: string; icon: LucideIc
   art: { label: "美术", icon: Palette },
   storyboard: { label: "分镜", icon: PanelsTopLeft },
   video: { label: "视频", icon: Video },
-  editing: { label: "剪辑", icon: Scissors },
+  editing: { label: "剪辑（未上线）", icon: Scissors },
 };
 
 function SaveStatus({ status }: { status: UnifiedProductionHeaderProps["saveStatus"] }) {
@@ -60,6 +60,7 @@ export function UnifiedProductionHeader({
     <header className={styles.unifiedHeader}>
       <div className={styles.unifiedTitleBlock}>
         <h1>{context.project.title || "未命名项目"}</h1>
+        <span>制作工作台</span>
         <div className={styles.unifiedContextLine}>
           {universe ? (
             <button type="button" className={styles.universeBadge} onClick={onOpenUniverse}>
@@ -98,6 +99,7 @@ export function UnifiedProductionHeader({
                 aria-selected={activeStage === stage}
                 aria-controls={activeTabId}
                 className={`${styles.stageIconButton} ${activeStage === stage ? styles.stageIconButtonActive : ""}`}
+                disabled={stage === "editing"}
                 onClick={() => onStageChange(stage)}
               >
                 <StageIcon size={15} aria-hidden="true" />
@@ -109,10 +111,10 @@ export function UnifiedProductionHeader({
 
         <span className={styles.headerDivider} aria-hidden="true" />
         {primaryActions}
-        <button type="button" className={styles.headerActionButton} onClick={onVersionClick} aria-label="Version">
+        <button type="button" className={styles.headerActionButton} onClick={onVersionClick} aria-label="版本">
           <FileClock size={15} aria-hidden="true" /><span>版本</span>
         </button>
-        <button type="button" className={styles.headerActionButton} onClick={onEvidenceClick} aria-label="Evidence">
+        <button type="button" className={styles.headerActionButton} onClick={onEvidenceClick} aria-label="证据">
           <ShieldCheck size={15} aria-hidden="true" /><span>证据</span>
         </button>
         <button type="button" className={styles.headerIconButton} onClick={onMoreClick} aria-label="More" title="更多">

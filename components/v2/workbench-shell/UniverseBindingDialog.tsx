@@ -71,11 +71,12 @@ export function UniverseBindingDialog({
     setUniverseId("");
     const timer = setTimeout(async () => {
       try {
-        const response = await fetchWithAuthRetry(`/api/v2/universes?limit=50&search=${encodeURIComponent(search.trim())}`, { signal: controller.signal });
+        const response = await fetchWithAuthRetry("/api/universe/summaries", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
         if (!response.ok) throw new Error(isZh ? "Universe 列表加载失败，请重新搜索。" : "Unable to load Universes. Please search again.");
         const result = await response.json();
         if (controller.signal.aborted) return;
-        setUniverses(result.items ?? []);
+        if (!result.success || !Array.isArray(result.universes)) throw new Error(isZh ? "Universe 列表响应无效，请重试。" : "Invalid Universe response. Please retry.");
+        setUniverses(result.universes.filter((item: { name: string }) => item.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())));
         setError("");
       } catch (err) {
         if (!controller.signal.aborted) { setUniverses([]); setError(err instanceof Error ? err.message : "Unable to load Universes"); }

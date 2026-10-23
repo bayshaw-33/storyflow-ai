@@ -47,6 +47,8 @@ export class StoryboardClientError extends Error {
   }
 }
 
+import { readShotImageResult } from "./generation-results.ts";
+
 type SessionSupplier = () => Promise<string | null>;
 
 type StoryboardClientOptions = {
@@ -202,14 +204,15 @@ export class StoryboardClient {
     idempotencyKey: string;
     referenceVersionIds?: string[];
     expectedRevision: number;
-  }): Promise<{ shotId: string; imageUrl: string; provider: string; model: string; inputHash: string }> {
+  }): Promise<{ imageUrl: string; versionId: string; provider: string; model: string; inputHash: string }> {
     const encoded = encodeURIComponent(shotId);
-    return this.fetchJson({
+    const payload = await this.fetchJson<Parameters<typeof readShotImageResult>[0]>({
       method: "POST",
       path: `/api/storyboard/shots/${encoded}/generate-image`,
-      body: input,
+      body: { ...input, count: 1 },
       expectConflict: true,
     });
+    return readShotImageResult(payload);
   }
 
   async savePrevisVersion(shotId: string, input: {
@@ -267,6 +270,8 @@ export class StoryboardClient {
     /** 允许文本覆盖；默认服务端读 shot.jimengPromptZh */
     promptOverride?: string;
     duration?: number;
+    resolution?: string;
+    model?: string;
     /** 画幅，如 "16:9" / "9:16" */
     aspectRatio?: string;
     /** Immutable adopted white-model version for exact input provenance. */

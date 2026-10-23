@@ -278,7 +278,8 @@ test("ProductionWorkbench 从 URL 读取 handoffId 参数并传给分镜阶段",
 });
 
 test("分镜阶段在 handoffId 存在时渲染 DynamicGridEditor 并传入 handoffId", () => {
-  assert.match(STORYBOARD_STAGE_SRC, /const fallbackMotion = handoffId \? \(/);
+  assert.match(STORYBOARD_STAGE_SRC, /const fallbackMotion = previsShots.length === 0/);
+  assert.match(STORYBOARD_STAGE_SRC, /: handoffId \? \(/);
   assert.match(STORYBOARD_STAGE_SRC, /<DynamicGridEditor handoffId=\{handoffId\} \/>/);
 });
 

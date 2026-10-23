@@ -37,19 +37,19 @@ type Props = {
 const COPY = {
   zh: {
     title: "剪辑工作台",
-    subtitle: "OpenCut-ready Framework",
+    subtitle: "素材与时间线预览",
     loading: "加载时间线…",
     error: "加载失败",
     retry: "重试",
-    assets: "Production Assets",
-    preview: "Preview",
+    assets: "制作素材",
+    preview: "预览",
     previewPlaceholder: "预览占位（本轮不提供剪辑能力）",
-    timeline: "Timeline Framework",
-    timelineEmpty: "时间线为空，请先在 Production 中创建 Selected Takes",
-    properties: "Project Properties",
-    opencutStatus: "OpenCut 状态",
-    opencutWaiting: "待适配",
-    opencutReason: "OpenCut Adapter 首期仅作为框架占位，尚未实际接入。",
+    timeline: "时间线预览",
+    timelineEmpty: "暂无可用视频，请先在制作工作台的视频阶段生成并采用素材。",
+    properties: "项目属性",
+    opencutStatus: "剪辑状态",
+    opencutWaiting: "未上线",
+    opencutReason: "剪辑功能尚未上线，当前仅可查看素材与时间线。",
     exportBtn: "导出 Production Package",
     exportUnavailable: "导出不可用",
     duration: "总时长",
@@ -66,7 +66,7 @@ const COPY = {
   },
   en: {
     title: "Editor Framework",
-    subtitle: "OpenCut-ready",
+    subtitle: "Assets and timeline preview",
     loading: "Loading timeline…",
     error: "Load failed",
     retry: "Retry",
@@ -76,9 +76,9 @@ const COPY = {
     timeline: "Timeline Framework",
     timelineEmpty: "Timeline is empty. Create Selected Takes in Production first.",
     properties: "Project Properties",
-    opencutStatus: "OpenCut Status",
-    opencutWaiting: "Waiting",
-    opencutReason: "OpenCut Adapter is a stub in this phase.",
+    opencutStatus: "Editing status",
+    opencutWaiting: "Coming soon",
+    opencutReason: "Editing is not available yet. You can preview assets and the timeline.",
     exportBtn: "Export Production Package",
     exportUnavailable: "Export unavailable",
     duration: "Duration",
@@ -152,7 +152,7 @@ export const EditorFramework = memo(function EditorFramework({
       >
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>
-            {copy.title}
+            {copy.title} · {isZh ? "未上线" : "Coming soon"}
           </div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
             {copy.subtitle} · {projectId}
@@ -575,7 +575,7 @@ function PropertiesPanel({
           }}
         >
           {data.opencutStatus.available ? "✓" : "⏳"}{" "}
-          {data.opencutStatus.reason || "OK"}
+          {data.opencutStatus.available ? "OK" : copy.opencutReason}
         </div>
         <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
           {copy.opencutReason}
@@ -585,7 +585,7 @@ function PropertiesPanel({
       <div style={{ marginTop: 16 }}>
         <button
           type="button"
-          disabled={!data.exportAvailable}
+          disabled={!data.exportAvailable || !data.opencutStatus.available}
           style={{
             width: "100%",
             padding: "8px 12px",
@@ -602,9 +602,9 @@ function PropertiesPanel({
             fontSize: 12,
             cursor: data.exportAvailable ? "pointer" : "not-allowed",
           }}
-          title={data.exportUnavailableReason || ""}
+          title={!data.opencutStatus.available ? "剪辑功能尚未上线，暂不支持导出。 / Editing is not available yet." : data.exportUnavailableReason || ""}
         >
-          {data.exportAvailable ? copy.exportBtn : copy.exportUnavailable}
+          {data.exportAvailable && data.opencutStatus.available ? copy.exportBtn : copy.exportUnavailable}
         </button>
         {!data.exportAvailable && data.exportUnavailableReason && (
           <div
@@ -615,7 +615,7 @@ function PropertiesPanel({
               textAlign: "center",
             }}
           >
-            {data.exportUnavailableReason}
+            {data.opencutStatus.available ? data.exportUnavailableReason : copy.opencutReason}
           </div>
         )}
       </div>

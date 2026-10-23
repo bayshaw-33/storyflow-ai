@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await authenticateRequest(request);
     const projectId = request.nextUrl.searchParams.get("projectId") || "";
-    if (!projectId) return apiError(new Error("MISSING_PROJECT_ID"), "缺少项目 ID。");
+    if (!projectId || /^draft(?:-|$)/.test(projectId)) return Response.json({ success: false, code: "INVALID_PROJECT_ID", error: "请选择正式项目。" }, { status: 422 });
 
     // Fetch characters for this project
     const characters = await serviceFetch<Array<Record<string, unknown>>>(

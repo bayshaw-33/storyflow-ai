@@ -754,7 +754,7 @@ function UniverseDetailPageV1() {
           </button>
           <Link
             className={styles.secondaryButton}
-            href={`/production?mode=art&setup=1&universeId=${encodeURIComponent(params.universeId)}`}
+            href={`/projects/new-v2?universeId=${encodeURIComponent(params.universeId)}&type=art`}
           >
             <Palette size={15} /> {isZh ? "美术工作台" : "Art workbench"}
           </Link>

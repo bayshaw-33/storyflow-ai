@@ -9830,3 +9830,14 @@ body:has(main.song-workbench-v2) .kk-nav-settings-corner {
   .song-voice-form label:last-child { grid-column: auto; }
   .song-health-card { grid-column: auto; }
 }
+
+/* Reserve space for the fixed global navigation at desktop sizes. */
+.kk-page-content { min-width: 0; }
+.kk-nav-vertical { width: 138px; gap: 14px; max-height: calc(100dvh - 112px); overflow-y: auto; }
+.kk-nav-group-label { margin-top: 8px; font-size: 11px; color: var(--ink-muted); }
+@media (min-width: 769px) {
+  body:has(.kk-nav-vertical) .kk-page-content { margin-left: 176px; }
+  html[data-screenplay-focus="on"] body .kk-page-content,
+  html[data-production-focus="on"] body .kk-page-content,
+  body:has(main.song-workbench-v2) .kk-page-content { margin-left: 0; }
+}

@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     // KIIKIS-TR-ACTOR-P0-009: 列表移除 description（Bible 可能数十 KB，列表页只用 card_summary）
     const universes = await serviceFetch<UniverseRow[]>(
-      `/rest/v1/storyflow_universes?${accessFilter}&archived_at=is.null&select=id,name,status,card_summary,cover_asset_version_id,metadata,genre,updated_at,archived_at&order=updated_at.desc&limit=50`,
+      `/rest/v1/storyflow_universes?${accessFilter}&archived_at=is.null&select=id,name,status,card_summary,description,cover_asset_version_id,metadata,genre,updated_at,archived_at&order=updated_at.desc&limit=50`,
     );
 
     if (!universes.length) return ok({ universes: [], requestId });

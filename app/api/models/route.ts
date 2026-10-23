@@ -29,7 +29,16 @@ export async function GET(request: NextRequest) {
     const rows = await serviceFetch<ModelRow[]>(
       `/rest/v1/storyflow_model_registry?user_id=eq.${encodeURIComponent(user.id)}${filter}&select=*&order=modality.asc,is_default.desc,created_at.desc`,
     );
-    return ok({ models: rows });
+    return ok({ models: [
+      ...rows,
+      ...(!modality || modality === "video" ? [{
+        id: "system-seedance-2", name: "Seedance 2.0", provider: "atlas", modality: "video",
+        model_id: "bytedance/seedance-2.0/image-to-video", readonly: true,
+        capabilities: { resolutions: ["720p"], aspectRatios: ["9:16", "16:9", "1:1"], maxDurationSeconds: 4 },
+        is_default: true, status: process.env.ATLASCLOUD_API_KEY ? "active" : "disabled",
+        config: {}, notes: process.env.ATLASCLOUD_API_KEY ? "团队测试默认：720P · 4s" : "视频服务尚未配置，请联系管理员。", created_at: "",
+      }] : []),
+    ] });
   } catch (error) {
     return apiError(error, "读取模型注册表失败。");
   }

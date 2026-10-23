@@ -22,6 +22,8 @@ export type VideoSubmitInput = {
   firstframeUrl: string;
   /** 时长秒数，5 或 10 */
   duration?: number;
+  resolution?: string;
+  model?: string;
   /** 画幅，如 "16:9" / "9:16" / "1:1" */
   aspectRatio?: string;
 };
@@ -77,7 +79,10 @@ export function computeVideoIdempotencyHash(input: {
   firstframeUrl: string;
   duration: number;
   provenanceHash?: string;
+  model?: string;
+  resolution?: string;
+  aspectRatio?: string;
 }): string {
-  const parts = [input.shotId, input.prompt, input.firstframeUrl, String(input.duration), input.provenanceHash ?? ""];
+  const parts = [input.shotId, input.prompt, input.firstframeUrl, String(input.duration), input.provenanceHash ?? "", input.model ?? "", input.resolution ?? "", input.aspectRatio ?? ""];
   return createHash("sha256").update(parts.join("\u0001")).digest("hex");
 }

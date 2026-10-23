@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { getPlanEntitlement, formatPrice, formatCnyPrice, type PlanEntitlement } from "@/lib/billing/plans";
 import type { Locale } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/useI18n";
 import { glassAssetFor, isFlagship, TIERS, type TierDef } from "@/lib/pricing/tiers";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { withTimeout } from "@/lib/client/with-timeout";
 import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
 const PRIMARY_TIER_IDS: TierDef["id"][] = ["FREE", "ELITE", "PRO", "ULTRA"];
@@ -162,6 +163,31 @@ export function MonetizationLayer() {
   const [savingTier, setSavingTier] = useState<TierDef["id"] | null>(null);
   const [annual, setAnnual] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    const client = getSupabaseBrowserClient();
+    if (!client) return;
+    let active = true;
+    let sequence = 0;
+    const loadPlan = async (userId?: string) => {
+      const current = ++sequence;
+      if (!userId) { if (active) setSelected(null); return; }
+      try {
+        const { data, error } = await withTimeout(client.from("storyflow_profiles").select("plan").eq("user_id", userId).maybeSingle(), 10_000);
+        if (!active || current !== sequence) return;
+        if (error) throw error;
+        const tier = TIERS.find(tier => tier.planId === data?.plan);
+        setSelected(tier?.id ?? null);
+      } catch {
+        if (active && current === sequence) setMessage({ tone: "error", text: locale === "zh-CN" ? "当前套餐读取失败，请刷新重试。" : "Unable to read current plan. Please refresh." });
+      }
+    };
+    void withTimeout(client.auth.getSession(), 10_000).then(({ data }) => loadPlan(data.session?.user.id)).catch(() => {
+      if (active) setMessage({ tone: "error", text: locale === "zh-CN" ? "登录会话读取失败，请刷新重试。" : "Unable to read session. Please refresh." });
+    });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => { setTimeout(() => { if (active) void loadPlan(session?.user.id); }, 0); });
+    return () => { active = false; sequence++; listener.subscription.unsubscribe(); };
+  }, [locale]);
 
   const tiers = useMemo(
     () => PRIMARY_TIER_IDS.map((id) => TIERS.find((tier) => tier.id === id)).filter(Boolean) as TierDef[],

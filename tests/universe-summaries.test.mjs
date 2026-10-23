@@ -155,6 +155,7 @@ test("35,000 字 description 不进入列表 DTO，cardSummary 截断为 60 字"
   mockFetch((url) => {
     if (url.includes("/rest/v1/storyflow_team_members")) return jsonResponse([]);
     if (url.includes("/rest/v1/storyflow_universes")) {
+      assert.ok(new URL(url).searchParams.get("select").split(",").includes("description"), "summary fallback must actually request description");
       return jsonResponse([
         {
           id: "uni-1",

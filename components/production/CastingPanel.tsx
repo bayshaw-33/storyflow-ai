@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Users, UserCircle, Link2, Unlink } from "lucide-react";
 
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
+
 type Character = {
   id: string;
   name: string;
@@ -41,13 +43,20 @@ export function CastingPanel({ projectId, casting, onCastingChange }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
+    if (!projectId || /^draft(?:-|$)/.test(projectId)) {
+      setCharacters([]);
+      setActors([]);
+      setError("请先从项目库选择正式项目，再配置选角。");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/production/casting?projectId=${encodeURIComponent(projectId)}`);
+      const response = await fetchWithAuthRetry(`/api/production/casting?projectId=${encodeURIComponent(projectId)}`, { signal: AbortSignal.timeout(15_000) });
       const payload = await response.json();
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || "加载失败");
+        throw new Error(response.status === 401 ? "登录会话验证失败，请刷新页面后重试。" : payload?.error || "加载选角数据失败，请重试。");
       }
       setCharacters((payload.characters || []).map(parseCharacter));
       setActors((payload.actors || []).map(parseActor));

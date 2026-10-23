@@ -75,6 +75,13 @@ export function ProjectStartFlow() {
   const [universeId, setUniverseId] = useState("");
   const [universeState, setUniverseState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const requested = WORK_TYPE_CARDS.find(card => card.workType && card.workType === query.get("type"));
+    if (requested) setPendingModule(requested);
+    if (query.get("universeId")) setUniverseId(query.get("universeId")!);
+  }, []);
+
   // P0-06：幂等键每次提交生成一次；失败重试复用，成功导航后清空。
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -114,12 +121,12 @@ export function ProjectStartFlow() {
 
   // 打开确认面板时按需加载 Universe 列表（可选绑定，失败不阻塞创建）
   useEffect(() => {
-    if (!pendingModule || universeState !== "idle") return;
+    if (!pendingModule) return;
     let cancelled = false;
     setUniverseState("loading");
     void (async () => {
       try {
-        const res = await fetchWithAuthRetry("/api/universe/summaries");
+        const res = await fetchWithAuthRetry("/api/universe/summaries", { signal: AbortSignal.timeout(10_000) });
         const payload = (await res.json().catch(() => null)) as { universes?: Array<{ id: string; name?: string }> } | null;
         if (cancelled) return;
         if (res.ok && Array.isArray(payload?.universes)) {
@@ -135,7 +142,7 @@ export function ProjectStartFlow() {
     return () => {
       cancelled = true;
     };
-  }, [pendingModule, universeState]);
+  }, [pendingModule]);
 
   const cancelPendingModule = useCallback(() => {
     // 零副作用：不调 API、不跳转；上一次失败留下的幂等键也一并丢弃，

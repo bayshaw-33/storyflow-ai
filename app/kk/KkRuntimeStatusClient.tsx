@@ -36,8 +36,8 @@ export function KkRuntimeStatusClient() {
         </h1>
         <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, marginTop: 4 }}>
           {isZh
-            ? "K21-KK-001 单一全站 runtime。所有 KK 入口读取同一上下文。"
-            : "K21-KK-001 single global runtime. All KK entry points read from the same context."}
+            ? "单一全站 runtime。所有 KK 入口读取同一上下文。"
+            : "single global runtime. All KK entry points read from the same context."}
         </p>
       </header>
 
@@ -112,7 +112,7 @@ export function KkRuntimeStatusClient() {
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>
           {isZh ? "任务投影" : "Task Projection"}
           <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
-            {isZh ? "K21-KK-005 只显示真实计数，不伪造百分比" : "K21-KK-005 only real counts, no fake %"}
+            {isZh ? "只显示真实计数，不伪造百分比" : "only real counts, no fake %"}
           </span>
         </h2>
         <dl style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px 16px", fontSize: 12 }}>
@@ -146,7 +146,7 @@ export function KkRuntimeStatusClient() {
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>
           {isZh ? "待确认动作" : "Pending Confirmations"}
           <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
-            {isZh ? "K21-KK-012 高风险动作须用户明确确认" : "K21-KK-012 high-risk actions need user confirmation"}
+            {isZh ? "高风险动作须用户明确确认" : "high-risk actions need user confirmation"}
           </span>
         </h2>
         {runtime.pendingConfirmations.length === 0 ? (
@@ -178,7 +178,7 @@ export function KkRuntimeStatusClient() {
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>
           {isZh ? "允许的动作" : "Allowed Actions"}
           <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
-            {isZh ? "K21-KK-006 服务端下发" : "K21-KK-006 server-provided"}
+            {isZh ? "服务端下发" : "server-provided"}
           </span>
         </h2>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>

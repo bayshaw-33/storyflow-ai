@@ -43,6 +43,8 @@ type GenerateVideoBody = {
   /** 允许文本覆盖；默认 shot.jimengPromptZh */
   promptOverride?: string;
   duration?: number;
+  resolution?: string;
+  model?: string;
   /** 画幅，如 "16:9"；前端可选传 */
   aspectRatio?: string;
   /** 已采用的不可变白模版本；存在时服务端忽略 promptOverride/duration/aspectRatio。 */
@@ -84,7 +86,14 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
     });
   }
 
-  let duration = body.duration === 10 ? 10 : 5;
+  const model = "bytedance/seedance-2.0/image-to-video";
+  const resolution = "720p";
+  if ((body.duration !== undefined && body.duration !== 4) ||
+      (body.resolution !== undefined && body.resolution !== resolution) ||
+      (body.model !== undefined && body.model !== model)) {
+    return errorResponse(422, "VIDEO_SPEC_NOT_ALLOWED", "测试视频固定使用 Seedance 2.0 · 720P · 4s。");
+  }
+  let duration = 4;
   let aspectRatio = body.aspectRatio || "16:9";
 
   // 1. load persisted state to find shot + 服务端解析 firstframe
@@ -121,7 +130,7 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       }
     }
   } catch {
-    // state load failure is non-fatal if caller supplied prompt
+    return errorResponse(503, "STORYBOARD_LOAD_FAILED", "读取已保存分镜失败，请稍后重试。");
   }
 
   if (!shotFound) {
@@ -169,11 +178,12 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       return errorResponse(409, "PREVIS_VERSION_INVALID", message);
     }
   }
+  if (duration !== 4) return errorResponse(422, "VIDEO_SPEC_NOT_ALLOWED", "采用的白模版本时长须为 4 秒，请调整并重新保存白模版本。");
   if (!shotHasImage || !firstframeUrl) {
     return errorResponse(409, "NO_FIRSTFRAME", "该 Shot 没有已生成的分镜示意图，无法作为首帧。请先生成分镜图。");
   }
   if (!shotPrompt) {
-    return errorResponse(422, "NO_PROMPT", "该 Shot 没有即梦视频提示词。请先生成提示词。");
+    return errorResponse(422, "NO_PROMPT", "该分镜没有视频提示词。请先生成提示词。");
   }
 
   // 2. 计算 idempotencyHash（DB 唯一约束由 migration 添加，应用层 read-before-insert 双保险）
@@ -183,6 +193,7 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
     firstframeUrl,
     duration,
     provenanceHash: provenance.previsSnapshotHash,
+    model, resolution, aspectRatio,
   });
 
   // 3. read-before-insert 幂等检查（用 hash）
@@ -203,7 +214,13 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
   }
 
   // 4. resolve provider（env VIDEO_PROVIDER=atlas|minimax，默认 atlas）
-  const provider = await resolveVideoProvider();
+  let provider;
+  try {
+    provider = await resolveVideoProvider();
+    if (provider.name !== "atlas") return errorResponse(503, "VIDEO_PROVIDER_UNAVAILABLE", "当前视频路由不支持 Seedance 2.0 测试规格，请配置 Atlas Cloud。");
+  } catch {
+    return errorResponse(503, "VIDEO_PROVIDER_UNAVAILABLE", "视频生成服务尚未配置，请联系管理员。");
+  }
 
   // 5. insert queued job row first（provider 调用失败时 job 仍存在可查）
   //    同时写入 idempotency_hash 列（migration 执行后参与唯一约束）；
@@ -214,7 +231,7 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
     owner_id: userId,
     job_type: "video",
     provider: provider.name,
-    model: null,
+    model,
     provider_task_id: null,
     prompt: shotPrompt,
     input_params: {
@@ -225,6 +242,8 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       sourceUnitId: body.sourceUnitId,
       firstframeImageUrl: firstframeUrl,
       duration,
+      resolution,
+      model,
       aspectRatio,
       expectedRevision: body.expectedRevision ?? null,
       previsVersionId: provenance.previsVersionId ?? null,
@@ -288,6 +307,8 @@ export async function POST(request: Request, context: { params: Promise<{ shotId
       prompt: shotPrompt,
       firstframeUrl,
       duration,
+      resolution,
+      model,
       aspectRatio,
     });
 

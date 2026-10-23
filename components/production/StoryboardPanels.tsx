@@ -9,7 +9,7 @@
  *   1. ScriptInputPanel     — 剧本输入（项目+集+剧本来源+上传+分析）
  *   2. StoryboardTablePanel — 分镜表（Scene/Shot 字段编辑+锁定+增删+拆合+排序+单场重分析+409）
  *   3. ArtAssetsPanel       — 美术物料（人物/场景/道具 Tab+4 候选+主参考+重新生成+上传替换+关联 Shot）
- *   4. ShotFramesPanel      — 分镜图与即梦提示词（主参考+分镜图+提示词+复制+生成/重试+confirmed）
+ *   4. ShotFramesPanel      — 分镜图与视频提示词（主参考+分镜图+提示词+复制+生成/重试+confirmed）
  *
  * 所有 API 调用由主壳 (ProductionWorkbench) 持有；panel 仅通过 props 接收回调与状态。
  * 这层只负责展示与编辑，避免重复 fetch/状态机。
@@ -375,7 +375,7 @@ export function StoryboardTablePanel(props: StoryboardTablePanelProps) {
 
       {scenes.length === 0 ? (
         <div style={cardStyle}>
-          <p style={{ ...mutedStyle, textAlign: "center", padding: 24 }}>尚无分镜数据。请到「剧本输入」tab 上传剧本并点击「分析剧本」。</p>
+          <p style={{ ...mutedStyle, textAlign: "center", padding: 24 }}>尚无分镜数据。请到「分镜」中的剧本分析入口 上传剧本并点击「分析剧本」。</p>
         </div>
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
@@ -565,7 +565,7 @@ export function ArtAssetsPanel({
       </div>
 
       {list.length === 0 ? (
-        <div style={cardStyle}><p style={{ ...mutedStyle, textAlign: "center", padding: 24 }}>暂无{tab === "character" ? "人物" : tab === "location" ? "场景" : "道具"}物料。请先到「剧本输入」tab 分析剧本，系统会自动提取资产。</p></div>
+        <div style={cardStyle}><p style={{ ...mutedStyle, textAlign: "center", padding: 24 }}>暂无{tab === "character" ? "人物" : tab === "location" ? "场景" : "道具"}物料。请先到「分镜」中的剧本分析入口 分析剧本，系统会自动提取资产。</p></div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
           {list.map((asset) => (
@@ -670,7 +670,7 @@ function AssetCard({ asset, candidates, generating, onGenerate, onSelectMain, on
 }
 
 // ---------------------------------------------------------------------------
-// 4. ShotFramesPanel — 分镜图与即梦提示词
+// 4. ShotFramesPanel — 分镜图与视频提示词
 // ---------------------------------------------------------------------------
 
 type ShotFramesPanelProps = {
@@ -738,7 +738,13 @@ export function ShotFramesPanel(props: ShotFramesPanelProps) {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>分镜图与即梦提示词</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>分镜图与视频提示词</h2>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }} aria-label="视频生成规格">
+            <label>模型 <select value="seedance-2" disabled><option value="seedance-2">Seedance 2.0</option></select></label>
+            <label>分辨率 <select value="720p" disabled><option value="720p">720P</option></select></label>
+            <label>时长 <select value="4" disabled><option value="4">4s</option></select></label>
+            <span style={mutedStyle}>团队测试规格</span>
+          </div>
           <p style={{ ...mutedStyle, margin: "4px 0 0" }}>共 {allShots.length} 个分镜 · 已生成 {Object.keys(frames).length} 张图 · 已生成 {Object.keys(prompts).length} 组提示词</p>
         </div>
         <button
@@ -753,7 +759,7 @@ export function ShotFramesPanel(props: ShotFramesPanelProps) {
       </div>
 
       {allShots.length === 0 ? (
-        <div style={cardStyle}><p style={{ ...mutedStyle, textAlign: "center", padding: 24 }}>尚无分镜。请先在「剧本输入」tab 分析剧本。</p></div>
+        <div style={cardStyle}><p style={{ ...mutedStyle, textAlign: "center", padding: 24 }}>尚无分镜。请先在「分镜」中的剧本分析入口 分析剧本。</p></div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 16 }}>
           {allShots.map(({ scene, shot }) => {
@@ -842,7 +848,7 @@ function ShotFrameCard({ scene, shot, frame, prompt, generatingFrame, onGenerate
         {prompt ? (
           <>
             <CopyableText label="IMAGE PROMPT (EN)" value={prompt.imagePrompt} multiline />
-            <CopyableText label="即梦 PROMPT (ZH)" value={prompt.jimengVideoPrompt} multiline />
+            <CopyableText label="视频提示词（中文）" value={prompt.jimengVideoPrompt} multiline />
             <CopyableText label="NEGATIVE PROMPT" value={prompt.negativePrompt} />
             <div>
               <span style={{ color: accentColor, fontSize: 11, fontWeight: 700 }}>REFERENCE VERSION IDS</span>

@@ -138,7 +138,7 @@ export type StoryboardPromptResult = {
 
 export type PromptResponse = {
   revision: number;
-  prompts: StoryboardPromptResult[];
+  prompts: Array<StoryboardPromptResult | { shotId: string; error: string; code: string }>;
 };
 
 export type SaveRequest = {

@@ -175,7 +175,7 @@ export function TaskCenter() {
   const [loading, setLoading] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<string>("fixture");
+  const [source, setSource] = useState<string>(USE_FIXTURE ? "fixture" : "api");
   const [dimension, setDimension] = useState<GroupingDimension>("stage");
   const [typeFilter, setTypeFilter] = useState<"all" | JobType>("all");
   const [activeOnly, setActiveOnly] = useState(false);

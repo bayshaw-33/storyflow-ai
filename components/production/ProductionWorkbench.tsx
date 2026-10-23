@@ -55,6 +55,7 @@ import {
   StoryboardClientError,
   StoryboardRevisionConflictError,
 } from "@/lib/storyboard/client";
+import { prepareGeneration, splitPromptResults, mergeSavedStoryboard } from "@/lib/storyboard/generation-results";
 import { readCreativeHandoff } from "@/lib/creative-handoff";
 import { readStoryboardDraft, writeStoryboardDraft, type StoryboardDraftScope } from "@/lib/storyboard/draft";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -167,8 +168,12 @@ export function ProductionWorkbench() {
 
   // --- Storyboard 状态（contracts.ts）---
   const [scenes, setScenes] = useState<StoryboardScene[]>([]);
+  const [savedScenes, setSavedScenes] = useState<string | null>(null);
+  const generationStateRef = useRef<{ scenes: StoryboardScene[]; revision: number } | null>(null);
   const [assets, setAssets] = useState<StoryboardAssets>(EMPTY_ASSETS);
   const [revision, setRevision] = useState<number>(0);
+  generationStateRef.current = { scenes, revision };
+  const storyboardDirty = savedScenes === null ? scenes.length > 0 : savedScenes !== JSON.stringify(scenes);
   const [deletedSceneIds, setDeletedSceneIds] = useState<string[]>([]);
   const [deletedShotIds, setDeletedShotIds] = useState<string[]>([]);
 
@@ -387,6 +392,15 @@ export function ProductionWorkbench() {
     if (existingWorkId) setWorkId(existingWorkId);
   }, [context, projectId, activeStage, workId]);
 
+  useEffect(() => {
+    if (unitId || context?.project.id !== projectId || !context.legacy.sourceUnitId) return;
+    const recovered = context.legacy.sourceUnitId;
+    setUnitId(recovered);
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("unitId", recovered);
+    router.replace(`/production?${query.toString()}`, { scroll: false });
+  }, [context, projectId, unitId, searchParams, router]);
+
   // 正式项目先读取只读上下文；缺失阶段只展示空状态，不在这里创建 Work。
   useEffect(() => {
     if (!projectId || projectId.startsWith("draft-")) {
@@ -533,6 +547,7 @@ export function ProductionWorkbench() {
       const state = await storyboardClient.loadState(projectId, sourceUnitId);
       if (state) {
         setScenes(state.scenes);
+        setSavedScenes(JSON.stringify(state.scenes));
         setRevision(state.revision);
         setDeletedSceneIds([]);
         setDeletedShotIds([]);
@@ -602,6 +617,7 @@ export function ProductionWorkbench() {
       const response: SaveResponse = await storyboardClient.saveState(request);
       // 应用服务端返回的稳定 ID 映射
       applyServerResponse(response);
+      setSavedScenes(JSON.stringify(response.scenes));
       setNotice(response.projectMetadataSynced === false
         ? `分镜已同步（revision ${response.revision}），但剧本元数据同步失败，请重试保存。`
         : `已同步到云端（revision ${response.revision}）。`);
@@ -707,6 +723,7 @@ export function ProductionWorkbench() {
         };
         const response: SaveResponse = await storyboardClient.saveState(request);
         applyServerResponse(response);
+      setSavedScenes(JSON.stringify(response.scenes));
         setNotice(response.projectMetadataSynced === false
           ? `已归档并保存分镜（revision ${response.revision}），但剧本元数据同步失败，请重试保存。`
           : `已归档并同步云端（revision ${response.revision}）。`);
@@ -790,30 +807,11 @@ export function ProductionWorkbench() {
     setNotice("已加载服务端最新版本，本地冲突已清除。");
   }
 
-  function applyServerResponse(response: SaveResponse) {
-    setScenes((current) => {
-      const next = current.map((scene) => {
-        const sceneId = scene.id ?? scene.clientId ?? "";
-        const mapped = response.idMap[sceneId];
-        if (mapped) {
-          return {
-            ...scene,
-            id: mapped,
-            idSource: "server" as const,
-            clientId: scene.clientId,
-            shots: scene.shots.map((shot) => {
-              const shotId = shot.id ?? shot.clientId ?? "";
-              const shotMapped = response.idMap[shotId];
-              return shotMapped
-                ? { ...shot, id: shotMapped, idSource: "server" as const, clientId: shot.clientId, sceneId: mapped }
-                : { ...shot, sceneId: mapped };
-            }),
-          };
-        }
-        return scene;
-      });
-      return next;
-    });
+  function applyServerResponse(response: SaveResponse, submittedScenes = scenes) {
+    const current = generationStateRef.current?.scenes ?? scenes;
+    const next = mergeSavedStoryboard(current, submittedScenes, response);
+    setScenes(next);
+    generationStateRef.current = { scenes: next, revision: response.revision };
     setRevision(response.revision);
     setDeletedSceneIds([]);
     setDeletedShotIds([]);
@@ -894,23 +892,31 @@ export function ProductionWorkbench() {
   // 提示词生成
   // -------------------------------------------------------------------
 
+  async function persistForGeneration(shotIds: string[]) {
+    if (!session) throw new Error("登录会话失效，请重新登录后重试。");
+    const current = generationStateRef.current!;
+    const prepared = await prepareGeneration({
+      projectId, sourceUnitId, expectedRevision: current.revision, scenes: current.scenes,
+      deletedSceneIds, deletedShotIds,
+    }, shotIds, request => storyboardClient.saveState(request));
+    applyServerResponse(prepared.state, current.scenes);
+    setSavedScenes(JSON.stringify(prepared.state.scenes));
+    return prepared;
+  }
+
   async function generatePromptsForShots(shotIds: string[]) {
     if (!projectId || !sourceUnitId || shotIds.length === 0) return;
     setGeneratingPromptsForShots(shotIds);
-    const request: PromptRequest = {
-      projectId,
-      sourceUnitId,
-      analysisVersion: 1,
-      shotIds,
-      language: "zh",
-      expectedRevision: revision,
-      idempotencyKey: `prompts-${projectId}-${sourceUnitId}-${Date.now()}`,
-    };
     try {
-      const response: PromptResponse = await storyboardClient.generatePrompts(request);
+      const prepared = await persistForGeneration(shotIds);
+      const response: PromptResponse = await storyboardClient.generatePrompts({
+        projectId, sourceUnitId, analysisVersion: 1, shotIds: prepared.shotIds, language: "zh",
+        expectedRevision: prepared.state.revision, idempotencyKey: `prompts-${projectId}-${sourceUnitId}-${Date.now()}`,
+      });
+      const { prompts: successfulPrompts, failures } = splitPromptResults(response.prompts);
       setPrompts((current) => {
         const next = { ...current };
-        for (const result of response.prompts) {
+        for (const result of successfulPrompts) {
           next[result.shotId] = {
             imagePrompt: result.imagePrompt,
             jimengVideoPrompt: result.jimengVideoPrompt,
@@ -926,11 +932,11 @@ export function ProductionWorkbench() {
         ...scene,
         shots: scene.shots.map((shot) => {
           const id = shot.id ?? shot.clientId ?? "";
-          const p = response.prompts.find((r) => r.shotId === id);
+          const p = successfulPrompts.find((r) => r.shotId === id);
           return p ? { ...shot, imagePrompt: p.imagePrompt, jimengPromptZh: p.jimengVideoPrompt } : shot;
         }),
       })));
-      setNotice(`已生成 ${response.prompts.length} 组提示词。`);
+      setNotice(`提示词：${successfulPrompts.length} 组成功${failures.length ? `，${failures.length} 组失败：${failures.map(item => item.error).join("；")}` : "。"}`);
     } catch (err) {
       if (err instanceof StoryboardRevisionConflictError) {
         setConflictRevision(err.currentRevision);
@@ -1012,12 +1018,14 @@ export function ProductionWorkbench() {
     if (!projectId || !sourceUnitId) return;
     setGeneratingShotId(shotId);
     try {
+      const prepared = await persistForGeneration([shotId]);
+      shotId = prepared.shotIds[0];
       const response = await storyboardClient.generateShotImage(shotId, {
         projectId,
         sourceUnitId,
         idempotencyKey: `frame-${shotId}-${Date.now()}`,
         referenceVersionIds: [],
-        expectedRevision: revision,
+        expectedRevision: prepared.state.revision,
       });
       setFrames((current) => ({
         ...current,
@@ -1028,7 +1036,7 @@ export function ProductionWorkbench() {
         ...scene,
         shots: scene.shots.map((shot) => {
           const id = shot.id ?? shot.clientId ?? "";
-          return id === shotId ? { ...shot, storyboardImageVersionId: response.imageUrl } : shot;
+          return id === shotId ? { ...shot, storyboardImageVersionId: response.versionId } : shot;
         }),
       })));
       setNotice(`分镜 ${shotId} 已生成。`);
@@ -1051,21 +1059,27 @@ export function ProductionWorkbench() {
     // PRD §8.1：视频生成需正式 scope（draft 不可，需先归档）—— fail-closed
     if (!isCloudActionable(projectId, sourceUnitId) || !session) {
       setNotice("视频生成需要先归档为正式项目。");
-      return;
+      return false;
     }
     const existing = videoJobs[shotId];
     if (existing && (existing.status === "queued" || existing.status === "running")) {
       setNotice("该 Shot 视频正在生成中，请等待。");
-      return;
+      return false;
     }
     setSubmittingVideoShotId(shotId);
     const idempotencyKey = `video-${shotId}-${Date.now()}`;
     try {
+      const prepared = await persistForGeneration([shotId]);
+      shotId = prepared.shotIds[0];
       const response = await storyboardClient.generateVideo(shotId, {
         projectId,
         sourceUnitId,
         idempotencyKey,
-        expectedRevision: revision ?? undefined,
+        expectedRevision: prepared.state.revision,
+        duration: 4,
+        aspectRatio: "9:16",
+        resolution: "720p",
+        model: "bytedance/seedance-2.0/image-to-video",
         previsVersionId,
       });
       setVideoJobs((current) => ({
@@ -1084,6 +1098,7 @@ export function ProductionWorkbench() {
           aspectRatio: "9:16",
         },
       }));
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "视频生成提交失败。";
       setVideoJobs((current) => ({
@@ -1103,6 +1118,7 @@ export function ProductionWorkbench() {
         },
       }));
       setNotice(`视频生成失败：${message}`);
+      return false;
     } finally {
       setSubmittingVideoShotId(null);
     }
@@ -1172,6 +1188,14 @@ export function ProductionWorkbench() {
       return;
     }
     setBatchRunning(true);
+    try {
+      const prepared = await persistForGeneration(shotIds);
+      shotIds = prepared.shotIds;
+    } catch (error) {
+      setBatchRunning(false);
+      setNotice(`批量提交已停止：${error instanceof Error ? error.message : "分镜保存失败"}`);
+      return;
+    }
     // 用本地 accumulator 避免 stale React state（Codex MUST FIX: batch progress reads stale state）
     let completed = 0;
     let failed = 0;
@@ -1187,10 +1211,9 @@ export function ProductionWorkbench() {
       if (existing?.status === "completed" && existing.videoUrl) continue;
       running += 1;
       setProgress({ completed, failed, running });
-      await submitVideo(shotId);
-      const newState = videoJobsRef.current[shotId];
+      const submitted = await submitVideo(shotId);
       running = Math.max(0, running - 1);
-      if (newState?.status === "failed") {
+      if (!submitted) {
         failed += 1;
       } else {
         completed += 1;
@@ -1198,7 +1221,7 @@ export function ProductionWorkbench() {
       setProgress({ completed, failed, running });
     }
     setBatchRunning(false);
-    setNotice(`批量完成：${completed} 成功，${failed} 失败。`);
+    setNotice(`批量提交：${completed} 已受理，${failed} 失败；生成结果请查看各分镜进度。`);
   }
 
   function batchAll() {
@@ -1429,7 +1452,7 @@ export function ProductionWorkbench() {
 
   function navigateToStage(stage: UnifiedProductionStage) {
     const existingStage = context?.stages[stage] ?? null;
-    const nextWorkId = existingStage?.workId ?? null;
+    const nextWorkId = existingStage?.workId ?? workId;
     router.replace(buildUnifiedWorkbenchUrl({
       projectId: context?.project.id || projectId,
       workId: nextWorkId,
@@ -1567,7 +1590,7 @@ export function ProductionWorkbench() {
       <UnifiedProductionHeader
         context={displayContext}
         activeStage={activeStage}
-        saveStatus={(activeStage === "script" ? scriptActions?.saving : saving) ? "saving" : unsaved ? "unsaved" : "saved"}
+        saveStatus={(activeStage === "script" ? scriptActions?.saving : saving) ? "saving" : (activeStage === "script" ? unsaved : storyboardDirty) ? "unsaved" : "saved"}
         onStageChange={handleStageChange}
         onCreateUniverse={() => router.push("/universes?create=1")}
         onBindUniverse={workId ? () => setBindingDialogOpen(true) : undefined}

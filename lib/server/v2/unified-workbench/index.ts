@@ -1,3 +1,4 @@
+import { resolveProjectSourceUnitId } from "../../../production/source-unit.ts";
 import {
   UNIFIED_PRODUCTION_STAGES,
   isUnifiedProductionStage,
@@ -123,7 +124,7 @@ export async function getUnifiedWorkbenchContext(input: {
     universe,
     stages,
     legacy: {
-      sourceUnitId: readSourceUnitId(project.data),
+      sourceUnitId: resolveProjectSourceUnitId(project.data),
       resolvedFromProjectOnly: true,
     },
   };
@@ -338,10 +339,6 @@ function toStageContext(
   };
 }
 
-function readSourceUnitId(data: Record<string, unknown> | null | undefined): string | null {
-  const value = data?.sourceUnitId ?? data?.source_unit_id;
-  return typeof value === "string" && value ? value : null;
-}
 
 function toUnifiedWorkbenchError(error: unknown, fallback: string): UnifiedWorkbenchServiceError {
   if (error instanceof UnifiedWorkbenchServiceError) return error;

@@ -5,9 +5,10 @@ import { DesignAssetImage } from "@/components/design/DesignAssetImage";
 
 type HeroSectionProps = {
   onStartCreating: () => void;
+  signedIn?: boolean;
 };
 
-export function HeroSection({ onStartCreating }: HeroSectionProps) {
+export function HeroSection({ onStartCreating, signedIn }: HeroSectionProps) {
   const { t, locale } = useI18n();
   const isZh = locale === "zh-CN";
 
@@ -43,7 +44,7 @@ export function HeroSection({ onStartCreating }: HeroSectionProps) {
         </p>
         <div className="hero-actions">
           <button className="kk-primary-cta" type="button" onClick={onStartCreating}>
-            {t("landing.hero.primary")}
+            {signedIn ? (isZh ? "打开工作台" : "Open workspace") : t("landing.hero.primary")}
           </button>
         </div>
       </div>

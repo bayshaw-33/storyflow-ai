@@ -25,7 +25,7 @@ type ProjectRow = {
   owner_id: string;
   title: string;
   data: unknown;
-  creation_workspace: unknown;
+  creation_workspace?: unknown;
 };
 
 type VerifyResponse = {
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
   try {
     const rows = await serviceFetch<ProjectRow[]>(
-      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(projectId)}&select=id,owner_id,title,data,creation_workspace&limit=1`,
+      `/rest/v1/storyflow_projects?id=eq.${encodeURIComponent(projectId)}&select=id,owner_id,title,data&limit=1`,
     );
     const row = rows[0];
     // fail-closed：项目不存在或不属于当前用户都拒绝

@@ -76,9 +76,9 @@ export function StoryboardPromptList({ scenes, prompts, onGenerate }: { scenes: 
 const SUBVIEWS: Array<{ id: StoryboardSubview; label: string }> = [
   { id: "shot_table", label: "镜头表" },
   { id: "grids", label: "宫格" },
-  { id: "motion", label: "运动预览" },
+  { id: "motion", label: "运动预览 / 白模预演" },
   { id: "prompts", label: "视频提示词" },
-  { id: "canvas", label: "画布" },
+  { id: "canvas", label: "分镜画布" },
 ];
 
 export function UnifiedStoryboardStage({
@@ -96,7 +96,7 @@ export function UnifiedStoryboardStage({
   content,
 }: UnifiedStoryboardStageProps) {
   const [previsOpen, setPrevisOpen] = useState(false);
-  const fallbackMotion = handoffId ? (
+  const fallbackMotion = previsShots.length === 0 ? <div role="status" style={{ padding: 24 }}>暂无镜头。请先在分镜镜头表中分析或添加镜头，再打开白模预演。</div> : handoffId ? (
     <>
       <div style={{ display: "flex", justifyContent: "flex-end", padding: "16px 24px 0" }}>
         <button type="button" onClick={() => setPrevisOpen((value) => !value)} style={{ padding: "8px 14px", borderRadius: 999, border: "1px solid rgba(117,219,198,.5)", background: previsOpen ? "rgba(117,219,198,.14)" : "rgba(255,255,255,.04)", color: "#75dbc6", cursor: "pointer", fontWeight: 700 }}>

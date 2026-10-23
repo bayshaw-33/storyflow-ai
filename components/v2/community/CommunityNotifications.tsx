@@ -19,6 +19,7 @@ type NotificationsResponse = {
   nextOffset?: number | null;
   hasMore?: boolean;
   error?: string;
+  code?: string;
 };
 
 const NOTIFICATION_PAGE_SIZE = 20;
@@ -60,10 +61,11 @@ export function CommunityNotifications({ viewerId }: CommunityNotificationsProps
     try {
       const response = await fetchWithAuthRetry(
         `/api/v2/community/notifications?limit=${NOTIFICATION_PAGE_SIZE}&offset=${offset}`,
+        { signal: AbortSignal.timeout(12_000) },
       );
       const json = (await response.json().catch(() => ({}))) as NotificationsResponse;
       if (!response.ok || !json.success) {
-        throw new Error(json.error || (isZh ? "通知暂时无法加载。" : "Notifications are temporarily unavailable."));
+        throw new Error(isZh ? (response.status === 401 ? "登录会话失效，请刷新后重试。" : "通知服务暂时不可用，请稍后重试。") : (response.status === 401 ? "Session expired. Please refresh." : "Notifications are temporarily unavailable. Please retry."));
       }
       const incoming = json.items ?? [];
       const merged = append ? appendUnique(itemsRef.current, incoming) : incoming;

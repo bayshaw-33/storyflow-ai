@@ -44,7 +44,7 @@ function clientWithFetch(impl) {
 // A1. Atlas provider submit 返回 providerTaskId
 // ---------------------------------------------------------------------------
 
-test("A1: Atlas submit 返回 providerTaskId（uploadMedia + generateVideo）", async () => {
+test("A1: Atlas submit 返回 providerTaskId（首帧 URL 直接提交）", async () => {
   const originalKey = process.env.ATLASCLOUD_API_KEY;
   process.env.ATLASCLOUD_API_KEY = "test-atlas-key";
   const originalFetch = globalThis.fetch;
@@ -53,14 +53,7 @@ test("A1: Atlas submit 返回 providerTaskId（uploadMedia + generateVideo）", 
   globalThis.fetch = async (url, init) => {
     calls.push({ url, init });
     callIndex += 1;
-    if (callIndex === 1) {
-      // uploadMedia response
-      return mockResponse({ data: { id: "media-uuid-1" } });
-    }
-    if (callIndex === 2) {
-      // generateVideo response
-      return mockResponse({ data: { id: "prediction-uuid-1" } });
-    }
+    if (callIndex === 1) return mockResponse({ data: { id: "prediction-uuid-1" } });
     return mockResponse({}, 500);
   };
   try {
@@ -72,13 +65,13 @@ test("A1: Atlas submit 返回 providerTaskId（uploadMedia + generateVideo）", 
       aspectRatio: "16:9",
     });
     assert.equal(result.providerTaskId, "prediction-uuid-1");
-    assert.ok(calls[0].url.endsWith("/model/uploadMedia"), "first call uploadMedia");
-    assert.ok(calls[1].url.endsWith("/model/generateVideo"), "second call generateVideo");
-    const genBody = JSON.parse(calls[1].init.body);
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].url.endsWith("/model/generateVideo"));
+    const genBody = JSON.parse(calls[0].init.body);
     assert.equal(genBody.model, "bytedance/seedance-2.0/image-to-video");
     assert.equal(genBody.duration, 5);
-    assert.equal(genBody.aspect_ratio, "16:9");
-    assert.equal(genBody.image, "media-uuid-1");
+    assert.equal(genBody.ratio, "16:9");
+    assert.equal(genBody.image, "https://example.com/frame.png");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey) process.env.ATLASCLOUD_API_KEY = originalKey;

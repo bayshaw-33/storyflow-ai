@@ -14,6 +14,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readProjectsFromSupabase } from "@/lib/supabase/projects";
 import { useOS } from "@/lib/os/uiState";
 import { useI18n } from "@/lib/i18n/useI18n";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { UniverseCard } from "@/components/universe/UniverseCard";
 import {
   DEFAULT_UNIVERSE_FILTER,
@@ -106,34 +107,34 @@ export default function UniversesPage() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
+    let loadSequence = 0;
+    let disposed = false;
     const load = async (nextSession: Session | null) => {
+      const sequence = ++loadSequence;
       const accessToken = nextSession?.access_token ?? null;
       setLoading(true);
       setLoadError("");
       try {
-        // KIIKIS-TR-ACTOR-P0-009: 三个独立请求并发（之前是串行 3 段链路）
-        const [cloudProjects, teamResult, universeItems] = await Promise.all([
-          accessToken
-            ? readProjectsFromSupabase({ accessToken }).catch(() => [])
-            : Promise.resolve([]),
-          accessToken
-            ? fetch("/api/teams", {
-                headers: { Authorization: `Bearer ${accessToken}` },
-              }).catch(() => null)
-            : Promise.resolve(null),
-          loadUniverseItems(accessToken),
-        ]);
-        const teamPayload = teamResult?.ok ? await teamResult.json().catch(() => null) : null;
-        setTeams(Array.isArray(teamPayload?.teams) ? teamPayload.teams : []);
-        setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
-        setItems(universeItems);
+        // Render the Universe list independently of slow project-library hydration.
+        const extras = Promise.all([
+          accessToken ? readProjectsFromSupabase({ accessToken }).catch(() => []) : Promise.resolve([]),
+          accessToken ? fetchWithAuthRetry("/api/teams", { signal: AbortSignal.timeout(10_000) }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+        ]).then(([cloudProjects, teamPayload]) => {
+          if (disposed || sequence !== loadSequence) return;
+          setTeams(Array.isArray(teamPayload?.teams) ? teamPayload.teams : []);
+          setProjects(getUniverseSourceProjects(mergeProjectsForUniverse(readProjectsFromStorage(), cloudProjects)));
+        });
+        void extras;
+        const universeItems = await loadUniverseItems(accessToken);
+        if (!disposed && sequence === loadSequence) setItems(universeItems);
       } catch (loadIssue) {
+        if (disposed || sequence !== loadSequence) return;
         setLoadError(loadIssue instanceof Error ? loadIssue.message : "Universe load failed.");
         setProjects(getUniverseSourceProjects(readProjectsFromStorage()));
         setTeams([]);
         setItems([]);
       } finally {
-        setLoading(false);
+        if (!disposed && sequence === loadSequence) setLoading(false);
       }
     };
 
@@ -141,17 +142,17 @@ export default function UniversesPage() {
       const nextSession = data.session ?? null;
       setSession(nextSession);
       void load(nextSession);
-    });
+    }).catch(() => { if (!disposed) { setLoadError("登录会话读取失败，请刷新重试。"); setLoading(false); } });
 
     const { data: listener } =
       supabase?.auth.onAuthStateChange((_event, nextSession) => {
         setSession(nextSession);
-        void load(nextSession);
+        setTimeout(() => { if (!disposed) void load(nextSession); }, 0);
       }) ?? {};
 
     if (!supabase) void load(null);
 
-    return () => listener?.subscription.unsubscribe();
+    return () => { disposed = true; loadSequence++; listener?.subscription.unsubscribe(); };
   }, []);
 
   const signedOut = !session;
@@ -446,20 +447,12 @@ export default function UniversesPage() {
  */
 async function loadUniverseItems(accessToken: string | null): Promise<UniverseListItem[]> {
   if (!accessToken) return [];
-  try {
-    const response = await fetch("/api/universe/summaries", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const payload = await response.json().catch(() => null);
-    if (response.ok && payload?.universes && Array.isArray(payload.universes)) {
-      return payload.universes as UniverseListItem[];
-    }
-    console.error(`[universes] summaries API returned ${response.status}; falling back to empty list.`);
-    return [];
-  } catch (error) {
-    console.error("[universes] summaries API failed.", error);
-    return [];
+  const response = await fetchWithAuthRetry("/api/universe/summaries", { signal: AbortSignal.timeout(12_000) });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.success || !Array.isArray(payload.universes)) {
+    throw new Error("宇宙列表暂时无法加载，请重试。 / Unable to load Universes. Please retry.");
   }
+  return payload.universes as UniverseListItem[];
 }
 
 function getUniverseSourceProjects(projects: DramaProject[]) {

@@ -45,6 +45,7 @@ function localValidate(value: string, isZh: boolean): string | null {
 export function UsernameField({ value, onChange, currentUsername }: UsernameFieldProps) {
   const { locale } = useI18n();
   const isZh = locale === "zh-CN";
+  const [touched, setTouched] = useState(false);
   const [state, setState] = useState<CheckState>({ status: "idle" });
 
   const trimmed = value.trim().toLowerCase();
@@ -123,6 +124,7 @@ export function UsernameField({ value, onChange, currentUsername }: UsernameFiel
           autoCorrect="off"
           spellCheck={false}
           onChange={(event) => {
+            setTouched(true);
             onChange(event.target.value);
             if (state.status !== "idle") setState({ status: "idle" });
           }}
@@ -146,7 +148,7 @@ export function UsernameField({ value, onChange, currentUsername }: UsernameFiel
         {trimmed || "yourname"}
       </div>
 
-      {localError && state.status === "idle" ? (
+      {touched && localError && state.status === "idle" ? (
         <span className={`${styles.usernameStatus} ${styles.errorText}`}>{localError}</span>
       ) : null}
 

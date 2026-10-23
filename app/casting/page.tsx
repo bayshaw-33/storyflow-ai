@@ -97,7 +97,7 @@ function CastingContent() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || /^draft(?:-|$)/.test(projectId)) return;
     let active = true;
     void (async () => {
       try {
@@ -114,7 +114,7 @@ function CastingContent() {
     return () => {
       active = false;
     };
-  }, [session, sync]);
+  }, [session, projectId, sync.loadFromCloud]);
 
   useEffect(() => {
     if (sessionLoaded && !session) {

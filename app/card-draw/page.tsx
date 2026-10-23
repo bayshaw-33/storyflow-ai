@@ -107,6 +107,7 @@ function CardDrawContent() {
   const [clearing, setClearing] = useState(false);
 
   const cardDraw = useCardDraw(session, projectId);
+  const fetchDrawHistory = cardDraw.history;
 
   useEffect(() => {
     document.title = "抽卡系统 | Kiikis";
@@ -148,12 +149,12 @@ function CardDrawContent() {
     if (!session) return;
     setHistoryError(null);
     try {
-      const list = await cardDraw.history(20);
+      const list = await fetchDrawHistory(20);
       setHistory(list);
     } catch (err) {
       setHistoryError(err instanceof Error ? err.message : "加载抽卡历史失败。");
     }
-  }, [session, cardDraw]);
+  }, [session, fetchDrawHistory]);
 
   useEffect(() => {
     if (session) void loadHistory();

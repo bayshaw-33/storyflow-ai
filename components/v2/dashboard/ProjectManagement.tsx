@@ -379,9 +379,9 @@ export function ProjectManagement({ accessToken, userEmail }: ProjectManagementP
           </label>
           <label className={styles.filterControl}>
             <SlidersHorizontal size={14} aria-hidden="true" />
-            <span className={styles.srOnly}>{isZh ? "类型" : "Type"}</span>
+            <span>{isZh ? "项目类型" : "Project type"}</span>
             <select value={filters.workflow} onChange={(event) => setFilter("workflow", event.target.value)}>
-              <option value="all">全部类型</option>
+              <option value="all">全部项目类型（不含制作阶段）</option>
               {Object.entries(WORKFLOW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
@@ -403,6 +403,7 @@ export function ProjectManagement({ accessToken, userEmail }: ProjectManagementP
               onClick={() => {
                 if (testCleanupMode) exitTestCleanupMode();
                 else {
+                  if (!window.confirm("进入测试项目清理模式？请先核对待清理项目，删除前仍需确认。")) return;
                   setCleanupReview(null);
                   setActionProjectKey(null);
                   setTestCleanupMode(true);

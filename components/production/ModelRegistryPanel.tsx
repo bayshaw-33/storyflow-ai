@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Box, Check, Cpu, Edit2, Plus, Star, Trash2, X } from "lucide-react";
 
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
+
 type ModelRow = {
   id: string;
+  readonly?: boolean;
   name: string;
   provider: string;
   modality: string;
@@ -43,9 +46,9 @@ export function ModelRegistryPanel({ onClose }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("kiikis_auth_token") || "";
-      const response = await fetch("/api/models", { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetchWithAuthRetry("/api/models", { signal: AbortSignal.timeout(15_000) });
       const payload = await response.json();
+      if (!response.ok || !payload?.success) throw new Error(payload?.error || "模型列表加载失败，请重试。");
       setModels(payload?.models || []);
     } catch {
       setError("加载模型列表失败。");
@@ -62,10 +65,10 @@ export function ModelRegistryPanel({ onClose }: Props) {
   }, [notice]);
 
   async function setDefault(model: ModelRow) {
-    const token = localStorage.getItem("kiikis_auth_token") || "";
-    await fetch("/api/models", {
+
+    await fetchWithAuthRetry("/api/models", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json"},
       body: JSON.stringify({ modelId: model.id, isDefault: true, modality: model.modality }),
     });
     setNotice(`已将 ${model.name} 设为 ${modalityConfig[model.modality]?.label || model.modality} 默认模型。`);
@@ -74,10 +77,10 @@ export function ModelRegistryPanel({ onClose }: Props) {
 
   async function toggleStatus(model: ModelRow) {
     const next = model.status === "active" ? "disabled" : "active";
-    const token = localStorage.getItem("kiikis_auth_token") || "";
-    await fetch("/api/models", {
+
+    await fetchWithAuthRetry("/api/models", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json"},
       body: JSON.stringify({ modelId: model.id, status: next }),
     });
     void loadModels();
@@ -85,10 +88,10 @@ export function ModelRegistryPanel({ onClose }: Props) {
 
   async function removeModel(model: ModelRow) {
     if (!confirm(`确定删除模型 ${model.name}？`)) return;
-    const token = localStorage.getItem("kiikis_auth_token") || "";
-    await fetch(`/api/models?modelId=${encodeURIComponent(model.id)}`, {
+
+    await fetchWithAuthRetry(`/api/models?modelId=${encodeURIComponent(model.id)}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {},
     });
     setNotice(`模型 ${model.name} 已删除。`);
     void loadModels();
@@ -185,6 +188,7 @@ export function ModelRegistryPanel({ onClose }: Props) {
                             ) : null}
                           </div>
                           <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                            {model.readonly ? <span style={providerBadgeStyle}>系统测试路由 · 4s</span> : <>
                             {!model.is_default && model.status === "active" ? (
                               <button style={iconBtnStyle(cfg.color)} onClick={() => setDefault(model)} title="设为默认">
                                 <Star size={13} />
@@ -199,6 +203,7 @@ export function ModelRegistryPanel({ onClose }: Props) {
                             <button style={iconBtnStyle("#ff6b6b")} onClick={() => removeModel(model)} title="删除">
                               <Trash2 size={13} />
                             </button>
+                            </>}
                           </div>
                         </div>
                       </div>
@@ -254,7 +259,7 @@ function ModelForm({ initial, onClose, onSaved }: { initial: ModelRow | null; on
     setSaving(true);
     setErr(null);
     try {
-      const token = localStorage.getItem("kiikis_auth_token") || "";
+
       const body = {
         name: name.trim(),
         provider: provider.trim(),
@@ -268,9 +273,9 @@ function ModelForm({ initial, onClose, onSaved }: { initial: ModelRow | null; on
       const url = initial ? "/api/models" : "/api/models";
       const method = initial ? "PATCH" : "POST";
       const payload = initial ? { ...body, recordId: initial.id } : body;
-      const response = await fetch(url, {
+      const response = await fetchWithAuthRetry(url, {
         method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json"},
         body: JSON.stringify(payload),
       });
       const result = await response.json();

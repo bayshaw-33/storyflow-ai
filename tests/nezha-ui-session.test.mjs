@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { existsSync, readFileSync } from 'node:fs';
+import { registerHooks } from 'node:module';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import React, { act } from 'react';
+import TestRenderer from 'react-test-renderer';
+import ts from 'typescript';
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.document = { title: "" };
+globalThis.window = { location: { search: "" }, addEventListener(){}, removeEventListener(){} };
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const mocks = {
+  '@/lib/i18n/useI18n': "export const useI18n=()=>({locale:'zh-CN',t:key=>key});",
+  'next/link': "export default function Link({children}) {return children;}",
+  '@/components/design/DesignAssetImage': "export const DesignAssetImage = () => null;",
+  'css': 'export default {};',
+  'next/navigation': `export const useRouter = () => ({push(){},replace(){}}); export const useSearchParams = () => new URLSearchParams('projectId=project');`,
+  '@/lib/supabase/client': 'export const getSupabaseBrowserClient = () => globalThis.__nezhaClient;',
+};
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.endsWith('.css')) return {url:'nezha:css',shortCircuit:true};
+    if (mocks[specifier]) return {url:`nezha:${specifier}`, shortCircuit:true};
+    if (specifier.includes('supabase/client')) return {url:'nezha:@/lib/supabase/client',shortCircuit:true};
+    if (specifier.startsWith('@/') || (specifier.startsWith('.') && context.parentURL?.startsWith('file:'))) {
+      const base = specifier.startsWith('@/') ? resolve(root,specifier.slice(2)) : resolve(dirname(fileURLToPath(context.parentURL)),specifier);
+      for (const file of [base,`${base}.ts`,`${base}.tsx`]) if (existsSync(file)) return {url:pathToFileURL(file).href,shortCircuit:true};
+    }
+    return next(specifier, context.parentURL?.startsWith('nezha:') ? {...context,parentURL:import.meta.url}:context);
+  },
+  load(url,context,next) {
+    if (url.startsWith('nezha:')) return {format:'module',shortCircuit:true,source:mocks[url.slice(6)]};
+    if (/\.tsx?$/.test(url)) return {format:'module',shortCircuit:true,source:ts.transpileModule(readFileSync(new URL(url),'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext}}).outputText};
+    return next(url,context);
+  }
+});
+const {default:CardDraw} = await import('../app/card-draw/page.tsx');
+const {CastingPanel} = await import('../components/production/CastingPanel.tsx');
+const session={access_token:'valid-token',user:{id:'owner'}};
+globalThis.__nezhaClient={auth:{getSession:async()=>({data:{session}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})}};
+test('card draw settles after one history request and enables its CTA',async()=>{
+  const original=globalThis.fetch; let calls=0; let view;
+  globalThis.fetch=async()=>{if(++calls>4) return new Promise(()=>{}); return Response.json({success:true,draws:[]});};
+  try {
+    await act(async()=>{view=TestRenderer.create(React.createElement(CardDraw));});
+    assert.equal(calls,1,'history must not refetch on loading/render state changes');
+    const button=view.root.findAllByType('button').find(b=>b.children.includes('开始抽卡'));
+    assert.ok(button);assert.equal(button.props.disabled,false);
+  } finally {await act(async()=>view?.unmount());globalThis.fetch=original;}
+});
+test('casting uses current session token; draft scope sends no API request',async()=>{
+  const original=globalThis.fetch;const requests=[];let view;
+  globalThis.fetch=async(url,init)=>{requests.push([url,new Headers(init?.headers).get('Authorization')]);return Response.json({success:true,characters:[],actors:[]});};
+  try {
+    await act(async()=>{view=TestRenderer.create(React.createElement(CastingPanel,{projectId:'project',casting:{},onCastingChange(){}}));});
+    assert.equal(requests[0][1],'Bearer valid-token');
+    await act(async()=>view.update(React.createElement(CastingPanel,{projectId:'draft',casting:{},onCastingChange(){}})));
+    assert.equal(requests.length,1);
+    assert.match(JSON.stringify(view.toJSON()),/选择.*项目|正式项目/);
+  }finally{await act(async()=>view?.unmount());globalThis.fetch=original;}
+});
+
+const {MonetizationLayer} = await import('../components/pricing/MonetizationLayer.tsx');
+const {UsernameField} = await import('../components/settings/UsernameField.tsx');
+test('subscription highlights the saved current plan on entry',async()=>{
+ const original=globalThis.__nezhaClient;let view;
+ globalThis.__nezhaClient={...original,from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{plan:'elite'},error:null})})})})};
+ try{await act(async()=>{view=TestRenderer.create(React.createElement(MonetizationLayer));});
+  const selected=view.root.findAll(node=>node.props['data-tier']==='ELITE' && node.props.className?.includes('is-selected'));
+  assert.equal(selected.length,1);
+ }finally{await act(async()=>view?.unmount());globalThis.__nezhaClient=original;}
+});
+test('username does not show invalid state until edited or checked',async()=>{
+ let view;
+ try{await act(async()=>{view=TestRenderer.create(React.createElement(UsernameField,{value:'',onChange(){},currentUsername:null}));});
+ assert.doesNotMatch(JSON.stringify(view.toJSON()),/3-20 个字符/);
+ }finally{await act(async()=>view?.unmount());}
+});
+const {ProjectStartFlow} = await import('../components/v2/project-start/ProjectStartFlow.tsx');
+test('new Video confirmation finishes Universe loading instead of cancelling its own request', async()=>{
+ const original=globalThis.fetch; let view; let release;
+ globalThis.fetch=async()=>new Promise(resolve=>{release=()=>resolve(Response.json({success:true,universes:[{id:'u1',name:'测试宇宙'}]}));});
+ try{
+  await act(async()=>{view=TestRenderer.create(React.createElement(ProjectStartFlow));});
+  const button=view.root.findAllByType('button').find(b=>b.findAllByType('h3').some(h=>h.children.includes('视频')));
+  assert.ok(button);
+  await act(async()=>button.props.onClick());
+  await act(async()=>release());
+  const select=view.root.findByProps({'data-testid':'project-universe-select'});
+  assert.equal(select.props.disabled,false);
+  assert.match(JSON.stringify(select.toJSON?.() || select.findAllByType('option').map(n=>n.children)),/测试宇宙/);
+ }finally{await act(async()=>view?.unmount());globalThis.fetch=original;}
+});

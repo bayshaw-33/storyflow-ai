@@ -18,7 +18,7 @@ import { defaultAuthFetchDeps, fetchWithAuthRetry } from "../auth-fetch.ts";
 
 /** 是否使用 fixture 演示数据（生产环境 fail-closed） */
 export const USE_FIXTURE =
-  process.env.NEXT_PUBLIC_USE_JOB_FIXTURE === "true";
+  process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_USE_JOB_FIXTURE === "true";
 
 export interface JobsResult {
   jobs: UnifiedJob[];

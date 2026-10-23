@@ -403,7 +403,9 @@ export async function loadApprovedVersions(
   assetIds: string[],
 ): Promise<Map<string, ApprovedVersionInfo>> {
   const result = new Map<string, ApprovedVersionInfo>();
-  const uniqueIds = [...new Set(assetIds)].filter((id) => id.trim().length > 0);
+  // Analysis proposals use p_asset_* IDs; Postgres art asset IDs are UUIDs.
+  // Unapproved proposal references have no stored image/version to load yet.
+  const uniqueIds = [...new Set(assetIds)].filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
   if (uniqueIds.length === 0) return result;
 
   const inList = uniqueIds.map(encodeURIComponent).join(",");

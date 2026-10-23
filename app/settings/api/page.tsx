@@ -6,6 +6,8 @@ import type { Session } from "@supabase/supabase-js";
 import { KiikisLogo } from "@/components/brand/KiikisLogo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { AuthModal } from "@/components/layout/AuthModal";
+import { withTimeout } from "@/lib/client/with-timeout";
+import { fetchWithAuthRetry } from "@/lib/client/v2/auth-fetch";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
 import { readWorkflowModelRouting, writeWorkflowModelRouting, type WorkflowModelRoute, type WorkflowModelRouting } from "@/lib/ai/byoClient";
 import type { TeamRole } from "@/lib/actors";
@@ -209,7 +211,7 @@ export default function SettingsApiPage() {
         return;
       }
 
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await withTimeout(supabase.auth.getSession(), 10_000);
       const nextSession = sessionData.session;
       if (cancelled) return;
       setSession(nextSession || null);
@@ -219,20 +221,21 @@ export default function SettingsApiPage() {
         return;
       }
 
-      const { data } = await supabase
+      const { data } = await withTimeout(supabase
         .from("storyflow_profiles")
         .select("email, display_name, plan, created_at, updated_at")
         .eq("user_id", nextSession.user.id)
-        .maybeSingle();
+        .maybeSingle(), 10_000);
 
       if (cancelled) return;
       if (data) setProfile(data as Profile);
 
       try {
         const [connectionsResponse, teamsResponse] = await Promise.all([
-          fetch("/api/api-connections", { headers: { Authorization: `Bearer ${nextSession.access_token}` } }),
-          fetch("/api/teams", { headers: { Authorization: `Bearer ${nextSession.access_token}` } }),
+          fetchWithAuthRetry("/api/api-connections", { signal: AbortSignal.timeout(10_000) }),
+          fetchWithAuthRetry("/api/teams", { signal: AbortSignal.timeout(10_000) }),
         ]);
+        if (!connectionsResponse.ok || !teamsResponse.ok) throw new Error("配置加载失败，请重试。");
         const connectionsPayload = await connectionsResponse.json().catch(() => null);
         const teamsPayload = await teamsResponse.json().catch(() => null);
         if (!cancelled) {
@@ -241,15 +244,17 @@ export default function SettingsApiPage() {
         }
       } catch {
         if (!cancelled) {
-          setApiConnections([]);
-          setTeams([]);
+          setMessage({ tone: "error", text: "API 配置加载失败，请重试。 / Unable to load API settings. Please retry." });
         }
       }
 
       if (!cancelled) setLoading(false);
     }
 
-    void load();
+    const startLoad = () => { void load().catch(() => {
+      if (!cancelled) { setMessage({ tone: "error", text: "配置加载超时或失败，请重试。 / Unable to load settings. Please retry." }); setLoading(false); }
+    }); };
+    startLoad();
 
     // 监听 auth 状态变化（与 dashboard/login 一致），避免已登录用户在 session
     // 异步恢复完成前被误判为未登录，导致要求重新登录却始终登录不上。
@@ -257,7 +262,7 @@ export default function SettingsApiPage() {
       supabase?.auth.onAuthStateChange((_event, nextSession) => {
         setSession(nextSession || null);
         if (nextSession?.access_token) {
-          void load();
+          setTimeout(() => { if (!cancelled) startLoad(); }, 0);
         }
       }) ?? {};
 
@@ -389,7 +394,7 @@ export default function SettingsApiPage() {
       </section>
 
       <SettingsTabs activeTab="api">
-        {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
+        {message ? <p className={`notice ${message.tone}`}>{message.text}{message.tone === "error" ? <button type="button" onClick={() => setReloadKey(value => value + 1)}>{locale === "zh-CN" ? "重试" : "Retry"}</button> : null}</p> : null}
 
         {loading ? (
           <p style={{ color: "var(--ink-muted)", fontSize: 13, padding: "var(--space-6) 0" }}>
@@ -595,8 +600,8 @@ export default function SettingsApiPage() {
               {workflowRouteOptions.map((workflow) => (
                 <label key={workflow.id}>
                   {locale === "zh-CN" ? workflow.zh : workflow.en}
-                  <select value={workflowRouting[workflow.id] || ""} onChange={(event) => updateWorkflowRoute(workflow.id, event.target.value)}>
-                    <option value="">{text.defaultModel}</option>
+                  <select disabled={workflow.id === "video"} value={workflow.id === "video" ? "" : workflowRouting[workflow.id] || ""} onChange={(event) => updateWorkflowRoute(workflow.id, event.target.value)}>
+                    <option value="">{workflow.id === "video" ? "Seedance 2.0 · 720P · 4s" : text.defaultModel}</option>
                     {apiConnections.map((connection) => (
                       <option key={connection.id} value={connection.id}>
                         {connection.label || connection.provider} · {connection.model || connection.provider}

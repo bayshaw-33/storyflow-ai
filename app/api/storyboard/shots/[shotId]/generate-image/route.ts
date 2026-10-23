@@ -20,7 +20,7 @@ import {
   hasServiceRoleConfig,
   serviceFetch,
 } from "@/lib/supabase/server";
-import type { PersistedStoryboardShot } from "@/lib/storyboard/contracts";
+import { loadGenerationContext } from "@/lib/storyboard/generation-context";
 import { isStoryboardError } from "@/lib/storyboard/analyze/types";
 import {
   ensureStoryboardArtProject,
@@ -56,93 +56,6 @@ function jsonError(status: number, code: string, error: string, details?: Record
 // ---------------------------------------------------------------------------
 // Real loaders (production backend tables)
 // ---------------------------------------------------------------------------
-
-type ProductionShotRow = {
-  id: string;
-  production_project_id: string;
-  index: number;
-  scene_title: string;
-  duration: string;
-  description: string;
-  composition: string;
-  camera_movement: string;
-  image_prompt: string;
-  video_prompt: string;
-  dialogue: string | null;
-  continuity: string | null;
-  character_refs: unknown;
-  scene_refs: unknown;
-};
-
-function parseDurationSeconds(duration: unknown): number {
-  if (typeof duration === "number" && Number.isFinite(duration)) return duration;
-  if (typeof duration === "string") {
-    const parsed = Number.parseFloat(duration.replace(/s$/i, "").trim());
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return 4;
-}
-
-function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function mapShotRow(row: ProductionShotRow): PersistedStoryboardShot {
-  const sceneRefs = asStringArray(row.scene_refs);
-  return {
-    id: row.id,
-    clientId: row.id,
-    idSource: "server",
-    sceneId: `${row.production_project_id}#${row.scene_title || "未分场"}`,
-    order: row.index,
-    sourceText: row.description,
-    storyBeat: "",
-    visualDescription: row.description,
-    characterAssetIds: asStringArray(row.character_refs),
-    sceneAssetId: sceneRefs[0] ?? null,
-    propAssetIds: sceneRefs.slice(1),
-    shotSize: row.composition || "中景",
-    cameraMovement: row.camera_movement || "固定",
-    angle: "平视",
-    durationSeconds: parseDurationSeconds(row.duration),
-    dialogue: row.dialogue ?? "",
-    emotion: "",
-    continuity: row.continuity ?? "",
-    imagePrompt: row.image_prompt ?? "",
-    jimengPromptZh: row.video_prompt ?? "",
-    locked: false,
-    userEdited: false,
-    confirmed: false,
-    revision: 1,
-    analysisVersion: 1,
-    sourceHash: "",
-  };
-}
-
-async function loadShotContextReal(input: { ownerId: string; shotId: string }): Promise<ShotImageContext | null> {
-  const shots = await serviceFetch<ProductionShotRow[]>(
-    `/rest/v1/storyflow_production_shots?id=eq.${encodeURIComponent(input.shotId)}&owner_id=eq.${encodeURIComponent(input.ownerId)}&select=*&limit=1`,
-  );
-  const row = shots[0];
-  if (!row) return null;
-
-  const projects = await serviceFetch<
-    Array<{ id: string; project_id: string | null; aspect_ratio: string; visual_bible: Record<string, unknown> }>
-  >(
-    `/rest/v1/storyflow_production_projects?id=eq.${encodeURIComponent(row.production_project_id)}&owner_id=eq.${encodeURIComponent(input.ownerId)}&select=id,project_id,aspect_ratio,visual_bible&limit=1`,
-  );
-  const project = projects[0];
-  if (!project) return null;
-
-  const visualBible = (project.visual_bible ?? {}) as Record<string, unknown>;
-  return {
-    shot: mapShotRow(row),
-    productionProjectId: project.id,
-    projectId: project.project_id ?? project.id,
-    aspectRatio: project.aspect_ratio || "9:16",
-    visualStyle: typeof visualBible.visualStyle === "string" ? visualBible.visualStyle : "",
-  };
-}
 
 /** Sign fresh 7-day URLs for approved-version storage paths (the sign
  * helper in lib/supabase/art-storage.ts is not exported, so we mirror its
@@ -198,7 +111,12 @@ export async function POST(
 
   let shotContext: ShotImageContext | null;
   try {
-    shotContext = await loadShotContextReal({ ownerId: user.id, shotId });
+    const raw = parsedBody.value as Record<string, unknown>;
+    if (typeof raw.projectId !== "string" || typeof raw.sourceUnitId !== "string" || !raw.projectId || !raw.sourceUnitId) {
+      return jsonError(422, "MISSING_FIELD", "缺少 projectId / sourceUnitId。");
+    }
+    const loaded = await loadGenerationContext({ ownerId: user.id, projectId: raw.projectId, sourceUnitId: raw.sourceUnitId, shotIds: [shotId] }, serviceFetch);
+    shotContext = loaded.shots[0] ? { ...loaded, shot: loaded.shots[0], projectId: raw.projectId, sourceUnitId: raw.sourceUnitId } : null;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonError(500, "SHOT_LOAD_FAILED", message);

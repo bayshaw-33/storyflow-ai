@@ -1,3 +1,4 @@
+import { resolveProjectSourceUnitId } from "../../../production/source-unit.ts";
 import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
 import type {
   ProjectLibraryProject,
@@ -137,6 +138,7 @@ function projectRow(row: Row): ProjectLibraryProject {
     finalScript: stringValue(data.finalScript),
     createdAt: dateValue(row.created_at),
     updatedAt: dateValue(row.updated_at),
+    sourceUnitId: resolveProjectSourceUnitId(data),
     source: "project",
     sourceId: id,
     libraryKey: `project:${id}`,

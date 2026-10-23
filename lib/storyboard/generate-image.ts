@@ -90,6 +90,7 @@ export function validateShotImageBody(body: unknown): ShotImageBodyValidation {
 export type ShotImageContext = {
   shot: PersistedStoryboardShot;
   productionProjectId: string;
+  sourceUnitId?: string;
   projectId: string;
   aspectRatio: string;
   visualStyle: string;
@@ -220,6 +221,7 @@ export async function runShotImageGeneration(
       input_params: {
         idempotencyKey: input.idempotencyKey,
         shotId: input.shotId,
+        sourceUnitId: context.sourceUnitId,
         inputHash: item.inputHash,
         referenceVersionIds: item.referenceVersionIds,
         count: input.count,

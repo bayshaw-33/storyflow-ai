@@ -119,30 +119,15 @@ export function createAtlasProvider(): VideoProvider {
       if (!input.prompt?.trim()) throw new Error("ATLAS_SUBMIT_NO_PROMPT");
       if (!input.firstframeUrl?.trim()) throw new Error("ATLAS_SUBMIT_NO_FIRSTFRAME");
 
-      // 1. upload firstframe → mediaId
-      //    POST /model/uploadMedia, body: { type: "image", url: firstframeUrl }
-      const uploadBody = { type: "image", url: input.firstframeUrl };
-      const uploadResp = await atlasFetch(`${cfg.baseUrl}/model/uploadMedia`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(uploadBody),
-      });
-      const mediaId =
-        extractString(uploadResp, [["data", "id"], ["data", "mediaId"], ["id"], ["mediaId"]]) ||
-        extractString(uploadResp, [["data", "request_id"], ["request_id"]]);
-      if (!mediaId) {
-        throw new Error("ATLAS_UPLOAD_NO_MEDIA_ID");
-      }
-
-      // 2. generateVideo
-      const duration = input.duration === 10 ? 10 : 5;
-      const aspectRatio = input.aspectRatio || "16:9";
+      // Seedance accepts the signed first-frame URL directly (Atlas generateVideo schema).
       const genBody = {
-        model: cfg.model,
-        image: mediaId,
+        model: input.model || cfg.model,
+        image: input.firstframeUrl,
         prompt: input.prompt,
-        duration,
-        aspect_ratio: aspectRatio,
+        duration: input.duration ?? 4,
+        resolution: input.resolution || "720p",
+        ratio: input.aspectRatio || "9:16",
+        generate_audio: false,
       };
       const genResp = await atlasFetch(`${cfg.baseUrl}/model/generateVideo`, {
         method: "POST",

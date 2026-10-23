@@ -86,7 +86,7 @@ export default function LandingPage() {
         onSignOut={signOut}
       />
       <AuthModal open={authOpen} mode={authMode} onClose={() => setAuthOpen(false)} />
-      <HeroSection onStartCreating={enterProjectStart} />
+      <HeroSection signedIn={Boolean(session)} onStartCreating={session ? enterWriterRoom : enterProjectStart} />
 
       <ContentSection
         id="workspace"
