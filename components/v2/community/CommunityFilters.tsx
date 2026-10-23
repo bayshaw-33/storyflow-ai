@@ -11,11 +11,11 @@ export function CommunityFilters(props: {
   section: CommunitySectionId;
   query: string;
   onQueryChange: (value: string) => void;
-  onQuerySubmit?: () => void;
+  onQuerySubmit?: (query: string) => void;
 }) {
   const isZh = props.locale === "zh-CN";
   return (
-    <form className={styles.toolbar} onSubmit={(event) => { event.preventDefault(); props.onQuerySubmit?.(); }}>
+    <form className={styles.toolbar} onSubmit={(event) => { event.preventDefault(); props.onQuerySubmit?.(props.query); }}>
       <div className={styles.toolbarContext}>
         <span className={styles.toolbarKicker}>{isZh ? "当前视图" : "Current view"}</span>
         <strong>{getCommunitySectionLabel(props.section, props.locale)}</strong>
@@ -33,7 +33,7 @@ export function CommunityFilters(props: {
           <button
             type="button"
             className={styles.clearSearch}
-            onClick={() => { props.onQueryChange(""); props.onQuerySubmit?.(); }}
+            onClick={() => { props.onQueryChange(""); props.onQuerySubmit?.(""); }}
             aria-label={isZh ? "清除搜索" : "Clear search"}
           >
             <X size={14} />

@@ -184,7 +184,7 @@ export function ProjectStartFlow() {
           authToken,
           idempotencyKey: idempotencyKeyRef.current,
           // 空输入 = 显式确认采用默认标题（placeholder 所示），不是静默落库
-          title: title.trim() || defaultTitleFor(workType),
+          title: title.trim() || defaultTitleFor(workType, locale),
           universeId: selectedUniverseId || null,
         });
         // 成功：丢弃幂等键并按服务端返回的路由导航。
@@ -200,7 +200,7 @@ export function ProjectStartFlow() {
         setPendingType(null);
       }
     },
-    [pendingType, isZh, router],
+    [pendingType, isZh, locale, router],
   );
 
   const headerCopy = useMemo(
@@ -354,7 +354,7 @@ export function ProjectStartFlow() {
                 data-testid="project-title-input"
                 value={titleDraft}
                 onChange={(event) => setTitleDraft(event.target.value)}
-                placeholder={defaultTitleFor(pendingModule.workType!)}
+                placeholder={defaultTitleFor(pendingModule.workType!, locale)}
                 autoComplete="off"
                 maxLength={80}
                 style={{

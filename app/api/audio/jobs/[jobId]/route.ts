@@ -164,7 +164,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ jobI
       if (error) throw new Error("ART_STORAGE_DELETE_FAILED");
     }
     if (job.storage_path) {
-      const { error } = await serverClient.storage.from(AUDIO_BUCKET).remove([job.storage_path]);
+      const { error } = await serverClient.storage.from(AUDIO_BUCKET).remove([job.storage_path, `${job.storage_path}.320k-v1.mp3`]);
       if (error) throw new Error("AUDIO_STORAGE_DELETE_FAILED");
     }
     await serviceFetch(

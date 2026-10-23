@@ -29,7 +29,9 @@ export async function GET(
     if (!viewer) return unauthorized();
     const { workId, unitId } = await params;
     const service = new ScreenplayUnitsService(serviceFetch);
-    const result = await service.getUnit({ ownerId: viewer.id, workId, unitId });
+    const version = new URL(_request.url).searchParams.get("version");
+    if (version && version !== "current" && version !== "finalized") return NextResponse.json({ success: false, error: "Unsupported version selection." }, { status: 422 });
+    const result = await service.getUnit({ ownerId: viewer.id, workId, unitId, version: version === "finalized" ? "finalized" : "current" });
     return NextResponse.json({ success: true, contractVersion: "2.2.0-alpha.1", ...result });
   } catch (error) {
     return errorResponse(error);

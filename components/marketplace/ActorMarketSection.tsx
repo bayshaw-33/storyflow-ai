@@ -43,6 +43,7 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("latest");
   const requestVersion = useRef(0);
+  const [retryToken, setRetryToken] = useState(0);
 
   const PAGE_SIZE = 12;
 
@@ -60,7 +61,8 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
           pageSize: String(PAGE_SIZE),
         });
         if (sortKey === "popular") params.set("sort", "popular");
-        const response = await fetchWithAuthRetry(`/api/actors/platform?${params.toString()}`, { signal });
+        const timeout = AbortSignal.timeout(15000);
+        const response = await fetchWithAuthRetry(`/api/actors/platform?${params.toString()}`, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
         const json = await response.json();
         if (version !== requestVersion.current || signal?.aborted) return null;
         if (!response.ok || !json.success) {
@@ -123,7 +125,7 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
       requestVersion.current += 1;
       controller.abort();
     };
-  }, [fetchPage, viewerToken, sessionLoaded]);
+  }, [fetchPage, viewerToken, sessionLoaded, retryToken]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loading || !cursor) return;
@@ -134,7 +136,8 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
     setHasMore(Boolean(json.hasMore));
   }, [hasMore, loading, cursor, fetchPage]);
 
-  const showEmpty = !loading && !error && items.length === 0;
+  const visibleItems = priceFilter === "paid" ? [] : items;
+  const showEmpty = !loading && !error && visibleItems.length === 0;
   const showInitial = !sessionLoaded || (loading && items.length === 0);
 
   return (
@@ -149,7 +152,7 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
         <Store size={18} aria-hidden="true" />
       </header>
 
-      <div className={marketStyles.filterBar} role="group" aria-label="marketplace filter">
+      <div className={marketStyles.filterBar} role="group" aria-label={isZh ? "演员市场筛选" : "Actor marketplace filters"}>
         <div className={marketStyles.filterGroup}>
           {(["all", "free", "paid"] as const).map((value) => (
             <button
@@ -186,6 +189,7 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
         <div className={styles.noticeBar} role="alert">
           <TriangleAlert size={13} style={{ verticalAlign: "-2px", marginRight: 6 }} />
           {error}
+          <button type="button" onClick={() => setRetryToken(value => value + 1)}>{isZh ? "重试" : "Retry"}</button>
         </div>
       ) : null}
 
@@ -203,17 +207,17 @@ export function ActorMarketSection({ viewerToken, sessionLoaded = true }: Props)
         </ul>
       ) : showEmpty ? (
         <div className={marketStyles.emptyPanel}>
-          <p>{isZh ? "暂无演员上架" : "No actors listed yet"}</p>
+          <p>{priceFilter === "paid" ? isZh ? "当前目录为免费共享演员，暂无付费演员。" : "This catalog contains free shared actors. No paid actors are available." : isZh ? "暂无演员上架" : "No actors listed yet"}</p>
         </div>
       ) : (
         <ul className={styles.grid}>
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <ActorMarketCard key={item.id} actor={item} />
           ))}
         </ul>
       )}
 
-      {hasMore ? (
+      {hasMore && priceFilter !== "paid" ? (
         <div className={marketStyles.loadMoreRow}>
           <button
             type="button"

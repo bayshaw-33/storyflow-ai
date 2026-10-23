@@ -514,6 +514,7 @@ export default function SongWorkbenchPage() {
   const [drawerType, setDrawerType] = useState<null | "more" | "material" | "universe" | "history">(null);
   // 生成失败专用错误（显示在右侧创作区，不伪造成功结果）
   const [generationError, setGenerationError] = useState("");
+  const [audioDownloading, setAudioDownloading] = useState(false);
   // 生成进度状态文案（明确进度，禁用重复提交）
   const [generationProgress, setGenerationProgress] = useState("");
   const [audioCandidates, setAudioCandidates] = useState<SongAudioCandidate[]>([]);
@@ -762,11 +763,12 @@ export default function SongWorkbenchPage() {
     }
   }
 
-  async function downloadSongAudio(candidate: SongAudioCandidate) {
-    if (!session?.access_token || !candidate.jobId) return;
+  async function downloadSongAudio(candidate: SongAudioCandidate, format: "mp3-320" | "original" = "mp3-320") {
+    if (!session?.access_token || !candidate.jobId || audioDownloading) return;
+    setAudioDownloading(true);
     setGenerationError("");
     try {
-      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}/download`, {
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(candidate.jobId)}/download${format === "original" ? "?format=original" : ""}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!response.ok) {
@@ -789,6 +791,8 @@ export default function SongWorkbenchPage() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (downloadError) {
       setGenerationError(downloadError instanceof Error ? downloadError.message : (isZh ? "音乐下载失败，请重试。" : "Music download failed. Please retry."));
+    } finally {
+      setAudioDownloading(false);
     }
   }
 
@@ -2364,11 +2368,11 @@ export default function SongWorkbenchPage() {
           <header className="song-studio-heading">
             <div>
               <h2>{isZh ? "音乐生成与试听中心" : "Music generation & preview"}</h2>
-              <p>{isZh ? "从创意到音乐，让灵感即时发声" : "From an idea to music, instantly"}</p>
+              <p>{isZh ? "默认下载 MP3 320 kbps；也可保留原文件。重新编码不会提升低码率音源的原始音质。" : "Downloads use MP3 at 320 kbps; the original file is also available. Re-encoding cannot restore quality lost in a lower-bitrate source."}</p>
             </div>
           </header>
           <div className="song-right-studio">
-            <AudioCandidates candidates={audioCandidates} busy={audioGenerating || generating || chatGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDelete={deleteSongAudio} onFavorite={toggleSongFavorite} favoriteSavingId={favoriteSavingId} onGenerateCover={generateSongCover} onDownloadCover={downloadSongCover} coverGeneratingId={coverGeneratingId} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} voiceGender={voiceGender} onVoiceGenderChange={setVoiceGender} />
+            <AudioCandidates candidates={audioCandidates} busy={audioGenerating || generating || chatGenerating} isZh={isZh} onGenerate={() => void generateSongAudio()} onRetry={(candidateId) => void retrySongAudioCandidate(candidateId)} onDownload={downloadSongAudio} onDownloadOriginal={(candidate) => downloadSongAudio(candidate, "original")} downloading={audioDownloading} onDelete={deleteSongAudio} onFavorite={toggleSongFavorite} favoriteSavingId={favoriteSavingId} onGenerateCover={generateSongCover} onDownloadCover={downloadSongCover} coverGeneratingId={coverGeneratingId} documents={documents} selectedLyricsDocumentId={selectedLyricsDocumentId} selectedStyleDocumentId={selectedStyleDocumentId} selectedSfxDocumentId={selectedSfxDocumentId} onLyricsDocumentChange={setSelectedLyricsDocumentId} onStyleDocumentChange={setSelectedStyleDocumentId} onSfxDocumentChange={setSelectedSfxDocumentId} musicModels={musicModels} selectedMusicModel={selectedMusicModel} onMusicModelChange={(model) => { if (isSelectableMusicModel(model)) setSelectedMusicModel(model); }} musicMode={musicMode} onMusicModeChange={setMusicMode} voiceGender={voiceGender} onVoiceGenderChange={setVoiceGender} />
           </div>
         </section>
       </section>

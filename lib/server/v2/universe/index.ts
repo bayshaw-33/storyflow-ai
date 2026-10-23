@@ -5,6 +5,7 @@ import type {
   Project,
 } from "@/lib/contracts/v2";
 import { isRetiredNovelRecord } from "../../../v2/retired-novel.ts";
+import { readAllUniverseRows } from "../../universe/read-all.ts";
 
 export type UniverseReadFetcher = <T = unknown>(path: string) => Promise<T>;
 
@@ -137,13 +138,13 @@ export async function readUniverse(params: { fetcher: UniverseReadFetcher; userI
 
 export async function readUniverseEntities(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseEntityResult> {
   await readAuthorizedUniverse(params);
-  const rows = await query<EntityRow[]>(params.fetcher, `/rest/v1/storyflow_universe_entities?universe_id=eq.${encodeURIComponent(params.universeId)}&select=id,universe_id,type,name,summary,status,updated_at&order=updated_at.desc&limit=500`);
+  const rows = await readAllUniverseRows<EntityRow>(path => query(params.fetcher, path), `/rest/v1/storyflow_universe_entities?universe_id=eq.${encodeURIComponent(params.universeId)}&select=id,universe_id,type,name,summary,status,updated_at&order=updated_at.desc,id.desc`);
   return { items: (rows || []).map(toEntityDto) };
 }
 
 export async function readUniverseWorks(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseWorkResult> {
   await readAuthorizedUniverse(params);
-  const links = await query<LinkRow[]>(params.fetcher, `/rest/v1/storyflow_universe_project_links?universe_id=eq.${encodeURIComponent(params.universeId)}&select=id,universe_id,project_id,project_role,updated_at&order=updated_at.desc&limit=500`);
+  const links = await readAllUniverseRows<LinkRow>(path => query(params.fetcher, path), `/rest/v1/storyflow_universe_project_links?universe_id=eq.${encodeURIComponent(params.universeId)}&select=id,universe_id,project_id,project_role,updated_at&order=updated_at.desc,id.desc`);
   const projectIds = Array.from(new Set((links || []).map((link) => link.project_id).filter(Boolean)));
   if (!projectIds.length) return { items: [] };
   const projects = await query<ProjectRow[]>(params.fetcher, `/rest/v1/storyflow_projects?id=in.(${projectIds.map(encodeURIComponent).join(",")})&select=id,title,workflow_type,mode,data,status,updated_at`);
@@ -180,7 +181,7 @@ export async function readUniverseHealth(params: { fetcher: UniverseReadFetcher;
 async function readAuthorizedUniverse(params: { fetcher: UniverseReadFetcher; userId: string; universeId: string }): Promise<UniverseRow> {
   if (!params.userId) throw new V2UniverseError("unauthenticated", "Authentication is required.");
   if (!params.universeId) throw new V2UniverseError("validation_failed", "Universe id is required.");
-  const rows = await query<UniverseRow[]>(params.fetcher, `/rest/v1/storyflow_universes?id=eq.${encodeURIComponent(params.universeId)}&select=id,name,description,card_summary,status,updated_at,user_id,team_id,metadata,genre&limit=1`);
+  const rows = await query<UniverseRow[]>(params.fetcher, `/rest/v1/storyflow_universes?id=eq.${encodeURIComponent(params.universeId)}&select=id,name,description,card_summary,status,updated_at,created_at,user_id,team_id,metadata,genre&limit=1`);
   const row = rows?.[0];
   if (!row) throw new V2UniverseError("not_found", "Universe not found.");
   if (row.user_id !== params.userId && !(row.team_id && (await readTeamIds(params.fetcher, params.userId)).includes(row.team_id))) {
@@ -194,9 +195,9 @@ async function aggregateUniverseRows(fetcher: UniverseReadFetcher, rows: Univers
   const ids = rows.map((row) => row.id);
   const filter = `universe_id=in.(${ids.map(encodeURIComponent).join(",")})`;
   const [entities, inbox, links] = await Promise.all([
-    query<EntityRow[]>(fetcher, `/rest/v1/storyflow_universe_entities?${filter}&select=universe_id,type`),
-    query<Array<{ universe_id: string; status: string }>>(fetcher, `/rest/v1/storyflow_universe_inbox_items?${filter}&select=universe_id,status`),
-    query<Array<{ universe_id: string; project_id: string }>>(fetcher, `/rest/v1/storyflow_universe_project_links?${filter}&select=universe_id,project_id`),
+    readAllUniverseRows<EntityRow>(path => query(fetcher, path), `/rest/v1/storyflow_universe_entities?${filter}&select=universe_id,type`),
+    readAllUniverseRows<{ universe_id: string; status: string }>(path => query(fetcher, path), `/rest/v1/storyflow_universe_inbox_items?${filter}&select=universe_id,status`),
+    readAllUniverseRows<{ universe_id: string; project_id: string }>(path => query(fetcher, path), `/rest/v1/storyflow_universe_project_links?${filter}&select=universe_id,project_id`),
   ]);
   return rows.map((row) => {
     const universeEntities = (entities || []).filter((entity) => entity.universe_id === row.id);
@@ -237,7 +238,7 @@ function readTags(metadata: Record<string, unknown> | null | undefined): string[
   return Array.isArray(metadata?.tags) ? metadata.tags.map(String).filter(Boolean).slice(0, 10) : [];
 }
 
-function buildUniverseDisplaySummary(cardSummary?: string | null, description?: string | null): string {
+export function buildUniverseDisplaySummary(cardSummary?: string | null, description?: string | null): string {
   const explicitSummary = normalizeSummaryText(cardSummary || "");
   if (explicitSummary) return shortenSummary(explicitSummary);
 

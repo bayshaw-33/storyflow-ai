@@ -1,5 +1,7 @@
 "use client";
 import analysisStyles from "./AnalysisControls.module.css";
+import { readStoryboardSubview, updateStoryboardSubview } from "@/lib/storyboard/subview";
+import { SourceEpisodePicker } from "./SourceEpisodePicker";
 
 /**
  * ProductionWorkbench — 分镜制作台主壳（四区页面重构版）。
@@ -143,6 +145,8 @@ export function ProductionWorkbench() {
   const [workId, setWorkId] = useState<string | null>(null);
   const [unitId, setUnitId] = useState<string>("");
   const sourceUnitId = unitId;
+  const activeScopeRef = useRef(`${projectId}:${unitId}`);
+  activeScopeRef.current = `${projectId}:${unitId}`;
   const [handoffId, setHandoffId] = useState<string>("");
   const [projectTitle, setProjectTitle] = useState<string>("");
   const [manuscript, setManuscript] = useState<string>("");
@@ -322,12 +326,7 @@ export function ProductionWorkbench() {
     setWorkId(query.workId);
     setUnitId(query.unitId || "");
     setActiveStage(query.tab);
-    const requestedStoryboardSubview = searchParams.get("storyboardView") || searchParams.get("view");
-    if (requestedStoryboardSubview === "grid") setStoryboardSubview("grids");
-    else if (requestedStoryboardSubview === "dynamic" || requestedStoryboardSubview === "motion") setStoryboardSubview("motion");
-    else if (requestedStoryboardSubview === "prompts" || requestedStoryboardSubview === "video_prompt") setStoryboardSubview("prompts");
-    else if (requestedStoryboardSubview === "shot_table" || requestedStoryboardSubview === "shots") setStoryboardSubview("shot_table");
-    else if (requestedStoryboardSubview === "canvas" || requestedStoryboardSubview === "board") setStoryboardSubview("canvas");
+    setStoryboardSubview(readStoryboardSubview(searchParams));
     setHandoffId(searchParams.get("handoffId") || "");
     setHydrationPhase("loading_local");
 
@@ -546,8 +545,10 @@ export function ProductionWorkbench() {
 
   async function loadFromServer() {
     if (!projectId || !sourceUnitId) return;
+    const scope = `${projectId}:${sourceUnitId}`;
     try {
       const state = await storyboardClient.loadState(projectId, sourceUnitId);
+      if (activeScopeRef.current !== scope) return;
       if (state) {
         setScenes(state.scenes);
         setSavedScenes(JSON.stringify(state.scenes));
@@ -562,6 +563,7 @@ export function ProductionWorkbench() {
     // 刷新恢复视频 job 状态（Codex MUST FIX: listVideoJobs 未被调用）
     try {
       const resp = await storyboardClient.listVideoJobs({ projectId, sourceUnitId });
+      if (activeScopeRef.current !== scope) return;
       const map: VideoJobMap = {};
       for (const job of resp.jobs) {
         if (!job.target_id) continue;
@@ -1476,7 +1478,7 @@ export function ProductionWorkbench() {
   function handleStoryboardSubviewChange(subview: StoryboardSubview) {
     setStoryboardSubview(subview);
     if (!projectId) return;
-    const params = new URLSearchParams(searchParams.toString());
+    const params = updateStoryboardSubview(new URLSearchParams(searchParams.toString()), subview);
     params.set("projectId", projectId);
     params.set("tab", "storyboard");
     if (workId) params.set("workId", workId);
@@ -1755,6 +1757,17 @@ export function ProductionWorkbench() {
               workId ? (
                 <>
                   <div className={analysisStyles.controls}>
+                    {context?.stages.script?.workId ? <SourceEpisodePicker workId={context.stages.script.workId} unitId={unitId} disabled={analyzing || Boolean(analyzingSceneId) || saving || Boolean(generatingShotId) || Boolean(generatingAssetId) || Boolean(generatingPromptsForShots) || batchRunning || Boolean(submittingVideoShotId)} onSelect={(nextUnitId, text) => {
+                      if (storyboardDirty && !window.confirm("切换来源集会离开当前未保存的分镜修改，是否继续？")) return;
+                      activeScopeRef.current = `${projectId}:${nextUnitId}`;
+                      setScenes([]); setSavedScenes(null); setAssets(EMPTY_ASSETS); setRevision(0); setCanvas(null);
+                      setFrames({}); setPrompts({}); setCandidates({}); setVideoJobs({}); setAdoptedPrevisByShot({});
+                      setDeletedSceneIds([]); setDeletedShotIds([]); setConflictRevision(null); setAnalyzeError("");
+                      setManuscript(text); setSourceFiles([]); setUnitId(nextUnitId);
+                      const query = new URLSearchParams(searchParams.toString());
+                      query.delete("sourceUnitId"); query.set("unitId", nextUnitId);
+                      router.replace(`/production?${query.toString()}`, { scroll: false });
+                    }} /> : null}
                     <label>镜数上限 <input aria-label="镜数上限" type="number" min={1} max={100} value={analysisMaxShots} disabled={analyzing || Boolean(analyzingSceneId)} onChange={(event) => setAnalysisMaxShots(Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))))} /></label>
                     <label>目标时长（秒） <input aria-label="目标时长（秒）" type="number" min={1} max={600} value={analysisDuration} disabled={analyzing || Boolean(analyzingSceneId)} onChange={(event) => setAnalysisDuration(Math.max(1, Math.min(600, Math.round(Number(event.target.value) || 1))))} /></label>
                   </div>

@@ -106,7 +106,8 @@ export function getWorkTypeCard(workType: WorkType): WorkTypeCardMeta {
   return card;
 }
 
-export function defaultTitleFor(workType: WorkType): string {
+export function defaultTitleFor(workType: WorkType, locale = "zh-CN"): string {
+  if (locale !== "zh-CN") return { script: "Untitled screenplay", song: "Untitled song", art: "Untitled art project", storyboard: "Untitled storyboard", video: "Video production project", voice: "Untitled voice project", editing: "Untitled editing project" }[workType];
   return DEFAULT_WORK_TITLES[workType];
 }
 

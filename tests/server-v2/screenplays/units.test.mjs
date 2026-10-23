@@ -137,6 +137,19 @@ async function makeService() {
   return { service: new ScreenplayUnitsService(store.fetcher), store };
 }
 
+test("source episode can read the finalized text even when its current version is a later draft",async()=>{
+  const {service,store}=await makeService();
+  store.tables.storyflow_screenplay_units.push({id:'episode-source',work_id:WORK,type:'episode',title:'Episode',order_index:1,current_version_id:'later-draft',finalized_version_id:'final-text',readiness:'draft'});
+  store.tables.storyflow_screenplay_unit_versions.push(
+    {id:'final-text',work_id:WORK,unit_id:'episode-source',content_json:{body:'finalized text'}},
+    {id:'later-draft',work_id:WORK,unit_id:'episode-source',content_json:{body:'later unconfirmed draft'}},
+  );
+  const selected=await service.getUnit({ownerId:OWNER,workId:WORK,unitId:'episode-source',version:'finalized'});
+  assert.deepEqual(selected.content,{body:'finalized text'});assert.equal(selected.contentVersionId,'final-text');
+  const current=await service.getUnit({ownerId:OWNER,workId:WORK,unitId:'episode-source'});
+  assert.deepEqual(current.content,{body:'later unconfirmed draft'});
+});
+
 // ============================================================
 // 1. Ordered creation & identity
 // ============================================================

@@ -72,6 +72,7 @@ function VersionActionsComponent({
           className={styles.versionButton}
           disabled={busy}
           onClick={handleCheckpoint}
+          aria-label={isZh ? "创建版本快照" : "Create version checkpoint"}
           title={isZh ? "创建不可变快照" : "Create immutable checkpoint"}
         >
           <Bookmark size={12} />
@@ -85,6 +86,7 @@ function VersionActionsComponent({
           className={styles.versionButton}
           disabled={busy}
           onClick={() => setConfirmingFinalize(true)}
+          aria-label={isZh ? "定稿当前版本" : "Finalize current version"}
           title={isZh ? "定稿当前版本（不可逆）" : "Finalize current version (irreversible)"}
         >
           <Lock size={12} />

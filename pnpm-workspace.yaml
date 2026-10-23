@@ -2,4 +2,5 @@ packages:
   - '.'
 
 allowBuilds:
+  ffmpeg-static: true
   sharp: true

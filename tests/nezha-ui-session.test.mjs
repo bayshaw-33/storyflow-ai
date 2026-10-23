@@ -13,7 +13,7 @@ globalThis.window = { location: { search: "" }, addEventListener(){}, removeEven
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const mocks = {
   '@/lib/supabase/projects': 'export const readProjectsFromSupabase = async () => [];',
-  '@/lib/i18n/useI18n': "export const useI18n=()=>({locale:'zh-CN',t:key=>key});",
+  '@/lib/i18n/useI18n': "export const useI18n=()=>({locale:globalThis.__nezhaLocale||'zh-CN',t:key=>key});",
   'next/link': "export default function Link({children}) {return children;}",
   '@/components/design/DesignAssetImage': "export const DesignAssetImage = () => null;",
   'css': 'export default {};',
@@ -39,6 +39,58 @@ registerHooks({
 });
 const {default:CardDraw} = await import('../app/card-draw/page.tsx');
 const {CastingPanel} = await import('../components/production/CastingPanel.tsx');
+const {SourceEpisodePicker} = await import('../components/production/SourceEpisodePicker.tsx');
+const {AssetsPanel} = await import('../components/v2/universe/AssetsPanel.tsx');
+const {VersionHistory} = await import('../components/production/VersionHistory.tsx');
+const {CommunityFilters} = await import('../components/v2/community/CommunityFilters.tsx');
+test('source episode selection reads the chosen finalized version and excludes drafts and other document types',async()=>{
+ const original=globalThis.fetch;let view;const requests=[];const selected=[];
+ globalThis.fetch=async(url,init)=>{requests.push([String(url),init?.method||'GET']);return Response.json(String(url).includes('?version=finalized')?{success:true,unit:{id:'ep-2'},content:{body:'final episode two'}}:{success:true,units:[{id:'ep-1',title:'第一集',type:'episode',finalizedVersionId:'v1'},{id:'ep-2',title:'第二集',type:'episode',finalizedVersionId:'v2'},{id:'draft',type:'episode',finalizedVersionId:null},{id:'outline',type:'outline',finalizedVersionId:'v3'}]});};
+ try{
+  await act(async()=>{view=TestRenderer.create(React.createElement(SourceEpisodePicker,{workId:'script-work',unitId:'ep-1',onSelect:(...args)=>selected.push(args)}));});
+  assert.deepEqual(view.root.findAllByType('option').map(node=>node.props.value),['','ep-1','ep-2']);
+  await act(async()=>view.root.findByType('select').props.onChange({target:{value:'ep-2'}}));
+  assert.deepEqual(selected,[['ep-2','final episode two']]);
+  assert.ok(requests.at(-1)[0].includes('/units/ep-2?version=finalized'));
+  assert.ok(requests.every(([,method])=>method==='GET'));
+ }finally{await act(async()=>view?.unmount());globalThis.fetch=original;}
+});
+test('asset empty states distinguish no entities from no matches and disambiguate equal names',async()=>{
+ let view;const previous=globalThis.__nezhaClient;globalThis.__nezhaClient=null;
+ const empty={universe:{id:'universe'},characters:[],locations:[],organizations:[],props:[],concepts:[]};
+ try{
+  await act(async()=>{view=TestRenderer.create(React.createElement(AssetsPanel,{bundle:empty}));});
+  assert.match(JSON.stringify(view.toJSON()),/还没有角色、地点或其他资产/);
+  const row={name:'同名角色',summary:'summary',status:'draft',usedBy:[]};
+  await act(async()=>view.update(React.createElement(AssetsPanel,{bundle:{...empty,characters:[{...row,id:'character-11111111'},{...row,id:'character-22222222'}]}})));
+  const identifiers=view.root.findAllByType('small').map(node=>node.children.join(''));
+  assert.ok(identifiers.includes('#11111111'));assert.ok(identifiers.includes('#22222222'));
+  await act(async()=>view.root.findByType('input').props.onChange({target:{value:'no match'}}));
+  assert.match(JSON.stringify(view.toJSON()),/没有匹配的资产/);
+ }finally{await act(async()=>view?.unmount());globalThis.__nezhaClient=previous;}
+});
+test('version controls follow the UI language, including their accessible label',async()=>{
+ let view;
+ const props={versions:[{id:'v1',versionNo:1,source:'manual',entityType:'production_workbench',createdAt:'2026-10-23T00:00:00Z'}],loading:false,error:null,onSelect(){},onRestore(){},onCompare(){},diff:null,selectedVersionId:null,onClose(){}};
+ try{
+  globalThis.__nezhaLocale='en-US';
+  await act(async()=>{view=TestRenderer.create(React.createElement(VersionHistory,props));});
+  assert.match(JSON.stringify(view.toJSON()),/Manual save/);
+  assert.equal(view.root.findAllByType('button')[0].props['aria-label'],'Close version history');
+  globalThis.__nezhaLocale='zh-CN';
+  await act(async()=>view.update(React.createElement(VersionHistory,props)));
+  assert.match(JSON.stringify(view.toJSON()),/手动保存/);
+  assert.equal(view.root.findAllByType('button')[0].props['aria-label'],'关闭版本历史');
+ }finally{await act(async()=>view?.unmount());delete globalThis.__nezhaLocale;}
+});
+test('clearing community search submits the empty query instead of the stale previous value',async()=>{
+ let view;const events=[];
+ try{
+  await act(async()=>{view=TestRenderer.create(React.createElement(CommunityFilters,{locale:'zh-CN',section:'recommended',query:'old search',onQueryChange:value=>events.push(['change',value]),onQuerySubmit:value=>events.push(['submit',value])}));});
+  await act(async()=>view.root.findByType('button').props.onClick());
+  assert.deepEqual(events,[['change',''],['submit','']]);
+ }finally{await act(async()=>view?.unmount());}
+});
 const {DirectorPageClient} = await import('../app/director/DirectorPageClient.tsx');
 const {AudioCandidates} = await import('../components/song-workbench/AudioCandidates.tsx');
 test('audio player distinguishes unknown duration from real metadata', async () => {

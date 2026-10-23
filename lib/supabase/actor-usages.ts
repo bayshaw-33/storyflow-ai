@@ -147,6 +147,7 @@ export async function listPlatformActors(params: {
   page?: number;
   pageSize?: number;
   search?: string;
+  sort?: "latest" | "popular";
 }): Promise<{ actors: PlatformActorCard[]; total: number }> {
   ensureServiceRole();
   const page = Math.max(1, params.page || 1);
@@ -160,33 +161,34 @@ export async function listPlatformActors(params: {
     query = `/rest/v1/storyflow_actor_profiles?visibility=eq.platform&status=neq.archived&or=(name.ilike.${enc},bio.ilike.${enc},temperament.cs.%5B%22${encodeURIComponent(params.search)}%22%5D)&select=*&order=updated_at.desc&limit=${pageSize}&offset=${offset}`;
   }
 
-  const actors = await serviceFetch<ActorProfile[]>(query);
+  let actors = params.sort === "popular" ? await readAllPlatformRows<ActorProfile>(query) : await serviceFetch<ActorProfile[]>(query);
 
   // 2. 查询总数（用 Prefer: count=exact header 或单独 count 请求）
-  let countQuery = `/rest/v1/storyflow_actor_profiles?visibility=eq.platform&status=neq.archived&select=id`;
-  const countResp = await serviceFetch<{ id: string }[]>(countQuery);
+  const countQuery = `${query.split("&select=")[0]}&select=id`;
+  const countResp = params.sort === "popular" ? actors : await readAllPlatformRows<{ id: string }>(countQuery);
   const total = countResp.length;
 
   if (!actors.length) return { actors: [], total };
 
   // 3. 批量查询创建者昵称（不查邮箱）
   // Phase 0 Task 0.5：不再 .catch(() => []) 吞没 DB 错误，让 schema/RLS 错误透传到 route 层。
-  const ownerIds = [...new Set(actors.map((a) => a.owner_id))];
-  const profiles = await serviceFetch<{ user_id: string; display_name: string | null }[]>(
-    `/rest/v1/storyflow_profiles?user_id=in.(${ownerIds.map(encodeURIComponent).join(",")})&select=user_id,display_name`,
-  );
-  const profileMap = new Map(profiles.map((p) => [p.user_id, p.display_name]));
-
   // 4. 批量查询使用次数
   // Phase 0 Task 0.5：同上，不再吞没 DB 错误。
   const actorIds = actors.map((a) => a.id);
-  const usageCounts = await serviceFetch<{ actor_id: string }[]>(
-    `/rest/v1/storyflow_actor_usages?actor_id=in.(${actorIds.map(encodeURIComponent).join(",")})&select=actor_id`,
-  );
   const usageCountMap = new Map<string, number>();
-  for (const u of usageCounts) {
-    usageCountMap.set(u.actor_id, (usageCountMap.get(u.actor_id) || 0) + 1);
+  for (let index = 0; index < actorIds.length; index += 100) {
+    const batch = actorIds.slice(index, index + 100);
+    const usageCounts = await readAllPlatformRows<{ actor_id: string }>(
+      `/rest/v1/storyflow_actor_usages?actor_id=in.(${batch.map(encodeURIComponent).join(",")})&select=actor_id`,
+    );
+    for (const u of usageCounts) usageCountMap.set(u.actor_id, (usageCountMap.get(u.actor_id) || 0) + 1);
   }
+  if (params.sort === "popular") actors = actors.sort((a, b) => (usageCountMap.get(b.id) || 0) - (usageCountMap.get(a.id) || 0) || b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id)).slice(offset, offset + pageSize);
+  const ownerIds = [...new Set(actors.map((a) => a.owner_id))];
+  const profiles = ownerIds.length ? await serviceFetch<{ user_id: string; display_name: string | null }[]>(
+    `/rest/v1/storyflow_profiles?user_id=in.(${ownerIds.map(encodeURIComponent).join(",")})&select=user_id,display_name`,
+  ) : [];
+  const profileMap = new Map(profiles.map((p) => [p.user_id, p.display_name]));
 
   // 5. 组装返回（不暴露 owner_id 原始值给前端——只暴露 display_name）
   const cards: PlatformActorCard[] = actors.map((actor) => ({
@@ -196,6 +198,16 @@ export async function listPlatformActors(params: {
   }));
 
   return { actors: cards, total };
+}
+
+async function readAllPlatformRows<T>(query: string): Promise<T[]> {
+  const parts = query.split("&").filter(part => !/^(limit|offset|order)=/.test(part));
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const page = await serviceFetch<T[]>(`${parts.join("&")}&order=id.asc&limit=500&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < 500) return rows;
+  }
 }
 
 function toPublicActorProfile(actor: ActorProfile): PublicActorProfile {

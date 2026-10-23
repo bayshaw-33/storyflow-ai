@@ -128,9 +128,9 @@ export const screenplayStudioApi = {
   listUnits(workId: string) {
     return call<{ units: ScreenplayUnitClientDto[] }>(`/api/v2/works/${encodeURIComponent(workId)}/screenplay`);
   },
-  getUnit(workId: string, unitId: string) {
+  getUnit(workId: string, unitId: string, version: "current" | "finalized" = "current") {
     return call<{ unit: ScreenplayUnitClientDto; content: unknown }>(
-      `/api/v2/works/${encodeURIComponent(workId)}/screenplay/units/${encodeURIComponent(unitId)}`,
+      `/api/v2/works/${encodeURIComponent(workId)}/screenplay/units/${encodeURIComponent(unitId)}${version === "finalized" ? "?version=finalized" : ""}`,
     );
   },
   createUnit(workId: string, body: { type: string; title: string; parentId: string | null; order: number }) {

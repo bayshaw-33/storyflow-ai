@@ -709,6 +709,7 @@ function UniverseDetailPageV1() {
 
   return (
     <main className={`${styles.page} ${styles.detailShell}`}>
+      <p role="status">{isZh ? "你正在使用经典宇宙视图。" : "You are using the classic Universe view."} <Link href={`/universes/${encodeURIComponent(bundle.universe.id)}`}>{isZh ? "打开当前工作台" : "Open the current workspace"}</Link></p>
       <header className={styles.detailHeader}>
         <div className={styles.titleBrand}>
           <Link className={styles.iconButton} href="/universes" title={copy.detail.back} aria-label={copy.detail.back}>

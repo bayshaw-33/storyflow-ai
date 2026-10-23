@@ -24,6 +24,9 @@ test("Suno receives style and structured vocal gender even when lyrics already e
     }
     await createAtlasCloudAudioProvider().submitMusic({ model: "minimax/music-3.0", prompt: "piano", lyrics: "中文歌词", voiceGender: "female" });
     assert.match(body.prompt, /female lead vocals only/i);
+    assert.equal(body.format, 'wav', 'keep a WAV source for new MiniMax music');
+    assert.equal(body.sample_rate, 44100);
+    assert.equal(body.bitrate, undefined, 'do not send an unsupported 320000 MP3 parameter');
     await createAtlasCloudAudioProvider().submitMusic({ model: "suno/chirp-v6-mini", prompt: "弦乐".repeat(200), lyrics: "中文歌词", voiceGender: "male" });
     assert.ok(new TextEncoder().encode(body.style).length <= 1000);
     assert.match(body.style, /^Male lead vocals only/);

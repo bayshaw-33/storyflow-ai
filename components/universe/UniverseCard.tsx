@@ -14,6 +14,7 @@ import styles from "./universe.module.css";
 type UniverseCardProps = {
   universe: UniverseListItem;
   isZh: boolean;
+  showIdentifier?: boolean;
   onArchive?: (universe: UniverseListItem) => void;
 };
 
@@ -23,7 +24,7 @@ type UniverseCardProps = {
  * 作品+角色+地点计数 / Pending Inbox 徽标 / 更新时间。
  * 操作：点击进详情；更多菜单提供编辑摘要、归档；本轮不提供物理删除。
  */
-export function UniverseCard({ universe, isZh, onArchive }: UniverseCardProps) {
+export function UniverseCard({ universe, isZh, onArchive, showIdentifier = false }: UniverseCardProps) {
   const copy = getUniverseCopy(isZh);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -47,7 +48,7 @@ export function UniverseCard({ universe, isZh, onArchive }: UniverseCardProps) {
     <Link
       href={`/universes/${universe.id}`}
       className={styles.card}
-      aria-label={universe.name}
+      aria-label={showIdentifier ? `${universe.name} · ${universe.id}` : universe.name}
     >
       <div className={styles.cover}>
         {universe.coverUrl ? (
@@ -69,6 +70,7 @@ export function UniverseCard({ universe, isZh, onArchive }: UniverseCardProps) {
 
       <div className={styles.cardBody}>
         <h3 className={styles.cardName}>{universe.name}</h3>
+        {showIdentifier ? <small title={universe.id}>#{universe.id.slice(-8)}</small> : null}
         <p className={styles.cardSummary}>{summary}</p>
         {tags.length ? (
           <div className={styles.tags}>

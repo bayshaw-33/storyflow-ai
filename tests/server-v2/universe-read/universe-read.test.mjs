@@ -13,6 +13,7 @@ import test from "node:test";
 import {
   readUniverse,
   readUniverseWorks,
+  readUniverseEntities,
   toUniverseDto,
   V2UniverseError,
 } from "../../../lib/server/v2/universe/index.ts";
@@ -42,6 +43,22 @@ const ENTITY_ROWS = [
   { id: "ent-002", universe_id: "uni-001", type: "character", name: "Bob", summary: "Antagonist", status: "canon", updated_at: "2026-08-02T00:00:00Z" },
   { id: "ent-003", universe_id: "uni-001", type: "location", name: "Castle", summary: "Main location", status: "draft", updated_at: "2026-08-03T00:00:00Z" },
 ];
+
+test("readUniverseEntities returns every page, including entities after 500", async () => {
+  const entities = Array.from({length:1005}, (_, index)=>({...ENTITY_ROWS[0], id:`entity-${index}`}));
+  const fetcher = async path => {
+    if (path.includes('storyflow_universes')) return [UNIVERSE_ROW];
+    if (path.includes('storyflow_universe_entities')) {
+      const url = new URL(path,'https://db.test');
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const limit = Number(url.searchParams.get('limit') || 1000);
+      return entities.slice(offset,offset+limit);
+    }
+    return [];
+  };
+  const result = await readUniverseEntities({fetcher,userId:'user-001',universeId:'uni-001'});
+  assert.equal(result.items.length,1005);
+});
 
 // ---------------------------------------------------------------------------
 // Helper: convert DB entity rows to CanonObjectInput (strips updatedAt)

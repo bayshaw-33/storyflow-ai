@@ -78,7 +78,7 @@ export const DEFAULT_WORK_TITLES: Record<WorkType, string> = {
   song: "未命名歌曲",
   art: "未命名美术",
   storyboard: "未命名分镜",
-  video: "未命名视频",
+  video: "视频制作项目",
   voice: "未命名配音",
   editing: "未命名剪辑",
 };

@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
     const pageSize = Number(url.searchParams.get("pageSize") || "20");
     const search = url.searchParams.get("search") || undefined;
 
-    const result = await listPlatformActors({ page, pageSize, search });
+    const sort = url.searchParams.get("sort") === "popular" ? "popular" : "latest";
+    const result = await listPlatformActors({ page, pageSize, search, sort });
     return ok(result);
   } catch (error) {
     return apiError(error, "读取平台演员失败。");

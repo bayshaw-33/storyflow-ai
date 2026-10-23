@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ["ffmpeg-static"],
+  outputFileTracingIncludes: {
+    "/api/audio/jobs/*/download": ["./node_modules/ffmpeg-static/ffmpeg"],
+  },
   async redirects() {
     return [
       { source: "/universe", destination: "/universes", statusCode: 301 },

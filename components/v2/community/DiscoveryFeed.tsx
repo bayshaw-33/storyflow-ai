@@ -122,6 +122,7 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
   }, [activeSection, loadRemoteSection, viewerId, viewerReady]);
 
   function changeSection(section: CommunitySectionId) {
+    requestIdRef.current += 1;
     setActiveSection(section);
     setQuery("");
     nextCursorRef.current = null;
@@ -185,8 +186,8 @@ export function DiscoveryFeed({ initialItems, loadError, initialViewerId = null,
             section={activeSection}
             query={query}
             onQueryChange={setQuery}
-            onQuerySubmit={() => {
-              if (REMOTE_SECTIONS.has(activeSection)) void loadRemoteSection(activeSection, false, query);
+            onQuerySubmit={(searchQuery) => {
+              if (REMOTE_SECTIONS.has(activeSection)) void loadRemoteSection(activeSection, false, searchQuery);
             }}
           />
 

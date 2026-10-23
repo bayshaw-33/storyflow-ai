@@ -70,7 +70,7 @@ export function UniverseAssets({ entities, links, projectsById, isZh }: Universe
 
       {filtered.length === 0 ? (
         <div className={styles.emptyState}>
-          <strong>{copy.assets.empty}</strong>
+          <strong>{entities.length === 0 ? copy.assets.empty : isZh ? "此类型暂无资产，可切换其他类型。" : "No assets of this type. Try another type."}</strong>
         </div>
       ) : (
         <div className={styles.assetGrid}>
@@ -94,6 +94,7 @@ export function UniverseAssets({ entities, links, projectsById, isZh }: Universe
                     {entity.status}
                   </span>
                   <h3 className={styles.assetName}>{entity.name}</h3>
+                  {entities.some(other => other.id !== entity.id && other.name.trim().toLocaleLowerCase() === entity.name.trim().toLocaleLowerCase()) ? <small title={entity.id}>#{entity.id.slice(-8)}</small> : null}
                   <p className={styles.assetSummary}>{sanitizeCardSummary(entity.summary) || copy.card.noSummary}</p>
                   <div className={styles.assetMeta}>
                     <span>{copy.assets.usedBy}: {usedByWorks}</span>

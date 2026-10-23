@@ -43,6 +43,7 @@ export function SongLibraryClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState(false);
 
   async function loadLibrary(accessToken: string) {
     setLoading(true);
@@ -102,11 +103,12 @@ export function SongLibraryClient() {
     return matchesMode && matchesStatus && matchesQuery;
   }), [jobs, mode, query, status]);
 
-  async function downloadJob(job: MusicJob) {
-    if (!session?.access_token || !job.jobId) return;
+  async function downloadJob(job: MusicJob, format: "mp3-320" | "original" = "mp3-320") {
+    if (!session?.access_token || !job.jobId || downloading) return;
+    setDownloading(true);
     setDownloadError("");
     try {
-      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(job.jobId)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const response = await fetch(`/api/audio/jobs/${encodeURIComponent(job.jobId)}/download${format === "original" ? "?format=original" : ""}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
       const payload = await response.json().catch(() => ({})) as { downloadUrl?: string; filename?: string; error?: string };
       if (!response.ok || !payload.downloadUrl) throw new Error(payload.error || "下载链接生成失败，请重试。");
       const audioResponse = await fetch(payload.downloadUrl);
@@ -121,6 +123,8 @@ export function SongLibraryClient() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (downloadFailure) {
       setDownloadError(downloadFailure instanceof Error ? downloadFailure.message : "音乐下载失败，请重试。");
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -142,12 +146,14 @@ export function SongLibraryClient() {
           <button className="secondary-button" type="button" onClick={() => session.access_token && void loadLibrary(session.access_token)} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""} />刷新</button>
         </div>
         {error ? <div className="song-product-notice error" role="alert">{error}</div> : null}
+        <p>默认下载 MP3 320 kbps；重新编码不会提升低码率音源的原始音质。</p>
+        {downloading ? <p role="status">正在准备音频下载，请稍候…</p> : null}
         {downloadError ? <div className="song-product-notice warning" role="alert">{downloadError}</div> : null}
         <section className="song-product-section"><div className="song-product-section-head"><div><span>PROJECTS</span><h2>歌曲项目</h2></div><strong>{visibleProjects.length}</strong></div>
           {loading && !projects.length ? <div className="song-product-empty-inline"><Loader2 className="spin" size={18} />正在加载歌曲项目…</div> : visibleProjects.length ? <div className="song-project-grid">{visibleProjects.map((project) => <article className="song-project-card" key={project.libraryKey || project.id}><div className="song-project-card-art"><Music2 size={24} /></div><div className="song-project-card-copy"><span>{project.genre || "歌曲创作"}</span><h3>{project.title}</h3><p>{new Date(project.updatedAt).toLocaleString()}</p></div><Link className="secondary-button" href={`/song-workbench?projectId=${encodeURIComponent(project.id)}`}><FolderOpen size={15} />继续创作</Link></article>)}</div> : <div className="song-product-empty-inline">还没有歌曲项目，先从一个想法开始。</div>}
         </section>
         <section className="song-product-section"><div className="song-product-section-head"><div><span>GENERATED AUDIO</span><h2>生成音频</h2></div><strong>{visibleJobs.length}</strong></div>
-          {loading && !jobs.length ? <div className="song-product-empty-inline"><Loader2 className="spin" size={18} />正在加载生成历史…</div> : visibleJobs.length ? <div className="song-generated-list">{visibleJobs.map((job) => <article className="song-generated-row" key={job.id}><div className="song-generated-icon"><Music2 size={19} /></div><div className="song-generated-copy"><strong>{job.title || `候选 ${job.label}`}</strong><span>{modeLabels[getDisplayMode(job.musicMode)]} · {job.model || "Atlas Cloud"} · {new Date(job.createdAt).toLocaleString()}</span>{job.status === "completed" && job.resultUrl ? <audio controls preload="metadata" src={job.resultUrl} /> : <small>{job.error || (job.status === "completed" ? "音频文件暂不可用" : "任务处理中")}</small>}</div><div className="song-generated-actions">{job.status === "completed" && job.jobId ? <button className="icon-button" type="button" onClick={() => void downloadJob(job)} title="下载" aria-label={`下载${job.title || `候选 ${job.label}`}`}><Download size={17} /></button> : null}</div></article>)}</div> : <div className="song-product-empty-inline">还没有生成音频。完成内容文档后，在音乐工作台提交生成。</div>}
+          {loading && !jobs.length ? <div className="song-product-empty-inline"><Loader2 className="spin" size={18} />正在加载生成历史…</div> : visibleJobs.length ? <div className="song-generated-list">{visibleJobs.map((job) => <article className="song-generated-row" key={job.id}><div className="song-generated-icon"><Music2 size={19} /></div><div className="song-generated-copy"><strong>{job.title || `候选 ${job.label}`}</strong><span>{modeLabels[getDisplayMode(job.musicMode)]} · {job.model || "Atlas Cloud"} · {new Date(job.createdAt).toLocaleString()}</span>{job.status === "completed" && job.resultUrl ? <audio controls preload="metadata" src={job.resultUrl} /> : <small>{job.error || (job.status === "completed" ? "音频文件暂不可用" : "任务处理中")}</small>}</div><div className="song-generated-actions">{job.status === "completed" && job.jobId ? <button className="icon-button" type="button" disabled={downloading} onClick={() => void downloadJob(job)} title="MP3 320 kbps" aria-label={`下载${job.title || `候选 ${job.label}`}`}><Download size={17} /></button> : null}{job.status === "completed" && job.jobId ? <button type="button" disabled={downloading} onClick={() => void downloadJob(job, "original")}>原文件</button> : null}</div></article>)}</div> : <div className="song-product-empty-inline">还没有生成音频。完成内容文档后，在音乐工作台提交生成。</div>}
         </section>
       </section>
     </main>

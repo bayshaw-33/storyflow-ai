@@ -36,6 +36,8 @@ type AudioCandidatesProps = {
   onGenerate: () => void;
   onRetry?: (candidateId: string) => void;
   onDownload: (candidate: SongAudioCandidate) => Promise<void>;
+  onDownloadOriginal?: (candidate: SongAudioCandidate) => Promise<void>;
+  downloading?: boolean;
   onDelete?: (candidate: SongAudioCandidate) => Promise<void>;
   onFavorite?: (candidate: SongAudioCandidate) => Promise<void>;
   favoriteSavingId?: string | null;
@@ -80,7 +82,7 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, onDelete, onFavorite, favoriteSavingId, onGenerateCover, onDownloadCover, coverGeneratingId, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange, voiceGender, onVoiceGenderChange }: AudioCandidatesProps) {
+export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, onDownload, onDownloadOriginal, downloading = false, onDelete, onFavorite, favoriteSavingId, onGenerateCover, onDownloadCover, coverGeneratingId, documents, selectedLyricsDocumentId, selectedStyleDocumentId, selectedSfxDocumentId, onLyricsDocumentChange, onStyleDocumentChange, onSfxDocumentChange, musicModels, selectedMusicModel, onMusicModelChange, musicMode, onMusicModeChange, voiceGender, onVoiceGenderChange }: AudioCandidatesProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -136,6 +138,7 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
 
   return (
     <div className="dashboard-panel song-output-card song-audio-card">
+      {downloading ? <p role="status" className="field-note">{isZh ? "正在准备音频下载，请稍候…" : "Preparing your audio download…"}</p> : null}
       <div className="song-output-card-head song-audio-generation-controls song-audio-top-controls">
         <div className="song-audio-controls" style={{ display: "flex", alignItems: "flex-end", justifyContent: "flex-end", flexWrap: "wrap", gap: 8, flex: "1 1 auto" }}>
           <div className="song-audio-mode-switch" style={{ display: "inline-flex", alignItems: "stretch", padding: 2, border: "1px solid var(--glass-border)", borderRadius: 9, background: "rgba(255, 255, 255, 0.04)" }} role="group" aria-label={isZh ? "选择生成类型" : "Choose generation mode"}>
@@ -266,7 +269,8 @@ export function AudioCandidates({ candidates, busy, isZh, onGenerate, onRetry, o
                   <span className="song-audio-track-actions">
                     {candidate.jobId && onFavorite ? <button className="icon-button song-audio-favorite" type="button" onClick={() => void onFavorite(candidate)} disabled={Boolean(favoriteSavingId)} aria-pressed={Boolean(candidate.favorite)} title={candidate.favorite ? (isZh ? "取消收藏" : "Unfavorite") : (isZh ? "收藏" : "Favorite")} aria-label={isZh ? `${candidate.favorite ? "取消收藏" : "收藏"}候选 ${candidate.label}` : `${candidate.favorite ? "Unfavorite" : "Favorite"} candidate ${candidate.label}`}><Heart size={16} fill={candidate.favorite ? "currentColor" : "none"} /></button> : null}
                     {canRetry && onRetry ? <button className="icon-button song-audio-retry" type="button" onClick={() => onRetry(candidate.id)} title={isZh ? "重试" : "Retry"} aria-label={isZh ? `重试候选 ${candidate.label}` : `Retry candidate ${candidate.label}`}><RotateCcw size={16} /></button> : null}
-                    {candidate.resultUrl && candidate.jobId ? <button className="icon-button song-audio-download" type="button" onClick={() => void onDownload(candidate)} title={isZh ? "下载" : "Download"} aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label}`}><Download size={16} /></button> : null}
+                    {candidate.resultUrl && candidate.jobId ? <button className="icon-button song-audio-download" type="button" disabled={downloading} onClick={() => void onDownload(candidate)} title="MP3 320 kbps" aria-label={isZh ? `下载候选 ${candidate.label}` : `Download candidate ${candidate.label} MP3 320 kbps`}><Download size={16} /></button> : null}
+                    {candidate.jobId && onDownloadOriginal ? <button type="button" className="icon-button" disabled={downloading} onClick={() => void onDownloadOriginal(candidate)} title={isZh ? "下载原文件" : "Download original"}>{isZh ? "原文件" : "Original"}</button> : null}
                     {candidate.jobId && !candidate.coverUrl && onGenerateCover ? <button className="icon-button song-audio-cover-generate" type="button" onClick={() => void onGenerateCover(candidate)} disabled={coverGeneratingId === candidate.id} title={isZh ? "生成封面" : "Generate cover"} aria-label={isZh ? `生成候选 ${candidate.label} 封面` : `Generate cover for candidate ${candidate.label}`}><ImagePlus size={16} /></button> : null}
                     {candidate.coverUrl && onDownloadCover ? <button className="icon-button song-audio-cover-download" type="button" onClick={() => void onDownloadCover(candidate)} title={isZh ? "下载封面" : "Download cover"} aria-label={isZh ? `下载候选 ${candidate.label} 封面` : `Download cover for candidate ${candidate.label}`}><Download size={16} /></button> : null}
                     {candidate.jobId && onDelete ? <button className="icon-button song-audio-delete" type="button" onClick={() => void onDelete(candidate)} title={isZh ? "删除历史" : "Delete history"} aria-label={isZh ? `删除候选 ${candidate.label}` : `Delete candidate ${candidate.label}`}><Trash2 size={16} /></button> : null}

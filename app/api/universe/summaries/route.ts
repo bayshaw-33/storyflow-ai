@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
 import { signStoredArtImage } from "@/lib/supabase/art-storage";
+import { readAllUniverseRows } from "@/lib/server/universe/read-all";
+import { buildUniverseDisplaySummary } from "@/lib/server/v2/universe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
       : `user_id=eq.${encodeURIComponent(user.id)}`;
 
     // KIIKIS-TR-ACTOR-P0-009: 列表移除 description（Bible 可能数十 KB，列表页只用 card_summary）
-    const universes = await serviceFetch<UniverseRow[]>(
+    const universes = await readAllUniverseRows<UniverseRow>(serviceFetch,
       `/rest/v1/storyflow_universes?${accessFilter}&archived_at=is.null&select=id,name,status,card_summary,description,cover_asset_version_id,metadata,genre,updated_at,archived_at&order=updated_at.desc&limit=50`,
     );
 
@@ -66,9 +68,9 @@ export async function GET(request: NextRequest) {
 
     // 并发拉取计数所需三张子表 —— 不发生按 Universe 的 N+1
     const [entities, inbox, links] = await Promise.all([
-      serviceFetch<EntityRow[]>(`/rest/v1/storyflow_universe_entities?${universeFilter}&select=universe_id,type`),
-      serviceFetch<InboxRow[]>(`/rest/v1/storyflow_universe_inbox_items?${universeFilter}&select=universe_id,status`),
-      serviceFetch<LinkRow[]>(`/rest/v1/storyflow_universe_project_links?${universeFilter}&select=universe_id,project_id`),
+      readAllUniverseRows<EntityRow>(serviceFetch, `/rest/v1/storyflow_universe_entities?${universeFilter}&select=universe_id,type`),
+      readAllUniverseRows<InboxRow>(serviceFetch, `/rest/v1/storyflow_universe_inbox_items?${universeFilter}&select=universe_id,status`),
+      readAllUniverseRows<LinkRow>(serviceFetch, `/rest/v1/storyflow_universe_project_links?${universeFilter}&select=universe_id,project_id`),
     ]);
 
     // PRD §4.4：cover_asset_version_id 引用已持久化的 art asset version。
@@ -188,11 +190,7 @@ async function resolveCoverUrls(
 }
 
 function buildCardSummary(cardSummary: string | null, description: string | null): string {
-  const direct = (cardSummary || "").trim();
-  if (direct) return truncate(direct);
-  const desc = (description || "").trim();
-  if (!desc) return "";
-  return truncate(stripMarkdown(desc));
+  return truncate(stripMarkdown(buildUniverseDisplaySummary(cardSummary, description)));
 }
 
 function stripMarkdown(text: string): string {

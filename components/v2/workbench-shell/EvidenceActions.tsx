@@ -36,6 +36,7 @@ function EvidenceActionsComponent({
         type="button"
         className={styles.versionButton}
         disabled={busy}
+        aria-label={isZh ? "下载留痕包" : "Download evidence package"}
         onClick={handleDownload}
         title={isZh ? "下载留痕包（版本+对话+生成记录）" : "Download evidence package (versions + conversations + generations)"}
       >

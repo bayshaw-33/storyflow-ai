@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Clock, Eye, GitCompare, RotateCcw, X } from "lucide-react";
 import type { TextDiffOperation, JsonDiffOperation } from "@/lib/diff";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 export type VersionRecord = {
   id: string;
@@ -49,10 +50,10 @@ const entityTypeLabels: Record<string, string> = {
   story_bible: "故事圣经",
 };
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, locale: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleString(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   } catch {
     return iso;
   }
@@ -69,19 +70,24 @@ export function VersionHistory({
   selectedVersionId,
   onClose,
 }: Props) {
+  const { locale } = useI18n();
+  const isZh = locale === "zh-CN";
+  const sources = isZh ? sourceLabels : { ai: "AI generated", manual: "Manual save", import: "Imported", restore: "Restored", demo: "Example", optimize: "Optimized" } as Record<string, string>;
+  const entities = isZh ? entityTypeLabels : { production_workbench: "Production workspace", project_step: "Project step", story_bible: "Story bible" } as Record<string, string>;
+  const changeLabels: Record<string, string> = isZh ? { insert: "新增", add: "新增", delete: "删除", remove: "删除", replace: "修改", equal: "未改动" } : { insert: "Added", add: "Added", delete: "Removed", remove: "Removed", replace: "Changed", equal: "Unchanged" };
   const [compareA, setCompareA] = useState<string | null>(null);
   const [compareB, setCompareB] = useState<string | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
 
   const handleRestore = useCallback(async (versionId: string) => {
-    if (!confirm("确定恢复到此版本？当前工作台状态将被覆盖。")) return;
+    if (!confirm(isZh ? "确定恢复到此版本？当前工作台状态将被覆盖。" : "Restore this version? This will replace the current workspace state.")) return;
     setRestoring(versionId);
     try {
       await onRestore(versionId);
     } finally {
       setRestoring(null);
     }
-  }, [onRestore]);
+  }, [onRestore, isZh]);
 
   const handleCompare = useCallback(() => {
     if (compareA && compareB) {
@@ -95,17 +101,17 @@ export function VersionHistory({
         <div style={headerStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <Clock size={18} color="#75dbc6" />
-            <span style={{ fontSize: "16px", fontWeight: 600, color: "#e0e0e0" }}>版本历史</span>
-            <span style={{ fontSize: "12px", color: "#888" }}>{versions.length} 个版本</span>
+            <span style={{ fontSize: "16px", fontWeight: 600, color: "#e0e0e0" }}>{isZh ? "版本历史" : "Version history"}</span>
+            <span style={{ fontSize: "12px", color: "#888" }}>{versions.length} {isZh ? "个版本" : "versions"}</span>
           </div>
-          <button onClick={onClose} style={closeBtnStyle} aria-label="关闭">
+          <button onClick={onClose} style={closeBtnStyle} aria-label={isZh ? "关闭版本历史" : "Close version history"}>
             <X size={16} color="#aaa" />
           </button>
         </div>
 
-        {loading && <div style={msgStyle}>加载中...</div>}
+        {loading && <div style={msgStyle}>{isZh ? "加载中…" : "Loading…"}</div>}
         {error && <div style={{ ...msgStyle, color: "#ff6b6b" }}>{error}</div>}
-        {!loading && versions.length === 0 && <div style={msgStyle}>暂无版本记录。保存工作台时会自动创建版本快照。</div>}
+        {!loading && versions.length === 0 && <div style={msgStyle}>{isZh ? "暂无版本记录。保存工作台时会自动创建版本快照。" : "No versions yet. Saving the workspace creates a version snapshot."}</div>}
 
         <div style={listStyle}>
           {versions.map((v) => {
@@ -123,32 +129,32 @@ export function VersionHistory({
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <span style={versionNoStyle}>v{v.versionNo ?? "?"}</span>
-                  <span style={tagStyle}>{sourceLabels[v.source] || v.source}</span>
-                  <span style={tagStyle}>{entityTypeLabels[v.entityType] || v.entityType}</span>
-                  <span style={{ fontSize: "12px", color: "#888" }}>{formatTime(v.createdAt)}</span>
+                  <span style={tagStyle}>{sources[v.source] || v.source}</span>
+                  <span style={tagStyle}>{entities[v.entityType] || v.entityType}</span>
+                  <span style={{ fontSize: "12px", color: "#888" }}>{formatTime(v.createdAt, locale)}</span>
                 </div>
                 <div style={{ display: "flex", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
-                  <button onClick={() => onSelect(v.id)} style={miniBtnStyle} title="查看快照">
-                    <Eye size={12} /> 查看
+                  <button onClick={() => onSelect(v.id)} style={miniBtnStyle} title={isZh ? "查看快照" : "View snapshot"}>
+                    <Eye size={12} /> {isZh ? "查看" : "View"}
                   </button>
                   <button
                     onClick={() => setCompareA(isCompareA ? null : v.id)}
                     style={{ ...miniBtnStyle, borderColor: isCompareA ? "#75dbc6" : "#333" }}
                   >
-                    对比 A
+                    {isZh ? "对比 A" : "Compare A"}
                   </button>
                   <button
                     onClick={() => setCompareB(isCompareB ? null : v.id)}
                     style={{ ...miniBtnStyle, borderColor: isCompareB ? "#75dbc6" : "#333" }}
                   >
-                    对比 B
+                    {isZh ? "对比 B" : "Compare B"}
                   </button>
                   <button
                     onClick={() => handleRestore(v.id)}
                     disabled={restoring === v.id}
                     style={{ ...miniBtnStyle, color: "#ff6b6b", borderColor: "#5a2222" }}
                   >
-                    <RotateCcw size={12} /> {restoring === v.id ? "恢复中..." : "恢复"}
+                    <RotateCcw size={12} /> {restoring === v.id ? isZh ? "恢复中…" : "Restoring…" : isZh ? "恢复" : "Restore"}
                   </button>
                 </div>
               </div>
@@ -159,7 +165,7 @@ export function VersionHistory({
         {compareA && compareB && (
           <div style={{ padding: "8px 16px", borderTop: "1px solid #2a2d30" }}>
             <button onClick={handleCompare} style={compareBtnStyle}>
-              <GitCompare size={14} /> 对比 v{versions.find((v) => v.id === compareA)?.versionNo} ↔ v{versions.find((v) => v.id === compareB)?.versionNo}
+              <GitCompare size={14} /> {isZh ? "对比" : "Compare"} v{versions.find((v) => v.id === compareA)?.versionNo} ↔ v{versions.find((v) => v.id === compareB)?.versionNo}
             </button>
           </div>
         )}
@@ -167,19 +173,19 @@ export function VersionHistory({
         {diff && (
           <div style={diffPanelStyle}>
             <div style={{ fontSize: "13px", fontWeight: 600, color: "#e0e0e0", marginBottom: "8px" }}>
-              差异对比（文本变更 {diff.text?.changeCount ?? 0} 处，JSON 变更 {diff.json?.changeCount ?? 0} 处）
+              {isZh ? `差异对比（文本变更 ${diff.text?.changeCount ?? 0} 处，JSON 变更 ${diff.json?.changeCount ?? 0} 处）` : `Changes: ${diff.text?.changeCount ?? 0} text, ${diff.json?.changeCount ?? 0} JSON`}
             </div>
             <div style={diffListStyle}>
               {diff.text?.changes?.filter((c) => c.type !== "equal").slice(0, 30).map((c, i) => (
                 <div key={`t${i}`} style={diffItemStyle(c.type)}>
-                  <span style={{ opacity: 0.6, minWidth: "60px" }}>{c.type}</span>
+                  <span style={{ opacity: 0.6, minWidth: "60px" }}>{changeLabels[c.type] || c.type}</span>
                   {c.oldText && <span style={{ textDecoration: "line-through", color: "#ff6b6b" }}>{c.oldText.slice(0, 120)}</span>}
                   {c.newText && <span style={{ color: "#75dbc6" }}>{c.newText.slice(0, 120)}</span>}
                 </div>
               ))}
               {diff.json?.changes?.slice(0, 30).map((c, i) => (
                 <div key={`j${i}`} style={diffItemStyle(c.type === "add" ? "insert" : c.type === "remove" ? "delete" : "replace")}>
-                  <span style={{ opacity: 0.6, minWidth: "60px" }}>{c.type}</span>
+                  <span style={{ opacity: 0.6, minWidth: "60px" }}>{changeLabels[c.type] || c.type}</span>
                   <span style={{ color: "#88ccff" }}>{c.path}</span>
                 </div>
               ))}

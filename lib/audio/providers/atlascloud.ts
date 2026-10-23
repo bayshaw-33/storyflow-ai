@@ -47,9 +47,8 @@ function submitPayload(input: MusicSubmitInput, model: string): Record<string, u
       ...(mode === "vocal" && input.lyrics ? { lyrics: input.lyrics } : {}),
       lyrics_optimizer: false,
       is_instrumental: isInstrumentalMode(mode),
-      format: "mp3",
+      format: "wav",
       sample_rate: 44100,
-      bitrate: 256000,
     };
   }
 

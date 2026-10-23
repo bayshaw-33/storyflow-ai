@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { apiError, ok } from "@/lib/api/responses";
 import { authenticateRequest, hasServiceRoleConfig, serviceFetch } from "@/lib/supabase/server";
+import { readAllUniverseRows } from "@/lib/server/universe/read-all";
 import { getUniverseEntityThumbnail } from "@/lib/universe";
 
 export const runtime = "nodejs";
@@ -99,10 +100,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
     const universeFilter = `universe_id=eq.${encodeURIComponent(universeId)}`;
 
     const [entities, relationships, timeline, canonFacts, inbox, links, projects, reports] = await Promise.all([
-      serviceFetch<EntityRow[]>(`/rest/v1/storyflow_universe_entities?${universeFilter}&select=id,universe_id,type,name,summary,details_json,updated_at&order=updated_at.desc`),
-      serviceFetch<Array<{ universe_id: string }>>(`/rest/v1/storyflow_universe_relationships?${universeFilter}&select=universe_id`),
-      serviceFetch<Array<{ universe_id: string }>>(`/rest/v1/storyflow_universe_timeline_events?${universeFilter}&select=universe_id`),
-      serviceFetch<Array<{ universe_id: string; is_locked: boolean }>>(`/rest/v1/storyflow_canon_facts?${universeFilter}&select=universe_id,is_locked`),
+      readAllUniverseRows<EntityRow>(serviceFetch, `/rest/v1/storyflow_universe_entities?${universeFilter}&select=id,universe_id,type,name,summary,details_json,updated_at&order=updated_at.desc`),
+      readAllUniverseRows<{ universe_id: string }>(serviceFetch, `/rest/v1/storyflow_universe_relationships?${universeFilter}&select=universe_id`),
+      readAllUniverseRows<{ universe_id: string }>(serviceFetch, `/rest/v1/storyflow_universe_timeline_events?${universeFilter}&select=universe_id`),
+      readAllUniverseRows<{ universe_id: string; is_locked: boolean }>(serviceFetch, `/rest/v1/storyflow_canon_facts?${universeFilter}&select=universe_id,is_locked`),
       serviceFetch<InboxRow[]>(`/rest/v1/storyflow_universe_inbox_items?${universeFilter}&status=eq.pending&select=id,universe_id,item_type,title,source_excerpt,confidence,status,updated_at&order=updated_at.desc&limit=5`),
       readProjectLinks(universeFilter),
       // works preview：从 links 拿 project_id 后再查 projects（避免 N+1，限制 3 条）
@@ -142,9 +143,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ uni
     counts.canonFacts = canonFacts.length;
     counts.works = new Set(links.map((link) => link.project_id)).size;
     // pendingInbox 真实计数需要单独 query count；这里使用 inbox.length 仅作下界（limit=5）
-    const inboxCountRow = await serviceFetch<Array<{ count: number }>>(
+    const inboxCountRow = await readAllUniverseRows<{ id: string }>(serviceFetch,
       `/rest/v1/storyflow_universe_inbox_items?${universeFilter}&status=eq.pending&select=id&limit=1000`,
-    ).catch(() => [] as Array<{ count: number }>);
+    );
     counts.pendingInbox = inboxCountRow.length;
 
     // 代表 entity：前 6 个有缩略图（character 优先）

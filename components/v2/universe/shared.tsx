@@ -7,23 +7,27 @@ import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { UniverseObjectStatus, ProposalFieldDiff } from "@/lib/client/v2/universe/types";
 import styles from "./universe.module.css";
+import { useI18n } from "@/lib/i18n/useI18n";
 
 // 状态徽章：根据 UniverseObjectStatus 渲染对应颜色。
 export function StatusBadge({ status }: { status: UniverseObjectStatus }) {
+  const { locale } = useI18n();
   const cls = {
     canon: styles.statusCanon,
     draft: styles.statusDraft,
     alternative: styles.statusAlternative,
     deprecated: styles.statusDeprecated,
   }[status];
-  return <span className={`${styles.statusBadge} ${cls}`}>{status}</span>;
+  const label = locale === "zh-CN" ? { canon: "已确认", draft: "草稿", alternative: "备选", deprecated: "已停用" }[status] : status;
+  return <span className={`${styles.statusBadge} ${cls}`}>{label}</span>;
 }
 
 // Canon Fact 锁定状态徽章。
 export function LockBadge({ locked }: { locked: boolean }) {
+  const { locale } = useI18n();
   return (
     <span className={`${styles.statusBadge} ${locked ? styles.statusLocked : styles.statusUnlocked}`}>
-      {locked ? "LOCKED" : "UNLOCKED"}
+      {locale === "zh-CN" ? locked ? "已锁定" : "未锁定" : locked ? "Locked" : "Unlocked"}
     </span>
   );
 }

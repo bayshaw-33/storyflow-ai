@@ -18,6 +18,11 @@ export function validateAudioArtifact(bytes: Uint8Array, contentType: string) {
   if (!EXTENSIONS[contentType.toLowerCase()]) throw new Error(`AUDIO_UNSUPPORTED_CONTENT_TYPE:${contentType}`);
 }
 
+export function audioArtifactContentType(bytes: Uint8Array, contentType: string): string {
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WAVE") return "audio/wav";
+  return contentType.split(";")[0].trim().toLowerCase();
+}
+
 export function buildAudioStoragePath(ownerId: string, jobId: string, contentType: string) {
   const safe = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 128);
   return `${safe(ownerId)}/${safe(jobId)}.${EXTENSIONS[contentType.toLowerCase()] || "mp3"}`;
@@ -30,10 +35,11 @@ export async function persistAudioArtifact(input: {
   bytes: Uint8Array;
   contentType: string;
 }): Promise<{ storagePath: string; signedUrl: string; expiresAt: string }> {
-  validateAudioArtifact(input.bytes, input.contentType);
-  const storagePath = buildAudioStoragePath(input.ownerId, input.jobId, input.contentType);
+  const contentType = audioArtifactContentType(input.bytes, input.contentType);
+  validateAudioArtifact(input.bytes, contentType);
+  const storagePath = buildAudioStoragePath(input.ownerId, input.jobId, contentType);
   const { error: uploadError } = await input.serverClient.storage.from(AUDIO_BUCKET).upload(storagePath, input.bytes, {
-    contentType: input.contentType,
+    contentType,
     upsert: true,
   });
   if (uploadError) throw new Error(`AUDIO_UPLOAD_FAILED:${uploadError.message}`);

@@ -5,7 +5,8 @@
   padding: 12px 0;
 }
 .controls label { display: flex; align-items: center; gap: 8px; }
-.controls input {
+.controls input,
+.controls select {
   width: 80px;
   padding: 8px;
   border: 1px solid var(--divider);
@@ -13,3 +14,4 @@
   color: var(--ink-primary);
   background: var(--bg-void);
 }
+.controls select { width: 220px; max-width: 100%; }

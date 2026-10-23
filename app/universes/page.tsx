@@ -158,6 +158,17 @@ export default function UniversesPage() {
   const signedOut = !session;
   const canWriteUniverse = Boolean(session) && os.planReady && os.access.universe;
 
+  const duplicateNames = useMemo(() => {
+    const names = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const item of items) {
+      const name = item.name.trim().toLocaleLowerCase();
+      if (names.has(name)) duplicates.add(name);
+      names.add(name);
+    }
+    return duplicates;
+  }, [items]);
+
   const filtered = useMemo(
     () => filterAndSortUniverses(items, { ...DEFAULT_UNIVERSE_FILTER, search }),
     [items, search],
@@ -311,6 +322,7 @@ export default function UniversesPage() {
                 key={item.id}
                 universe={item}
                 isZh={isZh}
+                showIdentifier={duplicateNames.has(item.name.trim().toLocaleLowerCase())}
                 onArchive={(target) => {
                   // PRD §5.3 本轮提供归档入口；归档实现走 PATCH 端点，本期仅占位提示
                   setError(isZh ? `归档功能即将开放：${target.name}` : `Archive coming soon: ${target.name}`);

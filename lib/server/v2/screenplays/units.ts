@@ -384,18 +384,20 @@ export class ScreenplayUnitsService {
     return { units: (rows ?? []).map(toUnitDto) };
   }
 
-  async getUnit(params: { ownerId: string; workId: string; unitId: string }): Promise<{ unit: ScreenplayUnitDto; content: unknown }> {
+  async getUnit(params: { ownerId: string; workId: string; unitId: string; version?: "current" | "finalized" }): Promise<{ unit: ScreenplayUnitDto; content: unknown; contentVersionId: string | null }> {
     await this.assertWorkOwner(params.ownerId, params.workId);
     const unit = await this.readUnit(params.workId, params.unitId);
     let content: unknown = null;
-    if (unit.current_version_id) {
+    const contentVersionId = params.version === "finalized" ? unit.finalized_version_id : unit.current_version_id;
+    if (params.version === "finalized" && !contentVersionId) throw new ScreenplayUnitsError("validation_failed", "This episode has no finalized version.");
+    if (contentVersionId) {
       const versions = await get<UnitVersionRow[]>(
         this.fetcher,
-        `/rest/v1/storyflow_screenplay_unit_versions?id=eq.${encodeURIComponent(unit.current_version_id)}&select=${VERSION_COLUMNS}&limit=1`,
+        `/rest/v1/storyflow_screenplay_unit_versions?id=eq.${encodeURIComponent(contentVersionId)}&work_id=eq.${encodeURIComponent(params.workId)}&unit_id=eq.${encodeURIComponent(params.unitId)}&select=${VERSION_COLUMNS}&limit=1`,
       );
       content = versions?.[0]?.content_json ?? null;
     }
-    return { unit: toUnitDto(unit), content };
+    return { unit: toUnitDto(unit), content, contentVersionId };
   }
 
   // ---------------------------------------------------------
