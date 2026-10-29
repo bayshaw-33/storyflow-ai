@@ -465,7 +465,7 @@ export function createProject(overrides: Partial<DramaProject> = {}): DramaProje
     workflowType: "creation",
     title: "未命名短剧项目",
     market: "北美",
-    genre: "逆袭复仇",
+    genre: overrides.workflowType === "song" ? "" : "逆袭复仇",
     episodeDuration: "2 分钟",
     episodeCount: 12,
     chineseScriptRange: "first3",
@@ -1095,6 +1095,8 @@ function parseStructuredBeats(content: string): StructuredBeat[] {
 
 function normalizeProject(project: LegacyProject): DramaProject {
   const now = new Date().toISOString();
+  // A music genre is user input, not a short-drama category or its fallback.
+  const genre = project.workflowType === "song" ? project.genre?.trim() || "" : normalizeGenre(project.genre);
   const steps = project.steps || {};
   const legacyMarketAnalysis =
     project.marketAnalysis ||
@@ -1124,7 +1126,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     workflowType: project.workflowType || "creation",
     title: project.title || "未命名短剧项目",
     market: normalizeMarket(project.market),
-    genre: normalizeGenre(project.genre),
+    genre,
     episodeDuration: normalizeEpisodeDuration(project.episodeDuration),
     episodeCount: Number(project.episodeCount || 12),
     chineseScriptRange: normalizeChineseScriptRange(project.chineseScriptRange || project.scriptMode),
@@ -1137,7 +1139,7 @@ function normalizeProject(project: LegacyProject): DramaProject {
     importedScript: project.importedScript || "",
     storyBible: normalizeStoryBible(project.storyBible, {
       market: normalizeMarket(project.market),
-      genre: normalizeGenre(project.genre),
+      genre,
       idea: project.idea || project.storyIdea || "",
       relationshipDiagram: parsed.relationshipDiagram || project.relationshipDiagram || "",
     }),
