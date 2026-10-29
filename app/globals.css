@@ -5199,6 +5199,10 @@ input:focus, textarea:focus, select:focus {
   border-radius: 14px;
   background: #0b1112;
 }
+.song-document-paper.is-lyrics {
+  border-color: transparent;
+  background: transparent;
+}
 .song-document-paper pre,
 .song-translation-preview pre {
   margin: 0;

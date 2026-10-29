@@ -51,7 +51,7 @@ export function SongDocumentPreview({ document, isZh, onClose, onSave, onCopy, o
           </div>
         </header>
         <div className="song-document-modal-body">
-          <div className={`song-document-paper ${editing ? "is-editing" : ""}`}>
+          <div className={`song-document-paper ${isLyrics ? "is-lyrics" : ""} ${editing ? "is-editing" : ""}`}>
             {editing ? <textarea value={draft} onChange={(event) => setDraft(event.target.value)} autoFocus /> : <pre>{draft}</pre>}
           </div>
           <aside className="song-document-meta">
