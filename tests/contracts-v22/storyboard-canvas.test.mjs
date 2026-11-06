@@ -15,7 +15,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 test("canvas is the fifth storyboard subview with a Chinese label", () => {
   const stage = read("../../components/production/UnifiedStoryboardStage.tsx");
   assert.match(stage, /type StoryboardSubview = "shot_table" \| "grids" \| "motion" \| "prompts" \| "canvas"/);
-  assert.match(stage, /\{ id: "canvas", label: "画布" \}/);
+  assert.match(stage, /\{ id: "canvas", label: "分镜画布" \}/);
 });
 
 test("canvas state rides the production project state (draft pipeline field)", () => {
@@ -93,7 +93,7 @@ test("production workbench wires the canvas subview end-to-end", () => {
   assert.match(pw, /canvas:\s*\(\s*<StoryboardCanvas/, "canvas content passed to the stage");
   assert.match(pw, /storyboardCanvas:\s*canvas/, "canvas persisted through the draft payload");
   assert.match(pw, /storyboardCanvas\s*\?\?\s*null/, "canvas restored from the draft on hydration");
-  assert.match(pw, /requestedStoryboardSubview === "canvas"|=== "board"/, "URL alias storyboardView=canvas opens the subview");
+  assert.match(pw, /setStoryboardSubview\(readStoryboardSubview\(searchParams\)\)/, "URL subview aliases are resolved by the shared parser");
 });
 
 test("shot cards resolve live scene/frame data by shotId", () => {

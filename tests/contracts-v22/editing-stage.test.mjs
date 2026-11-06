@@ -36,9 +36,10 @@ test("buildUnifiedWorkbenchUrl emits tab=editing", () => {
   );
 });
 
-test("header stage metadata includes 剪辑 for editing", () => {
+test("header marks the editing stage as unavailable", () => {
   const header = read("../../components/production/UnifiedProductionHeader.tsx");
-  assert.match(header, /editing:\s*\{\s*label:\s*"剪辑"/);
+  assert.match(header, /editing:\s*\{\s*label:\s*"剪辑（未上线）"/);
+  assert.match(header, /disabled=\{stage === "editing"\}/);
 });
 
 test("production workbench renders EditorFramework for the editing stage", () => {
